@@ -909,6 +909,188 @@ fn compute_summary_without_license_evidence_has_no_clarity_score() {
 }
 
 #[test]
+fn compute_tallies_counts_file_findings_and_missing_values() {
+    let mut mit_file = file("project/src/lib.rs");
+    mit_file.programming_language = Some("Rust".to_string());
+    mit_file.license_expression = Some("mit".to_string());
+    mit_file.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: Some("project/src/lib.rs".to_string()),
+            start_line: 1,
+            end_line: 1,
+            matcher: None,
+            score: 100.0,
+            matched_length: None,
+            match_coverage: None,
+            rule_relevance: None,
+            rule_identifier: None,
+            rule_url: None,
+            matched_text: None,
+        }],
+        identifier: None,
+    }];
+    mit_file.copyrights = vec![Copyright {
+        copyright: "Copyright (c) Example Corp.".to_string(),
+        start_line: 1,
+        end_line: 1,
+    }];
+    mit_file.holders = vec![Holder {
+        holder: "Example Corp.".to_string(),
+        start_line: 1,
+        end_line: 1,
+    }];
+    mit_file.authors = vec![Author {
+        author: "Alice".to_string(),
+        start_line: 1,
+        end_line: 1,
+    }];
+
+    let mut dual_license_file = file("project/src/main.c");
+    dual_license_file.programming_language = Some("C".to_string());
+    dual_license_file.license_expression = Some("apache-2.0 AND mit".to_string());
+    dual_license_file.license_detections = vec![
+        crate::models::LicenseDetection {
+            license_expression: "apache-2.0".to_string(),
+            license_expression_spdx: "Apache-2.0".to_string(),
+            matches: vec![Match {
+                license_expression: "apache-2.0".to_string(),
+                license_expression_spdx: "Apache-2.0".to_string(),
+                from_file: Some("project/src/main.c".to_string()),
+                start_line: 1,
+                end_line: 1,
+                matcher: None,
+                score: 100.0,
+                matched_length: None,
+                match_coverage: None,
+                rule_relevance: None,
+                rule_identifier: None,
+                rule_url: None,
+                matched_text: None,
+            }],
+            identifier: None,
+        },
+        crate::models::LicenseDetection {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            matches: vec![Match {
+                license_expression: "mit".to_string(),
+                license_expression_spdx: "MIT".to_string(),
+                from_file: Some("project/src/main.c".to_string()),
+                start_line: 2,
+                end_line: 2,
+                matcher: None,
+                score: 100.0,
+                matched_length: None,
+                match_coverage: None,
+                rule_relevance: None,
+                rule_identifier: None,
+                rule_url: None,
+                matched_text: None,
+            }],
+            identifier: None,
+        },
+    ];
+    dual_license_file.copyrights = vec![Copyright {
+        copyright: "Copyright (c) Example Corp.".to_string(),
+        start_line: 1,
+        end_line: 1,
+    }];
+    dual_license_file.holders = vec![Holder {
+        holder: "Example Corp.".to_string(),
+        start_line: 1,
+        end_line: 1,
+    }];
+    dual_license_file.authors = vec![Author {
+        author: "Bob".to_string(),
+        start_line: 1,
+        end_line: 1,
+    }];
+
+    let empty_file = file("project/README.md");
+
+    let tallies =
+        compute_tallies(&[mit_file, dual_license_file, empty_file]).expect("tallies exist");
+
+    assert_eq!(
+        tallies.detected_license_expression,
+        vec![
+            TallyEntry {
+                value: None,
+                count: 1,
+            },
+            TallyEntry {
+                value: Some("apache-2.0 AND mit".to_string()),
+                count: 1,
+            },
+            TallyEntry {
+                value: Some("mit".to_string()),
+                count: 1,
+            },
+        ]
+    );
+    assert_eq!(
+        tallies.copyrights,
+        vec![
+            TallyEntry {
+                value: Some("Copyright (c) Example Corp.".to_string()),
+                count: 2,
+            },
+            TallyEntry {
+                value: None,
+                count: 1,
+            },
+        ]
+    );
+    assert_eq!(
+        tallies.holders,
+        vec![
+            TallyEntry {
+                value: Some("Example Corp.".to_string()),
+                count: 2,
+            },
+            TallyEntry {
+                value: None,
+                count: 1,
+            },
+        ]
+    );
+    assert_eq!(
+        tallies.authors,
+        vec![
+            TallyEntry {
+                value: None,
+                count: 1,
+            },
+            TallyEntry {
+                value: Some("Alice".to_string()),
+                count: 1,
+            },
+            TallyEntry {
+                value: Some("Bob".to_string()),
+                count: 1,
+            },
+        ]
+    );
+    assert_eq!(
+        tallies.programming_language,
+        vec![
+            TallyEntry {
+                value: Some("C".to_string()),
+                count: 1,
+            },
+            TallyEntry {
+                value: Some("Rust".to_string()),
+                count: 1,
+            },
+        ]
+    );
+}
+
+#[test]
 fn about_scan_promotes_packages_and_assigns_referenced_files() {
     let result = about_scan_and_assemble(Path::new("testdata/about"));
 

@@ -69,12 +69,10 @@ The Python reference already handles some Bundler and gemspec data, but constant
   - `is_key_file`
 - Nested files listed in Ruby package `file_references` are treated as top-level for that package even when they are not at filesystem depth 1.
 - Package metadata is promoted from key files when missing, including:
-  - `declared_license_expression`
-  - `declared_license_expression_spdx`
-  - `license_detections`
   - `copyright`
   - `holder`
-- Output now includes a top-level `summary.license_clarity_score` block derived from key files, plus the combined summary declared license expression.
+- Key-file license clues now stay in summary/tally outputs rather than mutating package declared-license provenance.
+- Output now includes a top-level `summary.license_clarity_score` block derived from key files, plus the combined summary declared license expression and core top-level tallies.
 
 ## Why this matters
 

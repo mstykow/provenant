@@ -20,7 +20,7 @@ implementation-plans/
 ### Post-Processing (`post-processing/`)
 
 - **[SUMMARIZATION_PLAN.md](post-processing/SUMMARIZATION_PLAN.md)** - License/copyright tallies, facets, classification
-  - Status: 🟡 Active — foundational key-file tagging, package metadata promotion, and initial summary output are implemented; remaining tallies, clarity parity, facets, generated-code detection, and broader summary parity are tracked in [SUMMARIZATION_PLAN.md](post-processing/SUMMARIZATION_PLAN.md)
+  - Status: 🟡 Active — key-file tagging, shared provenance cleanup, initial summary output, and core top-level tallies are implemented; remaining tally variants, clarity parity, facets, generated-code detection, and broader summary parity are tracked in [SUMMARIZATION_PLAN.md](post-processing/SUMMARIZATION_PLAN.md)
 
 ### Infrastructure (`infrastructure/`)
 

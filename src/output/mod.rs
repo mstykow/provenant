@@ -297,6 +297,55 @@ mod tests {
     }
 
     #[test]
+    fn test_json_and_json_lines_writers_include_top_level_tallies() {
+        let mut output = sample_output();
+        output.tallies = Some(crate::models::Tallies {
+            detected_license_expression: vec![crate::models::TallyEntry {
+                value: Some("mit".to_string()),
+                count: 2,
+            }],
+            copyrights: vec![crate::models::TallyEntry {
+                value: Some("Copyright (c) Example Org".to_string()),
+                count: 1,
+            }],
+            holders: vec![crate::models::TallyEntry {
+                value: Some("Example Org".to_string()),
+                count: 1,
+            }],
+            authors: vec![crate::models::TallyEntry {
+                value: Some("Jane Doe".to_string()),
+                count: 1,
+            }],
+            programming_language: vec![crate::models::TallyEntry {
+                value: Some("Rust".to_string()),
+                count: 1,
+            }],
+        });
+
+        let mut json_bytes = Vec::new();
+        writer_for_format(OutputFormat::Json)
+            .write(&output, &mut json_bytes, &OutputWriteConfig::default())
+            .expect("json write should succeed");
+        let json_value: Value =
+            serde_json::from_slice(&json_bytes).expect("json output should parse");
+        assert_eq!(
+            json_value["tallies"]["detected_license_expression"][0]["value"],
+            "mit"
+        );
+        assert_eq!(
+            json_value["tallies"]["programming_language"][0]["value"],
+            "Rust"
+        );
+
+        let mut jsonl_bytes = Vec::new();
+        writer_for_format(OutputFormat::JsonLines)
+            .write(&output, &mut jsonl_bytes, &OutputWriteConfig::default())
+            .expect("json-lines write should succeed");
+        let rendered = String::from_utf8(jsonl_bytes).expect("json-lines should be utf-8");
+        assert!(rendered.lines().any(|line| line.contains("\"tallies\"")));
+    }
+
+    #[test]
     fn test_cyclonedx_xml_writer_outputs_xml() {
         let output = sample_output();
         let mut bytes = Vec::new();
@@ -375,6 +424,7 @@ mod tests {
     fn test_spdx_empty_scan_tag_value_matches_python_sentinel() {
         let output = Output {
             summary: None,
+            tallies: None,
             headers: vec![],
             packages: vec![],
             dependencies: vec![],
@@ -403,6 +453,7 @@ mod tests {
     fn test_spdx_empty_scan_rdf_matches_python_sentinel() {
         let output = Output {
             summary: None,
+            tallies: None,
             headers: vec![],
             packages: vec![],
             dependencies: vec![],
@@ -497,6 +548,7 @@ mod tests {
     fn sample_output() -> Output {
         Output {
             summary: None,
+            tallies: None,
             headers: vec![Header {
                 start_timestamp: "2026-01-01T00:00:00Z".to_string(),
                 end_timestamp: "2026-01-01T00:00:01Z".to_string(),

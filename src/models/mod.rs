@@ -15,5 +15,5 @@ pub use package_type::PackageType;
 pub use file_info::build_package_uid;
 pub use output::{
     ExtraData, Header, LicenseClarityScore, LicenseReference, LicenseRuleReference,
-    OUTPUT_FORMAT_VERSION, Output, Summary, SystemEnvironment, TallyEntry,
+    OUTPUT_FORMAT_VERSION, Output, Summary, SystemEnvironment, Tallies, TallyEntry,
 };

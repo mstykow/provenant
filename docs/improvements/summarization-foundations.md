@@ -9,7 +9,8 @@ This incremental layer adds:
 1. file-level key-file classification flags
 2. package metadata promotion from key files
 3. top-level `summary` output structure
-4. initial non-license-dependent summary fields such as `declared_holder`, `primary_language`, and `other_languages`
+4. top-level codebase `tallies` output for detected license expressions, copyrights, holders, authors, and programming languages
+5. initial non-license-dependent summary fields such as `declared_holder`, `primary_language`, and `other_languages`
 
 ## Why This Matters
 
@@ -42,15 +43,24 @@ These flags are driven by package association, file references, and package-root
 
 When package metadata is missing, key files can now backfill:
 
-- `declared_license_expression`
-- `declared_license_expression_spdx`
-- `license_detections`
 - `copyright`
 - `holder`
+
+Key-file license clues now stay in summary/tally outputs rather than mutating package declared-license provenance.
 
 ### Summary output model
 
 Top-level output now supports a `summary` block that can evolve incrementally without forcing all ecosystems to wait for full summarizer parity.
+
+### Core top-level tallies
+
+Top-level output now also supports a `tallies` block for codebase-wide aggregation of:
+
+- `detected_license_expression`
+- `copyrights`
+- `holders`
+- `authors`
+- `programming_language`
 
 ### Initial non-license-dependent summary fields
 
@@ -68,9 +78,10 @@ This does **not** mean Rust now matches Python `summarycode` completely.
 
 Still open:
 
-- license tallies
-- copyright tallies
 - package tallies
+- `tallies_of_key_files`
+- `tallies_with_details`
+- `tallies_by_facet`
 - full `license_clarity_score` heuristic parity
 - facets
 - generated code detection

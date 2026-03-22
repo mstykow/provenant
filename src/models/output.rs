@@ -8,6 +8,8 @@ pub const OUTPUT_FORMAT_VERSION: &str = "4.0.0";
 pub struct Output {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<Summary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tallies: Option<Tallies>,
     pub headers: Vec<Header>,
     pub packages: Vec<Package>,
     pub dependencies: Vec<TopLevelDependency>,
@@ -46,6 +48,30 @@ pub struct TallyEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
     pub count: usize,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct Tallies {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub detected_license_expression: Vec<TallyEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub copyrights: Vec<TallyEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub holders: Vec<TallyEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub authors: Vec<TallyEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub programming_language: Vec<TallyEntry>,
+}
+
+impl Tallies {
+    pub fn is_empty(&self) -> bool {
+        self.detected_license_expression.is_empty()
+            && self.copyrights.is_empty()
+            && self.holders.is_empty()
+            && self.authors.is_empty()
+            && self.programming_language.is_empty()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]

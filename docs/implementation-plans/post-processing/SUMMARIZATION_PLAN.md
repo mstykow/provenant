@@ -1,6 +1,6 @@
 # Summary, Tallies & Analysis Implementation Plan
 
-> **Status**: 🟡 In Progress — foundational summary and key-file infrastructure is implemented; broader tallies/facets/generated-code parity remains open
+> **Status**: 🟡 In Progress — shared provenance cleanup and core top-level tallies are implemented; tally variants, facets/generated-code parity, and broader summary parity remain open
 > **Priority**: P2 - Medium Priority (Post-Processing Feature)
 > **Estimated Effort**: 3-4 weeks
 > **Dependencies**: [LICENSE_DETECTION_ARCHITECTURE.md](../../LICENSE_DETECTION_ARCHITECTURE.md), [COPYRIGHT_DETECTION_PLAN.md](../text-detection/COPYRIGHT_DETECTION_PLAN.md), [ASSEMBLY_PLAN.md](../package-detection/ASSEMBLY_PLAN.md)
@@ -119,9 +119,17 @@ Summarization is a **consumer**, not a normalizer.
 - ✅ Basic scan statistics (file count, scan time)
 - ✅ Output format structure
 - ✅ Top-level `summary` output block
+- ✅ Top-level `tallies` output block
 - ✅ Key-file tagging foundations (`is_legal`, `is_manifest`, `is_readme`, `is_top_level`, `is_key_file`)
 - ✅ Package metadata promotion from key files
+- ✅ Shared provenance cleanup so key-file license clues no longer mutate package declared-license fields or package detections
 - ✅ Initial `license_clarity_score` model/output
+- ✅ Core codebase tallies for:
+  - `detected_license_expression`
+  - `copyrights`
+  - `holders`
+  - `authors`
+  - `programming_language`
 - ✅ Initial non-license-dependent summary fields:
   - `declared_holder`
   - `primary_language`
@@ -129,16 +137,14 @@ Summarization is a **consumer**, not a normalizer.
 
 ### Missing
 
-- ❌ License tallies
-- ❌ Copyright tallies
 - ❌ Package tallies
-- ❌ Author/holder/language tally parity beyond current summary slices
+- ❌ `tallies_of_key_files` / `--tallies-key-files`
+- ❌ Detailed `--tallies-with-details` per-file/per-directory tallies
+- ❌ `tallies_by_facet` / `--tallies-by-facet`
 - ❌ Full Python-parity license clarity scoring heuristics
 - ❌ Full ScanCode `--classify` parity (including remaining classification nuances)
 - ❌ Facet assignment
 - ❌ Generated code detection
-- ❌ `--tallies-with-details` file/directory output parity
-- ❌ `--tallies-key-files` and `--tallies-by-facet` parity
 - ❌ CLI gating for summary/tally/classify/facet/generated options
 - ❌ Comprehensive scan summary parity
 
@@ -150,18 +156,18 @@ Summarization is a **consumer**, not a normalizer.
 
 ### Concrete follow-up before deeper summary parity work
 
-- Revisit the current key-file promotion path in `src/main.rs`.
-- Today `promote_package_metadata_from_key_files(...)` can backfill package `declared_license_expression*` and `license_detections` from key files when package fields are empty.
-- Summarization should continue consuming declared/discovered facts, but this package-field mutation should move toward explicit enriched/discovered provenance instead of implicitly redefining a package's declared license.
+- Shared provenance cleanup is complete.
+- `promote_package_metadata_from_key_files(...)` now limits key-file promotion to copyright and holder enrichment.
+- Remaining summary work can build on explicit summary/tally outputs instead of implicit package declared-license mutation.
 
 ## Implementation Phases
 
-1. **Phase 0**: Shared provenance cleanup so package declared-license fields are no longer implicitly redefined from key-file evidence.
+1. **Phase 0**: Shared provenance cleanup so package declared-license fields are no longer implicitly redefined from key-file evidence. ✅
 2. **Phase 1**: File classification and key-file tagging foundations ✅
 3. **Phase 2**: Package/file metadata promotion foundations ✅
 4. **Phase 3**: Initial summary model/output structure ✅
 5. **Phase 4**: Initial non-license-dependent summary fields ✅
-6. **Phase 5**: Core codebase tallies (`--tallies`) over existing declared/discovered evidence.
+6. **Phase 5**: Core codebase tallies (`--tallies`) over existing declared/discovered evidence. ✅ for top-level `detected_license_expression`, `copyrights`, `holders`, `authors`, and `programming_language`; package tallies remain open.
 7. **Phase 6**: Detailed tally variants (`--tallies-with-details`, `--tallies-key-files`, `--tallies-by-facet`).
 8. **Phase 7**: Full license clarity parity.
 9. **Phase 8**: Facets and generated-code detection parity.
@@ -191,7 +197,6 @@ Summarization is a **consumer**, not a normalizer.
 - Some summarization foundations can land before full detector parity (for example key-file tagging, package metadata promotion, initial summary fields, and primary-language/holder derivation).
 - Full parity for tallies and Python-style scoring still depends on richer discovered-license/copyright coverage and clearer package-vs-file provenance.
 - The recent parser-side declared-license normalization work reduces one gap for summarization consumers, but it does not remove the need for summary tallies, facets, generated-code detection, or scan-level aggregation.
-- The current `src/main.rs` key-file promotion of package declared-license fields should be treated as a follow-up cleanup item, not as the final package-license architecture.
 - This plan intentionally groups some upstream pre-scan/scan/post-scan features together because they converge on one post-processing summary surface in Provenant.
 - Implement incrementally, but preserve the user-visible dependency chain: classification/facets/generated feed tallies and clarity; tallies and clarity feed full summary parity.
 - License clarity score is a key metric for compliance teams.

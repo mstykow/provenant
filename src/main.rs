@@ -14,7 +14,7 @@ use crate::cli::Cli;
 use crate::license_detection::LicenseDetectionEngine;
 use crate::models::{
     ExtraData, FileInfo, FileType, Header, LicenseClarityScore, OUTPUT_FORMAT_VERSION, Output,
-    Package, Summary, SystemEnvironment, TallyEntry,
+    Package, Summary, SystemEnvironment, Tallies, TallyEntry,
 };
 use crate::output::{OutputWriteConfig, write_output_file};
 use crate::progress::{ProgressMode, ScanProgress};
@@ -743,9 +743,11 @@ fn create_output(
     classify_key_files(&mut files, &packages);
     promote_package_metadata_from_key_files(&files, &mut packages);
     let summary = compute_summary(&files, &packages);
+    let tallies = compute_tallies(&files);
 
     Output {
         summary,
+        tallies,
         headers: vec![Header {
             start_timestamp: start_time.to_rfc3339(),
             end_timestamp: end_time.to_rfc3339(),
@@ -977,6 +979,95 @@ fn compute_summary(files: &[FileInfo], packages: &[Package]) -> Option<Summary> 
         primary_language,
         other_languages,
     })
+}
+
+fn compute_tallies(files: &[FileInfo]) -> Option<Tallies> {
+    let detected_license_expression = tally_file_values(files, detected_license_values, true);
+    let copyrights = tally_file_values(files, copyright_values, true);
+    let holders = tally_file_values(files, holder_values, true);
+    let authors = tally_file_values(files, author_values, true);
+    let programming_language = tally_file_values(files, programming_language_values, false);
+
+    let tallies = Tallies {
+        detected_license_expression,
+        copyrights,
+        holders,
+        authors,
+        programming_language,
+    };
+
+    (!tallies.is_empty()).then_some(tallies)
+}
+
+fn tally_file_values<F>(
+    files: &[FileInfo],
+    values_for_file: F,
+    count_missing_files: bool,
+) -> Vec<TallyEntry>
+where
+    F: Fn(&FileInfo) -> Vec<String>,
+{
+    let mut counts: HashMap<Option<String>, usize> = HashMap::new();
+
+    for file in files.iter().filter(|file| file.file_type == FileType::File) {
+        let values = values_for_file(file);
+        if values.is_empty() {
+            if count_missing_files {
+                *counts.entry(None).or_insert(0) += 1;
+            }
+            continue;
+        }
+
+        for value in values {
+            *counts.entry(Some(value)).or_insert(0) += 1;
+        }
+    }
+
+    build_tally_entries(counts)
+}
+
+fn detected_license_values(file: &FileInfo) -> Vec<String> {
+    file.license_expression.clone().into_iter().collect()
+}
+
+fn copyright_values(file: &FileInfo) -> Vec<String> {
+    file.copyrights
+        .iter()
+        .map(|copyright| copyright.copyright.clone())
+        .collect()
+}
+
+fn holder_values(file: &FileInfo) -> Vec<String> {
+    file.holders
+        .iter()
+        .map(|holder| holder.holder.clone())
+        .collect()
+}
+
+fn author_values(file: &FileInfo) -> Vec<String> {
+    file.authors
+        .iter()
+        .map(|author| author.author.clone())
+        .collect()
+}
+
+fn programming_language_values(file: &FileInfo) -> Vec<String> {
+    file.programming_language.clone().into_iter().collect()
+}
+
+fn build_tally_entries(counts: HashMap<Option<String>, usize>) -> Vec<TallyEntry> {
+    let mut tallies: Vec<TallyEntry> = counts
+        .into_iter()
+        .map(|(value, count)| TallyEntry { value, count })
+        .collect();
+
+    tallies.sort_by(|left, right| {
+        right
+            .count
+            .cmp(&left.count)
+            .then_with(|| left.value.cmp(&right.value))
+    });
+    tallies
 }
 
 fn compute_declared_holder(files: &[FileInfo], packages: &[Package]) -> Option<String> {
