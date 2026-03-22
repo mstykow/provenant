@@ -10,7 +10,8 @@ This incremental layer adds:
 2. package metadata promotion from key files
 3. top-level `summary` output structure
 4. top-level codebase `tallies` output for detected license expressions, copyrights, holders, authors, and programming languages
-5. initial non-license-dependent summary fields such as `declared_holder`, `primary_language`, and `other_languages`
+5. top-level `tallies_of_key_files` output for key-file-only aggregation of those same tally families
+6. initial non-license-dependent summary fields such as `declared_holder`, `primary_language`, and `other_languages`
 
 ## Why This Matters
 
@@ -62,6 +63,10 @@ Top-level output now also supports a `tallies` block for codebase-wide aggregati
 - `authors`
 - `programming_language`
 
+### Key-file-only tallies
+
+Top-level output now also supports `tallies_of_key_files`, which re-aggregates the same tally families over files already classified as key files.
+
 ### Initial non-license-dependent summary fields
 
 The current incremental layer now computes:
@@ -79,7 +84,6 @@ This does **not** mean Rust now matches Python `summarycode` completely.
 Still open:
 
 - package tallies
-- `tallies_of_key_files`
 - `tallies_with_details`
 - `tallies_by_facet`
 - full `license_clarity_score` heuristic parity

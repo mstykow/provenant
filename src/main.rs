@@ -744,10 +744,12 @@ fn create_output(
     promote_package_metadata_from_key_files(&files, &mut packages);
     let summary = compute_summary(&files, &packages);
     let tallies = compute_tallies(&files);
+    let tallies_of_key_files = compute_key_file_tallies(&files);
 
     Output {
         summary,
         tallies,
+        tallies_of_key_files,
         headers: vec![Header {
             start_timestamp: start_time.to_rfc3339(),
             end_timestamp: end_time.to_rfc3339(),
@@ -999,6 +1001,40 @@ fn compute_tallies(files: &[FileInfo]) -> Option<Tallies> {
     (!tallies.is_empty()).then_some(tallies)
 }
 
+fn compute_key_file_tallies(files: &[FileInfo]) -> Option<Tallies> {
+    if !files
+        .iter()
+        .any(|file| file.file_type == FileType::File && file.is_key_file)
+    {
+        return None;
+    }
+
+    let tallies = Tallies {
+        detected_license_expression: tally_file_values_filtered(
+            files,
+            |file| file.is_key_file,
+            detected_license_values,
+            false,
+        ),
+        copyrights: tally_file_values_filtered(
+            files,
+            |file| file.is_key_file,
+            copyright_values,
+            false,
+        ),
+        holders: tally_file_values_filtered(files, |file| file.is_key_file, holder_values, false),
+        authors: tally_file_values_filtered(files, |file| file.is_key_file, author_values, false),
+        programming_language: tally_file_values_filtered(
+            files,
+            |file| file.is_key_file,
+            programming_language_values,
+            false,
+        ),
+    };
+
+    (!tallies.is_empty()).then_some(tallies)
+}
+
 fn tally_file_values<F>(
     files: &[FileInfo],
     values_for_file: F,
@@ -1007,9 +1043,25 @@ fn tally_file_values<F>(
 where
     F: Fn(&FileInfo) -> Vec<String>,
 {
+    tally_file_values_filtered(files, |_| true, values_for_file, count_missing_files)
+}
+
+fn tally_file_values_filtered<P, F>(
+    files: &[FileInfo],
+    predicate: P,
+    values_for_file: F,
+    count_missing_files: bool,
+) -> Vec<TallyEntry>
+where
+    P: Fn(&FileInfo) -> bool,
+    F: Fn(&FileInfo) -> Vec<String>,
+{
     let mut counts: HashMap<Option<String>, usize> = HashMap::new();
 
-    for file in files.iter().filter(|file| file.file_type == FileType::File) {
+    for file in files
+        .iter()
+        .filter(|file| file.file_type == FileType::File && predicate(file))
+    {
         let values = values_for_file(file);
         if values.is_empty() {
             if count_missing_files {

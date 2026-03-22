@@ -10,6 +10,8 @@ pub struct Output {
     pub summary: Option<Summary>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tallies: Option<Tallies>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tallies_of_key_files: Option<Tallies>,
     pub headers: Vec<Header>,
     pub packages: Vec<Package>,
     pub dependencies: Vec<TopLevelDependency>,

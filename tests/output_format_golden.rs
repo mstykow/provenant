@@ -1409,6 +1409,7 @@ fn sample_output_with_sections(
     Output {
         summary: None,
         tallies: None,
+        tallies_of_key_files: None,
         headers: vec![sample_header(files_count, directories_count)],
         packages,
         dependencies,
@@ -1718,6 +1719,7 @@ fn empty_output() -> Output {
     Output {
         summary: None,
         tallies: None,
+        tallies_of_key_files: None,
         headers: vec![],
         packages: vec![],
         dependencies: vec![],

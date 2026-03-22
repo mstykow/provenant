@@ -17,6 +17,13 @@ pub(crate) fn write_json_lines(output: &Output, writer: &mut dyn Write) -> io::R
         write_jsonl_line(writer, &json!({ "tallies": tallies }))?;
     }
 
+    if let Some(tallies_of_key_files) = &output.tallies_of_key_files {
+        write_jsonl_line(
+            writer,
+            &json!({ "tallies_of_key_files": tallies_of_key_files }),
+        )?;
+    }
+
     if !output.packages.is_empty() {
         write_jsonl_line(writer, &json!({ "packages": output.packages }))?;
     }

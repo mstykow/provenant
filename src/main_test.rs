@@ -1091,6 +1091,76 @@ fn compute_tallies_counts_file_findings_and_missing_values() {
 }
 
 #[test]
+fn compute_key_file_tallies_only_counts_key_files_and_drops_missing_values() {
+    let mut key_license = file("project/LICENSE");
+    key_license.is_key_file = true;
+    key_license.license_expression = Some("apache-2.0".to_string());
+    key_license.copyrights = vec![Copyright {
+        copyright: "Copyright (c) Example Corp.".to_string(),
+        start_line: 1,
+        end_line: 1,
+    }];
+    key_license.holders = vec![Holder {
+        holder: "Example Corp.".to_string(),
+        start_line: 1,
+        end_line: 1,
+    }];
+
+    let mut key_readme = file("project/README.md");
+    key_readme.is_key_file = true;
+    key_readme.programming_language = Some("Markdown".to_string());
+    key_readme.authors = vec![Author {
+        author: "Alice".to_string(),
+        start_line: 1,
+        end_line: 1,
+    }];
+
+    let mut non_key_source = file("project/src/lib.rs");
+    non_key_source.programming_language = Some("Rust".to_string());
+    non_key_source.license_expression = Some("mit".to_string());
+    non_key_source.is_key_file = false;
+
+    let tallies = compute_key_file_tallies(&[key_license, key_readme, non_key_source])
+        .expect("key-file tallies exist");
+
+    assert_eq!(
+        tallies.detected_license_expression,
+        vec![TallyEntry {
+            value: Some("apache-2.0".to_string()),
+            count: 1,
+        }]
+    );
+    assert_eq!(
+        tallies.copyrights,
+        vec![TallyEntry {
+            value: Some("Copyright (c) Example Corp.".to_string()),
+            count: 1,
+        }]
+    );
+    assert_eq!(
+        tallies.holders,
+        vec![TallyEntry {
+            value: Some("Example Corp.".to_string()),
+            count: 1,
+        }]
+    );
+    assert_eq!(
+        tallies.authors,
+        vec![TallyEntry {
+            value: Some("Alice".to_string()),
+            count: 1,
+        }]
+    );
+    assert_eq!(
+        tallies.programming_language,
+        vec![TallyEntry {
+            value: Some("Markdown".to_string()),
+            count: 1,
+        }]
+    );
+}
+
+#[test]
 fn about_scan_promotes_packages_and_assigns_referenced_files() {
     let result = about_scan_and_assemble(Path::new("testdata/about"));
 
