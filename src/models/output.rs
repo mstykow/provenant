@@ -52,7 +52,7 @@ pub struct TallyEntry {
     pub count: usize,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
 pub struct Tallies {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub detected_license_expression: Vec<TallyEntry>,

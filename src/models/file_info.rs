@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use super::DatasourceId;
 use super::PackageType;
+use crate::models::output::Tallies;
 use crate::utils::spdx::combine_license_expressions;
 
 #[derive(Debug, Builder, Serialize, Deserialize)]
@@ -82,6 +83,9 @@ pub struct FileInfo {
     #[builder(default)]
     #[serde(skip_serializing_if = "is_false", default)]
     pub is_key_file: bool,
+    #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub tallies: Option<Tallies>,
 }
 
 impl FileInfoBuilder {
@@ -194,6 +198,7 @@ impl FileInfo {
             is_readme: false,
             is_top_level: false,
             is_key_file: false,
+            tallies: None,
         }
     }
 }

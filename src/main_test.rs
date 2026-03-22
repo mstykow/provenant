@@ -1161,6 +1161,107 @@ fn compute_key_file_tallies_only_counts_key_files_and_drops_missing_values() {
 }
 
 #[test]
+fn compute_detailed_tallies_assigns_file_and_directory_rollups() {
+    let mut files = vec![
+        dir("project"),
+        dir("project/src"),
+        dir("project/empty"),
+        file("project/src/main.rs"),
+        file("project/README.md"),
+    ];
+
+    files[3].license_expression = Some("mit".to_string());
+    files[3].programming_language = Some("Rust".to_string());
+    files[3].authors = vec![Author {
+        author: "Alice".to_string(),
+        start_line: 1,
+        end_line: 1,
+    }];
+
+    files[4].programming_language = Some("Markdown".to_string());
+
+    compute_detailed_tallies(&mut files);
+
+    let root = files.iter().find(|file| file.path == "project").unwrap();
+    let src = files
+        .iter()
+        .find(|file| file.path == "project/src")
+        .unwrap();
+    let empty = files
+        .iter()
+        .find(|file| file.path == "project/empty")
+        .unwrap();
+    let main_rs = files
+        .iter()
+        .find(|file| file.path == "project/src/main.rs")
+        .unwrap();
+    let readme = files
+        .iter()
+        .find(|file| file.path == "project/README.md")
+        .unwrap();
+
+    assert_eq!(
+        main_rs
+            .tallies
+            .as_ref()
+            .unwrap()
+            .detected_license_expression,
+        vec![TallyEntry {
+            value: Some("mit".to_string()),
+            count: 1,
+        }]
+    );
+    assert_eq!(
+        main_rs.tallies.as_ref().unwrap().authors,
+        vec![TallyEntry {
+            value: Some("Alice".to_string()),
+            count: 1,
+        }]
+    );
+    assert_eq!(
+        readme.tallies.as_ref().unwrap().detected_license_expression,
+        vec![TallyEntry {
+            value: None,
+            count: 1,
+        }]
+    );
+    assert_eq!(
+        src.tallies.as_ref().unwrap().programming_language,
+        vec![TallyEntry {
+            value: Some("Rust".to_string()),
+            count: 1,
+        }]
+    );
+    assert_eq!(
+        root.tallies.as_ref().unwrap().detected_license_expression,
+        vec![
+            TallyEntry {
+                value: None,
+                count: 1,
+            },
+            TallyEntry {
+                value: Some("mit".to_string()),
+                count: 1,
+            },
+        ]
+    );
+    assert_eq!(
+        root.tallies.as_ref().unwrap().programming_language,
+        vec![
+            TallyEntry {
+                value: Some("Markdown".to_string()),
+                count: 1,
+            },
+            TallyEntry {
+                value: Some("Rust".to_string()),
+                count: 1,
+            },
+        ]
+    );
+    assert!(empty.tallies.as_ref().unwrap().is_empty());
+}
+
+#[test]
 fn about_scan_promotes_packages_and_assigns_referenced_files() {
     let result = about_scan_and_assemble(Path::new("testdata/about"));
 

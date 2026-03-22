@@ -742,6 +742,7 @@ fn create_output(
     let mut packages = assembly_result.packages;
     classify_key_files(&mut files, &packages);
     promote_package_metadata_from_key_files(&files, &mut packages);
+    compute_detailed_tallies(&mut files);
     let summary = compute_summary(&files, &packages);
     let tallies = compute_tallies(&files);
     let tallies_of_key_files = compute_key_file_tallies(&files);
@@ -1033,6 +1034,119 @@ fn compute_key_file_tallies(files: &[FileInfo]) -> Option<Tallies> {
     };
 
     (!tallies.is_empty()).then_some(tallies)
+}
+
+fn compute_detailed_tallies(files: &mut [FileInfo]) {
+    let mut children_by_parent: HashMap<String, Vec<usize>> = HashMap::new();
+    let known_paths: HashSet<String> = files.iter().map(|file| file.path.clone()).collect();
+
+    for (idx, file) in files.iter().enumerate() {
+        let Some(parent) = parent_path(&file.path) else {
+            continue;
+        };
+        if known_paths.contains(parent.as_str()) {
+            children_by_parent.entry(parent).or_default().push(idx);
+        }
+    }
+
+    let mut indices: Vec<usize> = (0..files.len()).collect();
+    indices.sort_by_key(|&idx| std::cmp::Reverse(path_depth(&files[idx].path)));
+
+    for idx in indices {
+        let tallies = if files[idx].file_type == FileType::File {
+            compute_direct_file_tallies(&files[idx])
+        } else {
+            aggregate_child_tallies(
+                children_by_parent
+                    .get(files[idx].path.as_str())
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]),
+                files,
+            )
+        };
+        files[idx].tallies = Some(tallies);
+    }
+}
+
+fn parent_path(path: &str) -> Option<String> {
+    Path::new(path)
+        .parent()
+        .and_then(|parent| parent.to_str())
+        .filter(|parent| !parent.is_empty())
+        .map(str::to_string)
+}
+
+fn path_depth(path: &str) -> usize {
+    Path::new(path).components().count()
+}
+
+fn compute_direct_file_tallies(file: &FileInfo) -> Tallies {
+    Tallies {
+        detected_license_expression: build_direct_tally_entries(
+            detected_license_values(file),
+            true,
+        ),
+        copyrights: build_direct_tally_entries(copyright_values(file), true),
+        holders: build_direct_tally_entries(holder_values(file), true),
+        authors: build_direct_tally_entries(author_values(file), true),
+        programming_language: build_direct_tally_entries(programming_language_values(file), false),
+    }
+}
+
+fn aggregate_child_tallies(child_indices: &[usize], files: &[FileInfo]) -> Tallies {
+    let mut detected_license_expression = HashMap::new();
+    let mut copyrights = HashMap::new();
+    let mut holders = HashMap::new();
+    let mut authors = HashMap::new();
+    let mut programming_language = HashMap::new();
+
+    for &child_idx in child_indices {
+        let Some(child_tallies) = files[child_idx].tallies.as_ref() else {
+            continue;
+        };
+
+        merge_tally_entries(
+            &mut detected_license_expression,
+            &child_tallies.detected_license_expression,
+        );
+        merge_tally_entries(&mut copyrights, &child_tallies.copyrights);
+        merge_tally_entries(&mut holders, &child_tallies.holders);
+        merge_tally_entries(&mut authors, &child_tallies.authors);
+        merge_tally_entries(
+            &mut programming_language,
+            &child_tallies.programming_language,
+        );
+    }
+
+    Tallies {
+        detected_license_expression: build_tally_entries(detected_license_expression),
+        copyrights: build_tally_entries(copyrights),
+        holders: build_tally_entries(holders),
+        authors: build_tally_entries(authors),
+        programming_language: build_tally_entries(programming_language),
+    }
+}
+
+fn build_direct_tally_entries(values: Vec<String>, count_missing: bool) -> Vec<TallyEntry> {
+    let mut counts: HashMap<Option<String>, usize> = HashMap::new();
+
+    if values.is_empty() {
+        if count_missing {
+            counts.insert(None, 1);
+        }
+    } else {
+        for value in values {
+            *counts.entry(Some(value)).or_insert(0) += 1;
+        }
+    }
+
+    build_tally_entries(counts)
+}
+
+fn merge_tally_entries(counts: &mut HashMap<Option<String>, usize>, entries: &[TallyEntry]) {
+    for entry in entries {
+        *counts.entry(entry.value.clone()).or_insert(0) += entry.count;
+    }
 }
 
 fn tally_file_values<F>(

@@ -54,6 +54,7 @@ mod tests {
             is_readme: false,
             is_top_level: false,
             is_key_file: false,
+            tallies: None,
         }
     }
 
@@ -2721,6 +2722,7 @@ mod tests {
             is_readme: false,
             is_top_level: false,
             is_key_file: false,
+            tallies: None,
         }];
 
         let result = assemble(&mut files);

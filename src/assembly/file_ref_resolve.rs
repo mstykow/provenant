@@ -839,6 +839,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "libc.so".to_string(),
@@ -870,6 +871,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "ldconfig".to_string(),
@@ -901,6 +903,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
         ];
 
@@ -1022,6 +1025,7 @@ mod tests {
             is_readme: false,
             is_top_level: false,
             is_key_file: false,
+            tallies: None,
         }];
 
         let mut packages = vec![Package {
@@ -1124,6 +1128,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "os-release".to_string(),
@@ -1160,6 +1165,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
         ];
 
@@ -1278,6 +1284,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "from_repo".to_string(),
@@ -1310,6 +1317,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
         ];
 
@@ -1494,6 +1502,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "test.so".to_string(),
@@ -1525,6 +1534,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
         ];
 
@@ -1653,6 +1663,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "__init__.py".to_string(),
@@ -1684,6 +1695,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "core.py".to_string(),
@@ -1715,6 +1727,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "LICENSE.rst".to_string(),
@@ -1747,6 +1760,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
         ];
 
@@ -1858,6 +1872,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "core.py".to_string(),
@@ -1889,6 +1904,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
         ];
 
@@ -1997,6 +2013,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "core.py".to_string(),
@@ -2028,6 +2045,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
         ];
 
@@ -2136,6 +2154,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "core.py".to_string(),
@@ -2167,6 +2186,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
         ];
 
@@ -2270,6 +2290,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "outside.py".to_string(),
@@ -2301,6 +2322,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
         ];
 
@@ -2404,6 +2426,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "bash.list".to_string(),
@@ -2462,6 +2485,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "bash.md5sums".to_string(),
@@ -2509,6 +2533,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "bash".to_string(),
@@ -2540,6 +2565,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "copyright".to_string(),
@@ -2571,6 +2597,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
         ];
 
@@ -2673,6 +2700,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "bash.list".to_string(),
@@ -2720,6 +2748,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "bash".to_string(),
@@ -2751,6 +2780,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
         ];
 
@@ -2850,6 +2880,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "libc6:amd64.list".to_string(),
@@ -2898,6 +2929,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "libc6:i386.list".to_string(),
@@ -2946,6 +2978,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "libc.so.6".to_string(),
@@ -2977,6 +3010,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
             FileInfo {
                 name: "libc.so.6".to_string(),
@@ -3008,6 +3042,7 @@ mod tests {
                 is_readme: false,
                 is_top_level: false,
                 is_key_file: false,
+                tallies: None,
             },
         ];
 

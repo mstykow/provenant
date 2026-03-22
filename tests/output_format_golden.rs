@@ -1,6 +1,7 @@
 use provenant::models::{
     Copyright, DatasourceId, ExtraData, FileInfo, FileType, Header, Holder, Output, Package,
-    PackageData, PackageType, Party, ResolvedPackage, SystemEnvironment, TopLevelDependency,
+    PackageData, PackageType, Party, ResolvedPackage, SystemEnvironment, Tallies, TallyEntry,
+    TopLevelDependency,
 };
 use provenant::{OutputFormat, OutputWriteConfig, OutputWriter, writer_for_format};
 use regex::Regex;
@@ -89,6 +90,120 @@ fn test_json_lines_contract_shape_matches_python_fixture_structure() {
     assert!(lines[0].get("headers").is_some());
     assert!(expected_array[0].get("headers").is_some());
     assert!(lines.iter().any(|line| line.get("files").is_some()));
+}
+
+#[test]
+fn test_json_contract_includes_detailed_tallies_for_files_and_directories() {
+    let mut root = sample_directory_file("scan");
+    root.tallies = Some(Tallies {
+        detected_license_expression: vec![
+            TallyEntry {
+                value: None,
+                count: 1,
+            },
+            TallyEntry {
+                value: Some("mit".to_string()),
+                count: 1,
+            },
+        ],
+        copyrights: vec![],
+        holders: vec![],
+        authors: vec![],
+        programming_language: vec![
+            TallyEntry {
+                value: Some("Markdown".to_string()),
+                count: 1,
+            },
+            TallyEntry {
+                value: Some("Rust".to_string()),
+                count: 1,
+            },
+        ],
+    });
+
+    let mut src = sample_directory_file("scan/src");
+    src.tallies = Some(Tallies {
+        detected_license_expression: vec![TallyEntry {
+            value: Some("mit".to_string()),
+            count: 1,
+        }],
+        copyrights: vec![],
+        holders: vec![],
+        authors: vec![],
+        programming_language: vec![TallyEntry {
+            value: Some("Rust".to_string()),
+            count: 1,
+        }],
+    });
+
+    let mut empty = sample_directory_file("scan/empty");
+    empty.tallies = Some(Tallies::default());
+
+    let mut file = sample_plain_text_file(
+        "main.rs",
+        "main",
+        ".rs",
+        "scan/src/main.rs",
+        10,
+        "abc",
+        vec![],
+    );
+    file.programming_language = Some("Rust".to_string());
+    file.tallies = Some(Tallies {
+        detected_license_expression: vec![TallyEntry {
+            value: Some("mit".to_string()),
+            count: 1,
+        }],
+        copyrights: vec![],
+        holders: vec![],
+        authors: vec![],
+        programming_language: vec![TallyEntry {
+            value: Some("Rust".to_string()),
+            count: 1,
+        }],
+    });
+
+    let output = sample_output_with_sections(1, 3, vec![], vec![], vec![root, src, empty, file]);
+    let mut bytes = Vec::new();
+    writer_for_format(OutputFormat::Json)
+        .write(&output, &mut bytes, &OutputWriteConfig::default())
+        .expect("json output should be generated");
+
+    let value: Value = serde_json::from_slice(&bytes).expect("json output should parse");
+    let files = value["files"].as_array().expect("files should be an array");
+
+    let root = files
+        .iter()
+        .find(|file| file["path"] == "scan")
+        .expect("root directory present");
+    let src = files
+        .iter()
+        .find(|file| file["path"] == "scan/src")
+        .expect("src directory present");
+    let empty = files
+        .iter()
+        .find(|file| file["path"] == "scan/empty")
+        .expect("empty directory present");
+    let file = files
+        .iter()
+        .find(|file| file["path"] == "scan/src/main.rs")
+        .expect("source file present");
+
+    assert!(root.get("tallies").is_some());
+    assert!(src.get("tallies").is_some());
+    assert!(empty.get("tallies").is_some());
+    assert!(file.get("tallies").is_some());
+
+    assert_eq!(
+        root["tallies"]["detected_license_expression"][0]["value"],
+        Value::Null
+    );
+    assert_eq!(src["tallies"]["programming_language"][0]["value"], "Rust");
+    assert_eq!(empty["tallies"], serde_json::json!({}));
+    assert_eq!(
+        file["tallies"]["detected_license_expression"][0]["value"],
+        "mit"
+    );
 }
 
 #[test]

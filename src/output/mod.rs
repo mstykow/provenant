@@ -386,6 +386,45 @@ mod tests {
     }
 
     #[test]
+    fn test_json_and_json_lines_writers_include_file_tallies() {
+        let mut output = sample_output();
+        output.files[0].tallies = Some(crate::models::Tallies {
+            detected_license_expression: vec![crate::models::TallyEntry {
+                value: Some("mit".to_string()),
+                count: 1,
+            }],
+            copyrights: vec![crate::models::TallyEntry {
+                value: None,
+                count: 1,
+            }],
+            holders: vec![],
+            authors: vec![],
+            programming_language: vec![crate::models::TallyEntry {
+                value: Some("Rust".to_string()),
+                count: 1,
+            }],
+        });
+
+        let mut json_bytes = Vec::new();
+        writer_for_format(OutputFormat::Json)
+            .write(&output, &mut json_bytes, &OutputWriteConfig::default())
+            .expect("json write should succeed");
+        let json_value: Value =
+            serde_json::from_slice(&json_bytes).expect("json output should parse");
+        assert_eq!(
+            json_value["files"][0]["tallies"]["detected_license_expression"][0]["value"],
+            "mit"
+        );
+
+        let mut jsonl_bytes = Vec::new();
+        writer_for_format(OutputFormat::JsonLines)
+            .write(&output, &mut jsonl_bytes, &OutputWriteConfig::default())
+            .expect("json-lines write should succeed");
+        let rendered = String::from_utf8(jsonl_bytes).expect("json-lines should be utf-8");
+        assert!(rendered.lines().any(|line| line.contains("\"tallies\"")));
+    }
+
+    #[test]
     fn test_cyclonedx_xml_writer_outputs_xml() {
         let output = sample_output();
         let mut bytes = Vec::new();
