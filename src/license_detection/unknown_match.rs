@@ -122,7 +122,7 @@ fn compute_covered_positions(
     let mut covered = std::collections::HashSet::new();
 
     for m in known_matches {
-        for pos in m.qspan() {
+        for pos in m.qspan_iter() {
             covered.insert(pos);
         }
     }

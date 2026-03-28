@@ -19,19 +19,25 @@ fn combine_matches(a: &LicenseMatch, b: &LicenseMatch) -> LicenseMatch {
 
     let mut merged = a.clone();
 
-    let mut qspan: HashSet<usize> = a.qspan().into_iter().collect();
-    qspan.extend(b.qspan());
+    let mut qspan: HashSet<usize> = HashSet::new();
+    qspan.extend(a.qspan_iter());
+    qspan.extend(b.qspan_iter());
     let mut qspan_vec: Vec<usize> = qspan.into_iter().collect();
     qspan_vec.sort();
 
-    let mut ispan: HashSet<usize> = a.ispan().into_iter().collect();
-    ispan.extend(b.ispan());
+    let mut ispan: HashSet<usize> = HashSet::new();
+    ispan.extend(a.ispan_iter());
+    ispan.extend(b.ispan_iter());
     let mut ispan_vec: Vec<usize> = ispan.into_iter().collect();
     ispan_vec.sort();
 
-    let a_hispan: HashSet<usize> = a.hispan().into_iter().collect();
-    let b_hispan: HashSet<usize> = b.hispan().into_iter().collect();
-    let combined_hispan: HashSet<usize> = a_hispan.union(&b_hispan).copied().collect();
+    let a_hispan: Vec<usize> = a.hispan();
+    let b_hispan: Vec<usize> = b.hispan();
+    let mut a_hispan_set: HashSet<usize> = HashSet::with_capacity(a_hispan.len());
+    a_hispan_set.extend(a_hispan.iter().copied());
+    let mut b_hispan_set: HashSet<usize> = HashSet::with_capacity(b_hispan.len());
+    b_hispan_set.extend(b_hispan.iter().copied());
+    let combined_hispan: HashSet<usize> = a_hispan_set.union(&b_hispan_set).copied().collect();
     let mut hispan_vec: Vec<usize> = combined_hispan.into_iter().collect();
     hispan_vec.sort();
     let hilen = hispan_vec.len();
@@ -319,12 +325,13 @@ pub(super) fn filter_license_references_with_text_match(
         return matches.to_vec();
     }
 
-    matches
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| !to_discard.contains(i))
-        .map(|(_, m)| m.clone())
-        .collect()
+    let mut result = Vec::with_capacity(matches.len() - to_discard.len());
+    for (i, m) in matches.iter().enumerate() {
+        if !to_discard.contains(&i) {
+            result.push(m.clone());
+        }
+    }
+    result
 }
 
 #[cfg(test)]
