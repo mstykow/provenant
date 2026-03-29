@@ -96,16 +96,13 @@ impl PackageParser for MyParser {
 - Use `crate::parser_warn!` (typically imported as `warn`) for parser failures so diagnostics land
   in structured scan output.
 - Do not use plain `log::warn!()` for file-scoped parser failures.
-- Do not execute package-manager code or shell commands from parser logic **by default**.
+- Do not execute package-manager code or shell commands from parser logic.
 - Do not do broad file-content license detection, copyright detection, or backfilling from sibling
   files inside the parser **by default**.
 - Preserve raw dependency and license input when the source format is ambiguous.
 
 Rare exceptions should stay rare, bounded, and documented:
 
-- `swift_manifest_json.rs` may invoke `swift package dump-package` for raw `Package.swift`
-  inputs because current SwiftPM manifest JSON generation requires manifest evaluation; pre-generated
-  `Package.swift.json` remains the preferred static surface and graceful fallback is required.
 - `python.rs` currently performs bounded sibling enrichment for adjacent installed/source metadata
   sidecars such as `requires.txt`, `RECORD`, `installed-files.txt`, `SOURCES.txt`, and sibling
   `WHEEL` files because those files are part of the same Python metadata surface. File ownership
