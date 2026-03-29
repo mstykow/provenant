@@ -325,7 +325,16 @@ fn spdx_package_verification_code(files: &[&FileInfo]) -> String {
 fn spdx_file_license_info(file: &FileInfo) -> Vec<String> {
     let mut license_ids = Vec::new();
 
-    for detection in &file.license_detections {
+    for detection in file.license_detections.iter().chain(
+        file.package_data
+            .iter()
+            .flat_map(|package_data| package_data.license_detections.iter())
+            .chain(
+                file.package_data
+                    .iter()
+                    .flat_map(|package_data| package_data.other_license_detections.iter()),
+            ),
+    ) {
         if detection.matches.is_empty() {
             license_ids.extend(spdx_ids_from_expression(&detection.license_expression_spdx));
             continue;
@@ -378,7 +387,16 @@ fn spdx_extracted_license_infos(output: &Output, files: &[&FileInfo]) -> Vec<Ext
     let mut infos = Vec::new();
 
     for file in files {
-        for detection in &file.license_detections {
+        for detection in file.license_detections.iter().chain(
+            file.package_data
+                .iter()
+                .flat_map(|package_data| package_data.license_detections.iter())
+                .chain(
+                    file.package_data
+                        .iter()
+                        .flat_map(|package_data| package_data.other_license_detections.iter()),
+                ),
+        ) {
             for detection_match in &detection.matches {
                 let expression = if detection_match.license_expression_spdx.is_empty() {
                     &detection.license_expression_spdx
@@ -458,4 +476,68 @@ fn spdx_ids_from_expression(expression: &str) -> Vec<String> {
     flush(&mut token, &mut ids);
 
     ids
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{LicenseDetection, PackageData, PackageType};
+
+    #[test]
+    fn spdx_file_license_info_includes_manifest_package_data_detections() {
+        let mut file = FileInfo::new(
+            "Cargo.toml".to_string(),
+            "Cargo".to_string(),
+            ".toml".to_string(),
+            "project/Cargo.toml".to_string(),
+            FileType::File,
+            None,
+            1,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Vec::new(),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        file.package_data = vec![PackageData {
+            package_type: Some(PackageType::Cargo),
+            license_detections: vec![LicenseDetection {
+                license_expression: "mit".to_string(),
+                license_expression_spdx: "MIT".to_string(),
+                matches: vec![Match {
+                    license_expression: "mit".to_string(),
+                    license_expression_spdx: "MIT".to_string(),
+                    from_file: Some("project/Cargo.toml".to_string()),
+                    start_line: 1,
+                    end_line: 1,
+                    matcher: Some("parser-declared-license".to_string()),
+                    score: 100.0,
+                    matched_length: Some(1),
+                    match_coverage: Some(100.0),
+                    rule_relevance: Some(100),
+                    rule_identifier: None,
+                    rule_url: None,
+                    matched_text: Some("MIT".to_string()),
+                    referenced_filenames: Some(vec!["LICENSE".to_string()]),
+                    matched_text_diagnostics: None,
+                }],
+                detection_log: vec!["unknown-reference-to-local-file".to_string()],
+                identifier: None,
+            }],
+            ..Default::default()
+        }];
+
+        assert_eq!(spdx_file_license_info(&file), vec!["MIT".to_string()]);
+    }
 }

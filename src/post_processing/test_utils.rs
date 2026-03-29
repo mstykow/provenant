@@ -445,6 +445,7 @@ pub(crate) struct FixtureOutputOptions<'a> {
     pub(crate) include_tallies_with_details: bool,
     pub(crate) include_tallies_by_facet: bool,
     pub(crate) include_generated: bool,
+    pub(crate) include_top_level_license_data: bool,
 }
 
 #[cfg(feature = "golden-tests")]
@@ -488,7 +489,27 @@ pub(crate) fn compute_fixture_output(
     {
         files.push(dir(root_name));
     }
-    let assembly_result = assembly::assemble(&mut files);
+    let mut assembly_result = assembly::assemble(&mut files);
+    for package in &mut assembly_result.packages {
+        package.backfill_license_provenance();
+    }
+    apply_package_reference_following(&mut files, &mut assembly_result.packages);
+
+    let (license_detections, license_references, license_rule_references) = if options
+        .include_top_level_license_data
+    {
+        let engine = test_license_engine();
+        let license_detections = collect_top_level_license_detections(&files);
+        let (license_references, license_rule_references) =
+            collect_top_level_license_references(&files, &assembly_result.packages, engine.index());
+        (
+            license_detections,
+            license_references,
+            license_rule_references,
+        )
+    } else {
+        (Vec::new(), Vec::new(), Vec::new())
+    };
 
     serde_json::to_value(create_output(
         Utc::now(),
@@ -500,9 +521,9 @@ pub(crate) fn compute_fixture_output(
         CreateOutputContext {
             total_dirs: collected.directories.len(),
             assembly_result,
-            license_detections: vec![],
-            license_references: vec![],
-            license_rule_references: vec![],
+            license_detections,
+            license_references,
+            license_rule_references,
             options: CreateOutputOptions {
                 facet_rules: &facet_rules,
                 include_classify: options.include_classify,
@@ -550,7 +571,11 @@ pub(crate) fn compute_fixture_summary(
             .to_str()
             .expect("fixture path should be UTF-8"),
     );
-    let assembly_result = assembly::assemble(&mut files);
+    let mut assembly_result = assembly::assemble(&mut files);
+    for package in &mut assembly_result.packages {
+        package.backfill_license_provenance();
+    }
+    apply_package_reference_following(&mut files, &mut assembly_result.packages);
     let mut packages = assembly_result.packages;
     normalize_package_datafile_paths(&mut packages, &resolved_scan_root.normalize_root);
 
@@ -732,6 +757,284 @@ pub(crate) fn project_package_fields(value: &Value) -> Value {
 }
 
 #[cfg(feature = "golden-tests")]
+fn project_detection_fields(detection: &Value) -> Value {
+    json!({
+        "license_expression": detection.get("license_expression").cloned().unwrap_or(Value::Null),
+        "license_expression_spdx": detection.get("license_expression_spdx").cloned().unwrap_or(Value::Null),
+        "detection_log": detection.get("detection_log").cloned().unwrap_or_else(|| json!([])),
+        "identifier": detection.get("identifier").cloned().unwrap_or(Value::Null),
+        "matches": detection
+            .get("matches")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|match_value| {
+                json!({
+                    "from_file": match_value.get("from_file").cloned().unwrap_or(Value::Null),
+                    "matched_text": match_value.get("matched_text").cloned().unwrap_or(Value::Null),
+                    "license_expression": match_value.get("license_expression").cloned().unwrap_or(Value::Null),
+                    "license_expression_spdx": match_value.get("license_expression_spdx").cloned().unwrap_or(Value::Null),
+                    "rule_identifier": match_value.get("rule_identifier").cloned().unwrap_or(Value::Null),
+                    "referenced_filenames": match_value.get("referenced_filenames").cloned().unwrap_or_else(|| json!([])),
+                })
+            })
+            .collect::<Vec<_>>()
+    })
+}
+
+#[cfg(feature = "golden-tests")]
+fn project_tally_entries(entries: Option<&Value>) -> Value {
+    Value::Array(
+        entries
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|entry| entry.get("value").is_some_and(|value| !value.is_null()))
+            .collect(),
+    )
+}
+
+#[cfg(feature = "golden-tests")]
+fn project_tallies(value: Option<&Value>) -> Value {
+    let Some(value) = value else {
+        return Value::Null;
+    };
+
+    json!({
+        "detected_license_expression": project_tally_entries(value.get("detected_license_expression")),
+        "copyrights": project_tally_entries(value.get("copyrights")),
+        "holders": project_tally_entries(value.get("holders")),
+        "authors": project_tally_entries(value.get("authors")),
+        "programming_language": project_tally_entries(value.get("programming_language")),
+    })
+}
+
+#[cfg(feature = "golden-tests")]
+pub(crate) fn project_reference_follow_fields(value: &Value) -> Value {
+    let files = value
+        .get("files")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let packages = value
+        .get("packages")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let top_level_detections = value
+        .get("license_detections")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let license_references = value
+        .get("license_references")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let license_rule_references = value
+        .get("license_rule_references")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    json!({
+        "summary": value.get("summary").map(|summary| {
+            json!({
+                "declared_license_expression": summary.get("declared_license_expression").cloned().unwrap_or(Value::Null),
+                "license_clarity_score": summary.get("license_clarity_score").cloned().unwrap_or(Value::Null),
+                "declared_holder": summary
+                    .get("declared_holder")
+                    .cloned()
+                    .filter(|holder| holder != "")
+                    .unwrap_or(Value::Null),
+                "primary_language": summary.get("primary_language").cloned().unwrap_or(Value::Null),
+                "other_license_expressions": project_tally_entries(summary.get("other_license_expressions")),
+                "other_holders": project_tally_entries(summary.get("other_holders")),
+                "other_languages": project_tally_entries(summary.get("other_languages")),
+            })
+        }).unwrap_or(Value::Null),
+        "tallies": project_tallies(value.get("tallies")),
+        "tallies_of_key_files": project_tallies(value.get("tallies_of_key_files")),
+        "license_detections": top_level_detections.into_iter().map(|detection| {
+            json!({
+                "identifier": detection.get("identifier").cloned().unwrap_or(Value::Null),
+                "license_expression": detection.get("license_expression").cloned().unwrap_or(Value::Null),
+                "license_expression_spdx": detection.get("license_expression_spdx").cloned().unwrap_or(Value::Null),
+                "detection_count": detection.get("detection_count").cloned().unwrap_or(Value::Null),
+                "detection_log": detection.get("detection_log").cloned().unwrap_or_else(|| json!([])),
+                "reference_matches": detection
+                    .get("reference_matches")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|match_value| {
+                        json!({
+                            "from_file": match_value.get("from_file").cloned().unwrap_or(Value::Null),
+                            "license_expression": match_value.get("license_expression").cloned().unwrap_or(Value::Null),
+                            "license_expression_spdx": match_value.get("license_expression_spdx").cloned().unwrap_or(Value::Null),
+                            "rule_identifier": match_value.get("rule_identifier").cloned().unwrap_or(Value::Null),
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+        }).collect::<Vec<_>>(),
+        "license_references": license_references.into_iter().map(|reference| {
+            json!({
+                "key": reference.get("key").cloned().unwrap_or(Value::Null),
+                "short_name": reference.get("short_name").cloned().unwrap_or(Value::Null),
+                "spdx_license_key": reference.get("spdx_license_key").cloned().unwrap_or(Value::Null),
+            })
+        }).collect::<Vec<_>>(),
+        "license_rule_references": license_rule_references.into_iter().map(|rule| {
+            json!({
+                "identifier": rule.get("identifier").cloned().unwrap_or(Value::Null),
+                "license_expression": rule.get("license_expression").cloned().unwrap_or(Value::Null),
+                "referenced_filenames": rule.get("referenced_filenames").cloned().unwrap_or_else(|| json!([])),
+            })
+        }).collect::<Vec<_>>(),
+        "packages": packages.into_iter().map(|package| {
+            json!({
+                "type": package.get("type").cloned().unwrap_or(Value::Null),
+                "name": package.get("name").cloned().unwrap_or(Value::Null),
+                "version": package.get("version").cloned().unwrap_or(Value::Null),
+                "declared_license_expression": package.get("declared_license_expression").cloned().unwrap_or(Value::Null),
+                "declared_license_expression_spdx": package.get("declared_license_expression_spdx").cloned().unwrap_or(Value::Null),
+                "other_license_expression": package.get("other_license_expression").cloned().unwrap_or(Value::Null),
+                "datafile_paths": package.get("datafile_paths").cloned().unwrap_or_else(|| json!([])),
+                "license_detections": package
+                    .get("license_detections")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|detection| project_detection_fields(&detection))
+                    .collect::<Vec<_>>(),
+                "other_license_detections": package
+                    .get("other_license_detections")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|detection| project_detection_fields(&detection))
+                    .collect::<Vec<_>>(),
+            })
+        }).collect::<Vec<_>>(),
+        "files": files.into_iter().filter(|file| {
+            file.get("type").and_then(Value::as_str) == Some("file")
+                && (
+                    file.get("is_key_file").and_then(Value::as_bool).unwrap_or(false)
+                        || file.get("is_manifest").and_then(Value::as_bool).unwrap_or(false)
+                        || file
+                            .get("license_detections")
+                            .and_then(Value::as_array)
+                            .is_some_and(|detections| !detections.is_empty())
+                        || file
+                            .get("package_data")
+                            .and_then(Value::as_array)
+                            .is_some_and(|package_data| !package_data.is_empty())
+                )
+        }).map(|file| {
+            json!({
+                "path": file.get("path").cloned().unwrap_or(Value::Null),
+                "type": file.get("type").cloned().unwrap_or(Value::Null),
+                "is_top_level": file.get("is_top_level").cloned().unwrap_or(Value::Bool(false)),
+                "is_key_file": file.get("is_key_file").cloned().unwrap_or(Value::Bool(false)),
+                "is_manifest": file.get("is_manifest").cloned().unwrap_or(Value::Bool(false)),
+                "detected_license_expression": file.get("detected_license_expression").cloned().unwrap_or(Value::Null),
+                "detected_license_expression_spdx": file.get("detected_license_expression_spdx").cloned().unwrap_or(Value::Null),
+                "license_detections": file
+                    .get("license_detections")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|detection| project_detection_fields(&detection))
+                    .collect::<Vec<_>>(),
+                "package_data": file
+                    .get("package_data")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|package_data| {
+                        json!({
+                            "type": package_data.get("type").cloned().unwrap_or(Value::Null),
+                            "name": package_data.get("name").cloned().unwrap_or(Value::Null),
+                            "version": package_data.get("version").cloned().unwrap_or(Value::Null),
+                            "declared_license_expression": package_data.get("declared_license_expression").cloned().unwrap_or(Value::Null),
+                            "declared_license_expression_spdx": package_data.get("declared_license_expression_spdx").cloned().unwrap_or(Value::Null),
+                            "other_license_expression": package_data.get("other_license_expression").cloned().unwrap_or(Value::Null),
+                            "license_detections": package_data
+                                .get("license_detections")
+                                .and_then(Value::as_array)
+                                .cloned()
+                                .unwrap_or_default()
+                                .into_iter()
+                                .map(|detection| project_detection_fields(&detection))
+                                .collect::<Vec<_>>(),
+                            "other_license_detections": package_data
+                                .get("other_license_detections")
+                                .and_then(Value::as_array)
+                                .cloned()
+                                .unwrap_or_default()
+                                .into_iter()
+                                .map(|detection| project_detection_fields(&detection))
+                                .collect::<Vec<_>>(),
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+        }).collect::<Vec<_>>()
+    })
+}
+
+#[cfg(feature = "golden-tests")]
+pub(crate) fn assert_reference_follow_fixture_matches_expected(
+    fixture_dir: &str,
+    expected_file: &str,
+) {
+    let actual = project_reference_follow_fields(&compute_fixture_output(
+        fixture_dir,
+        FixtureOutputOptions {
+            facet_defs: &[],
+            include_classify: true,
+            include_summary: true,
+            include_license_clarity_score: false,
+            include_tallies: true,
+            include_tallies_of_key_files: true,
+            include_tallies_with_details: false,
+            include_tallies_by_facet: false,
+            include_generated: false,
+            include_top_level_license_data: true,
+        },
+    ));
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(expected_file)
+            .expect("expected reference follow fixture should be readable"),
+    )
+    .expect("expected reference follow fixture should parse");
+
+    let mut actual_normalized = actual;
+    let mut expected_normalized = expected;
+    normalize_scan_json(&mut actual_normalized, None);
+    normalize_scan_json(&mut expected_normalized, None);
+
+    if let Err(error) = compare_scan_json_values(&actual_normalized, &expected_normalized, "") {
+        panic!(
+            "Reference-follow fixture mismatch for {} vs {}: {}\nactual={}\nexpected={}",
+            fixture_dir,
+            expected_file,
+            error,
+            serde_json::to_string_pretty(&actual_normalized).unwrap_or_default(),
+            serde_json::to_string_pretty(&expected_normalized).unwrap_or_default()
+        );
+    }
+}
+
+#[cfg(feature = "golden-tests")]
 pub(crate) fn assert_package_fixture_matches_expected(fixture_dir: &str, expected_file: &str) {
     let actual = project_package_fields(&compute_fixture_output(
         fixture_dir,
@@ -745,6 +1048,7 @@ pub(crate) fn assert_package_fixture_matches_expected(fixture_dir: &str, expecte
             include_tallies_with_details: false,
             include_tallies_by_facet: false,
             include_generated: false,
+            include_top_level_license_data: false,
         },
     ));
     let expected: Value = serde_json::from_str(
@@ -788,6 +1092,7 @@ pub(crate) fn assert_facet_fixture_matches_expected(
             include_tallies_with_details: false,
             include_tallies_by_facet: false,
             include_generated: false,
+            include_top_level_license_data: false,
         },
     ));
     let expected: Value = serde_json::from_str(

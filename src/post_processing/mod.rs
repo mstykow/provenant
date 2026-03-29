@@ -645,46 +645,87 @@ pub(crate) fn sync_packages_from_followed_package_data(
         .filter(|file| !file.package_data.is_empty())
         .map(|file| (file.path.clone(), file.package_data.clone()))
         .collect();
+    let files_by_path: HashMap<_, _> = files.iter().map(|file| (file.path.clone(), file)).collect();
 
     let mut modified = false;
 
     for package in packages {
         for datafile_path in &package.datafile_paths {
-            if let Some(package_datas) = package_data_by_path.get(datafile_path)
-                && let Some(package_data) = package_datas.iter().find(|package_data| {
-                    package_data.purl.as_ref().is_some_and(|purl| {
-                        package
-                            .purl
-                            .as_ref()
-                            .is_some_and(|pkg_purl| pkg_purl == purl)
-                    }) || (package_data.name == package.name
-                        && package_data.version == package.version)
-                        || package_datas.len() == 1
-                })
+            let matched_package_data =
+                package_data_by_path
+                    .get(datafile_path)
+                    .and_then(|package_datas| {
+                        package_datas.iter().find(|package_data| {
+                            package_data.purl.as_ref().is_some_and(|purl| {
+                                package
+                                    .purl
+                                    .as_ref()
+                                    .is_some_and(|pkg_purl| pkg_purl == purl)
+                            }) || (package_data.name == package.name
+                                && package_data.version == package.version)
+                                || package_datas.len() == 1
+                        })
+                    });
+
+            let manifest_file = files_by_path.get(datafile_path).copied();
+
+            let mut next_license_detections = matched_package_data
+                .map(|package_data| package_data.license_detections.clone())
+                .unwrap_or_default();
+            let next_other_license_detections = matched_package_data
+                .map(|package_data| package_data.other_license_detections.clone())
+                .unwrap_or_default();
+            let mut next_declared_license_expression = matched_package_data
+                .and_then(|package_data| package_data.declared_license_expression.clone());
+            let mut next_declared_license_expression_spdx = matched_package_data
+                .and_then(|package_data| package_data.declared_license_expression_spdx.clone());
+            let next_other_license_expression = matched_package_data
+                .and_then(|package_data| package_data.other_license_expression.clone());
+            let next_other_license_expression_spdx = matched_package_data
+                .and_then(|package_data| package_data.other_license_expression_spdx.clone());
+
+            if next_license_detections.is_empty()
+                && let Some(manifest_file) =
+                    manifest_file.filter(|file| !file.license_detections.is_empty())
             {
-                let changed = package.license_detections != package_data.license_detections
-                    || package.other_license_detections != package_data.other_license_detections
-                    || package.declared_license_expression
-                        != package_data.declared_license_expression
-                    || package.declared_license_expression_spdx
-                        != package_data.declared_license_expression_spdx
-                    || package.other_license_expression != package_data.other_license_expression
-                    || package.other_license_expression_spdx
-                        != package_data.other_license_expression_spdx;
-                if changed {
-                    package.license_detections = package_data.license_detections.clone();
-                    package.other_license_detections =
-                        package_data.other_license_detections.clone();
-                    package.declared_license_expression =
-                        package_data.declared_license_expression.clone();
-                    package.declared_license_expression_spdx =
-                        package_data.declared_license_expression_spdx.clone();
-                    package.other_license_expression =
-                        package_data.other_license_expression.clone();
-                    package.other_license_expression_spdx =
-                        package_data.other_license_expression_spdx.clone();
-                    modified = true;
+                next_license_detections = manifest_file.license_detections.clone();
+                if next_declared_license_expression.is_none() {
+                    next_declared_license_expression = combine_license_expressions(
+                        manifest_file
+                            .license_detections
+                            .iter()
+                            .map(|detection| detection.license_expression.clone()),
+                    )
+                    .or_else(|| manifest_file.license_expression.clone());
                 }
+                if next_declared_license_expression_spdx.is_none() {
+                    next_declared_license_expression_spdx = combine_license_expressions(
+                        manifest_file
+                            .license_detections
+                            .iter()
+                            .filter(|detection| !detection.license_expression_spdx.is_empty())
+                            .map(|detection| detection.license_expression_spdx.clone()),
+                    );
+                }
+            }
+
+            let changed = package.license_detections != next_license_detections
+                || package.other_license_detections != next_other_license_detections
+                || package.declared_license_expression != next_declared_license_expression
+                || package.declared_license_expression_spdx
+                    != next_declared_license_expression_spdx
+                || package.other_license_expression != next_other_license_expression
+                || package.other_license_expression_spdx != next_other_license_expression_spdx;
+            if changed {
+                package.license_detections = next_license_detections;
+                package.other_license_detections = next_other_license_detections;
+                package.declared_license_expression = next_declared_license_expression;
+                package.declared_license_expression_spdx = next_declared_license_expression_spdx;
+                package.other_license_expression = next_other_license_expression;
+                package.other_license_expression_spdx = next_other_license_expression_spdx;
+                modified = true;
+            }
+            if matched_package_data.is_some() || manifest_file.is_some() {
                 break;
             }
         }
@@ -2112,12 +2153,22 @@ fn compute_license_score(
 
     let mut scoring = LicenseClarityScore {
         score: 0,
-        declared_license: key_files
-            .iter()
-            .any(|file| !file.license_detections.is_empty()),
+        declared_license: key_files.iter().any(|file| {
+            !file.license_detections.is_empty()
+                || file
+                    .package_data
+                    .iter()
+                    .any(|package_data| !package_data.license_detections.is_empty())
+        }),
         identification_precision: key_files
             .iter()
-            .flat_map(|file| file.license_detections.iter())
+            .flat_map(|file| {
+                file.license_detections.iter().chain(
+                    file.package_data
+                        .iter()
+                        .flat_map(|package_data| package_data.license_detections.iter()),
+                )
+            })
             .flat_map(|detection| detection.matches.iter())
             .any(is_good_match),
         has_license_text: key_files.iter().any(|file| key_file_has_license_text(file)),
@@ -2608,6 +2659,12 @@ fn summary_license_expression(file: &FileInfo) -> Option<String> {
             .license_detections
             .iter()
             .map(|detection| detection.license_expression.clone())
+            .chain(
+                file.package_data
+                    .iter()
+                    .flat_map(|package_data| package_data.license_detections.iter())
+                    .map(|detection| detection.license_expression.clone()),
+            )
             .collect::<Vec<_>>(),
     );
 
@@ -2626,6 +2683,31 @@ fn summary_license_expression(file: &FileInfo) -> Option<String> {
     file.license_expression
         .as_deref()
         .map(canonicalize_summary_expression)
+}
+
+fn package_primary_detected_license_values(file: &FileInfo, skip_unknown: bool) -> Vec<String> {
+    let mut values = file
+        .package_data
+        .iter()
+        .flat_map(|package_data| {
+            package_data
+                .license_detections
+                .iter()
+                .map(|detection| canonicalize_summary_expression(&detection.license_expression))
+                .chain(
+                    package_data
+                        .declared_license_expression
+                        .as_deref()
+                        .map(canonicalize_summary_expression),
+                )
+        })
+        .collect::<Vec<_>>();
+
+    if skip_unknown {
+        values.retain(|expression| expression != "unknown-license-reference");
+    }
+
+    values
 }
 
 fn package_other_detected_license_values(file: &FileInfo, skip_unknown: bool) -> Vec<String> {
@@ -2656,6 +2738,11 @@ fn package_other_detected_license_values(file: &FileInfo, skip_unknown: bool) ->
 fn key_file_has_license_text(file: &FileInfo) -> bool {
     file.license_detections
         .iter()
+        .chain(
+            file.package_data
+                .iter()
+                .flat_map(|package_data| package_data.license_detections.iter()),
+        )
         .flat_map(|detection| detection.matches.iter())
         .any(|m| {
             m.matched_length.unwrap_or_default() > 1 || m.match_coverage.unwrap_or_default() > 1.0
@@ -3045,6 +3132,7 @@ fn detected_license_values(file: &FileInfo) -> Vec<String> {
         .iter()
         .map(|detection| canonicalize_summary_expression(&detection.license_expression))
         .collect();
+    detection_expressions.extend(package_primary_detected_license_values(file, false));
     detection_expressions.extend(package_other_detected_license_values(file, false));
 
     if detection_expressions.is_empty() {
@@ -3066,6 +3154,7 @@ fn summary_detected_license_values(file: &FileInfo) -> Vec<String> {
         .map(|detection| canonicalize_summary_expression(&detection.license_expression))
         .filter(|expression| expression != "unknown-license-reference")
         .collect();
+    detection_expressions.extend(package_primary_detected_license_values(file, true));
     detection_expressions.extend(package_other_detected_license_values(file, true));
 
     if detection_expressions.is_empty() {

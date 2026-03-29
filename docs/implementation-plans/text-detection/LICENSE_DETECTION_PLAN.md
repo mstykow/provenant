@@ -96,6 +96,14 @@ implementation plan again.
 - ✅ `--license-references` CLI flag
 - ✅ `--from-json` round-trip preservation of preexisting
   `license_references` / `license_rule_references`
+- ✅ Package/file reference-following for manifest-local references, license
+  beside manifest, package-context inheritance, and root fallback when no
+  package exists
+- ✅ Fixture-backed end-to-end coverage for the main reference-following
+  scenario families plus `--from-json` recomputation after those cases
+- ✅ Followed package detections now drive top-level `license_detections`,
+  `license_references`, `license_rule_references`, summary, tallies,
+  key-file tallies, and SPDX file/package license-info surfaces consistently
 
 ### Known Public Parity Gaps
 
@@ -131,23 +139,24 @@ That leaves Provenant without a public place to preserve:
 - diagnostic classifications
 - file-region-dependent aggregation metadata
 
-### 2. Top-level unique-detection aggregation still has consumer edge cases
+### 2. Remaining gaps are now mostly clue/filter and enrichment work
 
-`license_references` and `license_rule_references` now generate on native scans,
-and Provenant now emits top-level unique `license_detections` for
-identifier-bearing file/resource detections plus package/manifest-origin public
-detections after provenance backfill. The internal aggregation substrate now has
-real file-region metadata, but full Python-style parity still depends on the
-remaining package/file reference-following edge cases and any later
-file-region-consuming consumers.
+`license_references`, `license_rule_references`, and top-level unique
+`license_detections` now generate from the final post-follow state, including
+the main package/file reference-following scenarios and their downstream
+reporting consumers. The remaining work in this plan is now concentrated in:
 
-### 3. Detection-path consumers are still unimplemented
+- clue-only output and `--filter-clues` edge cases
+- remaining CLI parity (`--license-score`, `--license-url-template`)
+- any later top-level reference/report enrichment beyond the current stable
+  runtime-backed data
+
+### 3. File-region consumers are now partly implemented, not missing wholesale
 
 The engine and post-processing layers now have file-region-aware unique
-aggregation, but Provenant still lacks the downstream consumers that use those
-paths for fuller package/file reference-following and other post-scan
-behaviors. The focused
-sub-plan for that work is
+aggregation plus the first real downstream consumers for package/file
+reference-following and reporting synchronization. The focused sub-plan for
+that work remains
 [PLAN-019-file-region-and-unique-detection.md](../../license-detection/PLAN-019-file-region-and-unique-detection.md).
 
 ### 4. CLI parity drift accumulated after the engine landed
@@ -187,10 +196,12 @@ The repository still has a mix of:
    - Add `percentage_of_license_text`
 
 3. **Phase 2 — Top-level license aggregation parity**
-   - Consume file-region-aware unique aggregation in the remaining clue and
+   - ✅ Consume file-region-aware unique aggregation in the main package/file
      reference-following flows
-   - Enrich top-level `license_references` / `license_rule_references` with the
-     runtime metadata already available after reference-following
+   - ✅ Keep top-level `license_detections`, `license_references`, and
+     `license_rule_references` synchronized with the post-follow runtime state
+   - Remaining work here is limited to later enrichment and any uncovered clue
+     edge cases
 
 4. **Phase 3 — CLI flag parity**
    - Resolve `--include-text` vs `--license-text`
@@ -199,10 +210,10 @@ The repository still has a mix of:
 
 5. **Phase 4 — Downstream consumer parity**
    - Close the remaining `--filter-clues` license-edge cases where appropriate
-   - Feed SPDX writers with real license-info-from-files / extracted-license
+   - ✅ Feed SPDX writers with real license-info-from-files / extracted-license
      data while preserving upstream `NOASSERTION` conclusions
-   - Close any remaining downstream consumers that still miss package-origin
-     license evidence
+   - ✅ Keep summary/tallies/key-file tallies aligned with followed
+     package-origin license evidence
 
 ## Verify-First Gap List
 
@@ -226,10 +237,10 @@ whenever work resumes here:
       enabled
 - [ ] Top-level unique `license_detections` are generated on native scans with
       the remaining file-region-dependent parity edge cases closed
-- [ ] `license_references` and `license_rule_references` are generated on native
+- [x] `license_references` and `license_rule_references` are generated on native
       scans instead of only being preserved from input JSON
 - [ ] The CLI plan accurately reflects the implemented and pending license flags
-- [ ] SPDX writers consume current-scan license data with fixture-backed parity
+- [x] SPDX writers consume current-scan license data with fixture-backed parity
 - [ ] Evergreen docs describe the current public output shape accurately
 
 ## Related Documents

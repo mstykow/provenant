@@ -1,0 +1,239 @@
+{
+  "summary": {
+    "declared_license_expression": "mit",
+    "license_clarity_score": {
+      "score": 100,
+      "declared_license": true,
+      "identification_precision": true,
+      "has_license_text": true,
+      "declared_copyrights": true,
+      "conflicting_license_categories": false,
+      "ambiguous_compound_licensing": false
+    },
+    "declared_holder": "Example Corp.",
+    "primary_language": "Rust",
+    "other_license_expressions": [],
+    "other_holders": [],
+    "other_languages": []
+  },
+  "tallies": {
+    "detected_license_expression": [{ "value": "mit", "count": 2 }],
+    "copyrights": [],
+    "holders": [],
+    "authors": [],
+    "programming_language": []
+  },
+  "tallies_of_key_files": {
+    "detected_license_expression": [{ "value": "mit", "count": 2 }],
+    "copyrights": [],
+    "holders": [],
+    "authors": [],
+    "programming_language": []
+  },
+  "license_detections": [
+    {
+      "identifier": "mit-424eb7f7-65d2-bbe6-ee7c-127238c95c99",
+      "license_expression": "mit",
+      "license_expression_spdx": "MIT",
+      "detection_count": 3,
+      "detection_log": ["unknown-reference-to-local-file"],
+      "reference_matches": [
+        {
+          "from_file": "codebase/Cargo.toml",
+          "license_expression": "unknown-license-reference",
+          "license_expression_spdx": "LicenseRef-scancode-unknown-license-reference",
+          "rule_identifier": "unknown-license-reference_see_license_at_manifest_1.RULE"
+        },
+        {
+          "from_file": "codebase/LICENSE",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit_14.RULE"
+        },
+        {
+          "from_file": "codebase/LICENSE",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit.LICENSE"
+        }
+      ]
+    },
+    {
+      "identifier": "mit-0417f034-29de-3369-3be1-60a79938d91c",
+      "license_expression": "mit",
+      "license_expression_spdx": "MIT",
+      "detection_count": 2,
+      "detection_log": [],
+      "reference_matches": [
+        {
+          "from_file": "codebase/LICENSE",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit_14.RULE"
+        },
+        {
+          "from_file": "codebase/LICENSE",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit.LICENSE"
+        }
+      ]
+    }
+  ],
+  "license_references": [
+    { "key": "mit", "short_name": "MIT", "spdx_license_key": "MIT" },
+    {
+      "key": "unknown-license-reference",
+      "short_name": "Unknown License file reference",
+      "spdx_license_key": "LicenseRef-scancode-unknown-license-reference"
+    }
+  ],
+  "license_rule_references": [
+    { "identifier": "mit.LICENSE", "license_expression": "mit", "referenced_filenames": [] },
+    { "identifier": "mit_14.RULE", "license_expression": "mit", "referenced_filenames": [] },
+    {
+      "identifier": "unknown-license-reference_see_license_at_manifest_1.RULE",
+      "license_expression": "unknown-license-reference",
+      "referenced_filenames": ["LICENSE"]
+    }
+  ],
+  "packages": [
+    {
+      "type": "cargo",
+      "name": "demo",
+      "version": "1.0.0",
+      "declared_license_expression": "mit",
+      "declared_license_expression_spdx": "MIT",
+      "other_license_expression": null,
+      "datafile_paths": ["codebase/Cargo.toml"],
+      "license_detections": [
+        {
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "detection_log": ["unknown-reference-to-local-file"],
+          "identifier": "mit-424eb7f7-65d2-bbe6-ee7c-127238c95c99",
+          "matches": [
+            {
+              "from_file": "codebase/Cargo.toml",
+              "matched_text": null,
+              "license_expression": "unknown-license-reference",
+              "license_expression_spdx": "LicenseRef-scancode-unknown-license-reference",
+              "rule_identifier": "unknown-license-reference_see_license_at_manifest_1.RULE",
+              "referenced_filenames": ["LICENSE"]
+            },
+            {
+              "from_file": "codebase/LICENSE",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit_14.RULE",
+              "referenced_filenames": []
+            },
+            {
+              "from_file": "codebase/LICENSE",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit.LICENSE",
+              "referenced_filenames": []
+            }
+          ]
+        }
+      ],
+      "other_license_detections": []
+    }
+  ],
+  "files": [
+    {
+      "path": "codebase/Cargo.toml",
+      "type": "file",
+      "is_top_level": true,
+      "is_key_file": true,
+      "is_manifest": true,
+      "detected_license_expression": null,
+      "detected_license_expression_spdx": "mit",
+      "license_detections": [
+        {
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "detection_log": ["unknown-reference-to-local-file"],
+          "identifier": "mit-424eb7f7-65d2-bbe6-ee7c-127238c95c99",
+          "matches": [
+            {
+              "from_file": "codebase/Cargo.toml",
+              "matched_text": null,
+              "license_expression": "unknown-license-reference",
+              "license_expression_spdx": "LicenseRef-scancode-unknown-license-reference",
+              "rule_identifier": "unknown-license-reference_see_license_at_manifest_1.RULE",
+              "referenced_filenames": ["LICENSE"]
+            },
+            {
+              "from_file": "codebase/LICENSE",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit_14.RULE",
+              "referenced_filenames": []
+            },
+            {
+              "from_file": "codebase/LICENSE",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit.LICENSE",
+              "referenced_filenames": []
+            }
+          ]
+        }
+      ],
+      "package_data": [
+        {
+          "type": "cargo",
+          "name": "demo",
+          "version": "1.0.0",
+          "declared_license_expression": null,
+          "declared_license_expression_spdx": null,
+          "other_license_expression": null,
+          "license_detections": [],
+          "other_license_detections": []
+        }
+      ]
+    },
+    {
+      "path": "codebase/LICENSE",
+      "type": "file",
+      "is_top_level": true,
+      "is_key_file": true,
+      "is_manifest": false,
+      "detected_license_expression": null,
+      "detected_license_expression_spdx": "MIT",
+      "license_detections": [
+        {
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "detection_log": [],
+          "identifier": "mit-0417f034-29de-3369-3be1-60a79938d91c",
+          "matches": [
+            {
+              "from_file": "codebase/LICENSE",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit_14.RULE",
+              "referenced_filenames": []
+            },
+            {
+              "from_file": "codebase/LICENSE",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit.LICENSE",
+              "referenced_filenames": []
+            }
+          ]
+        }
+      ],
+      "package_data": []
+    }
+  ]
+}

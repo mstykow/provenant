@@ -1,0 +1,202 @@
+{
+  "summary": {
+    "declared_license_expression": "bsd-new",
+    "license_clarity_score": {
+      "score": 0,
+      "declared_license": false,
+      "identification_precision": false,
+      "has_license_text": false,
+      "declared_copyrights": false,
+      "conflicting_license_categories": false,
+      "ambiguous_compound_licensing": true
+    },
+    "declared_holder": null,
+    "primary_language": "Python",
+    "other_license_expressions": [],
+    "other_holders": [],
+    "other_languages": []
+  },
+  "tallies": {
+    "detected_license_expression": [{ "value": "bsd-new", "count": 2 }],
+    "copyrights": [],
+    "holders": [],
+    "authors": [{ "value": "Example Corp.", "count": 1 }],
+    "programming_language": []
+  },
+  "tallies_of_key_files": {
+    "detected_license_expression": [{ "value": "bsd-new", "count": 1 }],
+    "copyrights": [],
+    "holders": [],
+    "authors": [{ "value": "Example Corp.", "count": 1 }],
+    "programming_language": []
+  },
+  "license_detections": [
+    {
+      "identifier": "bsd_new-0e3f702d-39dc-889e-6409-d34b37057fe4",
+      "license_expression": "bsd-new",
+      "license_expression_spdx": "BSD-3-Clause",
+      "detection_count": 2,
+      "detection_log": ["unknown-reference-in-file-to-package"],
+      "reference_matches": [
+        {
+          "from_file": "codebase/venv/lib/python3.11/site-packages/locale/django.po",
+          "license_expression": "free-unknown",
+          "license_expression_spdx": "LicenseRef-scancode-free-unknown",
+          "rule_identifier": "free-unknown-package_1.RULE"
+        },
+        {
+          "from_file": "codebase/venv/lib/python3.11/site-packages/demo-1.0.dist-info/METADATA",
+          "license_expression": "bsd-new",
+          "license_expression_spdx": "BSD-3-Clause",
+          "rule_identifier": "bsd-new_195.RULE"
+        }
+      ]
+    },
+    {
+      "identifier": "bsd_new-2be3685d-f9f3-48f7-f6c5-2ebb7a722def",
+      "license_expression": "bsd-new",
+      "license_expression_spdx": "BSD-3-Clause",
+      "detection_count": 1,
+      "detection_log": [],
+      "reference_matches": [
+        {
+          "from_file": "codebase/venv/lib/python3.11/site-packages/demo-1.0.dist-info/METADATA",
+          "license_expression": "bsd-new",
+          "license_expression_spdx": "BSD-3-Clause",
+          "rule_identifier": "bsd-new_195.RULE"
+        }
+      ]
+    }
+  ],
+  "license_references": [
+    {
+      "key": "bsd-new",
+      "short_name": "BSD-3-Clause",
+      "spdx_license_key": "BSD-3-Clause"
+    },
+    {
+      "key": "free-unknown",
+      "short_name": "Free unknown license detected but not recognized",
+      "spdx_license_key": "LicenseRef-scancode-free-unknown"
+    }
+  ],
+  "license_rule_references": [
+    {
+      "identifier": "bsd-new_195.RULE",
+      "license_expression": "bsd-new",
+      "referenced_filenames": []
+    },
+    {
+      "identifier": "free-unknown-package_1.RULE",
+      "license_expression": "free-unknown",
+      "referenced_filenames": ["INHERIT_LICENSE_FROM_PACKAGE"]
+    }
+  ],
+  "packages": [
+    {
+      "type": "pypi",
+      "name": "demo",
+      "version": "1.0.0",
+      "declared_license_expression": "bsd-new",
+      "declared_license_expression_spdx": "BSD-3-Clause",
+      "other_license_expression": null,
+      "datafile_paths": ["codebase/venv/lib/python3.11/site-packages/demo-1.0.dist-info/METADATA"],
+      "license_detections": [
+        {
+          "license_expression": "bsd-new",
+          "license_expression_spdx": "BSD-3-Clause",
+          "detection_log": [],
+          "identifier": "bsd_new-2be3685d-f9f3-48f7-f6c5-2ebb7a722def",
+          "matches": [
+            {
+              "from_file": "codebase/venv/lib/python3.11/site-packages/demo-1.0.dist-info/METADATA",
+              "matched_text": null,
+              "license_expression": "bsd-new",
+              "license_expression_spdx": "BSD-3-Clause",
+              "rule_identifier": "bsd-new_195.RULE",
+              "referenced_filenames": []
+            }
+          ]
+        }
+      ],
+      "other_license_detections": []
+    }
+  ],
+  "files": [
+    {
+      "path": "codebase/venv/lib/python3.11/site-packages/demo-1.0.dist-info/METADATA",
+      "type": "file",
+      "is_top_level": true,
+      "is_key_file": true,
+      "is_manifest": true,
+      "detected_license_expression": null,
+      "detected_license_expression_spdx": "BSD-3-Clause",
+      "license_detections": [
+        {
+          "license_expression": "bsd-new",
+          "license_expression_spdx": "BSD-3-Clause",
+          "detection_log": [],
+          "identifier": "bsd_new-2be3685d-f9f3-48f7-f6c5-2ebb7a722def",
+          "matches": [
+            {
+              "from_file": "codebase/venv/lib/python3.11/site-packages/demo-1.0.dist-info/METADATA",
+              "matched_text": null,
+              "license_expression": "bsd-new",
+              "license_expression_spdx": "BSD-3-Clause",
+              "rule_identifier": "bsd-new_195.RULE",
+              "referenced_filenames": []
+            }
+          ]
+        }
+      ],
+      "package_data": [
+        {
+          "type": "pypi",
+          "name": "demo",
+          "version": "1.0.0",
+          "declared_license_expression": null,
+          "declared_license_expression_spdx": null,
+          "other_license_expression": null,
+          "license_detections": [],
+          "other_license_detections": []
+        }
+      ]
+    },
+    {
+      "path": "codebase/venv/lib/python3.11/site-packages/locale/django.po",
+      "type": "file",
+      "is_top_level": false,
+      "is_key_file": false,
+      "is_manifest": false,
+      "detected_license_expression": null,
+      "detected_license_expression_spdx": "bsd-new",
+      "license_detections": [
+        {
+          "license_expression": "bsd-new",
+          "license_expression_spdx": "BSD-3-Clause",
+          "detection_log": ["unknown-reference-in-file-to-package"],
+          "identifier": "bsd_new-0e3f702d-39dc-889e-6409-d34b37057fe4",
+          "matches": [
+            {
+              "from_file": "codebase/venv/lib/python3.11/site-packages/locale/django.po",
+              "matched_text": null,
+              "license_expression": "free-unknown",
+              "license_expression_spdx": "LicenseRef-scancode-free-unknown",
+              "rule_identifier": "free-unknown-package_1.RULE",
+              "referenced_filenames": ["INHERIT_LICENSE_FROM_PACKAGE"]
+            },
+            {
+              "from_file": "codebase/venv/lib/python3.11/site-packages/demo-1.0.dist-info/METADATA",
+              "matched_text": null,
+              "license_expression": "bsd-new",
+              "license_expression_spdx": "BSD-3-Clause",
+              "rule_identifier": "bsd-new_195.RULE",
+              "referenced_filenames": []
+            }
+          ]
+        }
+      ],
+      "package_data": []
+    }
+  ]
+}

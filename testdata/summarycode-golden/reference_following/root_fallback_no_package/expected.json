@@ -1,0 +1,183 @@
+{
+  "summary": {
+    "declared_license_expression": "mit",
+    "license_clarity_score": {
+      "score": 100,
+      "declared_license": true,
+      "identification_precision": true,
+      "has_license_text": true,
+      "declared_copyrights": true,
+      "conflicting_license_categories": false,
+      "ambiguous_compound_licensing": false
+    },
+    "declared_holder": "Example Corp.",
+    "primary_language": null,
+    "other_license_expressions": [],
+    "other_holders": [],
+    "other_languages": []
+  },
+  "tallies": {
+    "detected_license_expression": [{ "value": "mit", "count": 2 }],
+    "copyrights": [],
+    "holders": [],
+    "authors": [],
+    "programming_language": []
+  },
+  "tallies_of_key_files": {
+    "detected_license_expression": [{ "value": "mit", "count": 1 }],
+    "copyrights": [],
+    "holders": [],
+    "authors": [],
+    "programming_language": []
+  },
+  "license_detections": [
+    {
+      "identifier": "mit-5089aa6b-4f82-800f-b5c6-8fd0ba9f46d1",
+      "license_expression": "mit",
+      "license_expression_spdx": "MIT",
+      "detection_count": 3,
+      "detection_log": ["unknown-reference-in-file-to-nonexistent-package"],
+      "reference_matches": [
+        {
+          "from_file": "codebase/django.po",
+          "license_expression": "free-unknown",
+          "license_expression_spdx": "LicenseRef-scancode-free-unknown",
+          "rule_identifier": "free-unknown-package_1.RULE"
+        },
+        {
+          "from_file": "codebase/COPYING",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit_14.RULE"
+        },
+        {
+          "from_file": "codebase/COPYING",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit.LICENSE"
+        }
+      ]
+    },
+    {
+      "identifier": "mit-0417f034-29de-3369-3be1-60a79938d91c",
+      "license_expression": "mit",
+      "license_expression_spdx": "MIT",
+      "detection_count": 2,
+      "detection_log": [],
+      "reference_matches": [
+        {
+          "from_file": "codebase/COPYING",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit_14.RULE"
+        },
+        {
+          "from_file": "codebase/COPYING",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit.LICENSE"
+        }
+      ]
+    }
+  ],
+  "license_references": [
+    {
+      "key": "free-unknown",
+      "short_name": "Free unknown license detected but not recognized",
+      "spdx_license_key": "LicenseRef-scancode-free-unknown"
+    },
+    { "key": "mit", "short_name": "MIT", "spdx_license_key": "MIT" }
+  ],
+  "license_rule_references": [
+    {
+      "identifier": "free-unknown-package_1.RULE",
+      "license_expression": "free-unknown",
+      "referenced_filenames": ["INHERIT_LICENSE_FROM_PACKAGE"]
+    },
+    { "identifier": "mit.LICENSE", "license_expression": "mit", "referenced_filenames": [] },
+    { "identifier": "mit_14.RULE", "license_expression": "mit", "referenced_filenames": [] }
+  ],
+  "packages": [],
+  "files": [
+    {
+      "path": "codebase/COPYING",
+      "type": "file",
+      "is_top_level": true,
+      "is_key_file": true,
+      "is_manifest": false,
+      "detected_license_expression": null,
+      "detected_license_expression_spdx": "MIT",
+      "license_detections": [
+        {
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "detection_log": [],
+          "identifier": "mit-0417f034-29de-3369-3be1-60a79938d91c",
+          "matches": [
+            {
+              "from_file": "codebase/COPYING",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit_14.RULE",
+              "referenced_filenames": []
+            },
+            {
+              "from_file": "codebase/COPYING",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit.LICENSE",
+              "referenced_filenames": []
+            }
+          ]
+        }
+      ],
+      "package_data": []
+    },
+    {
+      "path": "codebase/django.po",
+      "type": "file",
+      "is_top_level": true,
+      "is_key_file": false,
+      "is_manifest": false,
+      "detected_license_expression": null,
+      "detected_license_expression_spdx": "mit",
+      "license_detections": [
+        {
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "detection_log": ["unknown-reference-in-file-to-nonexistent-package"],
+          "identifier": "mit-5089aa6b-4f82-800f-b5c6-8fd0ba9f46d1",
+          "matches": [
+            {
+              "from_file": "codebase/django.po",
+              "matched_text": null,
+              "license_expression": "free-unknown",
+              "license_expression_spdx": "LicenseRef-scancode-free-unknown",
+              "rule_identifier": "free-unknown-package_1.RULE",
+              "referenced_filenames": ["INHERIT_LICENSE_FROM_PACKAGE"]
+            },
+            {
+              "from_file": "codebase/COPYING",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit_14.RULE",
+              "referenced_filenames": []
+            },
+            {
+              "from_file": "codebase/COPYING",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit.LICENSE",
+              "referenced_filenames": []
+            }
+          ]
+        }
+      ],
+      "package_data": []
+    }
+  ]
+}

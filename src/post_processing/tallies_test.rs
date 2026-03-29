@@ -273,6 +273,86 @@ fn compute_key_file_tallies_include_package_other_license_detections() {
 }
 
 #[test]
+fn compute_tallies_include_manifest_package_license_detections() {
+    let mut manifest = file("project/Cargo.toml");
+    manifest.package_data = vec![PackageData {
+        package_type: Some(PackageType::Cargo),
+        license_detections: vec![crate::models::LicenseDetection {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            matches: vec![Match {
+                license_expression: "mit".to_string(),
+                license_expression_spdx: "MIT".to_string(),
+                from_file: Some("project/Cargo.toml".to_string()),
+                start_line: 1,
+                end_line: 1,
+                matcher: Some("parser-declared-license".to_string()),
+                score: 100.0,
+                matched_length: Some(1),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: None,
+                rule_url: None,
+                matched_text: Some("MIT".to_string()),
+                referenced_filenames: Some(vec!["LICENSE".to_string()]),
+                matched_text_diagnostics: None,
+            }],
+            identifier: Some("mit-package-id".to_string()),
+            detection_log: vec!["unknown-reference-to-local-file".to_string()],
+        }],
+        ..Default::default()
+    }];
+
+    let tallies = compute_tallies(&[manifest]).expect("tallies exist");
+
+    assert_eq!(tallies.detected_license_expression.len(), 1);
+    assert_eq!(
+        tallies.detected_license_expression[0].value.as_deref(),
+        Some("mit")
+    );
+}
+
+#[test]
+fn compute_key_file_tallies_include_manifest_package_license_detections() {
+    let mut manifest = file("project/Cargo.toml");
+    manifest.is_key_file = true;
+    manifest.package_data = vec![PackageData {
+        package_type: Some(PackageType::Cargo),
+        license_detections: vec![crate::models::LicenseDetection {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            matches: vec![Match {
+                license_expression: "mit".to_string(),
+                license_expression_spdx: "MIT".to_string(),
+                from_file: Some("project/Cargo.toml".to_string()),
+                start_line: 1,
+                end_line: 1,
+                matcher: Some("parser-declared-license".to_string()),
+                score: 100.0,
+                matched_length: Some(1),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: None,
+                rule_url: None,
+                matched_text: Some("MIT".to_string()),
+                referenced_filenames: Some(vec!["LICENSE".to_string()]),
+                matched_text_diagnostics: None,
+            }],
+            identifier: Some("mit-package-id".to_string()),
+            detection_log: vec!["unknown-reference-to-local-file".to_string()],
+        }],
+        ..Default::default()
+    }];
+
+    let tallies = compute_key_file_tallies(&[manifest]).expect("key-file tallies exist");
+
+    assert_eq!(
+        tallies.detected_license_expression[0].value.as_deref(),
+        Some("mit")
+    );
+}
+
+#[test]
 fn compute_tallies_ignores_legal_file_copyright_holder_and_author_noise() {
     let mut legal = file("project/LICENSE");
     legal.is_legal = true;
