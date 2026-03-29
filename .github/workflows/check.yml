@@ -32,7 +32,7 @@ jobs:
           shared-key: embedded-license-index
 
       - name: Verify embedded license index
-        uses: ./.github/actions/prepare-embedded-license-index
+        uses: ./.github/actions/verify-embedded-license-index
 
   rust-quality:
     name: Code Quality

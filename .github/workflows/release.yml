@@ -34,7 +34,7 @@ jobs:
           key: embedded-license-index
 
       - name: Verify embedded license index
-        uses: ./.github/actions/prepare-embedded-license-index
+        uses: ./.github/actions/verify-embedded-license-index
 
   build:
     name: Build ${{ matrix.target }}

@@ -15,7 +15,7 @@ contract across:
 - runtime loading in `src/license_detection/mod.rs`
 - embedded artifact validation and schema checks in `src/license_detection/embedded/index.rs`
 - release refresh flow in `release.sh`
-- CI artifact verification in `.github/actions/prepare-embedded-license-index`
+- CI artifact verification in `.github/actions/verify-embedded-license-index`
 - source packaging rules in `Cargo.toml`
 - embedded artifact regression tests in `src/license_detection/embedded_test.rs`
 
@@ -151,6 +151,6 @@ cost of extra product, release, CI, and documentation complexity.
   embedded artifact validation and loading
 - [`src/license_detection/embedded_test.rs`](../../src/license_detection/embedded_test.rs) -
   artifact equality/existence/schema tests
-- [`.github/actions/prepare-embedded-license-index/action.yml`](../../.github/actions/prepare-embedded-license-index/action.yml) -
+- [`.github/actions/verify-embedded-license-index/action.yml`](../../.github/actions/verify-embedded-license-index/action.yml) -
   CI regeneration and checked-in artifact verification
 - [`docs/RELEASING.md`](../RELEASING.md) - maintainer release flow
