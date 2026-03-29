@@ -244,10 +244,8 @@ mod tests {
             matches.len()
         );
 
-        let license_expressions: Vec<&str> = matches
-            .iter()
-            .map(|m| m.license_expression.as_str())
-            .collect();
+        let license_expressions: Vec<&str> =
+            matches.iter().map(|m| m.license_expression()).collect();
         assert!(
             license_expressions.iter().all(|&e| e == "test-license"),
             "All matches should be for test-license"

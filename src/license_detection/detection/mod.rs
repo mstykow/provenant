@@ -71,9 +71,9 @@ pub const DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE: &str = "unknown-referen
 /// 4. Creates the identifier
 ///
 /// Parameter `index` is reserved for future use (e.g., spdx conversion).
-pub(crate) fn populate_detection_from_group(
-    detection: &mut LicenseDetection,
-    group: &DetectionGroup,
+pub(crate) fn populate_detection_from_group<'a>(
+    detection: &mut LicenseDetection<'a>,
+    group: &DetectionGroup<'a>,
 ) {
     if group.matches.is_empty() {
         return;
@@ -133,9 +133,9 @@ fn should_compute_public_expression(log_category: &str) -> bool {
 /// * `detection` - LicenseDetection to populate
 /// * `group` - DetectionGroup containing the matches
 /// * `spdx_mapping` - SpdxMapping for SPDX conversion
-pub(crate) fn populate_detection_from_group_with_spdx(
-    detection: &mut LicenseDetection,
-    group: &DetectionGroup,
+pub(crate) fn populate_detection_from_group_with_spdx<'a>(
+    detection: &mut LicenseDetection<'a>,
+    group: &DetectionGroup<'a>,
     spdx_mapping: &SpdxMapping,
 ) {
     populate_detection_from_group(detection, group);
@@ -143,7 +143,7 @@ pub(crate) fn populate_detection_from_group_with_spdx(
     for match_item in &mut detection.matches {
         if match_item.license_expression_spdx.is_none()
             && let Ok(spdx_expr) = determine_spdx_expression_from_scancode(
-                &match_item.license_expression,
+                match_item.license_expression(),
                 spdx_mapping,
             )
         {
@@ -171,7 +171,7 @@ pub(crate) fn populate_detection_from_group_with_spdx(
 ///
 /// A fully populated LicenseDetection
 #[cfg(test)]
-fn create_detection_from_group(group: &DetectionGroup) -> LicenseDetection {
+fn create_detection_from_group<'a>(group: &DetectionGroup<'a>) -> LicenseDetection<'a> {
     let mut detection = LicenseDetection {
         license_expression: None,
         license_expression_spdx: None,
@@ -190,7 +190,7 @@ fn create_detection_from_group(group: &DetectionGroup) -> LicenseDetection {
     detection
 }
 
-pub(crate) fn empty_detection() -> LicenseDetection {
+pub(crate) fn empty_detection<'a>() -> LicenseDetection<'a> {
     LicenseDetection {
         license_expression: None,
         license_expression_spdx: None,
@@ -201,8 +201,8 @@ pub(crate) fn empty_detection() -> LicenseDetection {
     }
 }
 
-pub(crate) fn attach_source_path_to_detections(
-    detections: &mut [LicenseDetection],
+pub(crate) fn attach_source_path_to_detections<'a>(
+    detections: &mut [LicenseDetection<'a>],
     source_path: &str,
 ) {
     for detection in detections {
@@ -215,7 +215,7 @@ pub(crate) fn attach_source_path_to_detections(
     }
 }
 
-pub(crate) fn get_unique_detections(detections: &[LicenseDetection]) -> Vec<UniqueDetection> {
+pub(crate) fn get_unique_detections<'a>(detections: &[LicenseDetection<'a>]) -> Vec<UniqueDetection> {
     let mut detections_by_identifier: BTreeMap<String, UniqueDetection> = BTreeMap::new();
 
     for detection in detections {
@@ -246,7 +246,7 @@ pub(crate) fn get_unique_detections(detections: &[LicenseDetection]) -> Vec<Uniq
     detections_by_identifier.into_values().collect()
 }
 
-fn collect_file_regions_from_matches(matches: &[LicenseMatch]) -> Vec<FileRegion> {
+fn collect_file_regions_from_matches<'a>(matches: &[LicenseMatch<'a>]) -> Vec<FileRegion> {
     let mut seen = BTreeSet::new();
     let mut regions = Vec::new();
 
@@ -267,7 +267,7 @@ fn collect_file_regions_from_matches(matches: &[LicenseMatch]) -> Vec<FileRegion
     regions
 }
 
-fn attach_aggregated_file_regions(detections: &mut [LicenseDetection]) {
+fn attach_aggregated_file_regions<'a>(detections: &mut [LicenseDetection<'a>]) {
     let unique_regions: HashMap<_, _> = get_unique_detections(detections)
         .into_iter()
         .map(|unique| (unique.identifier, unique.file_regions))
@@ -282,10 +282,10 @@ fn attach_aggregated_file_regions(detections: &mut [LicenseDetection]) {
     }
 }
 
-pub(crate) fn select_matches_for_expression(
-    matches: &[crate::license_detection::models::LicenseMatch],
+pub(crate) fn select_matches_for_expression<'a>(
+    matches: &[crate::license_detection::models::LicenseMatch<'a>],
     log_category: &str,
-) -> Vec<crate::license_detection::models::LicenseMatch> {
+) -> Vec<crate::license_detection::models::LicenseMatch<'a>> {
     let filtered = if log_category == DETECTION_LOG_UNKNOWN_INTRO_FOLLOWED_BY_MATCH {
         filter_license_intros(matches)
     } else if log_category == DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE {
@@ -493,7 +493,7 @@ fn promoted_expression_from_matches(
     crate::utils::spdx::combine_license_expressions(
         matches
             .iter()
-            .map(|match_item| match_item.license_expression.clone()),
+            .map(|match_item| match_item.license_expression().to_string()),
     )
 }
 
@@ -509,6 +509,7 @@ mod tests {
     use super::*;
     use crate::license_detection::models::License;
     use crate::license_detection::models::LicenseMatch;
+    use crate::license_detection::models::MatcherKind;
     use crate::license_detection::spdx_mapping::build_spdx_mapping;
     use crate::license_detection::tests::TestMatchBuilder;
 
@@ -517,7 +518,7 @@ mod tests {
         end_line: usize,
         matcher: &str,
         rule_identifier: &str,
-    ) -> LicenseMatch {
+    ) -> LicenseMatch<'static> {
         TestMatchBuilder::default()
             .license_expression("mit")
             .license_expression_spdx(Some("MIT".to_string()))
@@ -535,7 +536,7 @@ mod tests {
             .build_match()
     }
 
-    fn create_perfect_match(start_line: usize, end_line: usize) -> LicenseMatch {
+    fn create_perfect_match(start_line: usize, end_line: usize) -> LicenseMatch<'static> {
         TestMatchBuilder::default()
             .license_expression("mit")
             .license_expression_spdx(Some("MIT".to_string()))
@@ -644,11 +645,18 @@ mod tests {
 
     #[test]
     fn test_populate_detection_from_group_false_positive() {
-        let mut m = create_test_match(2000, 2005, "2-aho", "gpl_bare.LICENSE");
-        m.rule_relevance = 50;
-        m.score = 30.0;
-        m.match_coverage = 30.0;
-        m.rule_length = 3;
+        let m = TestMatchBuilder::default()
+            .license_expression("gpl")
+            .start_line(2000)
+            .end_line(2005)
+            .matcher(crate::license_detection::models::MatcherKind::Aho)
+            .score(30.0)
+            .matched_length(3)
+            .rule_length(3)
+            .match_coverage(30.0)
+            .rule_relevance(50)
+            .rule_identifier("gpl_bare.LICENSE")
+            .build_match();
         let group = DetectionGroup::new(vec![m]);
         let mut detection = LicenseDetection {
             license_expression: None,
@@ -670,8 +678,19 @@ mod tests {
 
     #[test]
     fn test_populate_detection_from_group_license_clues_have_no_expression() {
-        let mut m = create_perfect_match(1, 2);
-        m.rule_kind = crate::license_detection::models::RuleKind::Clue;
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(2)
+            .matcher(crate::license_detection::models::MatcherKind::Hash)
+            .score(100.0)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(100.0)
+            .rule_relevance(100)
+            .rule_kind(crate::license_detection::models::RuleKind::Clue)
+            .rule_identifier("mit.LICENSE")
+            .build_match();
         let group = DetectionGroup::new(vec![m]);
         let mut detection = LicenseDetection {
             license_expression: None,
@@ -696,9 +715,18 @@ mod tests {
 
     #[test]
     fn test_populate_detection_from_group_low_quality_matches_have_no_expression() {
-        let mut m = create_test_match(1, 3, "2-aho", "mit.LICENSE");
-        m.match_coverage = 50.0;
-        m.score = 50.0;
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(3)
+            .matcher(crate::license_detection::models::MatcherKind::Aho)
+            .score(50.0)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(50.0)
+            .rule_relevance(100)
+            .rule_identifier("mit.LICENSE")
+            .build_match();
         let group = DetectionGroup::new(vec![m]);
         let mut detection = LicenseDetection {
             license_expression: None,
@@ -723,9 +751,7 @@ mod tests {
 
     #[test]
     fn test_populate_detection_from_group_with_spdx_perfect() {
-        let mut m = create_perfect_match(1, 10);
-        m.license_expression = "mit".to_string();
-        m.license_expression_spdx = Some("MIT".to_string());
+        let m = create_perfect_match(1, 10);
         let group = DetectionGroup::new(vec![m]);
         let licenses = vec![create_test_license()];
         let spdx_mapping = build_spdx_mapping(&licenses);
@@ -785,10 +811,18 @@ mod tests {
         };
         d1.identifier = Some(compute_detection_identifier(&d1));
 
-        let mut m = create_test_match(1, 10, "2-aho", "gpl_bare.LICENSE");
-        m.rule_relevance = 50;
-        m.score = 30.0;
-        m.match_coverage = 30.0;
+        let m = TestMatchBuilder::default()
+            .license_expression("gpl")
+            .start_line(1)
+            .end_line(10)
+            .matcher(crate::license_detection::models::MatcherKind::Aho)
+            .score(30.0)
+            .matched_length(3)
+            .rule_length(3)
+            .match_coverage(30.0)
+            .rule_relevance(50)
+            .rule_identifier("gpl_bare.LICENSE")
+            .build_match();
         let mut d2 = LicenseDetection {
             license_expression: Some("gpl".to_string()),
             license_expression_spdx: Some("GPL".to_string()),
@@ -805,10 +839,18 @@ mod tests {
 
     #[test]
     fn test_filter_detections_by_score_all_filtered() {
-        let mut m = create_test_match(1, 10, "2-aho", "gpl_bare.LICENSE");
-        m.rule_relevance = 50;
-        m.score = 30.0;
-        m.match_coverage = 30.0;
+        let m = TestMatchBuilder::default()
+            .license_expression("gpl")
+            .start_line(1)
+            .end_line(10)
+            .matcher(crate::license_detection::models::MatcherKind::Aho)
+            .score(30.0)
+            .matched_length(3)
+            .rule_length(3)
+            .match_coverage(30.0)
+            .rule_relevance(50)
+            .rule_identifier("gpl_bare.LICENSE")
+            .build_match();
         let mut detection = LicenseDetection {
             license_expression: Some("gpl".to_string()),
             license_expression_spdx: Some("GPL".to_string()),
@@ -1074,10 +1116,17 @@ mod tests {
 
     #[test]
     fn test_post_process_detections_all_filtered() {
-        let mut m = create_test_match(1, 10, "2-aho", "gpl_bare.LICENSE");
-        m.rule_relevance = 50;
-        m.score = 30.0;
-        m.match_coverage = 30.0;
+        let m = TestMatchBuilder::default()
+            .license_expression("gpl")
+            .license_expression_spdx(Some("GPL".to_string()))
+            .start_line(1)
+            .end_line(10)
+            .matcher(MatcherKind::Aho)
+            .score(30.0)
+            .match_coverage(30.0)
+            .rule_relevance(50)
+            .rule_identifier("gpl_bare.LICENSE")
+            .build_match();
         let mut d = LicenseDetection {
             license_expression: Some("gpl".to_string()),
             license_expression_spdx: Some("GPL".to_string()),
@@ -1099,15 +1148,27 @@ mod tests {
 
     #[test]
     fn test_post_process_detections_promotes_covered_low_quality_detection() {
-        let mut proper_match = create_perfect_match(10, 30);
-        proper_match.license_expression = "bsd-new".to_string();
-        proper_match.license_expression_spdx = Some("BSD-3-Clause".to_string());
+        let proper_match = TestMatchBuilder::default()
+            .license_expression("bsd-new")
+            .license_expression_spdx(Some("BSD-3-Clause".to_string()))
+            .start_line(10)
+            .end_line(30)
+            .matcher(MatcherKind::Hash)
+            .score(100.0)
+            .match_coverage(100.0)
+            .rule_identifier("bsd-new.LICENSE")
+            .build_match();
 
-        let mut low_quality_match = create_test_match(31, 36, "3-seq", "bsd-new_1319.RULE");
-        low_quality_match.license_expression = "bsd-new".to_string();
-        low_quality_match.license_expression_spdx = Some("BSD-3-Clause".to_string());
-        low_quality_match.match_coverage = 32.96;
-        low_quality_match.score = 32.96;
+        let low_quality_match = TestMatchBuilder::default()
+            .license_expression("bsd-new")
+            .license_expression_spdx(Some("BSD-3-Clause".to_string()))
+            .start_line(31)
+            .end_line(36)
+            .matcher(MatcherKind::Seq)
+            .score(32.96)
+            .match_coverage(32.96)
+            .rule_identifier("bsd-new_1319.RULE")
+            .build_match();
 
         let proper = LicenseDetection {
             license_expression: Some("bsd-new".to_string()),
@@ -1146,12 +1207,28 @@ mod tests {
 
     #[test]
     fn test_post_process_detections_does_not_promote_true_license_clues() {
-        let mut proper_match = create_perfect_match(10, 30);
-        proper_match.license_expression = "mit".to_string();
-        proper_match.license_expression_spdx = Some("MIT".to_string());
+        let proper_match = TestMatchBuilder::default()
+            .license_expression("mit")
+            .license_expression_spdx(Some("MIT".to_string()))
+            .start_line(10)
+            .end_line(30)
+            .matcher(MatcherKind::Hash)
+            .score(100.0)
+            .match_coverage(100.0)
+            .rule_identifier("mit.LICENSE")
+            .build_match();
 
-        let mut clue_match = create_perfect_match(1, 2);
-        clue_match.rule_kind = crate::license_detection::models::RuleKind::Clue;
+        let clue_match = TestMatchBuilder::default()
+            .license_expression("mit")
+            .license_expression_spdx(Some("MIT".to_string()))
+            .start_line(1)
+            .end_line(2)
+            .matcher(MatcherKind::Hash)
+            .score(100.0)
+            .match_coverage(100.0)
+            .rule_kind(crate::license_detection::models::RuleKind::Clue)
+            .rule_identifier("mit-clue.RULE")
+            .build_match();
 
         let proper = LicenseDetection {
             license_expression: Some("mit".to_string()),
@@ -1247,9 +1324,13 @@ mod tests {
 
     #[test]
     fn test_populate_detection_from_group_generates_spdx_expression() {
-        let mut m = create_perfect_match(1, 10);
-        m.license_expression = "mit".to_string();
-        m.license_expression_spdx = Some("MIT".to_string());
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .license_expression_spdx(Some("MIT".to_string()))
+            .start_line(1)
+            .end_line(10)
+            .matcher(MatcherKind::Hash)
+            .build_match();
         let group = DetectionGroup::new(vec![m]);
         let licenses = vec![create_test_license()];
         let spdx_mapping = build_spdx_mapping(&licenses);
@@ -1267,11 +1348,19 @@ mod tests {
 
     #[test]
     fn test_populate_detection_from_group_with_spdx_multiple() {
-        let mut m1 = create_perfect_match(1, 10);
-        m1.license_expression = "mit".to_string();
-        let mut m2 = create_perfect_match(11, 20);
-        m2.license_expression = "apache-2.0".to_string();
-        m2.license_expression_spdx = Some("Apache-2.0".to_string());
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .matcher(MatcherKind::Hash)
+            .build_match();
+        let m2 = TestMatchBuilder::default()
+            .license_expression("apache-2.0")
+            .license_expression_spdx(Some("Apache-2.0".to_string()))
+            .start_line(11)
+            .end_line(20)
+            .matcher(MatcherKind::Hash)
+            .build_match();
         let group = DetectionGroup::new(vec![m1, m2]);
         let licenses = vec![create_test_license()];
         let spdx_mapping = build_spdx_mapping(&licenses);
@@ -1289,9 +1378,13 @@ mod tests {
 
     #[test]
     fn test_populate_detection_from_group_with_spdx_custom_license() {
-        let mut m = create_perfect_match(1, 10);
-        m.license_expression = "custom-license".to_string();
-        m.license_expression_spdx = Some("custom-license".to_string());
+        let m = TestMatchBuilder::default()
+            .license_expression("custom-license")
+            .license_expression_spdx(Some("custom-license".to_string()))
+            .start_line(1)
+            .end_line(10)
+            .matcher(MatcherKind::Hash)
+            .build_match();
         let group = DetectionGroup::new(vec![m]);
         let licenses = vec![create_test_license()];
         let spdx_mapping = build_spdx_mapping(&licenses);
@@ -1309,8 +1402,14 @@ mod tests {
 
     #[test]
     fn test_create_detection_from_group_unknown_reference_filters() {
-        let mut m = create_test_match(1, 10, "2-aho", "mit.LICENSE");
-        m.rule_kind = crate::license_detection::models::RuleKind::Reference;
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .matcher(MatcherKind::Aho)
+            .rule_kind(crate::license_detection::models::RuleKind::Reference)
+            .rule_identifier("mit.LICENSE")
+            .build_match();
         let group = DetectionGroup::new(vec![m]);
         let detection = create_detection_from_group(&group);
         assert_eq!(detection.matches.len(), 1);
@@ -1318,13 +1417,18 @@ mod tests {
 
     #[test]
     fn test_create_detection_from_group_keeps_known_local_file_reference_expression() {
-        let mut m = create_test_match(1, 1, "1-hash", "zlib_5.RULE");
-        m.license_expression = "zlib".to_string();
-        m.license_expression_spdx = Some("Zlib".to_string());
-        m.match_coverage = 100.0;
-        m.score = 100.0;
-        m.rule_relevance = 100;
-        m.referenced_filenames = Some(vec!["zlib.h".to_string()]);
+        let m = TestMatchBuilder::default()
+            .license_expression("zlib")
+            .license_expression_spdx(Some("Zlib".to_string()))
+            .start_line(1)
+            .end_line(1)
+            .matcher(MatcherKind::Hash)
+            .match_coverage(100.0)
+            .score(100.0)
+            .rule_relevance(100)
+            .referenced_filenames(Some(vec!["zlib.h".to_string()]))
+            .rule_identifier("zlib_5.RULE")
+            .build_match();
 
         let group = DetectionGroup::new(vec![m]);
         let detection = create_detection_from_group(&group);

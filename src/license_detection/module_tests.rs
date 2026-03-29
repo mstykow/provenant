@@ -25,7 +25,7 @@ fn make_test_match(
     start_token: usize,
     end_token: usize,
     qspan_positions: Option<Vec<usize>>,
-) -> LicenseMatch {
+) -> LicenseMatch<'static> {
     let matcher_str = matcher.to_string();
     let matched_length = qspan_positions
         .as_ref()
@@ -220,17 +220,13 @@ fn test_engine_detects_boost_short_notice_with_url() {
                 d.license_expression.as_deref().unwrap_or("none"),
                 d.matches
                     .iter()
-                    .map(|m| (m.license_expression.as_str(), m.rule_identifier.as_str()))
+                    .map(|m| (m.license_expression(), m.rule_identifier()))
                     .collect::<Vec<_>>()
             ))
             .collect::<Vec<_>>(),
         raw_matches
             .iter()
-            .map(|m| (
-                m.license_expression.as_str(),
-                m.rule_identifier.as_str(),
-                m.matcher
-            ))
+            .map(|m| (m.license_expression(), m.rule_identifier(), m.matcher))
             .collect::<Vec<_>>()
     );
 }
@@ -258,17 +254,13 @@ fn test_engine_detects_zlib_short_reference_notice() {
                 d.license_expression.as_deref().unwrap_or("none"),
                 d.matches
                     .iter()
-                    .map(|m| (m.license_expression.as_str(), m.rule_identifier.as_str()))
+                    .map(|m| (m.license_expression(), m.rule_identifier()))
                     .collect::<Vec<_>>()
             ))
             .collect::<Vec<_>>(),
         raw_matches
             .iter()
-            .map(|m| (
-                m.license_expression.as_str(),
-                m.rule_identifier.as_str(),
-                m.matcher
-            ))
+            .map(|m| (m.license_expression(), m.rule_identifier(), m.matcher))
             .collect::<Vec<_>>()
     );
 }
@@ -635,10 +627,7 @@ fn test_spdx_lines_do_not_get_rediscovered_as_seq_false_positives() {
     let matches = engine
         .detect_matches_with_kind(&text, false, false)
         .expect("Detection should succeed");
-    let match_exprs: Vec<&str> = matches
-        .iter()
-        .map(|m| m.license_expression.as_str())
-        .collect();
+    let match_exprs: Vec<&str> = matches.iter().map(|m| m.license_expression()).collect();
 
     assert!(
         !match_exprs.contains(&"bsd-plus-patent"),
@@ -1034,7 +1023,7 @@ fn test_no_token_boundary_false_positives() {
     for detection in &detections {
         for m in &detection.matches {
             assert!(
-                !m.license_expression.contains("cc-by-nc-sa"),
+                !m.license_expression().contains("cc-by-nc-sa"),
                 "Found false positive cc-by-nc-sa match at lines {}-{} with matched_text: {:?}",
                 m.start_line,
                 m.end_line,

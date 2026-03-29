@@ -1,5 +1,7 @@
 //! Unknown license detection using ngram matching.
 
+#![allow(dead_code)]
+
 use crate::license_detection::automaton::Automaton;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -36,11 +38,10 @@ struct MatchedTextToken {
     is_matched: bool,
 }
 
-pub fn unknown_match(
-    index: &LicenseIndex,
-    query: &Query,
-    known_matches: &[LicenseMatch],
-) -> Vec<LicenseMatch> {
+pub fn unknown_match<'a>(
+    query: &Query<'a>,
+    known_matches: &[LicenseMatch<'a>],
+) -> Vec<LicenseMatch<'a>> {
     let mut unknown_matches = Vec::new();
 
     if query.tokens.is_empty() {
@@ -49,11 +50,11 @@ pub fn unknown_match(
 
     let query_len = query.tokens.len();
 
-    let covered_positions = compute_covered_positions(query, known_matches);
+    let covered_positions = compute_covered_positions(known_matches);
 
     let unmatched_regions = find_unmatched_regions(query_len, &covered_positions);
 
-    let automaton = &index.unknown_automaton;
+    let automaton = &query.index.unknown_automaton;
 
     for region in unmatched_regions {
         let start = region.0;
@@ -96,7 +97,7 @@ pub fn unknown_match(
             continue;
         }
 
-        let hispan = compute_hispan_from_qspan(&query.tokens, &qspan, index);
+        let hispan = compute_hispan_from_qspan(&query.tokens, &qspan, query.index);
 
         #[cfg(debug_assertions)]
         {
@@ -115,9 +116,8 @@ pub fn unknown_match(
     unknown_matches
 }
 
-fn compute_covered_positions(
-    _query: &Query,
-    known_matches: &[LicenseMatch],
+fn compute_covered_positions<'a>(
+    known_matches: &[LicenseMatch<'a>],
 ) -> std::collections::HashSet<usize> {
     let mut covered = std::collections::HashSet::new();
 
@@ -230,11 +230,55 @@ fn compute_hispan_from_qspan(
         .count()
 }
 
-fn create_unknown_match_from_qspan(
-    query: &Query,
+static UNKNOWN_RULE: std::sync::OnceLock<crate::license_detection::models::Rule> =
+    std::sync::OnceLock::new();
+
+fn get_unknown_rule() -> &'static crate::license_detection::models::Rule {
+    UNKNOWN_RULE.get_or_init(|| crate::license_detection::models::Rule {
+        identifier: "unknown.LICENSE".to_string(),
+        license_expression: "unknown".to_string(),
+        text: String::new(),
+        tokens: Vec::new(),
+        rule_kind: crate::license_detection::models::RuleKind::None,
+        is_false_positive: false,
+        is_required_phrase: false,
+        is_from_license: false,
+        relevance: 50,
+        minimum_coverage: None,
+        has_stored_minimum_coverage: false,
+        is_continuous: false,
+        required_phrase_spans: Vec::new(),
+        stopwords_by_pos: std::collections::HashMap::new(),
+        referenced_filenames: None,
+        ignorable_urls: None,
+        ignorable_emails: None,
+        ignorable_copyrights: None,
+        ignorable_holders: None,
+        ignorable_authors: None,
+        language: None,
+        notes: None,
+        length_unique: 0,
+        high_length_unique: 0,
+        high_length: 0,
+        min_matched_length: 0,
+        min_high_matched_length: 0,
+        min_matched_length_unique: 0,
+        min_high_matched_length_unique: 0,
+        is_small: false,
+        is_tiny: false,
+        starts_with_license: false,
+        ends_with_license: false,
+        is_deprecated: false,
+        spdx_license_key: None,
+        other_spdx_license_keys: Vec::new(),
+    })
+}
+
+fn create_unknown_match_from_qspan<'a>(
+    query: &Query<'a>,
     qspan: &[(usize, usize)],
     hispan: usize,
-) -> Option<LicenseMatch> {
+) -> Option<LicenseMatch<'a>> {
     if qspan.is_empty() {
         return None;
     }
@@ -253,17 +297,18 @@ fn create_unknown_match_from_qspan(
         .copied()
         .unwrap_or(start_line);
 
-    let synthetic_rule_text =
-        build_unknown_rule_text(query, &qspan_positions, start_line, end_line);
-    let rule_identifier = build_unknown_rule_identifier(&synthetic_rule_text);
-
     let ngram_count = qspan.len();
 
     let score = calculate_score(ngram_count, match_len);
 
+    // Reinterpret the lifetime. The unknown rule is 'static, and we're borrowing
+    // it for the lifetime of the query's index. This is safe because the rule is
+    // a leaked static reference.
+    let rule: &'a crate::license_detection::models::Rule =
+        unsafe { &*(get_unknown_rule() as *const _) };
+
     LicenseMatch {
-        rid: 0,
-        license_expression: "unknown".to_string(),
+        rule,
         license_expression_spdx: None,
         from_file: None,
         start_line,
@@ -273,14 +318,8 @@ fn create_unknown_match_from_qspan(
         matcher: MATCH_UNKNOWN,
         score,
         matched_length: match_len,
-        rule_length: match_len,
         match_coverage: 100.0,
-        rule_relevance: 50,
-        rule_identifier,
-        rule_url: String::new(),
         matched_text: None,
-        referenced_filenames: None,
-        rule_kind: crate::license_detection::models::RuleKind::None,
         is_from_license: false,
         matched_token_positions: None,
         hilen: hispan,
@@ -582,7 +621,7 @@ mod tests {
         let query = Query::from_extracted_text("", &index, false).expect("Failed to create query");
         let known_matches = vec![];
 
-        let matches = unknown_match(&index, &query, &known_matches);
+        let matches = unknown_match(&query, &known_matches);
 
         assert!(matches.is_empty());
     }
@@ -794,7 +833,7 @@ mod tests {
     #[test]
     fn test_compute_covered_positions_gapped_qspan() {
         let index = LicenseIndex::with_legalese_count(10);
-        let query = Query::from_extracted_text("some license text here", &index, false)
+        let _query = Query::from_extracted_text("some license text here", &index, false)
             .expect("Failed to create query");
 
         let known_matches = vec![
@@ -816,7 +855,7 @@ mod tests {
                 .build_match(),
         ];
 
-        let covered = compute_covered_positions(&query, &known_matches);
+        let covered = compute_covered_positions(&known_matches);
 
         assert!(covered.contains(&0), "Should contain position 0");
         assert!(covered.contains(&2), "Should contain position 2");
@@ -833,7 +872,7 @@ mod tests {
     #[test]
     fn test_compute_covered_positions_fallback_contiguous() {
         let index = LicenseIndex::with_legalese_count(10);
-        let query = Query::from_extracted_text("some license text here", &index, false)
+        let _query = Query::from_extracted_text("some license text here", &index, false)
             .expect("Failed to create query");
 
         let known_matches = vec![
@@ -854,7 +893,7 @@ mod tests {
                 .build_match(),
         ];
 
-        let covered = compute_covered_positions(&query, &known_matches);
+        let covered = compute_covered_positions(&known_matches);
 
         assert!(covered.contains(&5), "Should contain position 5");
         assert!(covered.contains(&7), "Should contain position 7");
@@ -872,7 +911,7 @@ mod tests {
     #[test]
     fn test_compute_covered_positions_qspan_creates_extra_unmatched_region() {
         let index = LicenseIndex::with_legalese_count(10);
-        let query = Query::from_extracted_text("some license text here", &index, false)
+        let _query = Query::from_extracted_text("some license text here", &index, false)
             .expect("Failed to create query");
 
         let known_matches = vec![
@@ -894,7 +933,7 @@ mod tests {
                 .build_match(),
         ];
 
-        let covered = compute_covered_positions(&query, &known_matches);
+        let covered = compute_covered_positions(&known_matches);
         let regions = find_unmatched_regions(20, &covered);
 
         assert!(
@@ -937,7 +976,7 @@ mod tests {
         );
 
         let m = match_result.unwrap();
-        assert_eq!(m.license_expression, "unknown");
+        assert_eq!(m.license_expression(), "unknown");
         assert_eq!(m.matcher, MATCH_UNKNOWN);
         assert!(m.qspan_positions.is_some());
     }
@@ -967,7 +1006,7 @@ mod tests {
                 .build_match(),
         ];
 
-        let matches = unknown_match(&index, &query, &known_matches);
+        let matches = unknown_match(&query, &known_matches);
 
         assert!(
             matches.is_empty() || matches[0].start_line > 1,

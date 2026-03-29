@@ -818,7 +818,7 @@ fn test_ibmpl_detection() {
     let has_ibmpl_match = detections.iter().any(|d| {
         d.matches
             .iter()
-            .any(|m| m.license_expression.contains("ibmpl-1.0"))
+            .any(|m| m.license_expression().contains("ibmpl-1.0"))
     });
     assert!(
         has_ibmpl_match,

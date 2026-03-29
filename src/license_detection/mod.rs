@@ -23,7 +23,7 @@ pub mod spdx_mapping;
 #[cfg(test)]
 mod test_utils;
 #[cfg(test)]
-mod tests;
+pub mod tests;
 pub mod tokenize;
 pub mod unknown_match;
 
@@ -138,7 +138,7 @@ fn is_redundant_same_expression_seq_container(
         .filter_map(|m| {
             if m.matcher == MatcherKind::Aho
                 && has_full_match_coverage(m)
-                && m.license_expression == container.license_expression
+                && m.license_expression() == container.license_expression()
                 && (container.qcontains_with_set(m, &container_qspan_set)
                     || container.qoverlap_with_set(m, &container_qspan_set) > 0)
             {
@@ -236,19 +236,19 @@ fn is_redundant_same_expression_seq_container(
         && child_only_positions.count() <= max_child_only_positions
 }
 
-fn filter_redundant_same_expression_seq_containers(
-    seq_matches: Vec<LicenseMatch>,
-    candidate_contained_matches: &[LicenseMatch],
-) -> Vec<LicenseMatch> {
+fn filter_redundant_same_expression_seq_containers<'a>(
+    seq_matches: Vec<LicenseMatch<'a>>,
+    candidate_contained_matches: &[LicenseMatch<'a>],
+) -> Vec<LicenseMatch<'a>> {
     seq_matches
         .into_iter()
         .filter(|m| !is_redundant_same_expression_seq_container(m, candidate_contained_matches))
         .collect()
 }
 
-fn is_redundant_low_coverage_composite_seq_wrapper(
-    container: &LicenseMatch,
-    candidate_contained_matches: &[LicenseMatch],
+fn is_redundant_low_coverage_composite_seq_wrapper<'a>(
+    container: &LicenseMatch<'a>,
+    candidate_contained_matches: &[LicenseMatch<'a>],
 ) -> bool {
     if container.matcher != seq_match::MATCH_SEQ || container.match_coverage >= 30.0 {
         return false;
@@ -256,12 +256,12 @@ fn is_redundant_low_coverage_composite_seq_wrapper(
 
     let container_qspan_set: BitSet = container.qspan_bitset();
 
-    let children: Vec<(&LicenseMatch, Vec<usize>)> = candidate_contained_matches
+    let children: Vec<(&LicenseMatch<'a>, Vec<usize>)> = candidate_contained_matches
         .iter()
         .filter_map(|m| {
             if m.matcher == aho_match::MATCH_AHO
                 && has_full_match_coverage(m)
-                && m.license_expression != container.license_expression
+                && m.license_expression() != container.license_expression()
                 && (container.qcontains_with_set(m, &container_qspan_set)
                     || container.qoverlap_with_set(m, &container_qspan_set) > 0)
             {
@@ -278,7 +278,7 @@ fn is_redundant_low_coverage_composite_seq_wrapper(
 
     let unique_expressions: HashSet<&str> = children
         .iter()
-        .map(|(m, _)| m.license_expression.as_str())
+        .map(|(m, _)| m.license_expression())
         .collect();
     if unique_expressions.len() < 2 {
         return false;
@@ -315,10 +315,10 @@ fn is_redundant_low_coverage_composite_seq_wrapper(
         && container_only_boundary_positions <= MAX_REDUNDANT_SEQ_CONTAINER_BOUNDARY_GAP
 }
 
-fn filter_redundant_low_coverage_composite_seq_wrappers(
-    seq_matches: Vec<LicenseMatch>,
-    candidate_contained_matches: &[LicenseMatch],
-) -> Vec<LicenseMatch> {
+fn filter_redundant_low_coverage_composite_seq_wrappers<'a>(
+    seq_matches: Vec<LicenseMatch<'a>>,
+    candidate_contained_matches: &[LicenseMatch<'a>],
+) -> Vec<LicenseMatch<'a>> {
     seq_matches
         .into_iter()
         .filter(|m| {
@@ -327,11 +327,11 @@ fn filter_redundant_low_coverage_composite_seq_wrappers(
         .collect()
 }
 
-fn subtract_spdx_match_qspans(
-    query: &mut Query<'_>,
+fn subtract_spdx_match_qspans<'a>(
+    query: &mut Query<'a>,
     matched_qspans: &mut Vec<query::PositionSpan>,
     aho_extra_matchables: &mut BitSet,
-    spdx_matches: &[LicenseMatch],
+    spdx_matches: &[LicenseMatch<'a>],
 ) {
     for m in spdx_matches {
         let Some(span) = query_span_for_match(m) else {
@@ -349,12 +349,11 @@ fn subtract_spdx_match_qspans(
     }
 }
 
-fn merge_and_prepare_aho_matches(
-    index: &index::LicenseIndex,
-    query: &mut Query<'_>,
+fn merge_and_prepare_aho_matches<'a>(
+    query: &mut Query<'a>,
     matched_qspans: &mut Vec<query::PositionSpan>,
-    refined_aho: &[LicenseMatch],
-) -> (Vec<LicenseMatch>, bool) {
+    refined_aho: &[LicenseMatch<'a>],
+) -> (Vec<LicenseMatch<'a>>, bool) {
     let merged_aho = merge_overlapping_matches(refined_aho);
     let mut saw_long_exact_license_text_match = false;
 
@@ -367,13 +366,7 @@ fn merge_and_prepare_aho_matches(
             matched_qspans.push(span.clone());
         }
 
-        if index
-            .rules_by_rid
-            .get(m.rid)
-            .is_some_and(|rule| rule.is_license_text())
-            && m.rule_length > 120
-            && m.match_coverage > 98.0
-        {
+        if m.rule.is_license_text() && m.rule_length() > 120 && m.match_coverage > 98.0 {
             query.subtract(&span);
             saw_long_exact_license_text_match = true;
         }
@@ -382,21 +375,20 @@ fn merge_and_prepare_aho_matches(
     (merged_aho, saw_long_exact_license_text_match)
 }
 
-fn collect_whole_query_exact_followup_matches(
-    index: &index::LicenseIndex,
-    query: &mut Query<'_>,
+fn collect_whole_query_exact_followup_matches<'a>(
+    query: &mut Query<'a>,
     matched_qspans: &mut Vec<query::PositionSpan>,
-    whole_run: &query::QueryRun<'_>,
-) -> Vec<LicenseMatch> {
+    whole_run: &query::QueryRun<'a, 'a>,
+) -> Vec<LicenseMatch<'a>> {
     let mut seq_all_matches = Vec::new();
 
     if whole_run.is_matchable(false, matched_qspans) {
         let near_dupe_candidates =
-            compute_candidates_with_msets(index, whole_run, true, MAX_NEAR_DUPE_CANDIDATES);
+            compute_candidates_with_msets(query.index, whole_run, true, MAX_NEAR_DUPE_CANDIDATES);
 
         if !near_dupe_candidates.is_empty() {
             let near_dupe_matches =
-                seq_match_with_candidates(index, whole_run, &near_dupe_candidates);
+                seq_match_with_candidates(query.index, whole_run, &near_dupe_candidates);
 
             for m in &near_dupe_matches {
                 if m.end_token > m.start_token {
@@ -413,15 +405,16 @@ fn collect_whole_query_exact_followup_matches(
     seq_all_matches
 }
 
-fn collect_regular_seq_matches(
-    index: &index::LicenseIndex,
-    query: &Query<'_>,
+fn collect_regular_seq_matches<'a>(
+    index: &'a LicenseIndex,
+    query: &Query<'a>,
     matched_qspans: &[query::PositionSpan],
-    candidate_contained_matches: &[LicenseMatch],
-) -> Vec<LicenseMatch> {
+    candidate_contained_matches: &[LicenseMatch<'a>],
+) -> Vec<LicenseMatch<'a>> {
     let mut seq_all_matches = Vec::new();
 
-    for query_run in query.query_runs() {
+    for &(start, end) in &query.query_run_ranges {
+        let query_run = query::QueryRun::new(query, start, end);
         if !query_run.is_matchable(false, matched_qspans) {
             continue;
         }
@@ -500,12 +493,12 @@ impl LicenseDetectionEngine {
         Self::from_index(index)
     }
 
-    pub fn detect_with_kind(
-        &self,
+    pub fn detect_with_kind<'a>(
+        &'a self,
         text: &str,
         unknown_licenses: bool,
         binary_derived: bool,
-    ) -> Result<Vec<LicenseDetection>> {
+    ) -> Result<Vec<LicenseDetection<'a>>> {
         let clean_text = strip_utf8_bom_str(text);
 
         let content = truncate_detection_text(clean_text);
@@ -513,8 +506,8 @@ impl LicenseDetectionEngine {
         let mut query = Query::from_extracted_text(content, &self.index, binary_derived)?;
         let whole_query_run = query.whole_query_run();
 
-        let mut all_matches = Vec::new();
-        let mut candidate_contained_matches = Vec::new();
+        let mut all_matches: Vec<LicenseMatch<'a>> = Vec::new();
+        let mut candidate_contained_matches: Vec<LicenseMatch<'a>> = Vec::new();
         let mut aho_extra_matchables = BitSet::new();
         let mut matched_qspans: Vec<query::PositionSpan> = Vec::new();
 
@@ -547,7 +540,7 @@ impl LicenseDetectionEngine {
 
         // Phase 1b: SPDX-LID matching
         {
-            let spdx_matches = spdx_lid_match(&self.index, &query);
+            let spdx_matches = spdx_lid_match(&query);
             let merged_spdx = merge_overlapping_matches(&spdx_matches);
             subtract_spdx_match_qspans(
                 &mut query,
@@ -574,16 +567,11 @@ impl LicenseDetectionEngine {
             // This applies quality filters including required phrase filtering
             let refined_aho = match_refine::refine_aho_matches(&self.index, aho_matches, &query);
             candidate_contained_matches.extend(refined_aho.clone());
-            let (merged_aho, _) = merge_and_prepare_aho_matches(
-                &self.index,
-                &mut query,
-                &mut matched_qspans,
-                &refined_aho,
-            );
+            let (merged_aho, _) =
+                merge_and_prepare_aho_matches(&mut query, &mut matched_qspans, &refined_aho);
             all_matches.extend(merged_aho);
 
             let whole_query_followup = collect_whole_query_exact_followup_matches(
-                &self.index,
                 &mut query,
                 &mut matched_qspans,
                 &whole_query_run,
@@ -601,17 +589,16 @@ impl LicenseDetectionEngine {
 
         // Step 1: Initial refine WITHOUT false positive filtering
         // Python: refine_matches with filter_false_positive=False (index.py:1073-1080)
-        let merged_matches =
-            refine_matches_without_false_positive_filter(&self.index, all_matches, &query);
+        let merged_matches = refine_matches_without_false_positive_filter(all_matches, &query);
 
         // Step 2: Unknown detection and weak match handling
         // Python: index.py:1079-1118 - only runs when unknown_licenses=True
         let refined_matches = if unknown_licenses {
             // Split weak from good - Python: index.py:1083
-            let (good_matches, weak_matches) = split_weak_matches(&self.index, &merged_matches);
+            let (good_matches, weak_matches) = split_weak_matches(&merged_matches);
 
             // Unknown detection on uncovered regions - Python: index.py:1093-1114
-            let unknown_matches = unknown_match(&self.index, &query, &good_matches);
+            let unknown_matches = unknown_match(&query, &good_matches);
             let filtered_unknown =
                 filter_invalid_contained_unknown_matches(&unknown_matches, &good_matches);
 
@@ -626,7 +613,7 @@ impl LicenseDetectionEngine {
         };
 
         // Step 5: Final refine WITH false positive filtering - Python: index.py:1130-1145
-        let refined = refine_matches(&self.index, refined_matches, &query);
+        let refined = refine_matches(refined_matches, &query);
 
         let mut sorted = refined;
         sort_matches_by_line(&mut sorted);
@@ -668,7 +655,7 @@ impl LicenseDetectionEngine {
         text: &str,
         unknown_licenses: bool,
         binary_derived: bool,
-    ) -> Result<Vec<LicenseMatch>> {
+    ) -> Result<Vec<LicenseMatch<'_>>> {
         let clean_text = strip_utf8_bom_str(text);
 
         let content = truncate_detection_text(clean_text);
@@ -676,8 +663,8 @@ impl LicenseDetectionEngine {
         let mut query = Query::from_extracted_text(content, &self.index, binary_derived)?;
         let whole_query_run = query.whole_query_run();
 
-        let mut all_matches = Vec::new();
-        let mut candidate_contained_matches = Vec::new();
+        let mut all_matches: Vec<LicenseMatch> = Vec::new();
+        let mut candidate_contained_matches: Vec<LicenseMatch> = Vec::new();
         let mut aho_extra_matchables = BitSet::new();
         let mut matched_qspans: Vec<query::PositionSpan> = Vec::new();
 
@@ -694,7 +681,7 @@ impl LicenseDetectionEngine {
 
         // Phase 1b: SPDX-LID matching
         {
-            let spdx_matches = spdx_lid_match(&self.index, &query);
+            let spdx_matches = spdx_lid_match(&query);
             let merged_spdx = merge_overlapping_matches(&spdx_matches);
             subtract_spdx_match_qspans(
                 &mut query,
@@ -718,16 +705,11 @@ impl LicenseDetectionEngine {
             };
             let refined_aho = match_refine::refine_aho_matches(&self.index, aho_matches, &query);
             candidate_contained_matches.extend(refined_aho.clone());
-            let (merged_aho, _) = merge_and_prepare_aho_matches(
-                &self.index,
-                &mut query,
-                &mut matched_qspans,
-                &refined_aho,
-            );
+            let (merged_aho, _) =
+                merge_and_prepare_aho_matches(&mut query, &mut matched_qspans, &refined_aho);
             all_matches.extend(merged_aho);
 
             let whole_query_followup = collect_whole_query_exact_followup_matches(
-                &self.index,
                 &mut query,
                 &mut matched_qspans,
                 &whole_query_run,
@@ -744,13 +726,12 @@ impl LicenseDetectionEngine {
         }
 
         // Step 1: Initial refine WITHOUT false positive filtering
-        let merged_matches =
-            refine_matches_without_false_positive_filter(&self.index, all_matches, &query);
+        let merged_matches = refine_matches_without_false_positive_filter(all_matches, &query);
 
         // Step 2: Unknown detection and weak match handling
         let refined_matches = if unknown_licenses {
-            let (good_matches, weak_matches) = split_weak_matches(&self.index, &merged_matches);
-            let unknown_matches = unknown_match(&self.index, &query, &good_matches);
+            let (good_matches, weak_matches) = split_weak_matches(&merged_matches);
+            let unknown_matches = unknown_match(&query, &good_matches);
             let filtered_unknown =
                 filter_invalid_contained_unknown_matches(&unknown_matches, &good_matches);
 
@@ -763,7 +744,7 @@ impl LicenseDetectionEngine {
         };
 
         // Step 3: Final refine WITH false positive filtering - Python: index.py:1130-1145
-        let refined = refine_matches(&self.index, refined_matches, &query);
+        let refined = refine_matches(refined_matches, &query);
 
         let mut sorted = refined;
         sort_matches_by_line(&mut sorted);

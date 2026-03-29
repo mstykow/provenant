@@ -15,13 +15,13 @@ pub(crate) struct UniqueDetection {
     pub(crate) file_regions: Vec<FileRegion>,
 }
 
-pub struct DetectionGroup {
+pub struct DetectionGroup<'a> {
     /// The matches in this group
-    pub matches: Vec<LicenseMatch>,
+    pub matches: Vec<LicenseMatch<'a>>,
 }
 
-impl DetectionGroup {
-    pub fn new(matches: Vec<LicenseMatch>) -> Self {
+impl<'a> DetectionGroup<'a> {
+    pub fn new(matches: Vec<LicenseMatch<'a>>) -> Self {
         Self { matches }
     }
 }
@@ -29,7 +29,7 @@ impl DetectionGroup {
 /// A LicenseDetection combines one or more LicenseMatch objects using
 /// various rules and heuristics.
 #[derive(Debug, Clone)]
-pub struct LicenseDetection {
+pub struct LicenseDetection<'a> {
     /// A license expression string using SPDX license expression syntax
     /// and ScanCode license keys - the effective license expression for this detection.
     pub license_expression: Option<String>,
@@ -38,7 +38,7 @@ pub struct LicenseDetection {
     pub license_expression_spdx: Option<String>,
 
     /// List of license matches combined in this detection.
-    pub matches: Vec<LicenseMatch>,
+    pub matches: Vec<LicenseMatch<'a>>,
 
     /// A list of detection log entries explaining how this detection was created.
     pub detection_log: Vec<String>,
@@ -55,7 +55,7 @@ mod tests {
     use super::*;
     use crate::license_detection::tests::TestMatchBuilder;
 
-    fn create_test_match(start_line: usize, end_line: usize) -> LicenseMatch {
+    fn create_test_match(start_line: usize, end_line: usize) -> LicenseMatch<'static> {
         TestMatchBuilder::default()
             .license_expression("mit")
             .license_expression_spdx(Some("MIT".to_string()))
@@ -77,7 +77,7 @@ mod tests {
 
     #[test]
     fn test_detection_group_new_empty() {
-        let group = DetectionGroup::new(Vec::new());
+        let group: DetectionGroup<'static> = DetectionGroup::new(Vec::new());
         assert_eq!(group.matches.len(), 0);
     }
 

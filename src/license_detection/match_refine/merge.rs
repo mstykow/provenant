@@ -10,11 +10,13 @@ use crate::license_detection::query::Query;
 
 const MAX_DIST: usize = 50;
 
-fn combine_matches(a: &LicenseMatch, b: &LicenseMatch) -> LicenseMatch {
+fn combine_matches<'a>(a: &LicenseMatch<'a>, b: &LicenseMatch<'a>) -> LicenseMatch<'a> {
     assert_eq!(
-        a.rule_identifier, b.rule_identifier,
+        a.rule_identifier(),
+        b.rule_identifier(),
         "Cannot combine matches with different rules: {} vs {}",
-        a.rule_identifier, b.rule_identifier
+        a.rule_identifier(),
+        b.rule_identifier()
     );
 
     let mut merged = a.clone();
@@ -58,10 +60,10 @@ fn combine_matches(a: &LicenseMatch, b: &LicenseMatch) -> LicenseMatch {
     merged.qspan_positions = Some(qspan_vec);
     merged.ispan_positions = Some(ispan_vec);
 
-    if merged.rule_length > 0 {
-        merged.match_coverage = (merged.matched_length.min(merged.rule_length) as f32
-            / merged.rule_length as f32)
-            * 100.0;
+    let rule_length = merged.rule_length();
+    if rule_length > 0 {
+        merged.match_coverage =
+            (merged.matched_length.min(rule_length) as f32 / rule_length as f32) * 100.0;
     }
 
     merged
@@ -71,7 +73,7 @@ fn combine_matches(a: &LicenseMatch, b: &LicenseMatch) -> LicenseMatch {
 ///
 /// Based on Python: `merge_matches()` (match.py:869-1068)
 /// Uses distance-based merging with multiple merge conditions.
-pub fn merge_overlapping_matches(matches: &[LicenseMatch]) -> Vec<LicenseMatch> {
+pub fn merge_overlapping_matches<'a>(matches: &[LicenseMatch<'a>]) -> Vec<LicenseMatch<'a>> {
     if matches.is_empty() {
         return Vec::new();
     }
@@ -80,21 +82,21 @@ pub fn merge_overlapping_matches(matches: &[LicenseMatch]) -> Vec<LicenseMatch> 
         return matches.to_vec();
     }
 
-    let mut sorted: Vec<&LicenseMatch> = matches.iter().collect();
+    let mut sorted: Vec<&LicenseMatch<'a>> = matches.iter().collect();
     sorted.sort_by(|a, b| {
-        a.rule_identifier
-            .cmp(&b.rule_identifier)
+        a.rule_identifier()
+            .cmp(b.rule_identifier())
             .then_with(|| a.qstart().cmp(&b.qstart()))
             .then_with(|| b.hilen.cmp(&a.hilen))
             .then_with(|| b.matched_length.cmp(&a.matched_length))
             .then_with(|| a.matcher_order().cmp(&b.matcher_order()))
     });
 
-    let mut grouped: Vec<Vec<&LicenseMatch>> = Vec::new();
-    let mut current_group: Vec<&LicenseMatch> = Vec::new();
+    let mut grouped: Vec<Vec<&LicenseMatch<'a>>> = Vec::new();
+    let mut current_group: Vec<&LicenseMatch<'a>> = Vec::new();
 
     for m in sorted {
-        if current_group.is_empty() || current_group[0].rule_identifier == m.rule_identifier {
+        if current_group.is_empty() || current_group[0].rule_identifier() == m.rule_identifier() {
             current_group.push(m);
         } else {
             grouped.push(current_group);
@@ -113,10 +115,10 @@ pub fn merge_overlapping_matches(matches: &[LicenseMatch]) -> Vec<LicenseMatch> 
             continue;
         }
 
-        let rule_length = rule_matches[0].rule_length;
+        let rule_length = rule_matches[0].rule_length();
         let max_rule_side_dist = (rule_length / 2).clamp(1, MAX_DIST);
 
-        let mut rule_matches: Vec<LicenseMatch> =
+        let mut rule_matches: Vec<LicenseMatch<'a>> =
             rule_matches.iter().map(|m| (*m).clone()).collect();
         let mut i = 0;
 
@@ -248,14 +250,14 @@ pub fn merge_overlapping_matches(matches: &[LicenseMatch]) -> Vec<LicenseMatch> 
 /// * `query` - Query reference for qmagnitude calculation
 ///
 /// Based on Python: LicenseMatch.score() at match.py:592-619
-pub(super) fn update_match_scores(matches: &mut [LicenseMatch], query: &Query) {
+pub(super) fn update_match_scores<'a>(matches: &mut [LicenseMatch<'a>], query: &Query<'a>) {
     for m in matches.iter_mut() {
         m.score = compute_match_score(m, query);
     }
 }
 
-fn compute_match_score(m: &LicenseMatch, query: &Query) -> f32 {
-    let relevance = m.rule_relevance as f32 / 100.0;
+fn compute_match_score<'a>(m: &LicenseMatch<'a>, query: &Query<'a>) -> f32 {
+    let relevance = m.rule_relevance() as f32 / 100.0;
     if relevance < 0.001 {
         return 0.0;
     }
@@ -288,9 +290,9 @@ fn compute_match_score(m: &LicenseMatch, query: &Query) -> f32 {
 ///
 /// References at DIFFERENT locations are kept (e.g., MIT.t10 where "The MIT License"
 /// header at line 1 is separate from the license text at lines 5-20).
-pub(super) fn filter_license_references_with_text_match(
-    matches: &[LicenseMatch],
-) -> Vec<LicenseMatch> {
+pub(super) fn filter_license_references_with_text_match<'a>(
+    matches: &[LicenseMatch<'a>],
+) -> Vec<LicenseMatch<'a>> {
     if matches.len() < 2 {
         return matches.to_vec();
     }
@@ -306,7 +308,7 @@ pub(super) fn filter_license_references_with_text_match(
             let current = &matches[i];
             let other = &matches[j];
 
-            if current.license_expression == other.license_expression {
+            if current.license_expression() == other.license_expression() {
                 let current_is_ref = current.is_license_reference() && !current.is_license_text();
                 let other_is_text = other.is_license_text() && !other.is_license_reference();
 
@@ -357,11 +359,10 @@ mod tests {
         score: f32,
         coverage: f32,
         relevance: u8,
-    ) -> LicenseMatch {
+    ) -> LicenseMatch<'static> {
         let matched_len = end_line - start_line + 1;
         let rule_len = matched_len;
-        let rid = parse_rule_id(rule_identifier).unwrap_or(0);
-        let mut m = TestMatchBuilder::default()
+        TestMatchBuilder::default()
             .license_expression("mit")
             .license_expression_spdx(Some("MIT".to_string()))
             .start_line(start_line)
@@ -377,19 +378,49 @@ mod tests {
             .rule_identifier(rule_identifier)
             .rule_url("https://example.com".to_string())
             .hilen(50)
-            .build_match();
-        m.rid = rid;
-        m
+            .build_match()
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn create_test_match_with_rule_len(
+        rule_identifier: &str,
+        start_line: usize,
+        end_line: usize,
+        score: f32,
+        coverage: f32,
+        relevance: u8,
+        rule_len: usize,
+        rule_start_token: usize,
+    ) -> LicenseMatch<'static> {
+        let matched_len = end_line - start_line + 1;
+        TestMatchBuilder::default()
+            .license_expression("mit")
+            .license_expression_spdx(Some("MIT".to_string()))
+            .start_line(start_line)
+            .end_line(end_line)
+            .start_token(start_line)
+            .end_token(end_line + 1)
+            .matcher(MatcherKind::Aho)
+            .score(score)
+            .matched_length(matched_len)
+            .rule_length(rule_len)
+            .match_coverage(coverage)
+            .rule_relevance(relevance)
+            .rule_identifier(rule_identifier)
+            .rule_url("https://example.com".to_string())
+            .hilen(50)
+            .rule_start_token(rule_start_token)
+            .build_match()
+    }
+
+    #[allow(dead_code)]
     fn create_test_match_with_tokens(
         rule_identifier: &str,
         start_token: usize,
         end_token: usize,
         matched_length: usize,
-    ) -> LicenseMatch {
-        let rid = parse_rule_id(rule_identifier).unwrap_or(0);
-        let mut m = TestMatchBuilder::default()
+    ) -> LicenseMatch<'static> {
+        TestMatchBuilder::default()
             .license_expression("mit")
             .license_expression_spdx(Some("MIT".to_string()))
             .start_line(start_token)
@@ -405,9 +436,7 @@ mod tests {
             .rule_identifier(rule_identifier)
             .rule_url("https://example.com".to_string())
             .hilen(matched_length / 2)
-            .build_match();
-        m.rid = rid;
-        m
+            .build_match()
     }
 
     #[test]
@@ -438,19 +467,33 @@ mod tests {
 
     #[test]
     fn test_merge_overlapping_matches_same_rule() {
-        let mut m1 = create_test_match("#1", 1, 10, 0.9, 100.0, 100);
-        m1.rule_length = 100;
-        m1.rule_start_token = 0;
-        let mut m2 = create_test_match("#1", 5, 15, 0.85, 100.0, 100);
-        m2.rule_length = 100;
-        m2.rule_start_token = 4;
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .rule_length(100)
+            .rule_start_token(0)
+            .rule_identifier("#1")
+            .score(0.9)
+            .match_coverage(100.0)
+            .build_match();
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(5)
+            .end_line(15)
+            .rule_length(100)
+            .rule_start_token(4)
+            .rule_identifier("#1")
+            .score(0.85)
+            .match_coverage(100.0)
+            .build_match();
 
         let matches = vec![m1, m2];
 
         let merged = merge_overlapping_matches(&matches);
 
         assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].rule_identifier, "#1");
+        assert_eq!(merged[0].rule_identifier(), "#1");
         assert_eq!(merged[0].start_line, 1);
         assert_eq!(merged[0].end_line, 15);
         assert_eq!(merged[0].score, 0.9);
@@ -458,19 +501,33 @@ mod tests {
 
     #[test]
     fn test_merge_adjacent_matches_same_rule() {
-        let mut m1 = create_test_match("#1", 1, 10, 0.9, 100.0, 100);
-        m1.rule_length = 100;
-        m1.rule_start_token = 0;
-        let mut m2 = create_test_match("#1", 10, 20, 0.85, 100.0, 100);
-        m2.rule_length = 100;
-        m2.rule_start_token = 9;
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .rule_length(100)
+            .rule_start_token(0)
+            .rule_identifier("#1")
+            .score(0.9)
+            .match_coverage(100.0)
+            .build_match();
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(10)
+            .end_line(20)
+            .rule_length(100)
+            .rule_start_token(9)
+            .rule_identifier("#1")
+            .score(0.85)
+            .match_coverage(100.0)
+            .build_match();
 
         let matches = vec![m1, m2];
 
         let merged = merge_overlapping_matches(&matches);
 
         assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].rule_identifier, "#1");
+        assert_eq!(merged[0].rule_identifier(), "#1");
         assert_eq!(merged[0].start_line, 1);
         assert_eq!(merged[0].end_line, 20);
         assert_eq!(merged[0].score, 0.9);
@@ -502,15 +559,9 @@ mod tests {
 
     #[test]
     fn test_merge_multiple_matches_same_rule() {
-        let mut m1 = create_test_match("#1", 1, 5, 0.8, 100.0, 100);
-        m1.rule_length = 100;
-        m1.rule_start_token = 0;
-        let mut m2 = create_test_match("#1", 5, 10, 0.9, 100.0, 100);
-        m2.rule_length = 100;
-        m2.rule_start_token = 4;
-        let mut m3 = create_test_match("#1", 10, 15, 0.85, 100.0, 100);
-        m3.rule_length = 100;
-        m3.rule_start_token = 9;
+        let m1 = create_test_match_with_rule_len("#1", 1, 5, 0.8, 100.0, 100, 100, 0);
+        let m2 = create_test_match_with_rule_len("#1", 5, 10, 0.9, 100.0, 100, 100, 4);
+        let m3 = create_test_match_with_rule_len("#1", 10, 15, 0.85, 100.0, 100, 100, 9);
 
         let matches = vec![m1, m2, m3];
 
@@ -589,12 +640,8 @@ mod tests {
 
     #[test]
     fn test_merge_partially_overlapping_matches_same_rule() {
-        let mut m1 = create_test_match("#1", 1, 15, 0.9, 100.0, 100);
-        m1.rule_length = 100;
-        m1.rule_start_token = 0;
-        let mut m2 = create_test_match("#1", 10, 25, 0.85, 100.0, 100);
-        m2.rule_length = 100;
-        m2.rule_start_token = 9;
+        let m1 = create_test_match_with_rule_len("#1", 1, 15, 0.9, 100.0, 100, 100, 0);
+        let m2 = create_test_match_with_rule_len("#1", 10, 25, 0.85, 100.0, 100, 100, 9);
 
         let matches = vec![m1, m2];
 
@@ -623,15 +670,9 @@ mod tests {
 
     #[test]
     fn test_merge_preserves_max_score() {
-        let mut m1 = create_test_match("#1", 1, 10, 0.7, 100.0, 100);
-        m1.rule_length = 100;
-        m1.rule_start_token = 0;
-        let mut m2 = create_test_match("#1", 5, 15, 0.95, 100.0, 100);
-        m2.rule_length = 100;
-        m2.rule_start_token = 4;
-        let mut m3 = create_test_match("#1", 12, 20, 0.8, 100.0, 100);
-        m3.rule_length = 100;
-        m3.rule_start_token = 11;
+        let m1 = create_test_match_with_rule_len("#1", 1, 10, 0.7, 100.0, 100, 100, 0);
+        let m2 = create_test_match_with_rule_len("#1", 5, 15, 0.95, 100.0, 100, 100, 4);
+        let m3 = create_test_match_with_rule_len("#1", 12, 20, 0.8, 100.0, 100, 100, 11);
 
         let matches = vec![m1, m2, m3];
 
@@ -643,37 +684,72 @@ mod tests {
 
     #[test]
     fn test_qspan_magnitude_contiguous() {
-        let mut m = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
-        m.start_token = 5;
-        m.end_token = 15;
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .start_token(5)
+            .end_token(15)
+            .rule_length(10)
+            .build_match();
         assert_eq!(m.qspan_magnitude(), 10);
     }
 
     #[test]
     fn test_qspan_magnitude_non_contiguous() {
-        let mut m = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
-        m.qspan_positions = Some(vec![4, 8]);
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .start_token(1)
+            .end_token(11)
+            .rule_length(10)
+            .qspan_positions(Some(vec![4, 8]))
+            .build_match();
         assert_eq!(m.qspan_magnitude(), 5);
     }
 
     #[test]
     fn test_qspan_magnitude_empty() {
-        let mut m = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
-        m.qspan_positions = Some(vec![]);
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .start_token(1)
+            .end_token(11)
+            .rule_length(10)
+            .qspan_positions(Some(vec![]))
+            .build_match();
         assert_eq!(m.qspan_magnitude(), 0);
     }
 
     #[test]
     fn test_merge_equal_ispan_dense_vs_sparse() {
-        let mut dense = create_test_match_with_tokens("#1", 1, 11, 100);
-        dense.rule_start_token = 0;
-        dense.matched_length = 100;
-        dense.qspan_positions = None;
+        let dense = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .start_token(1)
+            .end_token(11)
+            .matched_length(100)
+            .rule_length(100)
+            .rule_start_token(0)
+            .qspan_positions(None)
+            .rule_identifier("#1")
+            .build_match();
 
-        let mut sparse = create_test_match_with_tokens("#1", 1, 11, 100);
-        sparse.rule_start_token = 0;
-        sparse.matched_length = 100;
-        sparse.qspan_positions = Some(vec![1, 5, 10, 20, 50]);
+        let sparse = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .start_token(1)
+            .end_token(11)
+            .matched_length(100)
+            .rule_length(100)
+            .rule_start_token(0)
+            .qspan_positions(Some(vec![1, 5, 10, 20, 50]))
+            .rule_identifier("#1")
+            .build_match();
 
         let merged = merge_overlapping_matches(&[dense.clone(), sparse.clone()]);
 
@@ -683,15 +759,31 @@ mod tests {
 
     #[test]
     fn test_merge_equal_ispan_dense_vs_sparse_reversed() {
-        let mut dense = create_test_match_with_tokens("#1", 1, 11, 100);
-        dense.rule_start_token = 0;
-        dense.matched_length = 100;
-        dense.qspan_positions = None;
+        let dense = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .start_token(1)
+            .end_token(11)
+            .matched_length(100)
+            .rule_length(100)
+            .rule_start_token(0)
+            .qspan_positions(None)
+            .rule_identifier("#1")
+            .build_match();
 
-        let mut sparse = create_test_match_with_tokens("#1", 1, 11, 100);
-        sparse.rule_start_token = 0;
-        sparse.matched_length = 100;
-        sparse.qspan_positions = Some(vec![1, 5, 10, 20, 50]);
+        let sparse = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .start_token(1)
+            .end_token(11)
+            .matched_length(100)
+            .rule_length(100)
+            .rule_start_token(0)
+            .qspan_positions(Some(vec![1, 5, 10, 20, 50]))
+            .rule_identifier("#1")
+            .build_match();
 
         let merged = merge_overlapping_matches(&[sparse.clone(), dense.clone()]);
 
@@ -701,13 +793,29 @@ mod tests {
 
     #[test]
     fn test_merge_equal_ispan_same_magnitude() {
-        let mut m1 = create_test_match_with_tokens("#1", 1, 11, 100);
-        m1.rule_start_token = 0;
-        m1.matched_length = 100;
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .start_token(1)
+            .end_token(11)
+            .matched_length(100)
+            .rule_length(100)
+            .rule_start_token(0)
+            .rule_identifier("#1")
+            .build_match();
 
-        let mut m2 = create_test_match_with_tokens("#1", 1, 11, 100);
-        m2.rule_start_token = 0;
-        m2.matched_length = 100;
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .start_token(1)
+            .end_token(11)
+            .matched_length(100)
+            .rule_length(100)
+            .rule_start_token(0)
+            .rule_identifier("#1")
+            .build_match();
 
         let merged = merge_overlapping_matches(&[m1, m2]);
 

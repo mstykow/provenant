@@ -1,5 +1,7 @@
 //! Rule metadata loaded from .LICENSE and .RULE files.
 
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::ops::Range;
 

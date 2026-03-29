@@ -3,12 +3,14 @@
 //! This module provides a fluent builder API for creating `LicenseMatch`
 //! instances in tests with sensible defaults and `'static` rule references.
 
+#![allow(dead_code)]
+
 use derive_builder::Builder;
 
 use crate::license_detection::models::license_match::{LicenseMatch, MatcherKind};
 use crate::license_detection::models::rule::RuleKind;
 
-use super::get_or_create_rule;
+use super::get_or_create_rule_ext;
 
 #[derive(Builder, Clone)]
 #[builder(setter(into))]
@@ -40,6 +42,11 @@ pub struct TestMatchBuilder {
     pub hispan_positions: Option<Vec<usize>>,
     pub candidate_resemblance: f32,
     pub candidate_containment: f32,
+    pub is_small: bool,
+    pub min_matched_length: usize,
+    pub min_high_matched_length: usize,
+    pub minimum_coverage: Option<u8>,
+    pub is_false_positive: bool,
 }
 
 impl Default for TestMatchBuilder {
@@ -72,16 +79,32 @@ impl Default for TestMatchBuilder {
             hispan_positions: None,
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
+            is_small: false,
+            min_matched_length: 0,
+            min_high_matched_length: 0,
+            minimum_coverage: None,
+            is_false_positive: false,
         }
     }
 }
 
 impl TestMatchBuilder {
-    pub fn build_match(self) -> LicenseMatch {
-        let _rule = get_or_create_rule(&self.rule_identifier, &self.license_expression);
+    pub fn build_match(self) -> LicenseMatch<'static> {
+        let rule = get_or_create_rule_ext(
+            &self.rule_identifier,
+            &self.license_expression,
+            self.rule_kind,
+            self.rule_relevance,
+            self.referenced_filenames.clone(),
+            self.is_small,
+            self.min_matched_length,
+            self.min_high_matched_length,
+            self.minimum_coverage,
+            self.is_false_positive,
+            self.rule_length,
+        );
         LicenseMatch {
-            rid: 0,
-            license_expression: self.license_expression,
+            rule,
             license_expression_spdx: self.license_expression_spdx,
             from_file: self.from_file,
             start_line: self.start_line,
@@ -91,14 +114,8 @@ impl TestMatchBuilder {
             matcher: self.matcher,
             score: self.score,
             matched_length: self.matched_length,
-            rule_length: self.rule_length,
             match_coverage: self.match_coverage,
-            rule_relevance: self.rule_relevance,
-            rule_identifier: self.rule_identifier,
-            rule_url: self.rule_url,
             matched_text: self.matched_text,
-            referenced_filenames: self.referenced_filenames,
-            rule_kind: self.rule_kind,
             is_from_license: self.is_from_license,
             matched_token_positions: self.matched_token_positions,
             hilen: self.hilen,
@@ -181,6 +198,7 @@ impl TestMatchBuilder {
         self
     }
 
+    #[allow(clippy::wrong_self_convention)]
     pub fn from_file(mut self, value: Option<String>) -> Self {
         self.from_file = value;
         self
@@ -201,6 +219,7 @@ impl TestMatchBuilder {
         self
     }
 
+    #[allow(clippy::wrong_self_convention)]
     pub fn is_from_license(mut self, value: bool) -> Self {
         self.is_from_license = value;
         self
@@ -245,10 +264,37 @@ impl TestMatchBuilder {
         self.candidate_containment = value;
         self
     }
+
+    #[allow(clippy::wrong_self_convention)]
+    pub fn is_small(mut self, value: bool) -> Self {
+        self.is_small = value;
+        self
+    }
+
+    pub fn min_matched_length(mut self, value: usize) -> Self {
+        self.min_matched_length = value;
+        self
+    }
+
+    pub fn min_high_matched_length(mut self, value: usize) -> Self {
+        self.min_high_matched_length = value;
+        self
+    }
+
+    pub fn minimum_coverage(mut self, value: Option<u8>) -> Self {
+        self.minimum_coverage = value;
+        self
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    pub fn is_false_positive(mut self, value: bool) -> Self {
+        self.is_false_positive = value;
+        self
+    }
 }
 
 impl TestMatchBuilderBuilder {
-    pub fn build_match(self) -> LicenseMatch {
+    pub fn build_match(self) -> LicenseMatch<'static> {
         self.build()
             .expect("TestMatchBuilder has all required fields with defaults")
             .build_match()

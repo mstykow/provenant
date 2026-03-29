@@ -64,11 +64,11 @@ mod tests {
             .collect()
     }
 
-    fn run_start_line(run: &QueryRun<'_>) -> Option<usize> {
+    fn run_start_line(run: &QueryRun<'_, '_>) -> Option<usize> {
         run.source_line_by_pos().get(run.start).copied()
     }
 
-    fn run_end_line(run: &QueryRun<'_>) -> Option<usize> {
+    fn run_end_line(run: &QueryRun<'_, '_>) -> Option<usize> {
         run.end
             .and_then(|end| run.source_line_by_pos().get(end).copied())
     }

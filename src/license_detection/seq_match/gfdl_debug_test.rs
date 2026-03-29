@@ -29,7 +29,9 @@ license is included in the section entitled "GNU Free Documentation License"."#;
         for m in &det.matches {
             eprintln!(
                 "  Rule: {}, score: {:.2}, coverage: {:.2}%",
-                m.rule_identifier, m.score, m.match_coverage
+                m.rule_identifier(),
+                m.score,
+                m.match_coverage
             );
         }
 
@@ -41,10 +43,10 @@ license is included in the section entitled "GNU Free Documentation License"."#;
             .expect("Should have a sequence match");
 
         assert!(
-            primary_match.license_expression.contains("gfdl-1.1")
-                && !primary_match.license_expression.contains("plus"),
+            primary_match.license_expression().contains("gfdl-1.1")
+                && !primary_match.license_expression().contains("plus"),
             "Expected gfdl-1.1, got {}",
-            primary_match.license_expression
+            primary_match.license_expression()
         );
     }
 }

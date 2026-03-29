@@ -1,5 +1,7 @@
 //! Query processing - tokenized input for license matching.
 
+#![allow(dead_code)]
+
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::{KnownToken, QueryToken, TokenId, TokenKind};
 use crate::license_detection::tokenize::STOPWORDS;
@@ -484,7 +486,7 @@ impl<'a> Query<'a> {
     /// Iterate over query runs.
     ///
     /// Corresponds to Python: `query.query_runs` property iteration
-    pub fn query_runs(&self) -> Vec<QueryRun<'_>> {
+    pub fn query_runs(&self) -> Vec<QueryRun<'a, '_>> {
         self.query_run_ranges
             .iter()
             .map(|&(start, end)| QueryRun::new(self, start, end))
@@ -774,7 +776,7 @@ impl<'a> Query<'a> {
     /// Get a query run covering the entire query.
     ///
     /// Corresponds to Python: `whole_query_run()` method (lines 306-317)
-    pub fn whole_query_run(&self) -> QueryRun<'a> {
+    pub fn whole_query_run(&self) -> QueryRun<'a, 'a> {
         QueryRun::whole_query_snapshot(self)
     }
 
@@ -828,8 +830,8 @@ struct WholeQueryRunSnapshot<'a> {
 /// Based on Python QueryRun class at:
 /// reference/scancode-toolkit/src/licensedcode/query.py (lines 720-914)
 #[derive(Debug, Clone)]
-pub struct QueryRun<'a> {
-    query: Option<&'a Query<'a>>,
+pub struct QueryRun<'a, 'q> {
+    query: Option<&'q Query<'a>>,
     whole_query_snapshot: Option<WholeQueryRunSnapshot<'a>>,
     pub start: usize,
     pub end: Option<usize>,
@@ -838,7 +840,7 @@ pub struct QueryRun<'a> {
     combined_matchables: RefCell<Option<BitSet>>,
 }
 
-impl<'a> QueryRun<'a> {
+impl<'a, 'q> QueryRun<'a, 'q> {
     /// Create a new query run from a query with start and end positions.
     ///
     /// # Arguments
@@ -847,7 +849,7 @@ impl<'a> QueryRun<'a> {
     /// * `end` - The end position (inclusive), or None for an empty run
     ///
     /// Corresponds to Python: `QueryRun.__init__()` (lines 735-749)
-    pub fn new(query: &'a Query<'a>, start: usize, end: Option<usize>) -> Self {
+    pub fn new(query: &'q Query<'a>, start: usize, end: Option<usize>) -> Self {
         Self {
             query: Some(query),
             whole_query_snapshot: None,
@@ -859,14 +861,14 @@ impl<'a> QueryRun<'a> {
         }
     }
 
-    fn whole_query_snapshot(query: &Query<'a>) -> Self {
+    fn whole_query_snapshot(query: &Query<'a>) -> QueryRun<'a, 'a> {
         let end = if query.is_empty() {
             None
         } else {
             Some(query.tokens.len() - 1)
         };
 
-        Self {
+        QueryRun {
             query: None,
             whole_query_snapshot: Some(WholeQueryRunSnapshot {
                 index: query.index,

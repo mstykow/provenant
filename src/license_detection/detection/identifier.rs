@@ -49,7 +49,7 @@ pub(super) fn compute_content_identifier(matches: &[LicenseMatch]) -> String {
         .map(|m| {
             let matched_text = m.matched_text.as_deref().unwrap_or("");
             let tokens = tokenize_without_stopwords(matched_text);
-            (m.rule_identifier.as_str(), m.score, tokens)
+            (m.rule_identifier(), m.score, tokens)
         })
         .collect();
 
@@ -167,7 +167,7 @@ mod tests {
     use crate::license_detection::models::LicenseMatch;
     use crate::license_detection::tests::TestMatchBuilder;
 
-    fn create_test_match() -> LicenseMatch {
+    fn create_test_match() -> LicenseMatch<'static> {
         TestMatchBuilder::default()
             .license_expression("mit")
             .license_expression_spdx(Some("MIT".to_string()))

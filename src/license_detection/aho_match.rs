@@ -58,7 +58,10 @@ fn byte_pos_to_token_pos(byte_pos: usize) -> usize {
 /// Vector of matches found by the Aho-Corasick automaton
 ///
 /// Corresponds to Python: `exact_match()` (lines 84-138)
-pub fn aho_match(index: &LicenseIndex, query_run: &QueryRun) -> Vec<LicenseMatch> {
+pub fn aho_match<'a, 'q>(
+    index: &'a LicenseIndex,
+    query_run: &QueryRun<'a, 'q>,
+) -> Vec<LicenseMatch<'a>> {
     aho_match_with_extra_matchables(index, query_run, None)
 }
 
@@ -67,11 +70,11 @@ pub fn aho_match(index: &LicenseIndex, query_run: &QueryRun) -> Vec<LicenseMatch
 /// This is used to preserve pre-subtraction SPDX positions for Phase 1c exact AHO
 /// eligibility checks only, while keeping the live query matchables unchanged for
 /// all later phases.
-pub fn aho_match_with_extra_matchables(
-    index: &LicenseIndex,
-    query_run: &QueryRun,
+pub fn aho_match_with_extra_matchables<'a, 'q>(
+    index: &'a LicenseIndex,
+    query_run: &QueryRun<'a, 'q>,
     extra_matchable_positions: Option<&BitSet>,
-) -> Vec<LicenseMatch> {
+) -> Vec<LicenseMatch<'a>> {
     let mut matches = Vec::new();
 
     let query_tokens = query_run.tokens();
@@ -162,7 +165,7 @@ pub fn aho_match_with_extra_matchables(
                 .collect();
 
             let license_match = LicenseMatch {
-                license_expression: rule.license_expression.clone(),
+                rule,
                 license_expression_spdx: None,
                 from_file: None,
                 start_line,
@@ -172,15 +175,8 @@ pub fn aho_match_with_extra_matchables(
                 matcher: MATCH_AHO,
                 score,
                 matched_length,
-                rule_length,
                 match_coverage,
-                rule_relevance: rule.relevance,
-                rid,
-                rule_identifier: rule.identifier.clone(),
-                rule_url: String::new(),
                 matched_text: None,
-                referenced_filenames: rule.referenced_filenames.clone(),
-                rule_kind: rule.kind(),
                 is_from_license: rule.is_from_license,
                 matched_token_positions: None,
                 hilen: hispan_count,
@@ -218,8 +214,8 @@ pub fn aho_match_with_extra_matchables(
                 !matches.iter().enumerate().any(|(j, inner)| {
                     j != *i
                         && inner.is_license_reference()
-                        && inner.rule_identifier.starts_with("spdx_license_id_")
-                        && inner.license_expression == m.license_expression
+                        && inner.rule_identifier().starts_with("spdx_license_id_")
+                        && inner.license_expression() == m.license_expression()
                         && inner.start_token >= m.start_token
                         && inner.end_token <= m.end_token
                         && (inner.start_token..inner.end_token)
@@ -427,9 +423,9 @@ mod tests {
         let matches = aho_match(run.get_index(), &run);
 
         assert_eq!(matches.len(), 2);
-        assert_eq!(matches[0].license_expression, "mit");
+        assert_eq!(matches[0].license_expression(), "mit");
         assert_eq!(matches[0].matched_length, 2);
-        assert_eq!(matches[1].license_expression, "apache-2.0");
+        assert_eq!(matches[1].license_expression(), "apache-2.0");
         assert_eq!(matches[1].matched_length, 2);
     }
 
@@ -570,7 +566,7 @@ mod tests {
 
         assert_eq!(matches.len(), 1);
         assert_eq!(
-            matches[0].rule_identifier,
+            matches[0].rule_identifier(),
             "spdx_license_id_cecill-c_for_cecill-c.RULE"
         );
     }

@@ -25,10 +25,10 @@ pub(super) fn is_candidate_false_positive(m: &LicenseMatch) -> bool {
     is_tag_or_ref && is_not_spdx_id && is_exact_match && is_short
 }
 
-fn count_unique_licenses(matches: &[LicenseMatch]) -> usize {
+fn count_unique_licenses<'a>(matches: &[LicenseMatch<'a>]) -> usize {
     let mut seen = std::collections::HashSet::new();
     for m in matches {
-        seen.insert(&m.license_expression);
+        seen.insert(m.license_expression());
     }
     seen.len()
 }
@@ -186,8 +186,7 @@ mod tests {
         matched_length: usize,
         rule_length: usize,
         license_expression: &str,
-    ) -> LicenseMatch {
-        let rid = rule_identifier.trim_start_matches('#').parse().unwrap_or(0);
+    ) -> LicenseMatch<'static> {
         let rule_kind = RuleKind::from_match_flags(
             false,
             is_license_reference,
@@ -196,7 +195,7 @@ mod tests {
             is_license_clue,
         )
         .unwrap();
-        let mut m = TestMatchBuilder::default()
+        TestMatchBuilder::default()
             .license_expression(license_expression)
             .license_expression_spdx(Some(license_expression.to_string()))
             .start_line(start_line)
@@ -211,9 +210,7 @@ mod tests {
             .rule_kind(rule_kind)
             .hilen(matched_length / 2)
             .qspan_positions(Some((0..matched_length).collect()))
-            .build_match();
-        m.rid = rid;
-        m
+            .build_match()
     }
 
     #[test]
@@ -453,7 +450,7 @@ mod tests {
     fn test_min_unique_licenses_fallback() {
         let matches: Vec<LicenseMatch> = (0..20)
             .map(|i| {
-                let mut m = TestMatchBuilder::default()
+                TestMatchBuilder::default()
                     .license_expression(format!("license-{}", i % 4))
                     .matcher(MatcherKind::Aho)
                     .matched_length(10)
@@ -461,8 +458,7 @@ mod tests {
                     .rule_relevance(100)
                     .rule_identifier("#1")
                     .rule_kind(RuleKind::Reference)
-                    .build_match();
-                m
+                    .build_match()
             })
             .collect();
 

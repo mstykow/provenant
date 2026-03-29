@@ -4,7 +4,7 @@ use super::LINES_THRESHOLD;
 use super::types::DetectionGroup;
 use crate::license_detection::models::LicenseMatch;
 
-pub fn group_matches_by_region(matches: &[LicenseMatch]) -> Vec<DetectionGroup> {
+pub fn group_matches_by_region<'a>(matches: &[LicenseMatch<'a>]) -> Vec<DetectionGroup<'a>> {
     group_matches_by_region_with_threshold(matches, LINES_THRESHOLD)
 }
 
@@ -18,12 +18,12 @@ pub fn group_matches_by_region(matches: &[LicenseMatch]) -> Vec<DetectionGroup> 
 /// # Returns
 ///
 /// A vector of DetectionGroup objects, each containing matches that form a region
-pub(super) fn group_matches_by_region_with_threshold(
-    matches: &[LicenseMatch],
+pub(super) fn group_matches_by_region_with_threshold<'a>(
+    matches: &[LicenseMatch<'a>],
     proximity_threshold: usize,
-) -> Vec<DetectionGroup> {
+) -> Vec<DetectionGroup<'a>> {
     let mut groups = Vec::new();
-    let mut current_group: Vec<LicenseMatch> = Vec::new();
+    let mut current_group: Vec<LicenseMatch<'a>> = Vec::new();
 
     for match_item in matches {
         if current_group.is_empty() {
@@ -73,9 +73,9 @@ pub(super) fn group_matches_by_region_with_threshold(
 /// ```
 ///
 /// This means: GROUP if start_line <= prev_end_line + 4 (equivalent to line_gap <= 4)
-pub(super) fn should_group_together(
-    prev: &LicenseMatch,
-    cur: &LicenseMatch,
+pub(super) fn should_group_together<'a>(
+    prev: &LicenseMatch<'a>,
+    cur: &LicenseMatch<'a>,
     threshold: usize,
 ) -> bool {
     let line_gap = cur.start_line.saturating_sub(prev.end_line);
@@ -94,7 +94,7 @@ pub(super) fn should_group_together(
 /// 2. Longer, more specific matches come first (for overlapping matches)
 /// 3. Higher hilen (legalese tokens) prioritized
 /// 4. Exact matchers take priority over approximate
-pub fn sort_matches_by_line(matches: &mut [LicenseMatch]) {
+pub fn sort_matches_by_line<'a>(matches: &mut [LicenseMatch<'a>]) {
     matches.sort_by(|a, b| {
         a.start_token
             .cmp(&b.start_token)
@@ -109,7 +109,7 @@ pub fn sort_matches_by_line(matches: &mut [LicenseMatch]) {
 ///
 /// Based on Python: is_correct_detection() at detection.py:1078
 #[cfg(test)]
-pub(super) fn is_correct_detection(matches: &[LicenseMatch]) -> bool {
+pub(super) fn is_correct_detection<'a>(matches: &[LicenseMatch<'a>]) -> bool {
     if matches.is_empty() {
         return false;
     }
@@ -139,7 +139,7 @@ mod tests {
         end_line: usize,
         matcher: &str,
         rule_identifier: &str,
-    ) -> LicenseMatch {
+    ) -> LicenseMatch<'static> {
         TestMatchBuilder::default()
             .license_expression("mit")
             .license_expression_spdx(Some("MIT".to_string()))
@@ -164,7 +164,7 @@ mod tests {
         end_line: usize,
         start_token: usize,
         end_token: usize,
-    ) -> LicenseMatch {
+    ) -> LicenseMatch<'static> {
         TestMatchBuilder::default()
             .license_expression("mit")
             .license_expression_spdx(Some("MIT".to_string()))

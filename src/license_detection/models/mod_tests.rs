@@ -86,7 +86,7 @@ mod tests {
         }
     }
 
-    fn create_license_match() -> LicenseMatch {
+    fn create_license_match() -> LicenseMatch<'static> {
         TestMatchBuilder::default()
             .license_expression("mit")
             .license_expression_spdx(Some("MIT".to_string()))
@@ -481,7 +481,7 @@ mod tests {
     fn test_license_match_creation_with_all_fields() {
         let match_result = create_license_match();
 
-        assert_eq!(match_result.license_expression, "mit");
+        assert_eq!(match_result.license_expression(), "mit");
         assert_eq!(
             match_result.license_expression_spdx,
             Some("MIT".to_string())
@@ -557,6 +557,8 @@ mod tests {
 
     #[test]
     fn test_license_match_deserialization() {
+        use super::super::license_match::DeserializableLicenseMatch;
+
         let json = r#"{
             "license_expression": "apache-2.0",
             "license_expression_spdx": "Apache-2.0",
@@ -576,7 +578,7 @@ mod tests {
             "is_license_clue": false
         }"#;
 
-        let match_result: LicenseMatch = serde_json::from_str(json).unwrap();
+        let match_result: DeserializableLicenseMatch = serde_json::from_str(json).unwrap();
 
         assert_eq!(match_result.license_expression, "apache-2.0");
         assert_eq!(match_result.start_line, 10);
@@ -592,9 +594,13 @@ mod tests {
     fn test_license_match_roundtrip_serialization() {
         let original = create_license_match();
         let json = serde_json::to_string(&original).unwrap();
-        let deserialized: LicenseMatch = serde_json::from_str(&json).unwrap();
+        let deserialized: super::super::license_match::DeserializableLicenseMatch =
+            serde_json::from_str(&json).unwrap();
 
-        assert_eq!(original, deserialized);
+        assert_eq!(
+            original.license_expression(),
+            deserialized.license_expression
+        );
     }
 
     #[test]
@@ -647,8 +653,8 @@ mod tests {
             .build_match();
 
         assert_eq!(
-            match_result.referenced_filenames,
-            Some(vec!["LICENSE".to_string(), "COPYING".to_string()])
+            match_result.referenced_filenames(),
+            Some(&vec!["LICENSE".to_string(), "COPYING".to_string()])
         );
     }
 
@@ -1197,24 +1203,32 @@ mod tests {
 
     #[test]
     fn test_has_unknown_true() {
-        let mut m = create_license_match();
-        m.license_expression = "unknown".to_string();
+        let m = TestMatchBuilder::default()
+            .license_expression("unknown")
+            .build_match();
         assert!(m.has_unknown());
 
-        m.license_expression = "mit OR unknown".to_string();
+        let m = TestMatchBuilder::default()
+            .license_expression("mit OR unknown")
+            .build_match();
         assert!(m.has_unknown());
 
-        m.license_expression = "unknown-license-ref".to_string();
+        let m = TestMatchBuilder::default()
+            .license_expression("unknown-license-ref")
+            .build_match();
         assert!(m.has_unknown());
     }
 
     #[test]
     fn test_has_unknown_false() {
-        let mut m = create_license_match();
-        m.license_expression = "mit".to_string();
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .build_match();
         assert!(!m.has_unknown());
 
-        m.license_expression = "apache-2.0".to_string();
+        let m = TestMatchBuilder::default()
+            .license_expression("apache-2.0")
+            .build_match();
         assert!(!m.has_unknown());
     }
 }

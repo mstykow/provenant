@@ -208,11 +208,11 @@ pub(super) fn match_blocks(
 /// # Returns
 ///
 /// Vector of LicenseMatch results
-pub fn seq_match_with_candidates(
-    index: &LicenseIndex,
-    query_run: &QueryRun,
-    candidates: &[Candidate<'_>],
-) -> Vec<LicenseMatch> {
+pub fn seq_match_with_candidates<'a, 'q>(
+    index: &'a LicenseIndex,
+    query_run: &QueryRun<'a, 'q>,
+    candidates: &[Candidate<'a>],
+) -> Vec<LicenseMatch<'a>> {
     let mut matches = Vec::new();
 
     for candidate in candidates {
@@ -307,7 +307,7 @@ pub fn seq_match_with_candidates(
                     let score = match_coverage * candidate.rule.relevance as f32 / 100.0;
 
                     let license_match = LicenseMatch {
-                        license_expression: candidate.rule.license_expression.clone(),
+                        rule: candidate.rule,
                         license_expression_spdx: None,
                         from_file: None,
                         start_line,
@@ -317,15 +317,8 @@ pub fn seq_match_with_candidates(
                         matcher: MATCH_SEQ,
                         score,
                         matched_length: mlen,
-                        rule_length,
                         match_coverage,
-                        rule_relevance: candidate.rule.relevance,
-                        rid,
-                        rule_identifier: candidate.rule.identifier.clone(),
-                        rule_url: candidate.rule.rule_url().unwrap_or_default(),
                         matched_text: None,
-                        referenced_filenames: candidate.rule.referenced_filenames.clone(),
-                        rule_kind: candidate.rule.kind(),
                         is_from_license: candidate.rule.is_from_license,
                         matched_token_positions: None,
                         hilen: hispan_count,

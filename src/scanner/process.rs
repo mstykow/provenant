@@ -655,45 +655,51 @@ fn convert_detection_to_model(
     }
 }
 
-fn convert_match_to_model(
-    m: &crate::license_detection::models::LicenseMatch,
-    license_options: LicenseScanOptions,
+fn convert_match_to_model<'a>(
+    m: crate::license_detection::models::LicenseMatch<'a>,
+    include_text: bool,
     text_content: &str,
     query: Option<&Query<'_>>,
 ) -> Match {
-    let rule_url = if m.rule_url.is_empty() {
-        None
-    } else {
-        Some(m.rule_url.clone())
-    };
-    let matched_text = if license_options.include_text {
-        m.matched_text.clone().or_else(|| {
+    let license_expression = m.license_expression().to_string();
+    let license_expression_spdx = m.license_expression_spdx().unwrap_or_default().to_string();
+    let rule_relevance = m.rule_relevance() as usize;
+    let rule_identifier = m.rule_identifier().to_string();
+    let rule_url = m.rule_url();
+    let start_line = m.start_line;
+    let end_line = m.end_line;
+    let matcher = m.matcher.to_string();
+    let score = m.score as f64;
+    let matched_length = m.matched_length;
+    let match_coverage = m.match_coverage as f64;
+    let matched_text = if include_text {
+        m.matched_text.or_else(|| {
             Some(crate::license_detection::query::matched_text_from_text(
                 text_content,
-                m.start_line,
-                m.end_line,
+                start_line,
+                end_line,
             ))
         })
     } else {
         None
     };
-    let matched_text_diagnostics = if license_options.include_text_diagnostics {
-        query.map(|query| matched_text_diagnostics_from_match(query, m))
+    let matched_text_diagnostics = if include_text {
+        query.map(|query| matched_text_diagnostics_from_match(query, &m))
     } else {
         None
     };
     Match {
-        license_expression: m.license_expression.clone(),
-        license_expression_spdx: m.license_expression_spdx.clone().unwrap_or_default(),
-        from_file: m.from_file.clone(),
-        start_line: m.start_line,
-        end_line: m.end_line,
-        matcher: Some(m.matcher.to_string()),
-        score: m.score as f64,
-        matched_length: Some(m.matched_length),
-        match_coverage: Some(m.match_coverage as f64),
-        rule_relevance: Some(m.rule_relevance as usize),
-        rule_identifier: Some(m.rule_identifier.clone()),
+        license_expression,
+        license_expression_spdx,
+        from_file: m.from_file,
+        start_line,
+        end_line,
+        matcher: Some(matcher),
+        score,
+        matched_length: Some(matched_length),
+        match_coverage: Some(match_coverage),
+        rule_relevance: Some(rule_relevance),
+        rule_identifier: Some(rule_identifier),
         rule_url,
         matched_text,
         referenced_filenames: m.referenced_filenames.clone(),
@@ -851,48 +857,46 @@ mod tests {
         compute_percentage_of_license_text, convert_detection_to_model, is_go_non_production_source,
     };
     use crate::license_detection::LicenseDetection as InternalLicenseDetection;
-    use crate::license_detection::index::LicenseIndex;
-    use crate::license_detection::index::dictionary::TokenDictionary;
-    use crate::license_detection::models::{LicenseMatch, MatcherKind, RuleKind};
-    use crate::license_detection::query::Query;
-    use crate::scanner::LicenseScanOptions;
+    use crate::license_detection::models::{MatcherKind, RuleKind};
+    use crate::license_detection::tests::TestMatchBuilder;
     use std::fs;
     use tempfile::tempdir;
 
-    fn make_internal_match(rule_url: &str) -> LicenseMatch {
-        LicenseMatch {
-            rid: 0,
-            license_expression: "mit".to_string(),
-            license_expression_spdx: Some("MIT".to_string()),
-            from_file: None,
-            start_line: 1,
-            end_line: 1,
-            start_token: 0,
-            end_token: 1,
-            matcher: MatcherKind::Hash,
-            score: 1.0,
-            matched_length: 3,
-            rule_length: 3,
-            match_coverage: 100.0,
-            rule_relevance: 100,
-            rule_identifier: "mit.LICENSE".to_string(),
-            rule_url: rule_url.to_string(),
-            matched_text: Some("MIT".to_string()),
-            referenced_filenames: None,
-            rule_kind: RuleKind::Text,
-            is_from_license: true,
-            matched_token_positions: None,
-            hilen: 3,
-            rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        }
+    fn make_internal_match(
+        rule_url: &str,
+    ) -> crate::license_detection::models::LicenseMatch<'static> {
+        TestMatchBuilder::default()
+            .license_expression("mit")
+            .license_expression_spdx(Some("MIT".to_string()))
+            .from_file(None)
+            .start_line(1)
+            .end_line(1)
+            .start_token(0)
+            .end_token(1)
+            .matcher(MatcherKind::Hash)
+            .score(1.0)
+            .matched_length(3)
+            .rule_length(3)
+            .match_coverage(100.0)
+            .rule_relevance(100)
+            .rule_identifier("mit.LICENSE")
+            .rule_url(rule_url.to_string())
+            .matched_text(Some("MIT".to_string()))
+            .referenced_filenames(None)
+            .rule_kind(RuleKind::Text)
+            .is_from_license(true)
+            .matched_token_positions(None)
+            .hilen(3)
+            .rule_start_token(0)
+            .qspan_positions(None)
+            .ispan_positions(None)
+            .hispan_positions(None)
+            .candidate_resemblance(0.0)
+            .candidate_containment(0.0)
+            .build_match()
     }
 
-    fn make_detection(rule_url: &str) -> InternalLicenseDetection {
+    fn make_detection(rule_url: &str) -> InternalLicenseDetection<'static> {
         InternalLicenseDetection {
             license_expression: Some("mit".to_string()),
             license_expression_spdx: Some("MIT".to_string()),
@@ -943,17 +947,23 @@ mod tests {
 
     #[test]
     fn test_convert_detection_to_model_routes_expressionless_detection_to_license_clues() {
-        let mut detection = make_detection(
-            "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/license-clue_1.RULE",
-        );
-        detection.license_expression = None;
-        detection.license_expression_spdx = None;
-        detection.identifier = None;
-        detection.matches[0].license_expression = "unknown-license-reference".to_string();
-        detection.matches[0].license_expression_spdx =
-            Some("LicenseRef-scancode-unknown-license-reference".to_string());
-        detection.matches[0].rule_identifier = "license-clue_1.RULE".to_string();
-        detection.matches[0].rule_kind = RuleKind::Clue;
+        let license_match = TestMatchBuilder::default()
+            .license_expression("unknown-license-reference")
+            .license_expression_spdx(Some("LicenseRef-scancode-unknown-license-reference".to_string()))
+            .rule_identifier("license-clue_1.RULE")
+            .rule_kind(RuleKind::Clue)
+            .rule_url("https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/license-clue_1.RULE".to_string())
+            .matched_text(Some("MIT".to_string()))
+            .is_from_license(true)
+            .build_match();
+
+        let detection = InternalLicenseDetection {
+            license_expression: None,
+            license_expression_spdx: None,
+            matches: vec![license_match],
+            detection_log: vec![],
+            identifier: None,
+        };
 
         let (converted, clues) = convert_detection_to_model(
             &detection,

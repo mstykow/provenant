@@ -318,10 +318,10 @@ mod tests {
 
         let text = "SPDX-License-Identifier: MIT";
         let query = Query::from_extracted_text(text, &index, false).unwrap();
-        let matches = spdx_lid_match(&index, &query);
+        let matches = spdx_lid_match(&query);
 
         assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].license_expression, "mit");
+        assert_eq!(matches[0].license_expression(), "mit");
         assert_eq!(matches[0].license_expression_spdx, Some("MIT".to_string()));
         assert_eq!(matches[0].start_line, 1);
         assert_eq!(matches[0].end_line, 1);
@@ -338,10 +338,10 @@ mod tests {
 
         let text = "SPDX-License-Identifier: mit";
         let query = Query::from_extracted_text(text, &index, false).unwrap();
-        let matches = spdx_lid_match(&index, &query);
+        let matches = spdx_lid_match(&query);
 
         assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].license_expression, "mit");
+        assert_eq!(matches[0].license_expression(), "mit");
     }
 
     #[test]
@@ -364,7 +364,7 @@ mod tests {
 
         let text = "SPDX-License-Identifier: OR\n# SPDX-License-Identifier: MIT\n# SPDX-License-Identifier: Apache-2.0";
         let query = Query::from_extracted_text(text, &index, false).unwrap();
-        let matches = spdx_lid_match(&index, &query);
+        let matches = spdx_lid_match(&query);
 
         assert_eq!(matches.len(), 3);
     }
@@ -375,7 +375,7 @@ mod tests {
 
         let text = "/* Regular comment */";
         let query = Query::from_extracted_text(text, &index, false).unwrap();
-        let matches = spdx_lid_match(&index, &query);
+        let matches = spdx_lid_match(&query);
 
         assert!(matches.is_empty());
     }
@@ -390,7 +390,7 @@ mod tests {
 
         let text = "SPDX-License-Identifier: MIT";
         let query = Query::from_extracted_text(text, &index, false).unwrap();
-        let matches = spdx_lid_match(&index, &query);
+        let matches = spdx_lid_match(&query);
 
         assert_eq!(matches.len(), 1);
         assert!((matches[0].score - 0.8).abs() < 0.01);
@@ -467,7 +467,7 @@ mod tests {
 
         let text = "SPDX-License-Identifier: GPL-2.0 WITH Classpath-exception-2.0";
         let query = Query::from_extracted_text(text, &index, false).unwrap();
-        let matches = spdx_lid_match(&index, &query);
+        let matches = spdx_lid_match(&query);
 
         assert!(
             !matches.is_empty(),
@@ -514,7 +514,7 @@ mod tests {
 
         let text = "";
         let query = Query::from_extracted_text(text, &index, false).unwrap();
-        let matches = spdx_lid_match(&index, &query);
+        let matches = spdx_lid_match(&query);
 
         assert!(matches.is_empty(), "Empty text should produce no matches");
     }
@@ -525,7 +525,7 @@ mod tests {
 
         let text = "   \n\t  ";
         let query = Query::from_extracted_text(text, &index, false).unwrap();
-        let matches = spdx_lid_match(&index, &query);
+        let matches = spdx_lid_match(&query);
 
         assert!(
             matches.is_empty(),
@@ -598,7 +598,7 @@ mod tests {
         let text = "Some preamble text\nSPDX-License-Identifier: MIT\nMore text";
         let query = Query::from_extracted_text(text, &index, false).unwrap();
 
-        let matches = spdx_lid_match(&index, &query);
+        let matches = spdx_lid_match(&query);
 
         if !matches.is_empty() {
             let m = &matches[0];

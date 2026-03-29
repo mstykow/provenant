@@ -4,7 +4,6 @@
 //! based on containment, overlap ratios, and license expression relationships.
 
 use crate::license_detection::expression::licensing_contains;
-use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::models::LicenseMatch;
 use crate::license_detection::spans::Span;
 
@@ -37,14 +36,14 @@ const OVERLAP_EXTRA_LARGE: f64 = 0.90;
 /// Tuple of (kept matches, discarded matches)
 ///
 /// Based on Python: `filter_contained_matches()` using qspan containment and expression subsumption
-pub fn filter_contained_matches(
-    matches: &[LicenseMatch],
-) -> (Vec<LicenseMatch>, Vec<LicenseMatch>) {
+pub fn filter_contained_matches<'a>(
+    matches: &[LicenseMatch<'a>],
+) -> (Vec<LicenseMatch<'a>>, Vec<LicenseMatch<'a>>) {
     if matches.len() < 2 {
         return (matches.to_vec(), Vec::new());
     }
 
-    let mut matches: Vec<LicenseMatch> = matches.to_vec();
+    let mut matches: Vec<LicenseMatch<'a>> = matches.to_vec();
     let mut discarded = Vec::new();
 
     matches.sort_by(|a, b| {
@@ -98,15 +97,15 @@ pub fn filter_contained_matches(
     (matches, discarded)
 }
 
-fn is_false_positive(m: &LicenseMatch, index: &LicenseIndex) -> bool {
-    index.false_positive_rids.contains(&m.rid)
+fn is_false_positive<'a>(m: &LicenseMatch<'a>) -> bool {
+    m.is_false_positive()
 }
 
-fn licensing_contains_match(current: &LicenseMatch, other: &LicenseMatch) -> bool {
-    if current.license_expression.is_empty() || other.license_expression.is_empty() {
+fn licensing_contains_match<'a>(current: &LicenseMatch<'a>, other: &LicenseMatch<'a>) -> bool {
+    if current.license_expression().is_empty() || other.license_expression().is_empty() {
         return false;
     }
-    licensing_contains(&current.license_expression, &other.license_expression)
+    licensing_contains(current.license_expression(), other.license_expression())
 }
 
 /// Filter overlapping matches based on overlap ratios and license expressions.
@@ -117,20 +116,18 @@ fn licensing_contains_match(current: &LicenseMatch, other: &LicenseMatch) -> boo
 ///
 /// # Arguments
 /// * `matches` - Vector of LicenseMatch to filter
-/// * `index` - LicenseIndex for false positive checking
 ///
 /// # Returns
 /// Tuple of (kept matches, discarded matches)
-pub fn filter_overlapping_matches(
-    matches: Vec<LicenseMatch>,
-    index: &LicenseIndex,
-) -> (Vec<LicenseMatch>, Vec<LicenseMatch>) {
+pub fn filter_overlapping_matches<'a>(
+    matches: Vec<LicenseMatch<'a>>,
+) -> (Vec<LicenseMatch<'a>>, Vec<LicenseMatch<'a>>) {
     if matches.len() < 2 {
         return (matches, vec![]);
     }
 
     let mut matches = matches;
-    let mut discarded: Vec<LicenseMatch> = vec![];
+    let mut discarded: Vec<LicenseMatch<'a>> = vec![];
 
     matches.sort_by(|a, b| {
         a.qstart()
@@ -151,8 +148,7 @@ pub fn filter_overlapping_matches(
                 break;
             }
 
-            let both_fp =
-                is_false_positive(&matches[i], index) && is_false_positive(&matches[j], index);
+            let both_fp = is_false_positive(&matches[i]) && is_false_positive(&matches[j]);
             if both_fp {
                 j += 1;
                 continue;
@@ -260,16 +256,8 @@ pub fn filter_overlapping_matches(
                     && current_len_val >= next_len_val + 2
                     && current_hilen >= next_hilen
                 {
-                    let current_ends = index
-                        .rules_by_rid
-                        .get(matches[i].rid)
-                        .map(|r| r.ends_with_license)
-                        .unwrap_or(false);
-                    let next_starts = index
-                        .rules_by_rid
-                        .get(matches[j].rid)
-                        .map(|r| r.starts_with_license)
-                        .unwrap_or(false);
+                    let current_ends = matches[i].rule.ends_with_license;
+                    let next_starts = matches[j].rule.starts_with_license;
 
                     if current_ends && next_starts {
                         discarded.push(matches.remove(j));
@@ -372,10 +360,10 @@ fn match_to_qspan(m: &LicenseMatch) -> Span {
 ///
 /// # Returns
 /// Tuple of (restored matches, still-discarded matches)
-pub fn restore_non_overlapping(
-    matches: &[LicenseMatch],
-    discarded: Vec<LicenseMatch>,
-) -> (Vec<LicenseMatch>, Vec<LicenseMatch>) {
+pub fn restore_non_overlapping<'a>(
+    matches: &[LicenseMatch<'a>],
+    discarded: Vec<LicenseMatch<'a>>,
+) -> (Vec<LicenseMatch<'a>>, Vec<LicenseMatch<'a>>) {
     let all_matched_qspans = matches
         .iter()
         .fold(Span::new(), |acc, m| acc.union_span(&match_to_qspan(m)));
@@ -398,8 +386,10 @@ pub fn restore_non_overlapping(
 }
 
 #[cfg(test)]
+#[allow(dead_code, unused_variables)]
 mod tests {
     use super::*;
+    use crate::license_detection::index::LicenseIndex;
     use crate::license_detection::models::MatcherKind;
     use crate::license_detection::tests::TestMatchBuilder;
 
@@ -419,11 +409,10 @@ mod tests {
         score: f32,
         coverage: f32,
         relevance: u8,
-    ) -> LicenseMatch {
+    ) -> LicenseMatch<'static> {
         let matched_len = end_line - start_line + 1;
         let rule_len = matched_len;
-        let rid = parse_rule_id(rule_identifier).unwrap_or(0);
-        let mut m = TestMatchBuilder::default()
+        TestMatchBuilder::default()
             .license_expression("mit")
             .license_expression_spdx(Some("MIT".to_string()))
             .start_line(start_line)
@@ -439,9 +428,7 @@ mod tests {
             .rule_identifier(rule_identifier)
             .rule_url("https://example.com".to_string())
             .hilen(50)
-            .build_match();
-        m.rid = rid;
-        m
+            .build_match()
     }
 
     fn create_test_match_with_tokens(
@@ -449,9 +436,8 @@ mod tests {
         start_token: usize,
         end_token: usize,
         matched_length: usize,
-    ) -> LicenseMatch {
-        let rid = parse_rule_id(rule_identifier).unwrap_or(0);
-        let mut m = TestMatchBuilder::default()
+    ) -> LicenseMatch<'static> {
+        TestMatchBuilder::default()
             .license_expression("mit")
             .license_expression_spdx(Some("MIT".to_string()))
             .start_line(start_token)
@@ -467,9 +453,7 @@ mod tests {
             .rule_identifier(rule_identifier)
             .rule_url("https://example.com".to_string())
             .hilen(matched_length / 2)
-            .build_match();
-        m.rid = rid;
-        m
+            .build_match()
     }
 
     #[test]
@@ -503,17 +487,30 @@ mod tests {
 
     #[test]
     fn test_filter_contained_matches_different_rules() {
-        let mut matches = vec![
-            create_test_match("#1", 1, 20, 0.9, 90.0, 100),
-            create_test_match("#2", 5, 15, 0.85, 85.0, 100),
-        ];
-        matches[0].matched_length = 200;
-        matches[1].matched_length = 100;
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(20)
+            .matched_length(200)
+            .score(0.9)
+            .match_coverage(90.0)
+            .rule_identifier("#1")
+            .build_match();
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(5)
+            .end_line(15)
+            .matched_length(100)
+            .score(0.85)
+            .match_coverage(85.0)
+            .rule_identifier("#2")
+            .build_match();
+        let matches = vec![m1, m2];
 
         let (filtered, _) = filter_contained_matches(&matches);
 
         assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].rule_identifier, "#1");
+        assert_eq!(filtered[0].rule_identifier(), "#1");
     }
 
     #[test]
@@ -685,7 +682,8 @@ mod tests {
 
         assert_eq!(filtered.len(), 1, "Should filter contained GPL match");
         assert_eq!(
-            filtered[0].rule_identifier, "#16218",
+            filtered[0].rule_identifier(),
+            "#16218",
             "Should keep gpl-2.0-plus"
         );
         assert_eq!(filtered[0].end_token, 32, "Should have correct end_token");
@@ -711,17 +709,17 @@ mod tests {
             "Should filter contained GPL match (line-based)"
         );
         assert_eq!(
-            filtered[0].rule_identifier, "#16218",
+            filtered[0].rule_identifier(),
+            "#16218",
             "Should keep gpl-2.0-plus"
         );
     }
 
     #[test]
     fn test_filter_overlapping_matches_empty() {
-        let index = LicenseIndex::with_legalese_count(10);
-        let matches: Vec<LicenseMatch> = vec![];
+        let matches: Vec<LicenseMatch<'static>> = vec![];
 
-        let (kept, discarded) = filter_overlapping_matches(matches, &index);
+        let (kept, discarded) = filter_overlapping_matches(matches);
 
         assert_eq!(kept.len(), 0);
         assert_eq!(discarded.len(), 0);
@@ -729,10 +727,9 @@ mod tests {
 
     #[test]
     fn test_filter_overlapping_matches_single() {
-        let index = LicenseIndex::with_legalese_count(10);
         let matches = vec![create_test_match("#1", 1, 10, 0.9, 90.0, 100)];
 
-        let (kept, discarded) = filter_overlapping_matches(matches, &index);
+        let (kept, discarded) = filter_overlapping_matches(matches);
 
         assert_eq!(kept.len(), 1);
         assert_eq!(discarded.len(), 0);
@@ -740,13 +737,12 @@ mod tests {
 
     #[test]
     fn test_filter_overlapping_matches_non_overlapping() {
-        let index = LicenseIndex::with_legalese_count(10);
         let matches = vec![
             create_test_match("#1", 1, 10, 0.9, 90.0, 100),
             create_test_match("#2", 20, 30, 0.85, 85.0, 100),
         ];
 
-        let (kept, discarded) = filter_overlapping_matches(matches, &index);
+        let (kept, discarded) = filter_overlapping_matches(matches);
 
         assert_eq!(kept.len(), 2);
         assert_eq!(discarded.len(), 0);
@@ -754,15 +750,32 @@ mod tests {
 
     #[test]
     fn test_filter_overlapping_matches_extra_large_discard_shorter() {
-        let index = LicenseIndex::with_legalese_count(10);
-        let mut m1 = create_test_match("#1", 1, 100, 0.9, 90.0, 100);
-        m1.matched_length = 100;
-        let mut m2 = create_test_match("#2", 5, 100, 0.85, 85.0, 100);
-        m2.matched_length = 10;
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(100)
+            .start_token(0)
+            .end_token(100)
+            .matched_length(100)
+            .score(0.9)
+            .match_coverage(90.0)
+            .rule_identifier("#1")
+            .build_match();
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(5)
+            .end_line(100)
+            .start_token(5)
+            .end_token(15)
+            .matched_length(10)
+            .score(0.85)
+            .match_coverage(85.0)
+            .rule_identifier("#2")
+            .build_match();
 
         let matches = vec![m1, m2];
 
-        let (kept, discarded) = filter_overlapping_matches(matches, &index);
+        let (kept, discarded) = filter_overlapping_matches(matches);
 
         assert_eq!(kept.len(), 1);
         assert_eq!(discarded.len(), 1);
@@ -771,15 +784,34 @@ mod tests {
 
     #[test]
     fn test_filter_overlapping_matches_large_with_hilen() {
-        let index = LicenseIndex::with_legalese_count(10);
-        let mut m1 = create_test_match("#1", 1, 100, 0.9, 90.0, 100);
-        m1.matched_length = 100;
-        let mut m2 = create_test_match("#2", 30, 100, 0.85, 85.0, 100);
-        m2.matched_length = 10;
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(100)
+            .start_token(0)
+            .end_token(100)
+            .matched_length(100)
+            .hilen(50)
+            .score(0.9)
+            .match_coverage(90.0)
+            .rule_identifier("#1")
+            .build_match();
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(30)
+            .end_line(100)
+            .start_token(30)
+            .end_token(40)
+            .matched_length(10)
+            .hilen(5)
+            .score(0.85)
+            .match_coverage(85.0)
+            .rule_identifier("#2")
+            .build_match();
 
         let matches = vec![m1, m2];
 
-        let (kept, discarded) = filter_overlapping_matches(matches, &index);
+        let (kept, discarded) = filter_overlapping_matches(matches);
 
         assert_eq!(kept.len(), 1);
         assert_eq!(discarded.len(), 1);
@@ -787,18 +819,28 @@ mod tests {
 
     #[test]
     fn test_filter_overlapping_matches_false_positive_skip() {
-        let mut index = LicenseIndex::with_legalese_count(10);
-        let _ = index.false_positive_rids.insert(1);
-        let _ = index.false_positive_rids.insert(2);
-
-        let mut m1 = create_test_match("#1", 1, 20, 0.9, 90.0, 100);
-        m1.matched_length = 100;
-        let mut m2 = create_test_match("#2", 10, 30, 0.85, 85.0, 100);
-        m2.matched_length = 100;
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(20)
+            .matched_length(100)
+            .score(0.9)
+            .match_coverage(90.0)
+            .rule_identifier("#1")
+            .build_match();
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(10)
+            .end_line(30)
+            .matched_length(100)
+            .score(0.85)
+            .match_coverage(85.0)
+            .rule_identifier("#2")
+            .build_match();
 
         let matches = vec![m1, m2];
 
-        let (kept, discarded) = filter_overlapping_matches(matches, &index);
+        let (kept, discarded) = filter_overlapping_matches(matches);
 
         assert_eq!(kept.len(), 2);
         assert_eq!(discarded.len(), 0);
@@ -806,18 +848,37 @@ mod tests {
 
     #[test]
     fn test_filter_overlapping_matches_sandwich_detection() {
-        let index = LicenseIndex::with_legalese_count(10);
-
-        let mut prev = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
-        prev.matched_length = 100;
-        let mut current = create_test_match("#2", 5, 15, 0.85, 85.0, 100);
-        current.matched_length = 50;
-        let mut next = create_test_match("#3", 12, 25, 0.8, 80.0, 100);
-        next.matched_length = 100;
+        let prev = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .matched_length(100)
+            .score(0.9)
+            .match_coverage(90.0)
+            .rule_identifier("#1")
+            .build_match();
+        let current = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(5)
+            .end_line(15)
+            .matched_length(50)
+            .score(0.85)
+            .match_coverage(85.0)
+            .rule_identifier("#2")
+            .build_match();
+        let next = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(12)
+            .end_line(25)
+            .matched_length(100)
+            .score(0.8)
+            .match_coverage(80.0)
+            .rule_identifier("#3")
+            .build_match();
 
         let matches = vec![prev, current, next];
 
-        let (kept, discarded) = filter_overlapping_matches(matches, &index);
+        let (kept, discarded) = filter_overlapping_matches(matches);
 
         assert!(kept.len() >= 2);
         assert!(!discarded.is_empty() || kept.len() == 3);
@@ -825,15 +886,13 @@ mod tests {
 
     #[test]
     fn test_filter_overlapping_matches_sorting_order() {
-        let index = LicenseIndex::with_legalese_count(10);
-
         let m1 = create_test_match("#1", 25, 35, 0.9, 90.0, 100);
         let m2 = create_test_match("#2", 1, 10, 0.85, 85.0, 100);
         let m3 = create_test_match("#3", 40, 50, 0.8, 80.0, 100);
 
         let matches = vec![m1, m2, m3];
 
-        let (kept, _) = filter_overlapping_matches(matches, &index);
+        let (kept, _) = filter_overlapping_matches(matches);
 
         assert_eq!(kept.len(), 3);
         assert_eq!(kept[0].start_line, 1);
@@ -843,16 +902,28 @@ mod tests {
 
     #[test]
     fn test_filter_overlapping_matches_partial_overlap_no_filter() {
-        let index = LicenseIndex::with_legalese_count(10);
-
-        let mut m1 = create_test_match("#1", 1, 20, 0.9, 90.0, 100);
-        m1.matched_length = 200;
-        let mut m2 = create_test_match("#2", 15, 35, 0.85, 85.0, 100);
-        m2.matched_length = 150;
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(20)
+            .matched_length(200)
+            .score(0.9)
+            .match_coverage(90.0)
+            .rule_identifier("#1")
+            .build_match();
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(15)
+            .end_line(35)
+            .matched_length(150)
+            .score(0.85)
+            .match_coverage(85.0)
+            .rule_identifier("#2")
+            .build_match();
 
         let matches = vec![m1, m2];
 
-        let (kept, discarded) = filter_overlapping_matches(matches, &index);
+        let (kept, discarded) = filter_overlapping_matches(matches);
 
         assert_eq!(kept.len(), 2);
         assert_eq!(discarded.len(), 0);
@@ -860,20 +931,36 @@ mod tests {
 
     #[test]
     fn test_filter_overlapping_matches_surround_check() {
-        let index = LicenseIndex::with_legalese_count(10);
-
-        let mut outer = create_test_match("#1", 1, 100, 0.9, 90.0, 100);
-        outer.matched_length = 500;
-        let mut inner = create_test_match("#2", 20, 30, 0.85, 85.0, 100);
-        inner.matched_length = 50;
+        let outer = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(100)
+            .start_token(0)
+            .end_token(500)
+            .matched_length(500)
+            .score(0.9)
+            .match_coverage(90.0)
+            .rule_identifier("#1")
+            .build_match();
+        let inner = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(20)
+            .end_line(30)
+            .start_token(200)
+            .end_token(250)
+            .matched_length(50)
+            .score(0.85)
+            .match_coverage(85.0)
+            .rule_identifier("#2")
+            .build_match();
 
         let matches = vec![outer, inner];
 
-        let (kept, discarded) = filter_overlapping_matches(matches, &index);
+        let (kept, discarded) = filter_overlapping_matches(matches);
 
         assert_eq!(kept.len(), 1);
         assert_eq!(discarded.len(), 1);
-        assert!(kept[0].rule_identifier == "#1" || kept[0].matched_length == 500);
+        assert!(kept[0].rule_identifier() == "#1" || kept[0].matched_length == 500);
     }
 
     #[test]
@@ -997,12 +1084,11 @@ mod tests {
         assert_eq!(to_keep.len(), 2);
         assert_eq!(to_discard.len(), 1);
 
-        let kept_identifiers: Vec<&str> =
-            to_keep.iter().map(|m| m.rule_identifier.as_str()).collect();
+        let kept_identifiers: Vec<&str> = to_keep.iter().map(|m| m.rule_identifier()).collect();
         assert!(kept_identifiers.contains(&"#2"));
         assert!(kept_identifiers.contains(&"#4"));
 
-        assert_eq!(to_discard[0].rule_identifier, "#3");
+        assert_eq!(to_discard[0].rule_identifier(), "#3");
     }
 
     #[test]
@@ -1022,30 +1108,45 @@ mod tests {
         assert_eq!(to_keep.len(), 2);
         assert_eq!(to_discard.len(), 1);
 
-        let kept_identifiers: Vec<&str> =
-            to_keep.iter().map(|m| m.rule_identifier.as_str()).collect();
+        let kept_identifiers: Vec<&str> = to_keep.iter().map(|m| m.rule_identifier()).collect();
         assert!(kept_identifiers.contains(&"#3"));
         assert!(kept_identifiers.contains(&"#5"));
 
-        assert_eq!(to_discard[0].rule_identifier, "#4");
+        assert_eq!(to_discard[0].rule_identifier(), "#4");
     }
 
     #[test]
     fn test_restore_non_overlapping_merges_discarded() {
         let kept = vec![create_test_match("#1", 1, 10, 0.9, 100.0, 100)];
-        let mut m1 = create_test_match("#2", 50, 60, 0.85, 100.0, 100);
-        m1.rule_length = 100;
-        m1.rule_start_token = 0;
-        let mut m2 = create_test_match("#2", 55, 65, 0.8, 100.0, 100);
-        m2.rule_length = 100;
-        m2.rule_start_token = 5;
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(50)
+            .end_line(60)
+            .start_token(50)
+            .end_token(61)
+            .matched_length(11)
+            .rule_length(100)
+            .rule_start_token(0)
+            .rule_identifier("#2")
+            .build_match();
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(55)
+            .end_line(65)
+            .start_token(55)
+            .end_token(66)
+            .matched_length(11)
+            .rule_length(100)
+            .rule_start_token(5)
+            .rule_identifier("#2")
+            .build_match();
 
         let discarded = vec![m1, m2];
 
         let (to_keep, _to_discard) = restore_non_overlapping(&kept, discarded);
 
         assert_eq!(to_keep.len(), 1);
-        assert_eq!(to_keep[0].rule_identifier, "#2");
+        assert_eq!(to_keep[0].rule_identifier(), "#2");
         assert_eq!(to_keep[0].start_line, 50);
         assert_eq!(to_keep[0].end_line, 65);
     }
@@ -1078,7 +1179,7 @@ mod tests {
         // the one with higher coverage should be kept.
         // This was a bug where gfdl-1.1-plus (68.6%) was kept over gfdl-1.1 (78.7%)
         // because they had identical tokens, hilen, and matcher_order.
-        let index = LicenseIndex::with_legalese_count(10);
+        let _index = LicenseIndex::with_legalese_count(10);
 
         let mut m1 = create_test_match("gfdl-1.1_13.RULE", 1, 10, 78.7, 78.7, 100);
         m1.start_token = 5;
@@ -1088,20 +1189,27 @@ mod tests {
         m1.matcher = crate::license_detection::models::MatcherKind::Seq;
         m1.qspan_positions = Some((5..77).collect());
 
-        let mut m2 = create_test_match("gfdl-1.1-plus_5.RULE", 1, 10, 68.6, 68.6, 100);
-        m2.start_token = 5;
-        m2.end_token = 77;
-        m2.matched_length = 48;
-        m2.hilen = 14;
-        m2.matcher = crate::license_detection::models::MatcherKind::Seq;
-        m2.qspan_positions = Some((5..77).collect());
+        let m2 = TestMatchBuilder::default()
+            .license_expression("gfdl-1.1-plus")
+            .start_line(1)
+            .end_line(10)
+            .start_token(5)
+            .end_token(77)
+            .matched_length(48)
+            .hilen(14)
+            .matcher(crate::license_detection::models::MatcherKind::Seq)
+            .qspan_positions(Some((5..77).collect()))
+            .match_coverage(68.6)
+            .score(68.6)
+            .rule_identifier("gfdl-1.1-plus_5.RULE")
+            .build_match();
 
         let matches = vec![m1, m2];
-        let (kept, _discarded) = filter_overlapping_matches(matches, &index);
+        let (kept, _discarded) = filter_overlapping_matches(matches);
 
         // Should keep the match with higher coverage (gfdl-1.1 at 78.7%)
         assert_eq!(kept.len(), 1);
-        assert_eq!(kept[0].rule_identifier, "gfdl-1.1_13.RULE");
+        assert_eq!(kept[0].rule_identifier(), "gfdl-1.1_13.RULE");
         assert!(kept[0].match_coverage > 70.0);
     }
 }

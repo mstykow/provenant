@@ -258,7 +258,7 @@ pub(crate) fn extract_matched_text_from_lines(
         .join("\n")
 }
 
-pub fn spdx_lid_match(index: &LicenseIndex, query: &Query) -> Vec<LicenseMatch> {
+pub fn spdx_lid_match<'a>(query: &Query<'a>) -> Vec<LicenseMatch<'a>> {
     let mut matches = Vec::new();
 
     for (spdx_text, start_token, end_token) in &query.spdx_lines {
@@ -277,7 +277,7 @@ pub fn spdx_lid_match(index: &LicenseIndex, query: &Query) -> Vec<LicenseMatch> 
         };
 
         if let Some(license_expression) =
-            find_matching_rule_for_expression(index, &resolved_expression)
+            find_matching_rule_for_expression(query.index, &resolved_expression)
         {
             let matched_length = spdx_expression.len();
             let match_coverage = 100.0;
@@ -285,43 +285,28 @@ pub fn spdx_lid_match(index: &LicenseIndex, query: &Query) -> Vec<LicenseMatch> 
             let start_line = query.line_for_pos(*start_token).unwrap_or(1);
             let end_line = query.line_for_pos(*end_token).unwrap_or(start_line);
 
-            let (rid, rule_relevance, rule_identifier, rule_url, rule_length, referenced_filenames) =
-                index
-                    .rid_by_spdx_key
-                    .get(&license_expression)
-                    .map(|&rid| {
-                        let rule = &index.rules_by_rid[rid];
-                        (
-                            rid,
-                            rule.relevance,
-                            rule.identifier.clone(),
-                            rule.rule_url().unwrap_or_default(),
-                            rule.tokens.len(),
-                            rule.referenced_filenames.clone(),
-                        )
-                    })
-                    .unwrap_or_else(|| {
-                        let unknown_rid = index.unknown_spdx_rid.unwrap_or(0);
-                        if unknown_rid < index.rules_by_rid.len() {
-                            let rule = &index.rules_by_rid[unknown_rid];
-                            (
-                                unknown_rid,
-                                rule.relevance,
-                                rule.identifier.clone(),
-                                rule.rule_url().unwrap_or_default(),
-                                rule.tokens.len(),
-                                rule.referenced_filenames.clone(),
-                            )
-                        } else {
-                            (0, 100_u8, String::new(), String::new(), 0_usize, None)
-                        }
-                    });
+            let rule = query
+                .index
+                .rid_by_spdx_key
+                .get(&license_expression)
+                .map(|&rid| &query.index.rules_by_rid[rid])
+                .or_else(|| {
+                    query
+                        .index
+                        .unknown_spdx_rid
+                        .map(|rid| &query.index.rules_by_rid[rid])
+                });
 
-            let score = rule_relevance as f32 / 100.0;
+            let rule = match rule {
+                Some(r) => r,
+                None => continue,
+            };
+
+            let score = rule.relevance as f32 / 100.0;
 
             let license_match = LicenseMatch {
-                license_expression,
-                license_expression_spdx: Some(spdx_expression.clone()),
+                rule,
+                license_expression_spdx: None,
                 from_file: None,
                 start_line,
                 end_line,
@@ -330,15 +315,8 @@ pub fn spdx_lid_match(index: &LicenseIndex, query: &Query) -> Vec<LicenseMatch> 
                 matcher: MATCH_SPDX_ID,
                 score,
                 matched_length,
-                rule_length,
                 match_coverage,
-                rule_relevance,
-                rid,
-                rule_identifier,
-                rule_url,
                 matched_text: None,
-                referenced_filenames,
-                rule_kind: crate::license_detection::models::RuleKind::Tag,
                 is_from_license: false,
                 matched_token_positions: None,
                 hilen: 0,

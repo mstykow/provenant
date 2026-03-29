@@ -49,7 +49,10 @@ pub fn compute_hash(tokens: &[TokenId]) -> [u8; 20] {
 /// Vector of matches (0 or 1 match)
 ///
 /// Corresponds to Python: `hash_match()` (lines 59-87)
-pub fn hash_match(index: &LicenseIndex, query_run: &QueryRun) -> Vec<LicenseMatch> {
+pub fn hash_match<'a, 'q>(
+    index: &'a LicenseIndex,
+    query_run: &QueryRun<'a, 'q>,
+) -> Vec<LicenseMatch<'a>> {
     let mut matches = Vec::new();
     let query_hash = compute_hash(query_run.tokens());
 
@@ -80,7 +83,7 @@ pub fn hash_match(index: &LicenseIndex, query_run: &QueryRun) -> Vec<LicenseMatc
         };
 
         let license_match = LicenseMatch {
-            license_expression: rule.license_expression.clone(),
+            rule,
             license_expression_spdx: None,
             from_file: None,
             start_line,
@@ -90,15 +93,8 @@ pub fn hash_match(index: &LicenseIndex, query_run: &QueryRun) -> Vec<LicenseMatc
             matcher: MATCH_HASH,
             score: 1.0,
             matched_length,
-            rule_length,
             match_coverage,
-            rule_relevance: rule.relevance,
-            rid,
-            rule_identifier: rule.identifier.clone(),
-            rule_url: rule.rule_url().unwrap_or_default(),
             matched_text: None,
-            referenced_filenames: rule.referenced_filenames.clone(),
-            rule_kind: rule.kind(),
             is_from_license: rule.is_from_license,
             matched_token_positions: None,
             hilen: hispan_positions.len(),

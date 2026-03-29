@@ -40,9 +40,9 @@ pub(super) fn is_match_coverage_below_threshold(
 
 /// Check if all matches have unknown license identifiers.
 pub(super) fn has_unknown_matches(matches: &[LicenseMatch]) -> bool {
-    matches
-        .iter()
-        .any(|m| m.rule_identifier.contains("unknown") || m.license_expression.contains("unknown"))
+    matches.iter().any(|m| {
+        m.rule_identifier().contains("unknown") || m.license_expression().contains("unknown")
+    })
 }
 
 /// Check if matches have extra words.
@@ -52,7 +52,7 @@ pub(super) fn has_unknown_matches(matches: &[LicenseMatch]) -> bool {
 /// and has_extra_words() at detection.py:1139
 pub(super) fn has_extra_words(matches: &[LicenseMatch]) -> bool {
     matches.iter().any(|m| {
-        let score_coverage_relevance = m.match_coverage * m.rule_relevance as f32 / 100.0;
+        let score_coverage_relevance = m.match_coverage * m.rule_relevance() as f32 / 100.0;
         score_coverage_relevance - m.score > 0.01
     })
 }
@@ -71,7 +71,7 @@ pub(super) fn is_false_positive(matches: &[LicenseMatch]) -> bool {
         return false;
     }
 
-    let has_full_relevance = matches.iter().all(|m| m.rule_relevance == 100);
+    let has_full_relevance = matches.iter().all(|m| m.rule_relevance() == 100);
 
     let copyright_words = ["copyright", "(c)"];
     let has_copyrights = matches.iter().all(|m| {
@@ -94,20 +94,20 @@ pub(super) fn is_false_positive(matches: &[LicenseMatch]) -> bool {
     let is_bare_rule = matches.iter().all(|m| {
         bare_rules
             .iter()
-            .any(|bare| m.rule_identifier.to_lowercase().contains(bare))
+            .any(|bare| m.rule_identifier().to_lowercase().contains(bare))
     });
 
     let is_gpl = matches.iter().all(|m| {
-        let id = m.rule_identifier.to_lowercase();
+        let id = m.rule_identifier().to_lowercase();
         id.contains("gpl") && !id.contains("lgpl")
     });
 
     // Use rule_length (token count) instead of matched_length (character count)
-    let rule_length_values: Vec<usize> = matches.iter().map(|m| m.rule_length).collect();
+    let rule_length_values: Vec<usize> = matches.iter().map(|m| m.rule_length()).collect();
 
     let all_rule_length_one = rule_length_values.iter().all(|&l| l == 1);
 
-    let all_low_relevance = matches.iter().all(|m| m.rule_relevance < 60);
+    let all_low_relevance = matches.iter().all(|m| m.rule_relevance() < 60);
 
     let is_single = matches.len() == 1;
 
@@ -197,24 +197,24 @@ pub(super) fn has_unknown_intro_before_detection(matches: &[LicenseMatch]) -> bo
         if m.matcher == MatcherKind::Undetected {
             continue;
         }
-        let has_unknown = m.license_expression.contains("unknown");
+        let has_unknown = m.license_expression().contains("unknown");
         let is_intro =
-            m.is_license_intro() || m.is_license_clue() || m.license_expression == "free-unknown";
+            m.is_license_intro() || m.is_license_clue() || m.license_expression() == "free-unknown";
         if has_unknown && is_intro {
             // Check if there's a non-intro, non-unknown match after this
             let has_unknown_intro = matches.iter().any(|other| {
                 other.matcher != MatcherKind::Undetected
                     && other.start_line > m.start_line
-                    && !other.rule_identifier.contains("unknown")
-                    && !other.license_expression.contains("unknown")
+                    && !other.rule_identifier().contains("unknown")
+                    && !other.license_expression().contains("unknown")
                     && !other.is_license_intro()
                     && !other.is_license_clue()
             });
 
             if has_unknown_intro {
                 let coverage_ok = m.match_coverage >= IMPERFECT_MATCH_COVERAGE_THR - 0.01;
-                let not_unknown = !m.rule_identifier.contains("unknown")
-                    && !m.license_expression.contains("unknown");
+                let not_unknown = !m.rule_identifier().contains("unknown")
+                    && !m.license_expression().contains("unknown");
                 if coverage_ok && not_unknown {
                     return true;
                 }
@@ -242,9 +242,9 @@ pub(super) fn has_unknown_intro_before_detection(matches: &[LicenseMatch]) -> bo
 ///
 /// Based on Python: is_unknown_intro() at detection.py:1250-1262
 pub(super) fn is_unknown_intro(m: &LicenseMatch) -> bool {
-    let has_unknown = m.license_expression.contains("unknown");
+    let has_unknown = m.license_expression().contains("unknown");
     has_unknown
-        && (m.is_license_intro() || m.is_license_clue() || m.license_expression == "free-unknown")
+        && (m.is_license_intro() || m.is_license_clue() || m.license_expression() == "free-unknown")
 }
 
 /// Check if a match should be considered a license intro for filtering.
@@ -257,14 +257,14 @@ pub(super) fn is_unknown_intro(m: &LicenseMatch) -> bool {
 pub(super) fn is_license_intro(match_item: &LicenseMatch) -> bool {
     (match_item.is_license_intro()
         || match_item.is_license_clue()
-        || match_item.license_expression == "free-unknown")
+        || match_item.license_expression() == "free-unknown")
         && (match_item.matcher == MatcherKind::Aho || match_item.match_coverage >= 99.99)
 }
 
 /// Filter out license intro matches from a list of matches.
 ///
 /// Based on Python: filter_license_intros() at detection.py:1368-1383
-pub(super) fn filter_license_intros(matches: &[LicenseMatch]) -> Vec<LicenseMatch> {
+pub(super) fn filter_license_intros<'a>(matches: &[LicenseMatch<'a>]) -> Vec<LicenseMatch<'a>> {
     matches
         .iter()
         .filter(|m| !is_license_intro(m))
@@ -276,7 +276,7 @@ pub(super) fn filter_license_intros(matches: &[LicenseMatch]) -> Vec<LicenseMatc
 ///
 /// Based on Python: is_license_reference_local_file() at detection.py:1368-1377
 pub(super) fn is_license_reference_local_file(m: &LicenseMatch) -> bool {
-    m.referenced_filenames
+    m.referenced_filenames()
         .as_ref()
         .is_some_and(|v| !v.is_empty())
 }
@@ -285,7 +285,7 @@ pub(super) fn is_license_reference_local_file(m: &LicenseMatch) -> bool {
 ///
 /// Based on Python: filter_license_references() at detection.py:1404-1419
 #[cfg(test)]
-pub(super) fn filter_license_references(matches: &[LicenseMatch]) -> Vec<LicenseMatch> {
+pub(super) fn filter_license_references<'a>(matches: &[LicenseMatch<'a>]) -> Vec<LicenseMatch<'a>> {
     matches
         .iter()
         .filter(|m| !is_license_reference_local_file(m))
@@ -296,7 +296,9 @@ pub(super) fn filter_license_references(matches: &[LicenseMatch]) -> Vec<License
 /// Filter out both license intros and local file references.
 ///
 /// Based on Python: filter_license_intros_and_references() at detection.py:1422-1440
-pub(super) fn filter_license_intros_and_references(matches: &[LicenseMatch]) -> Vec<LicenseMatch> {
+pub(super) fn filter_license_intros_and_references<'a>(
+    matches: &[LicenseMatch<'a>],
+) -> Vec<LicenseMatch<'a>> {
     matches
         .iter()
         .filter(|m| !is_license_intro(m) && !is_license_reference_local_file(m))
@@ -305,7 +307,7 @@ pub(super) fn filter_license_intros_and_references(matches: &[LicenseMatch]) -> 
 }
 
 /// Check if any matches reference local files.
-fn has_references_to_local_files(matches: &[LicenseMatch]) -> bool {
+fn has_references_to_local_files<'a>(matches: &[LicenseMatch<'a>]) -> bool {
     matches.iter().any(is_license_reference_local_file)
 }
 
@@ -397,7 +399,7 @@ pub fn compute_detection_score(matches: &[LicenseMatch]) -> f32 {
 
     let weighted_score: f32 = matches
         .iter()
-        .map(|m| m.score * m.match_coverage * m.rule_relevance as f32 / 100.0)
+        .map(|m| m.score * m.match_coverage * m.rule_relevance() as f32 / 100.0)
         .sum();
 
     (weighted_score / total_weight).min(100.0)
@@ -413,10 +415,7 @@ pub fn determine_license_expression(matches: &[LicenseMatch]) -> Result<String, 
         return Err("No matches to determine expression from".to_string());
     }
 
-    let expressions: Vec<&str> = matches
-        .iter()
-        .map(|m| m.license_expression.as_str())
-        .collect();
+    let expressions: Vec<&str> = matches.iter().map(|m| m.license_expression()).collect();
 
     combine_expressions_and(&expressions, true)
         .map_err(|e| format!("Failed to combine expressions: {}", e))
@@ -434,7 +433,7 @@ pub fn determine_spdx_expression(matches: &[LicenseMatch]) -> Result<String, Str
 
     let expressions: Option<Vec<&str>> = matches
         .iter()
-        .map(|m| m.license_expression_spdx.as_deref())
+        .map(|m| m.license_expression_spdx())
         .collect();
 
     let expressions = expressions
@@ -487,7 +486,7 @@ mod tests {
     use crate::license_detection::models::{LicenseMatch, MatcherKind};
     use crate::license_detection::tests::TestMatchBuilder;
 
-    fn create_test_match(coverage: f32, rule_identifier: &str) -> LicenseMatch {
+    fn create_test_match(coverage: f32, rule_identifier: &str) -> LicenseMatch<'static> {
         TestMatchBuilder::default()
             .license_expression("mit")
             .license_expression_spdx(Some("MIT".to_string()))
@@ -519,7 +518,7 @@ mod tests {
         match_coverage: f32,
         rule_relevance: u8,
         rule_identifier: &str,
-    ) -> LicenseMatch {
+    ) -> LicenseMatch<'static> {
         TestMatchBuilder::default()
             .license_expression(license_expression)
             .license_expression_spdx(Some(license_expression.to_string()))
@@ -588,8 +587,7 @@ mod tests {
 
     #[test]
     fn test_has_unknown_matches_true_in_expression() {
-        let mut m = create_test_match(95.0, "mit.LICENSE");
-        m.license_expression = "unknown".to_string();
+        let m = create_test_match(95.0, "unknown.LICENSE");
         let matches = vec![m];
         assert!(has_unknown_matches(&matches));
     }
@@ -701,58 +699,61 @@ mod tests {
 
     #[test]
     fn test_is_false_positive_single_license_reference_short() {
-        let mut m = create_test_match_full(
-            "borceux",
-            "2-aho",
-            1,
-            10,
-            100.0,
-            1,
-            1,
-            100.0,
-            80,
-            "borceux.LICENSE",
-        );
-        m.rule_kind = crate::license_detection::models::RuleKind::Reference;
-        let matches = vec![m];
+        let matches = vec![
+            TestMatchBuilder::default()
+                .license_expression("borceux")
+                .start_line(1)
+                .end_line(10)
+                .matcher(MatcherKind::Aho)
+                .score(100.0)
+                .matched_length(1)
+                .rule_length(1)
+                .match_coverage(100.0)
+                .rule_relevance(80)
+                .rule_kind(crate::license_detection::models::RuleKind::Reference)
+                .rule_identifier("borceux.LICENSE")
+                .build_match(),
+        ];
         assert!(!is_false_positive(&matches));
     }
 
     #[test]
     fn test_is_false_positive_single_license_reference_long_rule() {
-        let mut m = create_test_match_full(
-            "some-license",
-            "2-aho",
-            1,
-            10,
-            100.0,
-            10,
-            10,
-            100.0,
-            80,
-            "some-license.LICENSE",
-        );
-        m.rule_kind = crate::license_detection::models::RuleKind::Reference;
-        let matches = vec![m];
+        let matches = vec![
+            TestMatchBuilder::default()
+                .license_expression("some-license")
+                .start_line(1)
+                .end_line(10)
+                .matcher(MatcherKind::Aho)
+                .score(100.0)
+                .matched_length(10)
+                .rule_length(10)
+                .match_coverage(100.0)
+                .rule_relevance(80)
+                .rule_kind(crate::license_detection::models::RuleKind::Reference)
+                .rule_identifier("some-license.LICENSE")
+                .build_match(),
+        ];
         assert!(!is_false_positive(&matches));
     }
 
     #[test]
     fn test_is_false_positive_single_license_reference_full_relevance() {
-        let mut m = create_test_match_full(
-            "some-license",
-            "2-aho",
-            1,
-            10,
-            100.0,
-            1,
-            1,
-            100.0,
-            100,
-            "some-license.LICENSE",
-        );
-        m.rule_kind = crate::license_detection::models::RuleKind::Reference;
-        let matches = vec![m];
+        let matches = vec![
+            TestMatchBuilder::default()
+                .license_expression("some-license")
+                .start_line(1)
+                .end_line(10)
+                .matcher(MatcherKind::Aho)
+                .score(100.0)
+                .matched_length(1)
+                .rule_length(1)
+                .match_coverage(100.0)
+                .rule_relevance(100)
+                .rule_kind(crate::license_detection::models::RuleKind::Reference)
+                .rule_identifier("some-license.LICENSE")
+                .build_match(),
+        ];
         assert!(!is_false_positive(&matches));
     }
 
@@ -1072,7 +1073,7 @@ mod tests {
             100,
             "mit.LICENSE",
         );
-        let mut m2 = create_test_match_full(
+        let m2 = create_test_match_full(
             "apache-2.0",
             "1-hash",
             11,
@@ -1084,7 +1085,6 @@ mod tests {
             100,
             "apache.LICENSE",
         );
-        m2.license_expression = "apache-2.0".to_string();
         let matches = vec![m1, m2];
         let result = determine_license_expression(&matches);
         assert!(result.is_ok());
@@ -1107,19 +1107,18 @@ mod tests {
             100,
             "mit.LICENSE",
         );
-        let mut m2 = create_test_match_full(
-            "mit",
-            "1-hash",
-            11,
-            20,
-            100.0,
-            100,
-            100,
-            100.0,
-            100,
-            "apache.LICENSE",
-        );
-        m2.license_expression = "mit OR apache-2.0".to_string();
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit OR apache-2.0")
+            .start_line(11)
+            .end_line(20)
+            .matcher(MatcherKind::Hash)
+            .score(100.0)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(100.0)
+            .rule_relevance(100)
+            .rule_identifier("apache.LICENSE")
+            .build_match();
 
         let result = determine_license_expression(&[m1, m2]);
 
@@ -1462,19 +1461,19 @@ mod tests {
 
     #[test]
     fn test_analyze_detection_mixed_clue_and_detection_is_not_license_clues() {
-        let mut clue = create_test_match_full(
-            "mit",
-            "2-aho",
-            1,
-            3,
-            100.0,
-            100,
-            100,
-            100.0,
-            100,
-            "mit-clue.RULE",
-        );
-        clue.rule_kind = crate::license_detection::models::RuleKind::Clue;
+        let clue = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(3)
+            .matcher(MatcherKind::Aho)
+            .score(100.0)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(100.0)
+            .rule_relevance(100)
+            .rule_kind(crate::license_detection::models::RuleKind::Clue)
+            .rule_identifier("mit-clue.RULE")
+            .build_match();
 
         let detection = create_test_match_full(
             "mit",
@@ -1495,24 +1494,54 @@ mod tests {
 
     #[test]
     fn test_is_unknown_intro_true_with_is_license_intro_flag() {
-        let mut m = create_test_match(100.0, "mit.LICENSE");
-        m.license_expression = "unknown".to_string();
-        m.rule_kind = crate::license_detection::models::RuleKind::Intro;
+        let m = TestMatchBuilder::default()
+            .license_expression("unknown")
+            .start_line(1)
+            .end_line(10)
+            .matcher(MatcherKind::Hash)
+            .score(100.0)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(100.0)
+            .rule_relevance(100)
+            .rule_kind(crate::license_detection::models::RuleKind::Intro)
+            .rule_identifier("mit.LICENSE")
+            .build_match();
         assert!(is_unknown_intro(&m));
     }
 
     #[test]
     fn test_is_unknown_intro_true_with_is_license_clue_flag() {
-        let mut m = create_test_match(100.0, "mit.LICENSE");
-        m.license_expression = "unknown".to_string();
-        m.rule_kind = crate::license_detection::models::RuleKind::Clue;
+        let m = TestMatchBuilder::default()
+            .license_expression("unknown")
+            .start_line(1)
+            .end_line(10)
+            .matcher(MatcherKind::Hash)
+            .score(100.0)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(100.0)
+            .rule_relevance(100)
+            .rule_kind(crate::license_detection::models::RuleKind::Clue)
+            .rule_identifier("mit.LICENSE")
+            .build_match();
         assert!(is_unknown_intro(&m));
     }
 
     #[test]
     fn test_is_unknown_intro_true_with_free_unknown_expression() {
-        let mut m = create_test_match(100.0, "mit.LICENSE");
-        m.license_expression = "free-unknown".to_string();
+        let m = TestMatchBuilder::default()
+            .license_expression("free-unknown")
+            .start_line(1)
+            .end_line(10)
+            .matcher(MatcherKind::Hash)
+            .score(100.0)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(100.0)
+            .rule_relevance(100)
+            .rule_identifier("mit.LICENSE")
+            .build_match();
         assert!(is_unknown_intro(&m));
     }
 
@@ -1524,24 +1553,58 @@ mod tests {
 
     #[test]
     fn test_is_unknown_intro_false_no_flags_or_free_unknown() {
-        let mut m = create_test_match(100.0, "mit.LICENSE");
-        m.license_expression = "unknown".to_string();
-        m.rule_kind = crate::license_detection::models::RuleKind::None;
+        let m = TestMatchBuilder::default()
+            .license_expression("unknown")
+            .start_line(1)
+            .end_line(10)
+            .matcher(MatcherKind::Hash)
+            .score(100.0)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(100.0)
+            .rule_relevance(100)
+            .rule_kind(crate::license_detection::models::RuleKind::None)
+            .rule_identifier("mit.LICENSE")
+            .build_match();
 
         assert!(!is_unknown_intro(&m));
     }
 
     #[test]
     fn test_is_license_reference_local_file_true() {
-        let mut m = create_test_match(100.0, "mit.LICENSE");
-        m.referenced_filenames = Some(vec!["LICENSE".to_string()]);
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .matcher(MatcherKind::Hash)
+            .score(100.0)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(100.0)
+            .rule_relevance(100)
+            .rule_kind(crate::license_detection::models::RuleKind::Reference)
+            .referenced_filenames(Some(vec!["LICENSE".to_string()]))
+            .rule_identifier("mit.LICENSE")
+            .build_match();
         assert!(is_license_reference_local_file(&m));
     }
 
     #[test]
     fn test_is_license_reference_local_file_true_multiple() {
-        let mut m = create_test_match(100.0, "apache-2.0.COPYING");
-        m.referenced_filenames = Some(vec!["COPYING".to_string()]);
+        let m = TestMatchBuilder::default()
+            .license_expression("apache-2.0")
+            .start_line(1)
+            .end_line(10)
+            .matcher(MatcherKind::Hash)
+            .score(100.0)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(100.0)
+            .rule_relevance(100)
+            .rule_kind(crate::license_detection::models::RuleKind::Reference)
+            .referenced_filenames(Some(vec!["COPYING".to_string()]))
+            .rule_identifier("apache-2.0.COPYING")
+            .build_match();
         assert!(is_license_reference_local_file(&m));
     }
 
@@ -1553,8 +1616,20 @@ mod tests {
 
     #[test]
     fn test_filter_license_references_filters_matches() {
-        let mut m1 = create_test_match(100.0, "mit.LICENSE");
-        m1.referenced_filenames = Some(vec!["LICENSE".to_string()]);
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .matcher(MatcherKind::Hash)
+            .score(100.0)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(100.0)
+            .rule_relevance(100)
+            .rule_kind(crate::license_detection::models::RuleKind::Reference)
+            .referenced_filenames(Some(vec!["LICENSE".to_string()]))
+            .rule_identifier("mit.LICENSE")
+            .build_match();
         let m2 = create_test_match(100.0, "mit.RULE");
         let filtered = filter_license_references(&[m1, m2]);
         assert_eq!(filtered.len(), 1);
@@ -1576,11 +1651,20 @@ mod tests {
 
     #[test]
     fn test_filter_license_intros_and_references_filters_both() {
-        let mut m1 = create_test_match(100.0, "mit.LICENSE");
-        m1.rule_kind = crate::license_detection::models::RuleKind::Intro;
-        m1.matcher = MatcherKind::Aho;
-        m1.match_coverage = 100.0;
-        m1.referenced_filenames = Some(vec!["LICENSE".to_string()]);
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_line(1)
+            .end_line(10)
+            .matcher(MatcherKind::Aho)
+            .score(100.0)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(100.0)
+            .rule_relevance(100)
+            .rule_kind(crate::license_detection::models::RuleKind::Intro)
+            .referenced_filenames(Some(vec!["LICENSE".to_string()]))
+            .rule_identifier("mit.LICENSE")
+            .build_match();
         let m2 = create_test_match(100.0, "mit.RULE");
         let filtered = filter_license_intros_and_references(&[m1, m2]);
         assert_eq!(filtered.len(), 1);

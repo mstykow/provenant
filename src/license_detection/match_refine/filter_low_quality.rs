@@ -5,7 +5,6 @@
 
 use std::collections::HashSet;
 
-use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::models::{LicenseMatch, MatcherKind};
 use crate::license_detection::query::Query;
 
@@ -16,10 +15,10 @@ use crate::license_detection::query::Query;
 /// sequence and unknown matcher types - exact matches are always kept.
 ///
 /// Based on Python: `filter_spurious_matches()` (match.py:1768-1836)
-pub(crate) fn filter_spurious_matches(
-    matches: &[LicenseMatch],
-    query: &Query,
-) -> Vec<LicenseMatch> {
+pub(crate) fn filter_spurious_matches<'a>(
+    matches: &[LicenseMatch<'a>],
+    query: &Query<'a>,
+) -> Vec<LicenseMatch<'a>> {
     matches
         .iter()
         .filter(|m| {
@@ -66,10 +65,9 @@ pub(crate) fn filter_spurious_matches(
 /// Exact matches (hash, aho, spdx) are always kept.
 ///
 /// Based on Python: `filter_below_rule_minimum_coverage()` (lines 1551-1587)
-pub(crate) fn filter_below_rule_minimum_coverage(
-    index: &LicenseIndex,
-    matches: &[LicenseMatch],
-) -> Vec<LicenseMatch> {
+pub(crate) fn filter_below_rule_minimum_coverage<'a>(
+    matches: &[LicenseMatch<'a>],
+) -> Vec<LicenseMatch<'a>> {
     matches
         .iter()
         .filter(|m| {
@@ -77,10 +75,7 @@ pub(crate) fn filter_below_rule_minimum_coverage(
                 return true;
             }
 
-            let rid = m.rid;
-            if let Some(rule) = index.rules_by_rid.get(rid)
-                && let Some(min_cov) = rule.minimum_coverage
-            {
+            if let Some(min_cov) = m.rule.minimum_coverage {
                 return m.match_coverage >= min_cov as f32;
             }
 
@@ -100,10 +95,9 @@ pub(crate) fn filter_below_rule_minimum_coverage(
 /// License tag rules get a +2 tolerance on matched_len comparison.
 ///
 /// Based on Python: `filter_short_matches_scattered_on_too_many_lines()` (lines 1931-1972)
-pub(crate) fn filter_short_matches_scattered_on_too_many_lines(
-    index: &LicenseIndex,
-    matches: &[LicenseMatch],
-) -> Vec<LicenseMatch> {
+pub(crate) fn filter_short_matches_scattered_on_too_many_lines<'a>(
+    matches: &[LicenseMatch<'a>],
+) -> Vec<LicenseMatch<'a>> {
     if matches.len() == 1 {
         return matches.to_vec();
     }
@@ -111,10 +105,8 @@ pub(crate) fn filter_short_matches_scattered_on_too_many_lines(
     matches
         .iter()
         .filter(|m| {
-            let rid = m.rid;
-            if let Some(rule) = index.rules_by_rid.get(rid)
-                && rule.is_small
-            {
+            let rule = m.rule;
+            if rule.is_small {
                 let matched_len = m.len();
                 let line_span = m.end_line.saturating_sub(m.start_line) + 1;
 
@@ -145,11 +137,10 @@ pub(crate) fn filter_short_matches_scattered_on_too_many_lines(
 /// - `is_required_phrase` rules: same as is_continuous
 ///
 /// Based on Python: `filter_matches_missing_required_phrases()` (match.py:2154-2328)
-pub(crate) fn filter_matches_missing_required_phrases(
-    index: &LicenseIndex,
-    matches: &[LicenseMatch],
-    query: &Query,
-) -> (Vec<LicenseMatch>, Vec<LicenseMatch>) {
+pub(crate) fn filter_matches_missing_required_phrases<'a>(
+    matches: &[LicenseMatch<'a>],
+    query: &Query<'a>,
+) -> (Vec<LicenseMatch<'a>>, Vec<LicenseMatch<'a>>) {
     if matches.is_empty() {
         return (Vec::new(), Vec::new());
     }
@@ -158,15 +149,7 @@ pub(crate) fn filter_matches_missing_required_phrases(
     let mut discarded = Vec::new();
 
     for m in matches {
-        let rid = m.rid;
-
-        let rule = match index.rules_by_rid.get(rid) {
-            Some(r) => r,
-            None => {
-                kept.push(m.clone());
-                continue;
-            }
-        };
+        let rule = m.rule;
 
         let is_continuous = rule.is_continuous || rule.is_required_phrase;
         let ikey_spans = &rule.required_phrase_spans;
@@ -335,11 +318,11 @@ pub(crate) fn filter_matches_missing_required_phrases(
 /// exactly 1 matched token.
 ///
 /// Based on Python: `filter_matches_to_spurious_single_token()` (lines 1622-1700)
-pub(crate) fn filter_matches_to_spurious_single_token(
-    matches: &[LicenseMatch],
-    query: &Query,
+pub(crate) fn filter_matches_to_spurious_single_token<'a>(
+    matches: &[LicenseMatch<'a>],
+    query: &Query<'a>,
     unknown_count: usize,
-) -> Vec<LicenseMatch> {
+) -> Vec<LicenseMatch<'a>> {
     matches
         .iter()
         .filter(|m| {
@@ -386,25 +369,17 @@ pub(crate) fn filter_matches_to_spurious_single_token(
 
 /// Filter matches to false positive rules.
 ///
-/// Removes matches whose rule ID is in the index's false_positive_rids set.
+/// Removes matches whose rule is marked as a false positive.
 ///
 /// Based on Python: `filter_false_positive_matches()` (lines 1950-1970)
-pub(crate) fn filter_false_positive_matches(
-    index: &LicenseIndex,
-    matches: &[LicenseMatch],
-) -> Vec<LicenseMatch> {
-    let mut filtered = Vec::new();
-
-    for m in matches {
-        let rid = m.rid;
-        if index.false_positive_rids.contains(&rid) {
-            continue;
-        }
-
-        filtered.push(m.clone());
-    }
-
-    filtered
+pub(crate) fn filter_false_positive_matches<'a>(
+    matches: &[LicenseMatch<'a>],
+) -> Vec<LicenseMatch<'a>> {
+    matches
+        .iter()
+        .filter(|m| !m.is_false_positive())
+        .cloned()
+        .collect()
 }
 
 /// Check if a matched text is a valid short match.
@@ -484,11 +459,10 @@ fn is_valid_short_match(matched_text: &str, rule_text: &str, max_diff: usize) ->
 /// - The matched text has leading/trailing punctuation or mixed case issues
 ///
 /// Based on Python: `filter_invalid_matches_to_single_word_gibberish()` (lines 1839-1901)
-pub(crate) fn filter_invalid_matches_to_single_word_gibberish(
-    index: &LicenseIndex,
-    matches: &[LicenseMatch],
-    query: &Query,
-) -> Vec<LicenseMatch> {
+pub(crate) fn filter_invalid_matches_to_single_word_gibberish<'a>(
+    matches: &[LicenseMatch<'a>],
+    query: &Query<'a>,
+) -> Vec<LicenseMatch<'a>> {
     if !query.is_binary {
         return matches.to_vec();
     }
@@ -496,11 +470,8 @@ pub(crate) fn filter_invalid_matches_to_single_word_gibberish(
     matches
         .iter()
         .filter(|m| {
-            let rid = m.rid;
-            if let Some(rule) = index.rules_by_rid.get(rid)
-                && rule.length_unique == 1
-                && (rule.is_license_reference() || rule.is_license_clue())
-            {
+            let rule = m.rule;
+            if rule.length_unique == 1 && (rule.is_license_reference() || rule.is_license_clue()) {
                 let matched_text = match &m.matched_text {
                     Some(text) => text.clone(),
                     None => query.matched_text(m.start_line, m.end_line),
@@ -517,10 +488,7 @@ pub(crate) fn filter_invalid_matches_to_single_word_gibberish(
         .collect()
 }
 
-pub(crate) fn filter_too_short_matches(
-    index: &LicenseIndex,
-    matches: &[LicenseMatch],
-) -> Vec<LicenseMatch> {
+pub(crate) fn filter_too_short_matches<'a>(matches: &[LicenseMatch<'a>]) -> Vec<LicenseMatch<'a>> {
     matches
         .iter()
         .filter(|m| {
@@ -528,25 +496,22 @@ pub(crate) fn filter_too_short_matches(
                 return true;
             }
 
-            let rid = m.rid;
-            if let Some(rule) = index.rules_by_rid.get(rid) {
-                return !m.is_small(
-                    rule.min_matched_length,
-                    rule.min_high_matched_length,
-                    rule.is_small,
-                );
-            }
-
-            true
+            let rule = m.rule;
+            !m.is_small(
+                rule.min_matched_length,
+                rule.min_high_matched_length,
+                rule.is_small,
+            )
         })
         .cloned()
         .collect()
 }
 
 #[cfg(test)]
+#[allow(dead_code, unused_variables)]
 mod tests {
     use super::*;
-    use crate::license_detection::models::Rule;
+    use crate::license_detection::index::LicenseIndex;
     use crate::license_detection::tests::TestMatchBuilder;
     use crate::license_detection::unknown_match::MATCH_UNKNOWN;
 
@@ -566,11 +531,10 @@ mod tests {
         score: f32,
         coverage: f32,
         relevance: u8,
-    ) -> LicenseMatch {
+    ) -> LicenseMatch<'static> {
         let matched_len = end_line - start_line + 1;
         let rule_len = matched_len;
-        let rid = parse_rule_id(rule_identifier).unwrap_or(0);
-        let mut m = TestMatchBuilder::default()
+        TestMatchBuilder::default()
             .license_expression("mit")
             .license_expression_spdx(Some("MIT".to_string()))
             .start_line(start_line)
@@ -586,9 +550,7 @@ mod tests {
             .rule_identifier(rule_identifier)
             .rule_url("https://example.com".to_string())
             .hilen(50)
-            .build_match();
-        m.rid = rid;
-        m
+            .build_match()
     }
 
     fn create_test_match_with_tokens(
@@ -596,9 +558,8 @@ mod tests {
         start_token: usize,
         end_token: usize,
         matched_length: usize,
-    ) -> LicenseMatch {
-        let rid = parse_rule_id(rule_identifier).unwrap_or(0);
-        let mut m = TestMatchBuilder::default()
+    ) -> LicenseMatch<'static> {
+        TestMatchBuilder::default()
             .license_expression("mit")
             .license_expression_spdx(Some("MIT".to_string()))
             .start_line(start_token)
@@ -614,62 +575,81 @@ mod tests {
             .rule_identifier(rule_identifier)
             .rule_url("https://example.com".to_string())
             .hilen(matched_length / 2)
-            .build_match();
-        m.rid = rid;
-        m
+            .build_match()
     }
 
     #[test]
     fn test_filter_false_positive_matches_with_false_positive() {
-        let mut index = LicenseIndex::with_legalese_count(10);
-        let _ = index.false_positive_rids.insert(42);
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .rule_identifier("#42")
+            .start_line(1)
+            .end_line(10)
+            .score(0.9)
+            .match_coverage(90.0)
+            .rule_relevance(100)
+            .is_false_positive(true)
+            .build_match();
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .rule_identifier("#1")
+            .start_line(15)
+            .end_line(25)
+            .score(0.85)
+            .match_coverage(85.0)
+            .rule_relevance(100)
+            .build_match();
+        let matches = vec![m1, m2];
 
-        let matches = vec![
-            create_test_match("#42", 1, 10, 0.9, 90.0, 100),
-            create_test_match("#1", 15, 25, 0.85, 85.0, 100),
-        ];
-
-        let filtered = filter_false_positive_matches(&index, &matches);
+        let filtered = filter_false_positive_matches(&matches);
 
         assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].rule_identifier, "#1");
+        assert_eq!(filtered[0].rule_identifier(), "#1");
     }
 
     #[test]
     fn test_filter_false_positive_matches_no_false_positive() {
-        let index = LicenseIndex::with_legalese_count(10);
-
         let matches = vec![
             create_test_match("#1", 1, 10, 0.9, 90.0, 100),
             create_test_match("#2", 15, 25, 0.85, 85.0, 100),
         ];
 
-        let filtered = filter_false_positive_matches(&index, &matches);
+        let filtered = filter_false_positive_matches(&matches);
 
         assert_eq!(filtered.len(), 2);
     }
 
     #[test]
     fn test_filter_false_positive_matches_all_false_positive() {
-        let mut index = LicenseIndex::with_legalese_count(10);
-        let _ = index.false_positive_rids.insert(42);
-        let _ = index.false_positive_rids.insert(43);
-
         let matches = vec![
             create_test_match("#42", 1, 10, 0.9, 90.0, 100),
             create_test_match("#43", 15, 25, 0.85, 85.0, 100),
         ];
+        let matches: Vec<LicenseMatch<'static>> = matches
+            .into_iter()
+            .map(|m| {
+                TestMatchBuilder::default()
+                    .license_expression("mit")
+                    .rule_identifier(m.rule_identifier())
+                    .start_line(m.start_line)
+                    .end_line(m.end_line)
+                    .score(m.score)
+                    .match_coverage(m.match_coverage)
+                    .rule_relevance(m.rule_relevance())
+                    .is_false_positive(true)
+                    .build_match()
+            })
+            .collect();
 
-        let filtered = filter_false_positive_matches(&index, &matches);
+        let filtered = filter_false_positive_matches(&matches);
 
         assert_eq!(filtered.len(), 0);
     }
 
     #[test]
     fn test_filter_false_positive_matches_empty() {
-        let index = LicenseIndex::with_legalese_count(10);
-        let matches: Vec<LicenseMatch> = vec![];
-        let filtered = filter_false_positive_matches(&index, &matches);
+        let matches: Vec<LicenseMatch<'static>> = vec![];
+        let filtered = filter_false_positive_matches(&matches);
         assert_eq!(filtered.len(), 0);
     }
 
@@ -677,18 +657,23 @@ mod tests {
     fn test_filter_spurious_matches_keeps_non_seq_matchers() {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
-        let matches = vec![
-            LicenseMatch {
-                matcher: crate::license_detection::models::MatcherKind::Hash,
-                matched_length: 5,
-                ..create_test_match("#1", 1, 10, 1.0, 100.0, 100)
-            },
-            LicenseMatch {
-                matcher: crate::license_detection::models::MatcherKind::Aho,
-                matched_length: 5,
-                ..create_test_match("#2", 1, 10, 1.0, 100.0, 100)
-            },
-        ];
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(crate::license_detection::models::MatcherKind::Hash)
+            .matched_length(5)
+            .start_line(1)
+            .end_line(10)
+            .rule_identifier("#1")
+            .build_match();
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(crate::license_detection::models::MatcherKind::Aho)
+            .matched_length(5)
+            .start_line(1)
+            .end_line(10)
+            .rule_identifier("#2")
+            .build_match();
+        let matches = vec![m1, m2];
 
         let filtered = filter_spurious_matches(&matches, &query);
         assert_eq!(filtered.len(), 2);
@@ -698,10 +683,15 @@ mod tests {
     fn test_filter_spurious_matches_keeps_high_density_seq() {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
-        let mut m = create_test_match("#1", 1, 10, 1.0, 100.0, 100);
-        m.matcher = crate::license_detection::models::MatcherKind::Seq;
-        m.matched_length = 50;
-        m.matched_token_positions = Some((0..50).collect());
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(crate::license_detection::models::MatcherKind::Seq)
+            .matched_length(50)
+            .matched_token_positions(Some((0..50).collect()))
+            .start_line(1)
+            .end_line(10)
+            .rule_identifier("#1")
+            .build_match();
 
         let matches = vec![m];
         let filtered = filter_spurious_matches(&matches, &query);
@@ -712,12 +702,17 @@ mod tests {
     fn test_filter_spurious_matches_filters_low_density_short() {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
-        let mut m = create_test_match("#1", 1, 10, 1.0, 100.0, 100);
-        m.matcher = crate::license_detection::models::MatcherKind::Seq;
-        m.matched_length = 5;
-        m.start_token = 0;
-        m.end_token = 100;
-        m.matched_token_positions = Some(vec![0, 50, 75, 80, 99]);
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(crate::license_detection::models::MatcherKind::Seq)
+            .matched_length(5)
+            .start_token(0)
+            .end_token(100)
+            .matched_token_positions(Some(vec![0, 50, 75, 80, 99]))
+            .start_line(1)
+            .end_line(10)
+            .rule_identifier("#1")
+            .build_match();
 
         let matches = vec![m];
         let filtered = filter_spurious_matches(&matches, &query);
@@ -728,12 +723,17 @@ mod tests {
     fn test_filter_spurious_matches_filters_unknown_matcher() {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
-        let mut m = create_test_match("#1", 1, 10, 1.0, 100.0, 100);
-        m.matcher = MATCH_UNKNOWN;
-        m.matched_length = 5;
-        m.start_token = 0;
-        m.end_token = 100;
-        m.matched_token_positions = Some(vec![0, 50, 75, 80, 99]);
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(MATCH_UNKNOWN)
+            .matched_length(5)
+            .start_token(0)
+            .end_token(100)
+            .matched_token_positions(Some(vec![0, 50, 75, 80, 99]))
+            .start_line(1)
+            .end_line(10)
+            .rule_identifier("#1")
+            .build_match();
 
         let matches = vec![m];
         let filtered = filter_spurious_matches(&matches, &query);
@@ -744,13 +744,18 @@ mod tests {
     fn test_filter_spurious_matches_keeps_medium_length() {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
-        let mut m = create_test_match("#1", 1, 10, 1.0, 100.0, 100);
-        m.matcher = crate::license_detection::models::MatcherKind::Seq;
-        m.matched_length = 25;
-        m.start_token = 0;
-        m.end_token = 30;
-        m.matched_token_positions = Some((0..25).collect());
-        m.hilen = 10;
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(crate::license_detection::models::MatcherKind::Seq)
+            .matched_length(25)
+            .start_token(0)
+            .end_token(30)
+            .matched_token_positions(Some((0..25).collect()))
+            .hilen(10)
+            .start_line(1)
+            .end_line(10)
+            .rule_identifier("#1")
+            .build_match();
 
         let matches = vec![m];
         let filtered = filter_spurious_matches(&matches, &query);
@@ -761,315 +766,202 @@ mod tests {
     fn test_filter_spurious_matches_empty() {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
-        let matches: Vec<LicenseMatch> = vec![];
+        let matches: Vec<LicenseMatch<'static>> = vec![];
         let filtered = filter_spurious_matches(&matches, &query);
         assert_eq!(filtered.len(), 0);
     }
 
     #[test]
     fn test_filter_false_positive_matches_mixed_identifiers() {
-        let mut index = LicenseIndex::with_legalese_count(10);
-        let _ = index.false_positive_rids.insert(42);
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .rule_identifier("#42")
+            .start_line(1)
+            .end_line(10)
+            .score(0.9)
+            .match_coverage(90.0)
+            .rule_relevance(100)
+            .is_false_positive(true)
+            .build_match();
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .rule_identifier("mit.LICENSE")
+            .start_line(15)
+            .end_line(25)
+            .score(0.85)
+            .match_coverage(85.0)
+            .rule_relevance(100)
+            .build_match();
+        let m3 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .rule_identifier("#1")
+            .start_line(30)
+            .end_line(40)
+            .score(0.8)
+            .match_coverage(80.0)
+            .rule_relevance(100)
+            .build_match();
+        let matches = vec![m1, m2, m3];
 
-        let matches = vec![
-            create_test_match("#42", 1, 10, 0.9, 90.0, 100),
-            create_test_match("mit.LICENSE", 15, 25, 0.85, 85.0, 100),
-            create_test_match("#1", 30, 40, 0.8, 80.0, 100),
-        ];
-
-        let filtered = filter_false_positive_matches(&index, &matches);
+        let filtered = filter_false_positive_matches(&matches);
 
         assert_eq!(filtered.len(), 2);
-        assert!(filtered.iter().any(|m| m.rule_identifier == "mit.LICENSE"));
-        assert!(filtered.iter().any(|m| m.rule_identifier == "#1"));
+        assert!(
+            filtered
+                .iter()
+                .any(|m| m.rule_identifier() == "mit.LICENSE")
+        );
+        assert!(filtered.iter().any(|m| m.rule_identifier() == "#1"));
     }
 
     #[test]
     fn test_filter_too_short_matches_non_seq_match_kept() {
-        let index = LicenseIndex::with_legalese_count(10);
-
-        let mut m = create_test_match("#1", 1, 10, 0.9, 50.0, 100);
-        m.matcher = crate::license_detection::models::MatcherKind::Aho;
-        m.matched_length = 2;
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(crate::license_detection::models::MatcherKind::Aho)
+            .matched_length(2)
+            .start_line(1)
+            .end_line(10)
+            .rule_identifier("#1")
+            .build_match();
 
         let matches = vec![m];
-        let filtered = filter_too_short_matches(&index, &matches);
+        let filtered = filter_too_short_matches(&matches);
 
         assert_eq!(filtered.len(), 1);
     }
 
     #[test]
     fn test_filter_too_short_matches_small_seq_match_filtered() {
-        let mut index = LicenseIndex::with_legalese_count(10);
-        index.rules_by_rid.push(Rule {
-            identifier: "test".to_string(),
-            license_expression: "mit".to_string(),
-            text: "test".to_string(),
-            tokens: vec![],
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_false_positive: false,
-            is_required_phrase: false,
-            is_from_license: false,
-            relevance: 100,
-            minimum_coverage: None,
-            has_stored_minimum_coverage: false,
-            is_continuous: true,
-            referenced_filenames: None,
-            ignorable_urls: None,
-            ignorable_emails: None,
-            ignorable_copyrights: None,
-            ignorable_holders: None,
-            ignorable_authors: None,
-            language: None,
-            notes: None,
-            length_unique: 0,
-            high_length_unique: 0,
-            high_length: 0,
-            min_matched_length: 10,
-            min_high_matched_length: 5,
-            min_matched_length_unique: 0,
-            min_high_matched_length_unique: 0,
-            is_small: true,
-            is_tiny: false,
-            starts_with_license: false,
-            ends_with_license: false,
-            is_deprecated: false,
-            spdx_license_key: None,
-            other_spdx_license_keys: vec![],
-            required_phrase_spans: vec![],
-            stopwords_by_pos: std::collections::HashMap::new(),
-        });
-
-        let mut m = create_test_match("#0", 1, 10, 0.9, 50.0, 100);
-        m.matcher = crate::license_detection::models::MatcherKind::Seq;
-        m.matched_length = 5;
-        m.hilen = 2;
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(crate::license_detection::models::MatcherKind::Seq)
+            .matched_length(5)
+            .hilen(2)
+            .start_line(1)
+            .end_line(10)
+            .rule_identifier("#0")
+            .is_small(true)
+            .min_matched_length(10)
+            .min_high_matched_length(5)
+            .build_match();
 
         let matches = vec![m];
-        let filtered = filter_too_short_matches(&index, &matches);
+        let filtered = filter_too_short_matches(&matches);
 
         assert_eq!(filtered.len(), 0);
     }
 
     #[test]
     fn test_filter_too_short_matches_large_seq_match_kept() {
-        let mut index = LicenseIndex::with_legalese_count(10);
-        index.rules_by_rid.push(Rule {
-            identifier: "test".to_string(),
-            license_expression: "mit".to_string(),
-            text: "test".to_string(),
-            tokens: vec![],
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_false_positive: false,
-            is_required_phrase: false,
-            is_from_license: false,
-            relevance: 100,
-            minimum_coverage: None,
-            has_stored_minimum_coverage: false,
-            is_continuous: true,
-            referenced_filenames: None,
-            ignorable_urls: None,
-            ignorable_emails: None,
-            ignorable_copyrights: None,
-            ignorable_holders: None,
-            ignorable_authors: None,
-            language: None,
-            notes: None,
-            length_unique: 0,
-            high_length_unique: 0,
-            high_length: 0,
-            min_matched_length: 10,
-            min_high_matched_length: 5,
-            min_matched_length_unique: 0,
-            min_high_matched_length_unique: 0,
-            is_small: true,
-            is_tiny: false,
-            starts_with_license: false,
-            ends_with_license: false,
-            is_deprecated: false,
-            spdx_license_key: None,
-            other_spdx_license_keys: vec![],
-            required_phrase_spans: vec![],
-            stopwords_by_pos: std::collections::HashMap::new(),
-        });
-
-        let mut m = create_test_match("#0", 1, 10, 0.9, 90.0, 100);
-        m.matcher = crate::license_detection::models::MatcherKind::Seq;
-        m.matched_length = 15;
-        m.hilen = 8;
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(crate::license_detection::models::MatcherKind::Seq)
+            .matched_length(15)
+            .hilen(8)
+            .start_line(1)
+            .end_line(10)
+            .rule_identifier("#0")
+            .is_small(true)
+            .min_matched_length(10)
+            .min_high_matched_length(5)
+            .build_match();
 
         let matches = vec![m];
-        let filtered = filter_too_short_matches(&index, &matches);
+        let filtered = filter_too_short_matches(&matches);
 
         assert_eq!(filtered.len(), 1);
     }
 
     #[test]
     fn test_filter_below_rule_minimum_coverage_keeps_non_seq() {
-        let index = LicenseIndex::with_legalese_count(10);
-        let mut m = create_test_match("#0", 1, 10, 0.9, 50.0, 100);
-        m.matcher = crate::license_detection::models::MatcherKind::Aho;
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(crate::license_detection::models::MatcherKind::Aho)
+            .start_line(1)
+            .end_line(10)
+            .rule_identifier("#0")
+            .build_match();
 
         let matches = vec![m];
-        let filtered = filter_below_rule_minimum_coverage(&index, &matches);
+        let filtered = filter_below_rule_minimum_coverage(&matches);
 
         assert_eq!(filtered.len(), 1);
     }
 
     #[test]
     fn test_filter_below_rule_minimum_coverage_filters_low_coverage() {
-        let mut index = LicenseIndex::with_legalese_count(10);
-        index.rules_by_rid.push(Rule {
-            identifier: "test".to_string(),
-            license_expression: "mit".to_string(),
-            text: "test".to_string(),
-            tokens: vec![],
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_false_positive: false,
-            is_required_phrase: false,
-            is_from_license: false,
-            relevance: 100,
-            minimum_coverage: Some(80),
-            has_stored_minimum_coverage: false,
-            is_continuous: true,
-            referenced_filenames: None,
-            ignorable_urls: None,
-            ignorable_emails: None,
-            ignorable_copyrights: None,
-            ignorable_holders: None,
-            ignorable_authors: None,
-            language: None,
-            notes: None,
-            length_unique: 0,
-            high_length_unique: 0,
-            high_length: 0,
-            min_matched_length: 10,
-            min_high_matched_length: 5,
-            min_matched_length_unique: 0,
-            min_high_matched_length_unique: 0,
-            is_small: false,
-            is_tiny: false,
-            starts_with_license: false,
-            ends_with_license: false,
-            is_deprecated: false,
-            spdx_license_key: None,
-            other_spdx_license_keys: vec![],
-            required_phrase_spans: vec![],
-            stopwords_by_pos: std::collections::HashMap::new(),
-        });
-
-        let mut m = create_test_match("#0", 1, 10, 0.9, 50.0, 100);
-        m.matcher = crate::license_detection::models::MatcherKind::Seq;
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(crate::license_detection::models::MatcherKind::Seq)
+            .match_coverage(50.0)
+            .start_line(1)
+            .end_line(10)
+            .rule_identifier("#0")
+            .minimum_coverage(Some(80))
+            .build_match();
 
         let matches = vec![m];
-        let filtered = filter_below_rule_minimum_coverage(&index, &matches);
+        let filtered = filter_below_rule_minimum_coverage(&matches);
 
         assert_eq!(filtered.len(), 0);
     }
 
     #[test]
     fn test_filter_scattered_keeps_concentrated() {
-        let mut index = LicenseIndex::with_legalese_count(10);
-        index.rules_by_rid.push(Rule {
-            identifier: "test".to_string(),
-            license_expression: "mit".to_string(),
-            text: "test".to_string(),
-            tokens: vec![],
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_false_positive: false,
-            is_required_phrase: false,
-            is_from_license: false,
-            relevance: 100,
-            minimum_coverage: None,
-            has_stored_minimum_coverage: false,
-            is_continuous: true,
-            referenced_filenames: None,
-            ignorable_urls: None,
-            ignorable_emails: None,
-            ignorable_copyrights: None,
-            ignorable_holders: None,
-            ignorable_authors: None,
-            language: None,
-            notes: None,
-            length_unique: 0,
-            high_length_unique: 0,
-            high_length: 0,
-            min_matched_length: 10,
-            min_high_matched_length: 5,
-            min_matched_length_unique: 0,
-            min_high_matched_length_unique: 0,
-            is_small: true,
-            is_tiny: false,
-            starts_with_license: false,
-            ends_with_license: false,
-            is_deprecated: false,
-            spdx_license_key: None,
-            other_spdx_license_keys: vec![],
-            required_phrase_spans: vec![],
-            stopwords_by_pos: std::collections::HashMap::new(),
-        });
-
-        let m1 = create_test_match_with_tokens("#0", 0, 10, 10);
-        let m2 = create_test_match_with_tokens("#0", 20, 30, 10);
+        let m1 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_token(0)
+            .end_token(10)
+            .matched_length(10)
+            .start_line(1)
+            .end_line(10)
+            .rule_identifier("#0")
+            .is_small(true)
+            .build_match();
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_token(20)
+            .end_token(30)
+            .matched_length(10)
+            .start_line(11)
+            .end_line(20)
+            .rule_identifier("#0")
+            .is_small(true)
+            .build_match();
 
         let matches = vec![m1, m2];
-        let filtered = filter_short_matches_scattered_on_too_many_lines(&index, &matches);
+        let filtered = filter_short_matches_scattered_on_too_many_lines(&matches);
 
         assert_eq!(filtered.len(), 2);
     }
 
     #[test]
     fn test_filter_scattered_filters_scattered() {
-        let mut index = LicenseIndex::with_legalese_count(10);
-        index.rules_by_rid.push(Rule {
-            identifier: "test".to_string(),
-            license_expression: "mit".to_string(),
-            text: "test".to_string(),
-            tokens: vec![],
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_false_positive: false,
-            is_required_phrase: false,
-            is_from_license: false,
-            relevance: 100,
-            minimum_coverage: None,
-            has_stored_minimum_coverage: false,
-            is_continuous: true,
-            referenced_filenames: None,
-            ignorable_urls: None,
-            ignorable_emails: None,
-            ignorable_copyrights: None,
-            ignorable_holders: None,
-            ignorable_authors: None,
-            language: None,
-            notes: None,
-            length_unique: 0,
-            high_length_unique: 0,
-            high_length: 0,
-            min_matched_length: 10,
-            min_high_matched_length: 5,
-            min_matched_length_unique: 0,
-            min_high_matched_length_unique: 0,
-            is_small: true,
-            is_tiny: false,
-            starts_with_license: false,
-            ends_with_license: false,
-            is_deprecated: false,
-            spdx_license_key: None,
-            other_spdx_license_keys: vec![],
-            required_phrase_spans: vec![],
-            stopwords_by_pos: std::collections::HashMap::new(),
-        });
+        let m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_token(0)
+            .end_token(3)
+            .matched_length(3)
+            .start_line(1)
+            .end_line(50)
+            .rule_identifier("#0")
+            .is_small(true)
+            .build_match();
 
-        let mut m = create_test_match_with_tokens("#0", 0, 3, 3);
-        m.start_line = 1;
-        m.end_line = 50;
-
-        let mut m2 = create_test_match_with_tokens("#0", 10, 13, 3);
-        m2.start_line = 1;
-        m2.end_line = 50;
+        let m2 = TestMatchBuilder::default()
+            .license_expression("mit")
+            .start_token(10)
+            .end_token(13)
+            .matched_length(3)
+            .start_line(1)
+            .end_line(50)
+            .rule_identifier("#0")
+            .is_small(true)
+            .build_match();
 
         let matches = vec![m, m2];
-        let filtered = filter_short_matches_scattered_on_too_many_lines(&index, &matches);
+        let filtered = filter_short_matches_scattered_on_too_many_lines(&matches);
 
         assert_eq!(filtered.len(), 0);
     }
