@@ -171,7 +171,7 @@ mod golden_tests {
 
             let actual: Vec<&str> = matches
                 .iter()
-                .map(|m| m.license_expression.as_str())
+                .map(|m| m.license_expression())
                 .collect();
 
             let expected: Vec<&str> = self

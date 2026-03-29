@@ -18,6 +18,7 @@ use crate::license_detection::expression::{
 };
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::spdx_mapping::build_spdx_mapping;
+use crate::license_detection::tests::TestMatchBuilder;
 use crate::models::{
     DatasourceId, ExtraData, FacetTallies, FileInfo, FileType, Header, LicenseClarityScore,
     LicenseDetection, LicenseReference, LicenseRuleReference, Match, OUTPUT_FORMAT_VERSION, Output,
@@ -289,7 +290,7 @@ pub(crate) fn collect_top_level_license_detections(
                 .or_insert_with(Vec::<crate::license_detection::models::LicenseMatch>::new);
             for match_item in matches {
                 if !seen.iter().any(|existing| {
-                    existing.rule_identifier == match_item.rule_identifier
+                    existing.rule_identifier() == match_item.rule_identifier()
                         && existing.start_line == match_item.start_line
                         && existing.end_line == match_item.end_line
                         && existing.from_file == match_item.from_file
@@ -1041,7 +1042,7 @@ fn use_referenced_license_expression(
 
 fn public_detection_to_internal(
     detection: &LicenseDetection,
-) -> crate::license_detection::LicenseDetection {
+) -> crate::license_detection::LicenseDetection<'static> {
     let matches: Vec<_> = detection
         .matches
         .iter()
@@ -1089,62 +1090,76 @@ fn internal_detection_to_public(
 
 fn public_match_to_internal(
     detection_match: &Match,
-) -> crate::license_detection::models::LicenseMatch {
-    crate::license_detection::models::LicenseMatch {
-        rid: 0,
-        license_expression: detection_match.license_expression.clone(),
-        license_expression_spdx: (!detection_match.license_expression_spdx.is_empty())
-            .then(|| detection_match.license_expression_spdx.clone()),
-        from_file: detection_match.from_file.clone(),
-        start_line: detection_match.start_line,
-        end_line: detection_match.end_line,
-        start_token: 0,
-        end_token: 0,
-        matcher: detection_match
+) -> crate::license_detection::models::LicenseMatch<'static> {
+    TestMatchBuilder::default()
+        .license_expression(detection_match.license_expression.clone())
+        .license_expression_spdx((!detection_match.license_expression_spdx.is_empty())
+            .then(|| detection_match.license_expression_spdx.clone()))
+        .from_file(detection_match.from_file.clone())
+        .start_line(detection_match.start_line)
+        .end_line(detection_match.end_line)
+        .start_token(0)
+        .end_token(0)
+        .matcher(detection_match
             .matcher
             .as_deref()
             .and_then(|matcher| matcher.parse().ok())
-            .unwrap_or(crate::license_detection::models::MatcherKind::Hash),
-        score: detection_match.score as f32,
-        matched_length: detection_match.matched_length.unwrap_or_default(),
-        rule_length: detection_match.matched_length.unwrap_or_default(),
-        match_coverage: detection_match.match_coverage.unwrap_or_default() as f32,
-        rule_relevance: detection_match.rule_relevance.unwrap_or_default() as u8,
-        rule_identifier: detection_match.rule_identifier.clone().unwrap_or_default(),
-        rule_url: detection_match.rule_url.clone().unwrap_or_default(),
-        matched_text: detection_match.matched_text.clone(),
-        referenced_filenames: detection_match.referenced_filenames.clone(),
-        rule_kind: crate::license_detection::models::RuleKind::None,
-        is_from_license: false,
-        matched_token_positions: None,
-        hilen: 0,
-        rule_start_token: 0,
-        qspan_positions: None,
-        ispan_positions: None,
-        hispan_positions: None,
-        candidate_resemblance: 0.0,
-        candidate_containment: 0.0,
-    }
+            .unwrap_or(crate::license_detection::models::MatcherKind::Hash))
+        .score(detection_match.score as f32)
+        .matched_length(detection_match.matched_length.unwrap_or_default())
+        .rule_length(detection_match.matched_length.unwrap_or_default())
+        .match_coverage(detection_match.match_coverage.unwrap_or_default() as f32)
+        .rule_relevance(detection_match.rule_relevance.unwrap_or_default() as u8)
+        .rule_identifier(detection_match.rule_identifier.clone().unwrap_or_default())
+        .rule_url(detection_match.rule_url.clone().unwrap_or_default())
+        .matched_text(detection_match.matched_text.clone())
+        .referenced_filenames(detection_match.referenced_filenames.clone())
+        .rule_kind(crate::license_detection::models::RuleKind::None)
+        .is_from_license(false)
+        .matched_token_positions(None)
+        .hilen(0)
+        .rule_start_token(0)
+        .qspan_positions(None)
+        .ispan_positions(None)
+        .hispan_positions(None)
+        .candidate_resemblance(0.0)
+        .candidate_containment(0.0)
+        .build_match()
 }
 
 fn internal_match_to_public(
     detection_match: crate::license_detection::models::LicenseMatch,
 ) -> Match {
+    let license_expression = detection_match.license_expression().to_string();
+    let license_expression_spdx = detection_match.license_expression_spdx().unwrap_or_default().to_string();
+    let rule_relevance = detection_match.rule_relevance();
+    let rule_identifier = detection_match.rule_identifier().to_string();
+    let rule_url = detection_match.rule_url();
+    let referenced_filenames = detection_match.referenced_filenames().cloned();
+    let matcher = detection_match.matcher.to_string();
+    let score = detection_match.score as f64;
+    let matched_length = detection_match.matched_length;
+    let match_coverage = detection_match.match_coverage as f64;
+    let start_line = detection_match.start_line;
+    let end_line = detection_match.end_line;
+    let from_file = detection_match.from_file;
+    let matched_text = detection_match.matched_text;
+    
     Match {
-        license_expression: detection_match.license_expression,
-        license_expression_spdx: detection_match.license_expression_spdx.unwrap_or_default(),
-        from_file: detection_match.from_file,
-        start_line: detection_match.start_line,
-        end_line: detection_match.end_line,
-        matcher: Some(detection_match.matcher.to_string()),
-        score: detection_match.score as f64,
-        matched_length: Some(detection_match.matched_length),
-        match_coverage: Some(detection_match.match_coverage as f64),
-        rule_relevance: Some(detection_match.rule_relevance as usize),
-        rule_identifier: Some(detection_match.rule_identifier),
-        rule_url: (!detection_match.rule_url.is_empty()).then_some(detection_match.rule_url),
-        matched_text: detection_match.matched_text,
-        referenced_filenames: detection_match.referenced_filenames,
+        license_expression,
+        license_expression_spdx,
+        from_file,
+        start_line,
+        end_line,
+        matcher: Some(matcher),
+        score,
+        matched_length: Some(matched_length),
+        match_coverage: Some(match_coverage),
+        rule_relevance: Some(rule_relevance as usize),
+        rule_identifier: Some(rule_identifier),
+        rule_url,
+        matched_text,
+        referenced_filenames,
         matched_text_diagnostics: None,
     }
 }

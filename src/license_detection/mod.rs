@@ -22,7 +22,6 @@ pub mod spdx_lid;
 pub mod spdx_mapping;
 #[cfg(test)]
 mod test_utils;
-#[cfg(test)]
 pub mod tests;
 pub mod tokenize;
 pub mod unknown_match;
@@ -36,6 +35,7 @@ use anyhow::Result;
 
 use crate::license_detection::embedded::index::load_license_index_from_bytes;
 use crate::license_detection::index::build_index_from_loaded;
+use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::query::Query;
 use crate::license_detection::rules::{
     load_loaded_licenses_from_directory, load_loaded_rules_from_directory,
@@ -640,7 +640,7 @@ impl LicenseDetectionEngine {
         unknown_licenses: bool,
         binary_derived: bool,
         source_path: &str,
-    ) -> Result<Vec<LicenseDetection>> {
+    ) -> Result<Vec<LicenseDetection<'_>>> {
         let mut detections = self.detect_with_kind(text, unknown_licenses, binary_derived)?;
         attach_source_path_to_detections(&mut detections, source_path);
         Ok(detections)

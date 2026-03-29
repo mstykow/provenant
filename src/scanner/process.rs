@@ -629,7 +629,7 @@ fn convert_detection_to_model(
     let matches: Vec<Match> = detection
         .matches
         .iter()
-        .map(|m| convert_match_to_model(m, license_options, text_content, query))
+        .map(|m| convert_match_to_model(m.clone(), license_options.include_text, text_content, query))
         .collect();
 
     if let Some(license_expression) = detection.license_expression.clone() {
@@ -672,6 +672,13 @@ fn convert_match_to_model<'a>(
     let score = m.score as f64;
     let matched_length = m.matched_length;
     let match_coverage = m.match_coverage as f64;
+    let referenced_filenames = m.referenced_filenames().cloned();
+    let matched_text_diagnostics = if include_text {
+        query.map(|query| matched_text_diagnostics_from_match(query, &m))
+    } else {
+        None
+    };
+    let from_file = m.from_file;
     let matched_text = if include_text {
         m.matched_text.or_else(|| {
             Some(crate::license_detection::query::matched_text_from_text(
@@ -683,15 +690,10 @@ fn convert_match_to_model<'a>(
     } else {
         None
     };
-    let matched_text_diagnostics = if include_text {
-        query.map(|query| matched_text_diagnostics_from_match(query, &m))
-    } else {
-        None
-    };
     Match {
         license_expression,
         license_expression_spdx,
-        from_file: m.from_file,
+        from_file,
         start_line,
         end_line,
         matcher: Some(matcher),
@@ -702,7 +704,7 @@ fn convert_match_to_model<'a>(
         rule_identifier: Some(rule_identifier),
         rule_url,
         matched_text,
-        referenced_filenames: m.referenced_filenames.clone(),
+        referenced_filenames,
         matched_text_diagnostics,
     }
 }
@@ -857,8 +859,12 @@ mod tests {
         compute_percentage_of_license_text, convert_detection_to_model, is_go_non_production_source,
     };
     use crate::license_detection::LicenseDetection as InternalLicenseDetection;
+    use crate::license_detection::index::LicenseIndex;
+    use crate::license_detection::index::dictionary::TokenDictionary;
     use crate::license_detection::models::{MatcherKind, RuleKind};
+    use crate::license_detection::query::Query;
     use crate::license_detection::tests::TestMatchBuilder;
+    use crate::scanner::LicenseScanOptions;
     use std::fs;
     use tempfile::tempdir;
 
@@ -963,6 +969,7 @@ mod tests {
             matches: vec![license_match],
             detection_log: vec![],
             identifier: None,
+            file_regions: Vec::new(),
         };
 
         let (converted, clues) = convert_detection_to_model(
@@ -1017,27 +1024,35 @@ mod tests {
             14,
         );
         let query = Query::from_extracted_text(text, &index, false).expect("query should build");
-        let mut detection = make_detection(
-            "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/fsf-ap.LICENSE",
-        );
-        detection.detection_log = vec!["imperfect-match-coverage".to_string()];
-        detection.matches[0].license_expression = "fsf-ap".to_string();
-        detection.matches[0].license_expression_spdx = Some("FSFAP".to_string());
-        detection.matches[0].rule_identifier = "fsf-ap.LICENSE".to_string();
-        detection.matches[0].matched_text = None;
-        detection.matches[0].start_line = 1;
-        detection.matches[0].end_line = 3;
-        detection.matches[0].start_token = 0;
-        detection.matches[0].end_token = query.tokens.len();
-        detection.matches[0].qspan_positions = Some(
-            query
-                .tokens
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, _)| (idx != 9).then_some(idx))
-                .collect(),
-        );
-        detection.identifier = Some("fsf_ap-test".to_string());
+        
+        let license_match = TestMatchBuilder::default()
+            .license_expression("fsf-ap")
+            .license_expression_spdx(Some("FSFAP".to_string()))
+            .rule_identifier("fsf-ap.LICENSE")
+            .rule_url("https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/fsf-ap.LICENSE".to_string())
+            .matched_text(None)
+            .start_line(1)
+            .end_line(3)
+            .start_token(0)
+            .end_token(query.tokens.len())
+            .qspan_positions(Some(
+                query
+                    .tokens
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, _)| (idx != 9).then_some(idx))
+                    .collect(),
+            ))
+            .build_match();
+
+        let detection = InternalLicenseDetection {
+            license_expression: Some("fsf-ap".to_string()),
+            license_expression_spdx: Some("FSFAP".to_string()),
+            matches: vec![license_match],
+            detection_log: vec!["imperfect-match-coverage".to_string()],
+            identifier: Some("fsf_ap-test".to_string()),
+            file_regions: Vec::new(),
+        };
 
         let (converted, clues) = convert_detection_to_model(
             &detection,
@@ -1072,10 +1087,21 @@ mod tests {
         let index = create_test_index(&[("alpha", 0), ("mit", 1)], 2);
         let text = "alpha MIT omega";
         let query = Query::from_extracted_text(text, &index, false).expect("query should build");
-        let mut detection = make_detection("");
-        detection.matches[0].qspan_positions = Some(vec![1]);
-        detection.matches[0].start_token = 1;
-        detection.matches[0].end_token = 2;
+        
+        let license_match = TestMatchBuilder::default()
+            .qspan_positions(Some(vec![1]))
+            .start_token(1)
+            .end_token(2)
+            .build_match();
+        
+        let detection = InternalLicenseDetection {
+            license_expression: Some("mit".to_string()),
+            license_expression_spdx: Some("MIT".to_string()),
+            matches: vec![license_match],
+            detection_log: vec![],
+            identifier: Some("mit-test".to_string()),
+            file_regions: Vec::new(),
+        };
 
         let percentage = compute_percentage_of_license_text(&query, &[detection]);
 

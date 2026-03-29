@@ -134,6 +134,7 @@ pub struct LicenseIndex {
     /// filtering to subtract spurious matches.
     ///
     /// Corresponds to Python: `self.false_positive_rids = set()` (line 230)
+    #[allow(dead_code)]
     pub false_positive_rids: HashSet<usize>,
 
     /// Set of rule IDs that can be matched approximately.

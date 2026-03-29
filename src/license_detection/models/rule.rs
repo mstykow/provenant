@@ -1,7 +1,5 @@
 //! Rule metadata loaded from .LICENSE and .RULE files.
 
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 use std::ops::Range;
 
@@ -105,6 +103,7 @@ impl RuleKind {
         Ok(active.unwrap_or(Self::None))
     }
 
+    #[allow(dead_code)]
     pub fn from_match_flags(
         is_license_text: bool,
         is_license_reference: bool,
@@ -315,6 +314,7 @@ impl Rule {
             .then(|| format!("{SCANCODE_RULE_URL_BASE}/{}", self.identifier))
     }
 
+    #[allow(dead_code)]
     pub const fn kind(&self) -> RuleKind {
         self.rule_kind
     }
