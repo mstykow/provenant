@@ -174,6 +174,39 @@ fn manifest_declared_license_survives_into_package_and_summary() {
 }
 
 #[test]
+fn summary_other_license_expressions_include_license_clues() {
+    let mut clue_file = file("project/NOTICE");
+    clue_file.license_clues = vec![Match {
+        license_expression: "unknown-spdx".to_string(),
+        license_expression_spdx: "LicenseRef-scancode-unknown-spdx".to_string(),
+        from_file: Some("project/NOTICE".to_string()),
+        start_line: 2,
+        end_line: 2,
+        matcher: Some("2-aho".to_string()),
+        score: 65.0,
+        matched_length: Some(2),
+        match_coverage: Some(65.0),
+        rule_relevance: Some(100),
+        rule_identifier: Some("license-clue_1.RULE".to_string()),
+        rule_url: None,
+        matched_text: None,
+        referenced_filenames: None,
+        matched_text_diagnostics: None,
+    }];
+
+    let summary = compute_summary(&[clue_file], &[]).expect("summary exists");
+
+    assert!(summary.declared_license_expression.is_none());
+    assert_eq!(
+        summary.other_license_expressions,
+        vec![TallyEntry {
+            value: Some("unknown-spdx".to_string()),
+            count: 1,
+        }]
+    );
+}
+
+#[test]
 fn compute_summary_includes_package_other_license_detections_as_other_expressions() {
     let mut manifest = file("project/package.json");
     manifest.package_data = vec![crate::models::PackageData {

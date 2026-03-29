@@ -233,6 +233,71 @@ fn compute_tallies_include_package_other_license_detections() {
 }
 
 #[test]
+fn compute_tallies_include_license_clues_in_detected_license_expression() {
+    let mut clue_file = file("project/NOTICE");
+    clue_file.license_clues = vec![Match {
+        license_expression: "unknown-spdx".to_string(),
+        license_expression_spdx: "LicenseRef-scancode-unknown-spdx".to_string(),
+        from_file: Some("project/NOTICE".to_string()),
+        start_line: 2,
+        end_line: 2,
+        matcher: Some("2-aho".to_string()),
+        score: 65.0,
+        matched_length: Some(2),
+        match_coverage: Some(65.0),
+        rule_relevance: Some(100),
+        rule_identifier: Some("license-clue_1.RULE".to_string()),
+        rule_url: None,
+        matched_text: None,
+        referenced_filenames: None,
+        matched_text_diagnostics: None,
+    }];
+
+    let tallies = compute_tallies(&[clue_file]).expect("tallies exist");
+
+    assert_eq!(
+        tallies.detected_license_expression,
+        vec![TallyEntry {
+            value: Some("unknown-spdx".to_string()),
+            count: 1,
+        }]
+    );
+}
+
+#[test]
+fn compute_key_file_tallies_include_license_clues() {
+    let mut clue_file = file("project/NOTICE");
+    clue_file.is_key_file = true;
+    clue_file.license_clues = vec![Match {
+        license_expression: "unknown-spdx".to_string(),
+        license_expression_spdx: "LicenseRef-scancode-unknown-spdx".to_string(),
+        from_file: Some("project/NOTICE".to_string()),
+        start_line: 2,
+        end_line: 2,
+        matcher: Some("2-aho".to_string()),
+        score: 65.0,
+        matched_length: Some(2),
+        match_coverage: Some(65.0),
+        rule_relevance: Some(100),
+        rule_identifier: Some("license-clue_1.RULE".to_string()),
+        rule_url: None,
+        matched_text: None,
+        referenced_filenames: None,
+        matched_text_diagnostics: None,
+    }];
+
+    let tallies = compute_key_file_tallies(&[clue_file]).expect("key-file tallies exist");
+
+    assert_eq!(
+        tallies.detected_license_expression,
+        vec![TallyEntry {
+            value: Some("unknown-spdx".to_string()),
+            count: 1,
+        }]
+    );
+}
+
+#[test]
 fn compute_key_file_tallies_include_package_other_license_detections() {
     let mut manifest = file("project/package.json");
     manifest.is_key_file = true;

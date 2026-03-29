@@ -3183,6 +3183,9 @@ fn detected_license_values(file: &FileInfo) -> Vec<String> {
         .iter()
         .map(|detection| canonicalize_summary_expression(&detection.license_expression))
         .collect();
+    detection_expressions.extend(file.license_clues.iter().map(|detection_match| {
+        canonicalize_summary_expression(&detection_match.license_expression)
+    }));
     detection_expressions.extend(package_primary_detected_license_values(file, false));
     detection_expressions.extend(package_other_detected_license_values(file, false));
 
@@ -3205,6 +3208,14 @@ fn summary_detected_license_values(file: &FileInfo) -> Vec<String> {
         .map(|detection| canonicalize_summary_expression(&detection.license_expression))
         .filter(|expression| expression != "unknown-license-reference")
         .collect();
+    detection_expressions.extend(
+        file.license_clues
+            .iter()
+            .map(|detection_match| {
+                canonicalize_summary_expression(&detection_match.license_expression)
+            })
+            .filter(|expression| expression != "unknown-license-reference"),
+    );
     detection_expressions.extend(package_primary_detected_license_values(file, true));
     detection_expressions.extend(package_other_detected_license_values(file, true));
 
