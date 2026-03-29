@@ -11,6 +11,10 @@ use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 
 use super::PackageParser;
 
+/// Swift Package Manager manifest parser.
+///
+/// The parser prefers pre-generated manifest JSON when present, but can also
+/// invoke the Swift toolchain for raw `Package.swift` inputs as a convenience.
 pub struct SwiftManifestJsonParser;
 
 impl PackageParser for SwiftManifestJsonParser {
@@ -460,6 +464,10 @@ pub fn invoke_swift_dump_package(package_dir: &Path) -> Result<String, String> {
         .map_err(|e| format!("swift dump-package output is not valid UTF-8: {}", e))
 }
 
+/// Generate manifest JSON for a raw `Package.swift` file.
+///
+/// This validates that the source file is readable, runs `swift package
+/// dump-package` from the manifest directory, and rejects invalid JSON output.
 pub fn dump_package_json(package_swift_path: &Path) -> Result<String, String> {
     fs::read_to_string(package_swift_path).map_err(|e| {
         format!(
