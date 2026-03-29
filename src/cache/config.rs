@@ -11,15 +11,11 @@ pub const CACHE_DIR_ENV_VAR: &str = "PROVENANT_CACHE";
 pub enum CacheKind {
     #[value(alias = "scan")]
     ScanResults,
-    #[value(alias = "license", alias = "warm")]
-    LicenseIndex,
-    All,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CacheKinds {
     scan_results: bool,
-    license_index: bool,
 }
 
 impl CacheKinds {
@@ -29,11 +25,6 @@ impl CacheKinds {
         for kind in kinds {
             match kind {
                 CacheKind::ScanResults => selected.scan_results = true,
-                CacheKind::LicenseIndex => selected.license_index = true,
-                CacheKind::All => {
-                    selected.scan_results = true;
-                    selected.license_index = true;
-                }
             }
         }
 
@@ -44,12 +35,8 @@ impl CacheKinds {
         self.scan_results
     }
 
-    pub const fn license_index(self) -> bool {
-        self.license_index
-    }
-
     pub const fn any_enabled(self) -> bool {
-        self.scan_results || self.license_index
+        self.scan_results
     }
 }
 
@@ -117,14 +104,6 @@ impl CacheConfig {
         &self.root_dir
     }
 
-    pub fn license_index_dir(&self) -> PathBuf {
-        self.root_dir.join("license-index")
-    }
-
-    pub fn license_index_snapshot_path(&self) -> PathBuf {
-        self.license_index_dir().join("snapshot.bin.zst")
-    }
-
     pub fn scan_results_dir(&self) -> PathBuf {
         self.root_dir.join("scan-results")
     }
@@ -133,18 +112,11 @@ impl CacheConfig {
         self.kinds.scan_results()
     }
 
-    pub const fn license_index_enabled(&self) -> bool {
-        self.kinds.license_index()
-    }
-
     pub const fn any_enabled(&self) -> bool {
         self.kinds.any_enabled()
     }
 
     pub fn ensure_dirs(&self) -> io::Result<()> {
-        if self.license_index_enabled() {
-            fs::create_dir_all(self.license_index_dir())?;
-        }
         if self.scan_results_enabled() {
             fs::create_dir_all(self.scan_results_dir())?;
         }
@@ -180,10 +152,7 @@ mod tests {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let config = CacheConfig::from_scan_root_with_kinds(
             temp_dir.path(),
-            CacheKinds {
-                scan_results: true,
-                license_index: true,
-            },
+            CacheKinds { scan_results: true },
         );
 
         config
@@ -191,19 +160,15 @@ mod tests {
             .expect("Failed to create cache directories");
 
         assert!(config.root_dir().exists());
-        assert!(config.license_index_dir().exists());
         assert!(config.scan_results_dir().exists());
     }
 
     #[test]
-    fn test_ensure_dirs_only_creates_enabled_cache_subdirectories() {
+    fn test_ensure_dirs_only_creates_scan_results_subdirectory() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let config = CacheConfig::from_scan_root_with_kinds(
             temp_dir.path(),
-            CacheKinds {
-                scan_results: true,
-                license_index: false,
-            },
+            CacheKinds { scan_results: true },
         );
 
         config
@@ -211,7 +176,6 @@ mod tests {
             .expect("Failed to create selected cache directories");
 
         assert!(config.scan_results_dir().exists());
-        assert!(!config.license_index_dir().exists());
     }
 
     #[test]
@@ -235,14 +199,9 @@ mod tests {
     }
 
     #[test]
-    fn test_cache_kinds_from_cli_supports_all_and_specific_kinds() {
-        let selected = CacheKinds::from_cli(&[CacheKind::ScanResults, CacheKind::LicenseIndex]);
+    fn test_cache_kinds_from_cli_supports_scan_results() {
+        let selected = CacheKinds::from_cli(&[CacheKind::ScanResults]);
         assert!(selected.scan_results());
-        assert!(selected.license_index());
-
-        let all = CacheKinds::from_cli(&[CacheKind::All]);
-        assert!(all.scan_results());
-        assert!(all.license_index());
     }
 
     #[test]
@@ -250,10 +209,7 @@ mod tests {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let config = CacheConfig::with_kinds(
             temp_dir.path().join("cache-root"),
-            CacheKinds {
-                scan_results: true,
-                license_index: true,
-            },
+            CacheKinds { scan_results: true },
         );
 
         config
