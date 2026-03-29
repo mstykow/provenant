@@ -105,9 +105,9 @@ provenant --json-pp scan-results.json ~/projects/my-codebase --ignore "*.git*" -
 Use `-` as `FILE` to write an output stream to stdout, for example `--json-pp -`.
 Multiple output flags can be used in a single run, matching ScanCode CLI behavior.
 When using `--from-json`, you can pass multiple JSON inputs. Directory scan mode currently supports one input path.
-Persistent caching is opt-in. Use `--cache scan-results`, `--cache license-index`, or
-`--cache all` to enable cache kinds under one shared root. The cache root can also be controlled
-with the `PROVENANT_CACHE` environment variable or `--cache-dir`.
+Persistent caching is opt-in. Use `--cache scan-results` to enable the scan-result cache. The
+cache root can also be controlled with the `PROVENANT_CACHE` environment variable or
+`--cache-dir`.
 
 For the generated package-format support matrix, see [Supported Formats](docs/SUPPORTED_FORMATS.md).
 

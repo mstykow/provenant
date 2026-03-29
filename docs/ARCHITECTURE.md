@@ -670,17 +670,17 @@ Module location: `src/finder/`
 
 **Caching**:
 
-Provenant uses one shared persistent cache root with separate subdirectories for each cache kind:
+Provenant uses one shared persistent cache root. The currently implemented persistent cache is the
+optional scan-result cache stored under `scan-results/`, while incremental scanning remains future
+work.
 
-1. **License Index Cache**: optional local warm cache for the embedded license-index startup path, stored under `license-index/`
-2. **Scan Result Cache**: optional content-addressed per-file cache keyed by SHA256, stored under `scan-results/`
-3. **Incremental Scanning**: still deferred future work
-
-The cache implementation lives in `src/cache/` (`config`, `metadata`, `paths`, `io`, `scan_cache`, `license_index_cache`). It provides cache-root selection, snapshot metadata and invalidation, sharded scan-result paths, and atomic snapshot persistence.
+The cache implementation lives in `src/cache/` (`config`, `metadata`, `paths`, `io`,
+`scan_cache`). It provides cache-root selection, snapshot metadata and invalidation, sharded
+scan-result paths, and atomic snapshot persistence.
 
 User-facing behavior is:
 
-1. `--cache <kind>` enables `license-index`, `scan-results`, or `all`
+1. `--cache <kind>` currently enables `scan-results`
 2. `--cache-dir` and `PROVENANT_CACHE` select the shared cache root
 3. `--cache-clear` clears that root before scanning
 4. persistent caching is opt-in; nothing is written unless `--cache` is specified
