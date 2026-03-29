@@ -234,7 +234,7 @@ whenever work resumes here:
 
 - [ ] Provenant emits the ScanCode-style split between `license_detections` and
       `license_clues`
-- [ ] License diagnostics are available when the corresponding CLI behavior is
+- [x] License diagnostics are available when the corresponding CLI behavior is
       enabled
 - [ ] Top-level unique `license_detections` are generated on native scans with
       the remaining file-region-dependent parity edge cases closed
