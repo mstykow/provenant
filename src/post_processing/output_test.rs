@@ -1092,7 +1092,7 @@ fn collect_top_level_license_detections_groups_file_detections_and_preserves_pat
         detections[1].reference_matches[0].from_file.as_deref(),
         Some("project/src/lib.rs")
     );
-    assert_eq!(detections[1].reference_matches.len(), 2);
+    assert_eq!(detections[1].reference_matches.len(), 1);
     assert_eq!(
         detections[1].detection_log,
         vec!["imperfect-match-coverage".to_string()]
@@ -1155,7 +1155,100 @@ fn collect_top_level_license_detections_counts_same_identifier_regions_in_one_fi
 
     assert_eq!(detections.len(), 1);
     assert_eq!(detections[0].detection_count, 2);
-    assert_eq!(detections[0].reference_matches.len(), 2);
+    assert_eq!(detections[0].reference_matches.len(), 1);
+}
+
+#[test]
+fn collect_top_level_license_detections_deduplicates_identical_regions() {
+    let mut file = file("project/src/lib.rs");
+    file.license_detections = vec![
+        crate::models::LicenseDetection {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            matches: vec![Match {
+                license_expression: "mit".to_string(),
+                license_expression_spdx: "MIT".to_string(),
+                from_file: Some("project/src/lib.rs".to_string()),
+                start_line: 1,
+                end_line: 5,
+                matcher: Some("1-hash".to_string()),
+                score: 100.0,
+                matched_length: Some(10),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: Some("mit.LICENSE".to_string()),
+                rule_url: None,
+                matched_text: None,
+                referenced_filenames: None,
+                matched_text_diagnostics: None,
+            }],
+            detection_log: vec![],
+            identifier: Some("mit-shared-id".to_string()),
+        },
+        crate::models::LicenseDetection {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            matches: vec![Match {
+                license_expression: "mit".to_string(),
+                license_expression_spdx: "MIT".to_string(),
+                from_file: Some("project/src/lib.rs".to_string()),
+                start_line: 1,
+                end_line: 5,
+                matcher: Some("2-aho".to_string()),
+                score: 100.0,
+                matched_length: Some(10),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: Some("mit_1.RULE".to_string()),
+                rule_url: None,
+                matched_text: None,
+                referenced_filenames: None,
+                matched_text_diagnostics: None,
+            }],
+            detection_log: vec![],
+            identifier: Some("mit-shared-id".to_string()),
+        },
+    ];
+
+    let detections = collect_top_level_license_detections(&[file]);
+
+    assert_eq!(detections.len(), 1);
+    assert_eq!(detections[0].detection_count, 1);
+    assert_eq!(detections[0].reference_matches.len(), 1);
+}
+
+#[test]
+fn collect_top_level_license_detections_recomputes_empty_expression_from_matches() {
+    let mut file = file("project/src/lib.rs");
+    file.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: String::new(),
+        license_expression_spdx: String::new(),
+        matches: vec![Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: Some("project/src/lib.rs".to_string()),
+            start_line: 1,
+            end_line: 3,
+            matcher: Some("1-hash".to_string()),
+            score: 100.0,
+            matched_length: Some(10),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("mit.LICENSE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("mit-shared-id".to_string()),
+    }];
+
+    let detections = collect_top_level_license_detections(&[file]);
+
+    assert_eq!(detections.len(), 1);
+    assert_eq!(detections[0].license_expression, "mit");
+    assert_eq!(detections[0].license_expression_spdx, "MIT");
 }
 
 #[test]
