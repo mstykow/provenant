@@ -81,19 +81,77 @@
     }
   ],
   "license_references": [
-    { "key": "mit", "short_name": "MIT", "spdx_license_key": "MIT" },
+    {
+      "key": "mit",
+      "language": "en",
+      "short_name": "MIT License",
+      "name": "MIT License",
+      "owner": "MIT",
+      "homepage_url": "http://opensource.org/licenses/mit-license.php",
+      "spdx_license_key": "MIT",
+      "osi_license_key": null,
+      "text_urls": ["http://opensource.org/licenses/mit-license.php"],
+      "osi_url": "http://www.opensource.org/licenses/MIT",
+      "faq_url": "https://ieeexplore.ieee.org/document/9263265",
+      "other_urls": [
+        "https://opensource.com/article/18/3/patent-grant-mit-license",
+        "https://opensource.com/article/19/4/history-mit-license",
+        "https://opensource.org/licenses/MIT"
+      ],
+      "category": "Permissive",
+      "is_exception": false,
+      "is_unknown": false,
+      "is_generic": false,
+      "minimum_coverage": null,
+      "standard_notice": null
+    },
     {
       "key": "unknown-license-reference",
-      "short_name": "Unknown License file reference",
-      "spdx_license_key": "LicenseRef-scancode-unknown-license-reference"
+      "language": "en",
+      "short_name": "Unknown License reference",
+      "name": "Unknown License file reference",
+      "owner": "Unspecified",
+      "homepage_url": null,
+      "spdx_license_key": "LicenseRef-scancode-unknown-license-reference",
+      "osi_license_key": null,
+      "text_urls": [],
+      "osi_url": null,
+      "faq_url": null,
+      "other_urls": [],
+      "category": "Unstated License",
+      "is_exception": false,
+      "is_unknown": true,
+      "is_generic": false,
+      "minimum_coverage": null,
+      "standard_notice": null
     }
   ],
   "license_rule_references": [
-    { "identifier": "mit.LICENSE", "license_expression": "mit", "referenced_filenames": [] },
-    { "identifier": "mit_14.RULE", "license_expression": "mit", "referenced_filenames": [] },
+    {
+      "identifier": "mit.LICENSE",
+      "license_expression": "mit",
+      "language": null,
+      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE",
+      "is_synthetic": false,
+      "length": 161,
+      "referenced_filenames": []
+    },
+    {
+      "identifier": "mit_14.RULE",
+      "license_expression": "mit",
+      "language": null,
+      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_14.RULE",
+      "is_synthetic": false,
+      "length": 2,
+      "referenced_filenames": []
+    },
     {
       "identifier": "unknown-license-reference_see_license_at_manifest_1.RULE",
       "license_expression": "unknown-license-reference",
+      "language": null,
+      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/unknown-license-reference_see_license_at_manifest_1.RULE",
+      "is_synthetic": false,
+      "length": 3,
       "referenced_filenames": ["LICENSE"]
     }
   ],

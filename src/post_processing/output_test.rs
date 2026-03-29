@@ -13,16 +13,29 @@ use serde_json::json;
 fn sample_runtime_license(key: &str, name: &str, spdx_license_key: Option<&str>) -> RuntimeLicense {
     RuntimeLicense {
         key: key.to_string(),
+        short_name: Some(name.to_string()),
         name: name.to_string(),
+        language: Some("en".to_string()),
         spdx_license_key: spdx_license_key.map(str::to_string),
         other_spdx_license_keys: vec![],
         category: Some("Permissive".to_string()),
+        owner: Some("Example Owner".to_string()),
+        homepage_url: Some("https://example.com/license".to_string()),
         text: format!("{name} text"),
-        reference_urls: vec![],
+        reference_urls: vec!["https://example.com/license".to_string()],
+        osi_license_key: spdx_license_key.map(str::to_string),
+        text_urls: vec!["https://example.com/license.txt".to_string()],
+        osi_url: Some("https://opensource.org/licenses/example".to_string()),
+        faq_url: Some("https://example.com/faq".to_string()),
+        other_urls: vec!["https://example.com/other".to_string()],
         notes: None,
         is_deprecated: false,
+        is_exception: false,
+        is_unknown: false,
+        is_generic: false,
         replaced_by: vec![],
         minimum_coverage: None,
+        standard_notice: Some("Standard notice".to_string()),
         ignorable_copyrights: None,
         ignorable_holders: None,
         ignorable_authors: None,
@@ -178,6 +191,32 @@ fn collect_top_level_license_references_includes_clues_packages_and_sorted_dedup
         license_references[0].category.as_deref(),
         Some("Permissive")
     );
+    assert_eq!(license_references[0].language.as_deref(), Some("en"));
+    assert_eq!(
+        license_references[0].owner.as_deref(),
+        Some("Example Owner")
+    );
+    assert_eq!(
+        license_references[0].homepage_url.as_deref(),
+        Some("https://example.com/license")
+    );
+    assert_eq!(
+        license_references[0].osi_license_key.as_deref(),
+        Some("Apache-2.0")
+    );
+    assert_eq!(
+        license_references[0].text_urls,
+        vec!["https://example.com/license.txt".to_string()]
+    );
+    assert_eq!(
+        license_references[0].osi_url.as_deref(),
+        Some("https://opensource.org/licenses/example")
+    );
+    assert!(!license_references[0].is_exception);
+    assert_eq!(
+        license_references[0].standard_notice.as_deref(),
+        Some("Standard notice")
+    );
     assert!(license_references[0].scancode_url.is_some());
     assert_eq!(license_rule_references[0].relevance, Some(100));
 }
@@ -191,6 +230,85 @@ fn collect_top_level_license_references_returns_empty_for_empty_inputs() {
 
     assert!(license_references.is_empty());
     assert!(license_rule_references.is_empty());
+}
+
+#[test]
+fn collect_top_level_license_references_marks_synthetic_spdx_rules() {
+    let license_index = LicenseIndex {
+        rules_by_rid: vec![Rule {
+            identifier: "spdx_license_id_mit_for_mit.RULE".to_string(),
+            license_expression: "mit".to_string(),
+            text: "MIT".to_string(),
+            tokens: vec![],
+            rule_kind: RuleKind::Tag,
+            is_false_positive: false,
+            is_required_phrase: false,
+            is_from_license: false,
+            relevance: 100,
+            minimum_coverage: Some(0),
+            has_stored_minimum_coverage: false,
+            is_continuous: false,
+            required_phrase_spans: vec![],
+            stopwords_by_pos: HashMap::new(),
+            referenced_filenames: None,
+            ignorable_urls: None,
+            ignorable_emails: None,
+            ignorable_copyrights: None,
+            ignorable_holders: None,
+            ignorable_authors: None,
+            language: Some("en".to_string()),
+            notes: None,
+            length_unique: 0,
+            high_length_unique: 0,
+            high_length: 0,
+            min_matched_length: 0,
+            min_high_matched_length: 0,
+            min_matched_length_unique: 0,
+            min_high_matched_length_unique: 0,
+            is_small: false,
+            is_tiny: false,
+            starts_with_license: false,
+            ends_with_license: false,
+            is_deprecated: false,
+            spdx_license_key: Some("MIT".to_string()),
+            other_spdx_license_keys: vec![],
+        }],
+        ..LicenseIndex::default()
+    };
+
+    let mut source = file("project/Cargo.toml");
+    source.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: Some("project/Cargo.toml".to_string()),
+            start_line: 1,
+            end_line: 1,
+            matcher: Some("1-spdx-id".to_string()),
+            score: 100.0,
+            matched_length: Some(1),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("spdx_license_id_mit_for_mit.RULE".to_string()),
+            rule_url: None,
+            matched_text: Some("MIT".to_string()),
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        identifier: Some("mit-id".to_string()),
+        detection_log: vec![],
+    }];
+
+    let (_, license_rule_references) =
+        collect_top_level_license_references(&[source], &[], &license_index);
+
+    assert_eq!(license_rule_references.len(), 1);
+    assert!(license_rule_references[0].is_synthetic);
+    assert!(license_rule_references[0].rule_url.is_none());
+    assert_eq!(license_rule_references[0].length, 0);
+    assert!(!license_rule_references[0].skip_for_required_phrase_generation);
 }
 
 #[test]
@@ -1054,13 +1172,25 @@ fn create_output_preserves_top_level_license_references_from_context() {
             license_detections: vec![],
             license_references: vec![crate::models::LicenseReference {
                 key: Some("mit".to_string()),
+                language: Some("en".to_string()),
                 name: "MIT License".to_string(),
                 short_name: "MIT".to_string(),
+                owner: Some("Example Owner".to_string()),
+                homepage_url: Some("https://example.com/license".to_string()),
                 spdx_license_key: "MIT".to_string(),
                 other_spdx_license_keys: vec![],
+                osi_license_key: Some("MIT".to_string()),
+                text_urls: vec!["https://example.com/license.txt".to_string()],
+                osi_url: Some("https://opensource.org/licenses/MIT".to_string()),
+                faq_url: Some("https://example.com/faq".to_string()),
+                other_urls: vec!["https://example.com/other".to_string()],
                 category: None,
+                is_exception: false,
+                is_unknown: false,
+                is_generic: false,
                 notes: None,
                 minimum_coverage: None,
+                standard_notice: None,
                 ignorable_copyrights: vec![],
                 ignorable_holders: vec![],
                 ignorable_authors: vec![],
@@ -1083,8 +1213,11 @@ fn create_output_preserves_top_level_license_references_from_context() {
                 language: None,
                 rule_url: None,
                 is_required_phrase: false,
+                skip_for_required_phrase_generation: false,
                 is_continuous: false,
+                is_synthetic: false,
                 is_from_license: false,
+                length: 0,
                 relevance: None,
                 minimum_coverage: None,
                 referenced_filenames: vec![],

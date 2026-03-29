@@ -587,14 +587,18 @@ MIT License"#;
 fn test_parse_license_with_urls() {
     let content = r#"---
 key: url-test
+short_name: URL Test
 name: Test License
+owner: Example Org
 homepage_url: http://example.com
+osi_license_key: URL-TEST
 text_urls:
     - http://text.example.com
 osi_url: http://osi.example.com
 faq_url: http://faq.example.com
 other_urls:
     - http://other.example.com
+standard_notice: Include this notice.
 ---
 License text."#;
 
@@ -602,6 +606,25 @@ License text."#;
     assert!(result.is_ok());
     let license = result.unwrap();
     assert!(!license.reference_urls.is_empty());
+    assert_eq!(license.short_name.as_deref(), Some("URL Test"));
+    assert_eq!(license.language.as_deref(), Some("en"));
+    assert_eq!(license.owner.as_deref(), Some("Example Org"));
+    assert_eq!(license.homepage_url.as_deref(), Some("http://example.com"));
+    assert_eq!(license.osi_license_key.as_deref(), Some("URL-TEST"));
+    assert_eq!(
+        license.text_urls,
+        vec!["http://text.example.com".to_string()]
+    );
+    assert_eq!(license.osi_url.as_deref(), Some("http://osi.example.com"));
+    assert_eq!(license.faq_url.as_deref(), Some("http://faq.example.com"));
+    assert_eq!(
+        license.other_urls,
+        vec!["http://other.example.com".to_string()]
+    );
+    assert_eq!(
+        license.standard_notice.as_deref(),
+        Some("Include this notice.")
+    );
 }
 
 #[test]

@@ -884,14 +884,33 @@ pub(crate) fn project_reference_follow_fields(value: &Value) -> Value {
         "license_references": license_references.into_iter().map(|reference| {
             json!({
                 "key": reference.get("key").cloned().unwrap_or(Value::Null),
+                "language": reference.get("language").cloned().unwrap_or(Value::Null),
                 "short_name": reference.get("short_name").cloned().unwrap_or(Value::Null),
+                "name": reference.get("name").cloned().unwrap_or(Value::Null),
+                "owner": reference.get("owner").cloned().unwrap_or(Value::Null),
+                "homepage_url": reference.get("homepage_url").cloned().unwrap_or(Value::Null),
                 "spdx_license_key": reference.get("spdx_license_key").cloned().unwrap_or(Value::Null),
+                "osi_license_key": reference.get("osi_license_key").cloned().unwrap_or(Value::Null),
+                "text_urls": reference.get("text_urls").cloned().unwrap_or_else(|| json!([])),
+                "osi_url": reference.get("osi_url").cloned().unwrap_or(Value::Null),
+                "faq_url": reference.get("faq_url").cloned().unwrap_or(Value::Null),
+                "other_urls": reference.get("other_urls").cloned().unwrap_or_else(|| json!([])),
+                "category": reference.get("category").cloned().unwrap_or(Value::Null),
+                "is_exception": reference.get("is_exception").cloned().unwrap_or(Value::Bool(false)),
+                "is_unknown": reference.get("is_unknown").cloned().unwrap_or(Value::Bool(false)),
+                "is_generic": reference.get("is_generic").cloned().unwrap_or(Value::Bool(false)),
+                "minimum_coverage": reference.get("minimum_coverage").cloned().unwrap_or(Value::Null),
+                "standard_notice": reference.get("standard_notice").cloned().unwrap_or(Value::Null),
             })
         }).collect::<Vec<_>>(),
         "license_rule_references": license_rule_references.into_iter().map(|rule| {
             json!({
                 "identifier": rule.get("identifier").cloned().unwrap_or(Value::Null),
                 "license_expression": rule.get("license_expression").cloned().unwrap_or(Value::Null),
+                "language": rule.get("language").cloned().unwrap_or(Value::Null),
+                "rule_url": rule.get("rule_url").cloned().unwrap_or(Value::Null),
+                "is_synthetic": rule.get("is_synthetic").cloned().unwrap_or(Value::Bool(false)),
+                "length": rule.get("length").cloned().unwrap_or(Value::from(0)),
                 "referenced_filenames": rule.get("referenced_filenames").cloned().unwrap_or_else(|| json!([])),
             })
         }).collect::<Vec<_>>(),

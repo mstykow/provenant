@@ -1207,23 +1207,37 @@ pub(crate) fn collect_top_level_license_references(
         .filter_map(|key| {
             license_index.licenses_by_key.get(&key).map(|license| {
                 let spdx_license_key = spdx_mapping.scancode_to_spdx(&key).unwrap_or_default();
-                let short_name = if spdx_license_key.is_empty()
-                    || spdx_license_key.starts_with("LicenseRef-scancode-")
-                {
-                    license.name.clone()
-                } else {
-                    spdx_license_key.clone()
-                };
+                let short_name = license.short_name.clone().unwrap_or_else(|| {
+                    if spdx_license_key.is_empty()
+                        || spdx_license_key.starts_with("LicenseRef-scancode-")
+                    {
+                        license.name.clone()
+                    } else {
+                        spdx_license_key.clone()
+                    }
+                });
 
                 LicenseReference {
                     key: Some(license.key.clone()),
+                    language: license.language.clone(),
                     name: license.name.clone(),
                     short_name,
+                    owner: license.owner.clone(),
+                    homepage_url: license.homepage_url.clone(),
                     spdx_license_key: spdx_license_key.clone(),
                     other_spdx_license_keys: license.other_spdx_license_keys.clone(),
+                    osi_license_key: license.osi_license_key.clone(),
+                    text_urls: license.text_urls.clone(),
+                    osi_url: license.osi_url.clone(),
+                    faq_url: license.faq_url.clone(),
+                    other_urls: license.other_urls.clone(),
                     category: license.category.clone(),
+                    is_exception: license.is_exception,
+                    is_unknown: license.is_unknown,
+                    is_generic: license.is_generic,
                     notes: license.notes.clone(),
                     minimum_coverage: license.minimum_coverage,
+                    standard_notice: license.standard_notice.clone(),
                     ignorable_copyrights: license.ignorable_copyrights.clone().unwrap_or_default(),
                     ignorable_holders: license.ignorable_holders.clone().unwrap_or_default(),
                     ignorable_authors: license.ignorable_authors.clone().unwrap_or_default(),
@@ -1246,9 +1260,9 @@ pub(crate) fn collect_top_level_license_references(
     let license_rule_references = rule_identifiers
         .into_iter()
         .filter_map(|identifier| {
-            rules_by_identifier
-                .get(identifier.as_str())
-                .map(|rule| LicenseRuleReference {
+            rules_by_identifier.get(identifier.as_str()).map(|rule| {
+                let is_synthetic = is_synthetic_rule(rule);
+                LicenseRuleReference {
                     identifier: rule.identifier.clone(),
                     license_expression: rule.license_expression.clone(),
                     is_license_text: rule.is_license_text(),
@@ -1258,10 +1272,13 @@ pub(crate) fn collect_top_level_license_references(
                     is_license_clue: rule.is_license_clue(),
                     is_license_intro: rule.is_license_intro(),
                     language: rule.language.clone(),
-                    rule_url: rule.rule_url(),
+                    rule_url: (!is_synthetic).then(|| rule.rule_url()).flatten(),
                     is_required_phrase: rule.is_required_phrase,
+                    skip_for_required_phrase_generation: false,
                     is_continuous: rule.is_continuous,
+                    is_synthetic,
                     is_from_license: rule.is_from_license,
+                    length: rule.tokens.len(),
                     relevance: Some(rule.relevance),
                     minimum_coverage: rule.minimum_coverage,
                     referenced_filenames: rule.referenced_filenames.clone().unwrap_or_default(),
@@ -1272,7 +1289,8 @@ pub(crate) fn collect_top_level_license_references(
                     ignorable_urls: rule.ignorable_urls.clone().unwrap_or_default(),
                     ignorable_emails: rule.ignorable_emails.clone().unwrap_or_default(),
                     text: Some(rule.text.clone()),
-                })
+                }
+            })
         })
         .collect();
 
@@ -1337,6 +1355,11 @@ fn collect_rule_identifiers_from_matches(
             rule_identifiers.insert(rule_identifier.clone());
         }
     }
+}
+
+fn is_synthetic_rule(rule: &crate::license_detection::models::Rule) -> bool {
+    rule.identifier.starts_with("spdx-license-identifier-")
+        || rule.identifier.starts_with("spdx_license_id_")
 }
 
 fn build_classification_context(files: &[FileInfo], packages: &[Package]) -> ClassificationContext {

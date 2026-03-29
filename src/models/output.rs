@@ -134,17 +134,41 @@ pub struct SystemEnvironment {
 pub struct LicenseReference {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
     pub name: String,
     pub short_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub homepage_url: Option<String>,
     pub spdx_license_key: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub other_spdx_license_keys: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub osi_license_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub text_urls: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub osi_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub faq_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub other_urls: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
+    #[serde(default)]
+    pub is_exception: bool,
+    #[serde(default)]
+    pub is_unknown: bool,
+    #[serde(default)]
+    pub is_generic: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub minimum_coverage: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub standard_notice: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ignorable_copyrights: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -182,9 +206,15 @@ pub struct LicenseRuleReference {
     #[serde(default)]
     pub is_required_phrase: bool,
     #[serde(default)]
+    pub skip_for_required_phrase_generation: bool,
+    #[serde(default)]
     pub is_continuous: bool,
     #[serde(default)]
+    pub is_synthetic: bool,
+    #[serde(default)]
     pub is_from_license: bool,
+    #[serde(default)]
+    pub length: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relevance: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -262,6 +262,40 @@ impl Default for LicenseIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn simple_license(key: &str, name: &str, spdx: &str, category: &str, text: &str) -> License {
+        License {
+            key: key.to_string(),
+            short_name: Some(name.to_string()),
+            name: name.to_string(),
+            language: Some("en".to_string()),
+            spdx_license_key: Some(spdx.to_string()),
+            other_spdx_license_keys: vec![],
+            category: Some(category.to_string()),
+            owner: None,
+            homepage_url: None,
+            text: text.to_string(),
+            reference_urls: vec![],
+            osi_license_key: Some(spdx.to_string()),
+            text_urls: vec![],
+            osi_url: None,
+            faq_url: None,
+            other_urls: vec![],
+            notes: None,
+            is_deprecated: false,
+            is_exception: false,
+            is_unknown: false,
+            is_generic: false,
+            replaced_by: vec![],
+            minimum_coverage: None,
+            standard_notice: None,
+            ignorable_copyrights: None,
+            ignorable_holders: None,
+            ignorable_authors: None,
+            ignorable_urls: None,
+            ignorable_emails: None,
+        }
+    }
     use crate::license_detection::models::License;
 
     #[test]
@@ -316,24 +350,13 @@ mod tests {
     fn test_license_index_add_license() {
         let mut index = LicenseIndex::default();
 
-        let license = License {
-            key: "test-license".to_string(),
-            name: "Test License".to_string(),
-            spdx_license_key: Some("TEST".to_string()),
-            other_spdx_license_keys: vec![],
-            category: Some("Permissive".to_string()),
-            text: "Test license text".to_string(),
-            reference_urls: vec![],
-            notes: None,
-            is_deprecated: false,
-            replaced_by: vec![],
-            minimum_coverage: None,
-            ignorable_copyrights: None,
-            ignorable_holders: None,
-            ignorable_authors: None,
-            ignorable_urls: None,
-            ignorable_emails: None,
-        };
+        let license = simple_license(
+            "test-license",
+            "Test License",
+            "TEST",
+            "Permissive",
+            "Test license text",
+        );
 
         index.licenses_by_key.insert(license.key.clone(), license);
 
@@ -346,42 +369,20 @@ mod tests {
         let mut index = LicenseIndex::default();
 
         let licenses = vec![
-            License {
-                key: "license-1".to_string(),
-                name: "License 1".to_string(),
-                spdx_license_key: Some("LIC1".to_string()),
-                other_spdx_license_keys: vec![],
-                category: Some("Permissive".to_string()),
-                text: "License 1 text".to_string(),
-                reference_urls: vec![],
-                notes: None,
-                is_deprecated: false,
-                replaced_by: vec![],
-                minimum_coverage: None,
-                ignorable_copyrights: None,
-                ignorable_holders: None,
-                ignorable_authors: None,
-                ignorable_urls: None,
-                ignorable_emails: None,
-            },
-            License {
-                key: "license-2".to_string(),
-                name: "License 2".to_string(),
-                spdx_license_key: Some("LIC2".to_string()),
-                other_spdx_license_keys: vec![],
-                category: Some("Copyleft".to_string()),
-                text: "License 2 text".to_string(),
-                reference_urls: vec![],
-                notes: None,
-                is_deprecated: false,
-                replaced_by: vec![],
-                minimum_coverage: None,
-                ignorable_copyrights: None,
-                ignorable_holders: None,
-                ignorable_authors: None,
-                ignorable_urls: None,
-                ignorable_emails: None,
-            },
+            simple_license(
+                "license-1",
+                "License 1",
+                "LIC1",
+                "Permissive",
+                "License 1 text",
+            ),
+            simple_license(
+                "license-2",
+                "License 2",
+                "LIC2",
+                "Copyleft",
+                "License 2 text",
+            ),
         ];
 
         for license in licenses {
@@ -397,24 +398,13 @@ mod tests {
     fn test_license_index_get_license() {
         let mut index = LicenseIndex::default();
 
-        let license = License {
-            key: "mit".to_string(),
-            name: "MIT License".to_string(),
-            spdx_license_key: Some("MIT".to_string()),
-            other_spdx_license_keys: vec![],
-            category: Some("Permissive".to_string()),
-            text: "MIT License text".to_string(),
-            reference_urls: vec![],
-            notes: None,
-            is_deprecated: false,
-            replaced_by: vec![],
-            minimum_coverage: None,
-            ignorable_copyrights: None,
-            ignorable_holders: None,
-            ignorable_authors: None,
-            ignorable_urls: None,
-            ignorable_emails: None,
-        };
+        let license = simple_license(
+            "mit",
+            "MIT License",
+            "MIT",
+            "Permissive",
+            "MIT License text",
+        );
 
         index.licenses_by_key.insert(license.key.clone(), license);
 
@@ -431,24 +421,7 @@ mod tests {
 
         assert_eq!(index.licenses_by_key.len(), 0);
 
-        let license = License {
-            key: "test".to_string(),
-            name: "Test".to_string(),
-            spdx_license_key: Some("TEST".to_string()),
-            other_spdx_license_keys: vec![],
-            category: Some("Permissive".to_string()),
-            text: "Text".to_string(),
-            reference_urls: vec![],
-            notes: None,
-            is_deprecated: false,
-            replaced_by: vec![],
-            minimum_coverage: None,
-            ignorable_copyrights: None,
-            ignorable_holders: None,
-            ignorable_authors: None,
-            ignorable_urls: None,
-            ignorable_emails: None,
-        };
+        let license = simple_license("test", "Test", "TEST", "Permissive", "Text");
 
         index.licenses_by_key.insert(license.key.clone(), license);
 

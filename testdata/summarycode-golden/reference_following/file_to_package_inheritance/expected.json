@@ -71,24 +71,66 @@
   "license_references": [
     {
       "key": "bsd-new",
+      "language": "en",
       "short_name": "BSD-3-Clause",
-      "spdx_license_key": "BSD-3-Clause"
+      "name": "BSD-3-Clause",
+      "owner": "Regents of the University of California",
+      "homepage_url": "http://www.opensource.org/licenses/BSD-3-Clause",
+      "spdx_license_key": "BSD-3-Clause",
+      "osi_license_key": "BSD-3-Clause",
+      "text_urls": ["http://www.opensource.org/licenses/BSD-3-Clause"],
+      "osi_url": "http://www.opensource.org/licenses/BSD-3-Clause",
+      "faq_url": null,
+      "other_urls": [
+        "http://framework.zend.com/license/new-bsd",
+        "https://opensource.org/licenses/BSD-3-Clause",
+        "https://www.eclipse.org/org/documents/edl-v10.php"
+      ],
+      "category": "Permissive",
+      "is_exception": false,
+      "is_unknown": false,
+      "is_generic": false,
+      "minimum_coverage": null,
+      "standard_notice": null
     },
     {
       "key": "free-unknown",
-      "short_name": "Free unknown license detected but not recognized",
-      "spdx_license_key": "LicenseRef-scancode-free-unknown"
+      "language": "en",
+      "short_name": "Free unknown",
+      "name": "Free unknown license detected but not recognized",
+      "owner": "Unspecified",
+      "homepage_url": null,
+      "spdx_license_key": "LicenseRef-scancode-free-unknown",
+      "osi_license_key": null,
+      "text_urls": [],
+      "osi_url": null,
+      "faq_url": null,
+      "other_urls": [],
+      "category": "Unstated License",
+      "is_exception": false,
+      "is_unknown": true,
+      "is_generic": false,
+      "minimum_coverage": null,
+      "standard_notice": null
     }
   ],
   "license_rule_references": [
     {
       "identifier": "bsd-new_195.RULE",
       "license_expression": "bsd-new",
+      "language": null,
+      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_195.RULE",
+      "is_synthetic": false,
+      "length": 4,
       "referenced_filenames": []
     },
     {
       "identifier": "free-unknown-package_1.RULE",
       "license_expression": "free-unknown",
+      "language": null,
+      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/free-unknown-package_1.RULE",
+      "is_synthetic": false,
+      "length": 11,
       "referenced_filenames": ["INHERIT_LICENSE_FROM_PACKAGE"]
     }
   ],

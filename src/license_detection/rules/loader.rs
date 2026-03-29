@@ -467,16 +467,31 @@ pub fn parse_license_to_loaded(path: &Path) -> Result<LoadedLicense> {
 
     Ok(LoadedLicense {
         key,
+        short_name: LoadedLicense::normalize_optional_string(fm.short_name.as_deref()),
         name,
+        language: Some("en".to_string()),
         spdx_license_key: LoadedLicense::normalize_optional_string(fm.spdx_license_key.as_deref()),
         other_spdx_license_keys: fm.other_spdx_license_keys.unwrap_or_default(),
         category: LoadedLicense::normalize_optional_string(fm.category.as_deref()),
+        owner: LoadedLicense::normalize_optional_string(fm.owner.as_deref()),
+        homepage_url: LoadedLicense::normalize_optional_string(fm.homepage_url.as_deref()),
         text: parsed.text_content,
         reference_urls,
+        osi_license_key: LoadedLicense::normalize_optional_string(fm.osi_license_key.as_deref()),
+        text_urls: LoadedLicense::normalize_optional_list(fm.text_urls.as_deref())
+            .unwrap_or_default(),
+        osi_url: LoadedLicense::normalize_optional_string(fm.osi_url.as_deref()),
+        faq_url: LoadedLicense::normalize_optional_string(fm.faq_url.as_deref()),
+        other_urls: LoadedLicense::normalize_optional_list(fm.other_urls.as_deref())
+            .unwrap_or_default(),
         notes: LoadedLicense::normalize_optional_string(fm.notes.as_deref()),
         is_deprecated,
+        is_exception: fm.is_exception.unwrap_or(false),
+        is_unknown,
+        is_generic,
         replaced_by: fm.replaced_by.unwrap_or_default(),
         minimum_coverage,
+        standard_notice: LoadedLicense::normalize_optional_string(fm.standard_notice.as_deref()),
         ignorable_copyrights: LoadedLicense::normalize_optional_list(
             fm.ignorable_copyrights.as_deref(),
         ),

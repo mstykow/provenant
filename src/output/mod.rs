@@ -316,13 +316,25 @@ mod tests {
         }];
         output.license_references = vec![crate::models::LicenseReference {
             key: Some("unknown-license-reference".to_string()),
+            language: Some("en".to_string()),
             name: "Unknown License Reference".to_string(),
             short_name: "Unknown License Reference".to_string(),
+            owner: None,
+            homepage_url: None,
             spdx_license_key: "LicenseRef-scancode-unknown-license-reference".to_string(),
             other_spdx_license_keys: vec![],
+            osi_license_key: None,
+            text_urls: vec![],
+            osi_url: None,
+            faq_url: None,
+            other_urls: vec![],
             category: None,
+            is_exception: false,
+            is_unknown: true,
+            is_generic: false,
             notes: None,
             minimum_coverage: None,
+            standard_notice: None,
             ignorable_copyrights: vec![],
             ignorable_holders: vec![],
             ignorable_authors: vec![],
@@ -635,13 +647,25 @@ mod tests {
         let mut output = sample_output();
         output.license_references = vec![crate::models::LicenseReference {
             key: Some("mit".to_string()),
+            language: Some("en".to_string()),
             name: "MIT License".to_string(),
             short_name: "MIT".to_string(),
+            owner: Some("Example Owner".to_string()),
+            homepage_url: Some("https://example.com/license".to_string()),
             spdx_license_key: "MIT".to_string(),
             other_spdx_license_keys: vec![],
+            osi_license_key: Some("MIT".to_string()),
+            text_urls: vec!["https://example.com/license.txt".to_string()],
+            osi_url: Some("https://opensource.org/licenses/MIT".to_string()),
+            faq_url: None,
+            other_urls: vec![],
             category: None,
+            is_exception: false,
+            is_unknown: false,
+            is_generic: false,
             notes: None,
             minimum_coverage: None,
+            standard_notice: None,
             ignorable_copyrights: vec![],
             ignorable_holders: vec![],
             ignorable_authors: vec![],
@@ -664,8 +688,11 @@ mod tests {
             language: None,
             rule_url: None,
             is_required_phrase: false,
+            skip_for_required_phrase_generation: false,
             is_continuous: false,
+            is_synthetic: false,
             is_from_license: false,
+            length: 0,
             relevance: None,
             minimum_coverage: None,
             referenced_filenames: vec![],
@@ -689,6 +716,23 @@ mod tests {
             "MIT"
         );
         assert_eq!(json_value["license_references"][0]["key"], "mit");
+        assert_eq!(json_value["license_references"][0]["language"], "en");
+        assert_eq!(
+            json_value["license_references"][0]["owner"],
+            "Example Owner"
+        );
+        assert_eq!(
+            json_value["license_references"][0]["homepage_url"],
+            "https://example.com/license"
+        );
+        assert_eq!(
+            json_value["license_references"][0]["osi_license_key"],
+            "MIT"
+        );
+        assert_eq!(
+            json_value["license_references"][0]["text_urls"][0],
+            "https://example.com/license.txt"
+        );
         assert_eq!(
             json_value["license_rule_references"][0]["identifier"],
             "license-clue_1.RULE"
@@ -696,6 +740,10 @@ mod tests {
         assert_eq!(
             json_value["license_rule_references"][0]["relevance"],
             Value::Null
+        );
+        assert_eq!(
+            json_value["license_rule_references"][0]["length"],
+            Value::from(0)
         );
 
         let mut jsonl_bytes = Vec::new();

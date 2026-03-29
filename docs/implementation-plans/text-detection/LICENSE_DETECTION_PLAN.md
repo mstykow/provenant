@@ -148,8 +148,8 @@ reporting consumers. The remaining work in this plan is now concentrated in:
 
 - clue-only output and `--filter-clues` edge cases
 - remaining CLI parity (`--license-score`, `--license-url-template`)
-- any later top-level reference/report enrichment beyond the current stable
-  runtime-backed data
+- any remaining exact parity drift in the richer top-level reference/report
+  metadata now emitted from the embedded license and rule index
 
 ### 3. File-region consumers are now partly implemented, not missing wholesale
 
@@ -200,8 +200,9 @@ The repository still has a mix of:
      reference-following flows
    - ✅ Keep top-level `license_detections`, `license_references`, and
      `license_rule_references` synchronized with the post-follow runtime state
-   - Remaining work here is limited to later enrichment and any uncovered clue
-     edge cases
+   - ✅ Enrich top-level `license_references` / `license_rule_references` with
+     the richer stable metadata already available from the embedded index
+   - Remaining work here is limited to any uncovered clue edge cases
 
 4. **Phase 3 — CLI flag parity**
    - Resolve `--include-text` vs `--license-text`
