@@ -1,17 +1,17 @@
 # License Detection Implementation Plan
 
-> **Status**: 🟡 Active — core engine implemented; output, CLI, and downstream parity gaps remain open
+> **Status**: 🟢 Complete — public license-result, CLI, and downstream parity work tracked here is implemented
 > **Priority**: P1 - High Priority Core Feature
 > **Estimated Effort**: Multi-phase follow-up; depends on output and CLI wiring
 > **Dependencies**: [LICENSE_DETECTION_ARCHITECTURE.md](../../LICENSE_DETECTION_ARCHITECTURE.md), [CLI_PLAN.md](../infrastructure/CLI_PLAN.md), [OUTPUT_FORMATS_PLAN.md](../output/OUTPUT_FORMATS_PLAN.md), [SCAN_RESULT_SHAPING_PLAN.md](../post-processing/SCAN_RESULT_SHAPING_PLAN.md), [PLAN-019-file-region-and-unique-detection.md](../../license-detection/PLAN-019-file-region-and-unique-detection.md)
 
 ## Overview
 
-The Rust license-detection engine itself is implemented, but Provenant still has
-real ScanCode parity gaps in the **public license-result surface**.
+The Rust license-detection engine and the public license-result parity work that
+this plan tracked are now implemented.
 
-This plan tracks the missing work between the current engine and the user-facing
-behavior users actually compare against Python ScanCode:
+This document remains as the completed implementation record for the user-facing
+behavior Provenant needed to match from Python ScanCode:
 
 - file-level `license_detections` vs `license_clues`
 - top-level unique `license_detections`
@@ -109,16 +109,14 @@ implementation plan again.
 
 ### Known Public Parity Gaps
 
-- ⚠️ Clue-only detections now serialize at file level, but some clue-only output
-  and filtering edge cases still diverge from upstream
-- ❌ `--filter-clues` is only partially license-aware today: shaping now suppresses
-  ignorable clues using public match metadata and rule identifiers, but some
-  JSON/public-license-shape edge cases still diverge from upstream
-- ⚠️ SPDX output parity now consumes real file/package license-info surfaces, but
-  any remaining SPDX drift should be tracked as format-specific follow-up rather
-  than as a blocker on missing license-output data
+No open public-surface parity blockers remain in this plan.
 
-### Known CLI Parity Gaps
+Any future SPDX or other output-format drift should be tracked as a
+format-specific follow-up in [`OUTPUT_FORMATS_PLAN.md`](../output/OUTPUT_FORMATS_PLAN.md)
+or [`PARITY_SCORECARD.md`](../output/PARITY_SCORECARD.md), not as missing
+license-output data.
+
+### Compatibility Notes
 
 - ⚠️ Legacy `--include-text` remains as a compatibility alias; the upstream
   public flag is now `--license-text`
@@ -210,7 +208,7 @@ The repository still has a mix of:
    - Keep help text and docs aligned with the actual runtime surface
 
 5. **Phase 4 — Downstream consumer parity**
-   - Close the remaining `--filter-clues` license-edge cases where appropriate
+   - ✅ Close the remaining `--filter-clues` license-edge cases where appropriate
    - ✅ Feed SPDX writers with real license-info-from-files / extracted-license
      data while preserving upstream `NOASSERTION` conclusions
    - ✅ Keep summary/tallies/key-file tallies aligned with followed
@@ -236,7 +234,7 @@ whenever work resumes here:
       `license_clues`
 - [x] License diagnostics are available when the corresponding CLI behavior is
       enabled
-- [ ] Top-level unique `license_detections` are generated on native scans with
+- [x] Top-level unique `license_detections` are generated on native scans with
       the remaining file-region-dependent parity edge cases closed
 - [x] `license_references` and `license_rule_references` are generated on native
       scans instead of only being preserved from input JSON

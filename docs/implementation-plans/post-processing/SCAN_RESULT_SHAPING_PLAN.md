@@ -98,7 +98,7 @@ This already differs favorably from Python's plugin-oriented summarycode approac
 ### Remaining Work Outside This Plan
 
 - Broader `--info` field-surface parity remains tracked in [`CLI_PLAN.md`](../infrastructure/CLI_PLAN.md)
-- Remaining public-license-shape / serialization differences that still affect `--filter-clues` fixture parity remain tracked in [`LICENSE_DETECTION_PLAN.md`](../text-detection/LICENSE_DETECTION_PLAN.md)
+- Completed public-license-shape / serialization parity for `--filter-clues` is recorded in the completed [`LICENSE_DETECTION_PLAN.md`](../text-detection/LICENSE_DETECTION_PLAN.md)
 - Ongoing large-scan performance review remains a general maintenance concern, not a shaping-specific parity blocker
 
 ## Ordering Contract
