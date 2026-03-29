@@ -427,7 +427,7 @@ fn matches_ignorable(
             && ignorable
                 .values
                 .iter()
-                .any(|candidate| candidate.contains(&normalized_value))
+                .any(|candidate| candidate == &normalized_value)
     })
 }
 

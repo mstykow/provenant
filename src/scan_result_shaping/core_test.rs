@@ -216,6 +216,52 @@ fn filter_redundant_clues_with_rules_suppresses_ignorable_rule_and_cross_clues()
 }
 
 #[test]
+fn filter_redundant_clues_with_rules_keeps_non_exact_ignorable_values() {
+    let mut files = vec![file("project/a.txt")];
+    files[0].license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![crate::models::Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: None,
+            start_line: 1,
+            end_line: 5,
+            matcher: Some("2-aho".to_string()),
+            score: 100.0,
+            matched_length: Some(42),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("mit_1.RULE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        identifier: None,
+        detection_log: vec![],
+    }];
+    files[0].holders = vec![crate::models::Holder {
+        holder: "Example Corp".to_string(),
+        start_line: 2,
+        end_line: 2,
+    }];
+
+    let clue_rule_lookup = HashMap::from([(
+        "mit_1.RULE".to_string(),
+        ClueRuleData {
+            ignorable_holders: vec!["Example Corp Europe".to_string()],
+            ..Default::default()
+        },
+    )]);
+
+    filter_redundant_clues_with_rules(&mut files, Some(&clue_rule_lookup));
+
+    assert_eq!(files[0].holders.len(), 1);
+    assert_eq!(files[0].holders[0].holder, "Example Corp");
+}
+
+#[test]
 fn filter_redundant_clues_suppresses_cross_clues_without_license_rules() {
     let mut files = vec![file("project/a.txt")];
     files[0].copyrights = vec![Copyright {
