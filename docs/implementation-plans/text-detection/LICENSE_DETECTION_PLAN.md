@@ -232,7 +232,7 @@ whenever work resumes here:
 
 ## Success Criteria
 
-- [ ] Provenant emits the ScanCode-style split between `license_detections` and
+- [x] Provenant emits the ScanCode-style split between `license_detections` and
       `license_clues`
 - [x] License diagnostics are available when the corresponding CLI behavior is
       enabled
