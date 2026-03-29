@@ -242,7 +242,7 @@ whenever work resumes here:
       scans instead of only being preserved from input JSON
 - [x] The CLI plan accurately reflects the implemented and pending license flags
 - [x] SPDX writers consume current-scan license data with fixture-backed parity
-- [ ] Evergreen docs describe the current public output shape accurately
+- [x] Evergreen docs describe the current public output shape accurately
 
 ## Related Documents
 

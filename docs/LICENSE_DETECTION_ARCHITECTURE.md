@@ -10,10 +10,16 @@ The license detection system is a multi-phase, multi-strategy detection engine t
 
 ### CLI Flags
 
-| Flag                   | Purpose                                                |
-| ---------------------- | ------------------------------------------------------ |
-| `--license-rules-path` | Override to load custom license/rules from a directory |
-| `--include-text`       | Include matched text in output                         |
+| Flag                         | Purpose                                                |
+| ---------------------------- | ------------------------------------------------------ |
+| `--license-rules-path`       | Override to load custom license/rules from a directory |
+| `--license`                  | Enable license scanning                                |
+| `--license-text`             | Include matched text in output                         |
+| `--license-text-diagnostics` | Highlight unmatched words inside matched text          |
+| `--license-diagnostics`      | Include detection post-processing diagnostics          |
+| `--license-references`       | Emit top-level license and rule reference blocks       |
+| `--license-score`            | Filter returned license detections by minimum score    |
+| `--license-url-template`     | Customize top-level `licensedb_url` references         |
 
 **Default behavior**: Uses the built-in embedded license index. No external files required.
 
@@ -21,6 +27,28 @@ The license detection system is a multi-phase, multi-strategy detection engine t
 > [`docs/implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md`](implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md).
 
 **Custom rules**: Use `--license-rules-path /path/to/rules` to load from a custom directory containing `.LICENSE` and `.RULE` files.
+
+### Current Public Output Surface
+
+When license scanning is enabled, the current ScanCode-style public surface is:
+
+- file-level `license_detections`
+- file-level `license_clues`
+- file/package `detection_log` when `--license-diagnostics` is enabled
+- match-level `matched_text` under `--license-text`
+- match-level `matched_text_diagnostics` under `--license-text-diagnostics`
+- file-level `percentage_of_license_text`
+- top-level unique `license_detections`
+- top-level `license_references` and `license_rule_references`
+
+`--from-json` preserves preexisting top-level license reference blocks and can
+recompute the top-level license outputs when the loaded scan is reshaped or when
+license-reference generation is explicitly requested.
+
+The remaining parity work is no longer about creating these public surfaces from
+scratch. The active gaps are the narrower clue/filter, unique-detection-edge,
+and documentation follow-ups tracked in
+[`docs/implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md`](implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md).
 
 ### Initialization Flow
 
