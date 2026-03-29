@@ -40,7 +40,7 @@ fn validate_scan_option_compatibility_rejects_cache_flags_with_from_json() {
         "scan.json",
         "--from-json",
         "--cache",
-        "all",
+        "scan-results",
         "sample-scan.json",
     ])
     .unwrap();
@@ -477,8 +477,8 @@ fn prepare_cache_for_scan_respects_cache_dir_and_cache_clear() {
     fs::create_dir_all(&scan_root).expect("create scan root");
 
     let explicit_cache_dir = temp_dir.path().join("explicit-cache");
-    fs::create_dir_all(explicit_cache_dir.join("license-index")).unwrap();
-    let stale_file = explicit_cache_dir.join("license-index").join("stale.txt");
+    fs::create_dir_all(explicit_cache_dir.join("scan-results")).unwrap();
+    let stale_file = explicit_cache_dir.join("scan-results").join("stale.txt");
     fs::write(&stale_file, "old").unwrap();
 
     let cli = crate::cli::Cli::try_parse_from([
@@ -486,7 +486,7 @@ fn prepare_cache_for_scan_respects_cache_dir_and_cache_clear() {
         "--json-pp",
         "scan.json",
         "--cache",
-        "all",
+        "scan-results",
         "--cache-dir",
         explicit_cache_dir.to_str().unwrap(),
         "--cache-clear",
@@ -497,12 +497,11 @@ fn prepare_cache_for_scan_respects_cache_dir_and_cache_clear() {
 
     assert_eq!(config.root_dir(), explicit_cache_dir);
     assert!(!stale_file.exists());
-    assert!(config.license_index_dir().exists());
     assert!(config.scan_results_dir().exists());
 }
 
 #[test]
-fn prepare_cache_for_scan_only_creates_requested_cache_subdirectories() {
+fn prepare_cache_for_scan_creates_scan_results_dir_when_enabled() {
     let temp_dir = tempfile::TempDir::new().expect("create temp dir");
     let scan_root = temp_dir.path().join("scan");
     fs::create_dir_all(&scan_root).expect("create scan root");
@@ -512,16 +511,14 @@ fn prepare_cache_for_scan_only_creates_requested_cache_subdirectories() {
         "--json-pp",
         "scan.json",
         "--cache",
-        "license-index",
+        "scan-results",
         "sample-dir",
     ])
     .unwrap();
     let config = prepare_cache_for_scan(scan_root.to_str().unwrap(), &cli).unwrap();
 
-    assert!(!config.scan_results_enabled());
-    assert!(config.license_index_enabled());
-    assert!(config.license_index_dir().exists());
-    assert!(!config.scan_results_dir().exists());
+    assert!(config.scan_results_enabled());
+    assert!(config.scan_results_dir().exists());
 }
 
 #[test]
@@ -529,12 +526,12 @@ fn build_collection_exclude_patterns_skips_default_cache_dir() {
     let temp_dir = tempfile::TempDir::new().expect("create temp dir");
     let scan_root = temp_dir.path().join("scan");
     fs::create_dir_all(scan_root.join("src")).unwrap();
-    fs::create_dir_all(scan_root.join(DEFAULT_CACHE_DIR_NAME).join("license-index")).unwrap();
+    fs::create_dir_all(scan_root.join(DEFAULT_CACHE_DIR_NAME).join("scan-results")).unwrap();
     fs::write(scan_root.join("src").join("main.rs"), "fn main() {}").unwrap();
     fs::write(
         scan_root
             .join(DEFAULT_CACHE_DIR_NAME)
-            .join("license-index")
+            .join("scan-results")
             .join("stale.txt"),
         "cached",
     )
