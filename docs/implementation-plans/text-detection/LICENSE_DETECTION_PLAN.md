@@ -81,6 +81,8 @@ implementation plan again.
 - ✅ `--license-text-diagnostics` CLI flag
 - ✅ `--license-diagnostics` CLI flag
 - ✅ `--unknown-licenses` CLI flag
+- ✅ `--license-score` CLI flag
+- ✅ `--license-url-template` CLI flag
 - ✅ Internal clue/reference-aware rule and match kinds
 - ✅ Internal detection diagnostics (`detection_log`)
 - ✅ Internal unknown-license engine support
@@ -118,8 +120,6 @@ implementation plan again.
 
 ### Known CLI Parity Gaps
 
-- ❌ No `--license-score`
-- ❌ No `--license-url-template`
 - ⚠️ Legacy `--include-text` remains as a compatibility alias; the upstream
   public flag is now `--license-text`
 - ⚠️ Upstream `--is-license-text` is no longer a live parity target; current
@@ -147,7 +147,7 @@ the main package/file reference-following scenarios and their downstream
 reporting consumers. The remaining work in this plan is now concentrated in:
 
 - clue-only output and `--filter-clues` edge cases
-- remaining CLI parity (`--license-score`, `--license-url-template`)
+- remaining CLI/help parity drift around legacy aliases and documentation
 - any remaining exact parity drift in the richer top-level reference/report
   metadata now emitted from the embedded license and rule index
 
@@ -205,9 +205,9 @@ The repository still has a mix of:
    - Remaining work here is limited to any uncovered clue edge cases
 
 4. **Phase 3 — CLI flag parity**
-   - Resolve `--include-text` vs `--license-text`
-   - Add remaining ScanCode-compatible license flags
-   - Align help text and docs with the actual runtime surface
+   - ✅ Resolve `--include-text` vs `--license-text`
+   - ✅ Add remaining ScanCode-compatible license flags
+   - Keep help text and docs aligned with the actual runtime surface
 
 5. **Phase 4 — Downstream consumer parity**
    - Close the remaining `--filter-clues` license-edge cases where appropriate
@@ -240,7 +240,7 @@ whenever work resumes here:
       the remaining file-region-dependent parity edge cases closed
 - [x] `license_references` and `license_rule_references` are generated on native
       scans instead of only being preserved from input JSON
-- [ ] The CLI plan accurately reflects the implemented and pending license flags
+- [x] The CLI plan accurately reflects the implemented and pending license flags
 - [x] SPDX writers consume current-scan license data with fixture-backed parity
 - [ ] Evergreen docs describe the current public output shape accurately
 

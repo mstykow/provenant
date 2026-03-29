@@ -1,6 +1,7 @@
 use clap::{ArgGroup, Parser};
 
 use crate::cache::CacheKind;
+use crate::license_detection::DEFAULT_LICENSEDB_URL_TEMPLATE;
 use crate::output::OutputFormat;
 
 #[derive(Parser, Debug)]
@@ -187,6 +188,21 @@ pub struct Cli {
 
     #[arg(long = "unknown-licenses", requires = "license")]
     pub unknown_licenses: bool,
+
+    #[arg(
+        long = "license-score",
+        default_value_t = 0,
+        requires = "license",
+        value_parser = clap::value_parser!(u8).range(0..=100)
+    )]
+    pub license_score: u8,
+
+    #[arg(
+        long = "license-url-template",
+        default_value = DEFAULT_LICENSEDB_URL_TEMPLATE,
+        requires = "license"
+    )]
+    pub license_url_template: String,
 
     #[arg(long)]
     pub filter_clues: bool,
@@ -753,6 +769,73 @@ mod tests {
         assert!(parsed.license_text_diagnostics);
         assert!(parsed.license_diagnostics);
         assert!(parsed.unknown_licenses);
+        assert_eq!(parsed.license_score, 0);
+        assert_eq!(parsed.license_url_template, DEFAULT_LICENSEDB_URL_TEMPLATE);
+    }
+
+    #[test]
+    fn test_license_score_requires_license() {
+        let result = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--license-score",
+            "70",
+            "samples",
+        ]);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_license_url_template_requires_license() {
+        let result = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--license-url-template",
+            "https://example.com/licenses/{}/",
+            "samples",
+        ]);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parses_license_score_and_url_template_flags() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--license",
+            "--license-score",
+            "70",
+            "--license-url-template",
+            "https://example.com/licenses/{}/",
+            "samples",
+        ])
+        .expect("cli parse should succeed");
+
+        assert_eq!(parsed.license_score, 70);
+        assert_eq!(
+            parsed.license_url_template,
+            "https://example.com/licenses/{}/"
+        );
+    }
+
+    #[test]
+    fn test_rejects_license_score_above_range() {
+        let result = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--license",
+            "--license-score",
+            "101",
+            "samples",
+        ]);
+
+        assert!(result.is_err());
     }
 
     #[test]

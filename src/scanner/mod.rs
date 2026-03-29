@@ -16,6 +16,7 @@ pub struct LicenseScanOptions {
     pub include_text_diagnostics: bool,
     pub include_diagnostics: bool,
     pub unknown_licenses: bool,
+    pub min_score: u8,
 }
 
 #[derive(Debug, Clone)]

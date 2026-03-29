@@ -7,8 +7,8 @@ use std::path::Path;
 use crate::cache::{CacheConfig, DEFAULT_CACHE_DIR_NAME, build_collection_exclude_patterns};
 use crate::license_detection::LicenseDetectionEngine;
 use crate::post_processing::{
-    apply_package_reference_following, collect_top_level_license_detections,
-    collect_top_level_license_references,
+    DEFAULT_LICENSEDB_URL_TEMPLATE, apply_package_reference_following,
+    collect_top_level_license_detections, collect_top_level_license_references,
 };
 use crate::scan_result_shaping::json_input::{
     JsonScanInput, load_scan_from_json, normalize_loaded_json_scan,
@@ -479,8 +479,12 @@ fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
     );
 
     let engine = LicenseDetectionEngine::from_embedded().expect("embedded engine should load");
-    let (license_references, license_rule_references) =
-        collect_top_level_license_references(&loaded.files, &packages, engine.index());
+    let (license_references, license_rule_references) = collect_top_level_license_references(
+        &loaded.files,
+        &packages,
+        engine.index(),
+        DEFAULT_LICENSEDB_URL_TEMPLATE,
+    );
     assert!(
         license_references
             .iter()
@@ -598,8 +602,12 @@ fn from_json_recomputes_top_level_outputs_after_package_inheritance_following() 
     }));
 
     let engine = LicenseDetectionEngine::from_embedded().expect("embedded engine should load");
-    let (license_references, license_rule_references) =
-        collect_top_level_license_references(&loaded.files, &packages, engine.index());
+    let (license_references, license_rule_references) = collect_top_level_license_references(
+        &loaded.files,
+        &packages,
+        engine.index(),
+        DEFAULT_LICENSEDB_URL_TEMPLATE,
+    );
     assert!(
         license_references
             .iter()

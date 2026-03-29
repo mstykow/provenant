@@ -999,6 +999,30 @@ copies of the Software."#;
 }
 
 #[test]
+fn test_detect_with_kind_with_score_filters_partial_license() {
+    let engine = get_engine();
+
+    let partial_mit = r#"Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software."#;
+
+    let detections = engine
+        .detect_with_kind_with_score(partial_mit, false, false, 0.0)
+        .expect("Detection should succeed");
+    let filtered = engine
+        .detect_with_kind_with_score(partial_mit, false, false, 100.0)
+        .expect("Detection should succeed");
+
+    assert!(!detections.is_empty(), "Should detect partial MIT license");
+    assert!(
+        filtered.is_empty(),
+        "High minimum score should filter it out"
+    );
+}
+
+#[test]
 fn test_unknown_proprietary() {
     let engine = get_engine();
 

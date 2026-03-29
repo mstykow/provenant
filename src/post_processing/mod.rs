@@ -27,7 +27,7 @@ use crate::models::{
 
 const SCANCODE_LICENSE_URL_BASE: &str =
     "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses";
-const LICENSEDB_URL_BASE: &str = "https://scancode-licensedb.aboutcode.org";
+pub(crate) use crate::license_detection::DEFAULT_LICENSEDB_URL_TEMPLATE;
 const SPDX_LICENSE_URL_BASE: &str = "https://spdx.org/licenses";
 const INHERIT_LICENSE_FROM_PACKAGE_REFERENCE: &str = "INHERIT_LICENSE_FROM_PACKAGE";
 const DETECTION_LOG_UNKNOWN_REFERENCE_IN_FILE_TO_PACKAGE: &str =
@@ -1153,6 +1153,7 @@ pub(crate) fn collect_top_level_license_references(
     files: &[FileInfo],
     packages: &[Package],
     license_index: &LicenseIndex,
+    license_url_template: &str,
 ) -> (Vec<LicenseReference>, Vec<LicenseRuleReference>) {
     let licenses: Vec<_> = license_index.licenses_by_key.values().cloned().collect();
     let spdx_mapping = build_spdx_mapping(&licenses);
@@ -1247,7 +1248,10 @@ pub(crate) fn collect_top_level_license_references(
                         "{SCANCODE_LICENSE_URL_BASE}/{}.LICENSE",
                         license.key
                     )),
-                    licensedb_url: Some(format!("{LICENSEDB_URL_BASE}/{}", license.key)),
+                    licensedb_url: Some(format_license_reference_url(
+                        license_url_template,
+                        &license.key,
+                    )),
                     spdx_url: (!spdx_license_key.is_empty()
                         && !spdx_license_key.starts_with("LicenseRef-scancode-"))
                     .then(|| format!("{SPDX_LICENSE_URL_BASE}/{}", spdx_license_key)),
@@ -1295,6 +1299,10 @@ pub(crate) fn collect_top_level_license_references(
         .collect();
 
     (license_references, license_rule_references)
+}
+
+fn format_license_reference_url(template: &str, license_key: &str) -> String {
+    template.replacen("{}", license_key, 1)
 }
 
 fn collect_license_keys_from_package_data(

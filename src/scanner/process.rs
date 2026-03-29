@@ -318,7 +318,7 @@ fn scan_cache_fingerprint(
     license_enabled: bool,
 ) -> String {
     format!(
-        "packages={};copyrights={};emails={};urls={};max_emails={};max_urls={};timeout={:.6};license_enabled={};license_text={};license_text_diagnostics={};license_diagnostics={};unknown_licenses={}",
+        "packages={};copyrights={};emails={};urls={};max_emails={};max_urls={};timeout={:.6};license_enabled={};license_text={};license_text_diagnostics={};license_diagnostics={};unknown_licenses={};license_score={}",
         text_options.detect_packages,
         text_options.detect_copyrights,
         text_options.detect_emails,
@@ -331,6 +331,7 @@ fn scan_cache_fingerprint(
         license_options.include_text_diagnostics,
         license_options.include_diagnostics,
         license_options.unknown_licenses,
+        license_options.min_score,
     )
 }
 
@@ -562,12 +563,24 @@ fn extract_license_information(
         return Ok(());
     };
 
-    match engine.detect_with_kind_and_source(
-        &text_content,
-        license_options.unknown_licenses,
-        from_binary_strings,
-        &path.to_string_lossy(),
-    ) {
+    let detection_result = if license_options.min_score == 0 {
+        engine.detect_with_kind_and_source(
+            &text_content,
+            license_options.unknown_licenses,
+            from_binary_strings,
+            &path.to_string_lossy(),
+        )
+    } else {
+        engine.detect_with_kind_and_source_with_score(
+            &text_content,
+            license_options.unknown_licenses,
+            from_binary_strings,
+            &path.to_string_lossy(),
+            license_options.min_score as f32,
+        )
+    };
+
+    match detection_result {
         Ok(detections) => {
             let query =
                 Query::from_extracted_text(&text_content, engine.index(), from_binary_strings).ok();
@@ -848,7 +861,8 @@ fn process_directory(
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_percentage_of_license_text, convert_detection_to_model, is_go_non_production_source,
+        compute_percentage_of_license_text, convert_detection_to_model,
+        is_go_non_production_source, scan_cache_fingerprint,
     };
     use crate::license_detection::LicenseDetection as InternalLicenseDetection;
     use crate::license_detection::index::LicenseIndex;
@@ -959,6 +973,7 @@ mod tests {
             &detection,
             LicenseScanOptions {
                 include_text: true,
+                min_score: 0,
                 ..LicenseScanOptions::default()
             },
             "clue text",
@@ -1036,6 +1051,7 @@ mod tests {
                 include_text_diagnostics: true,
                 include_diagnostics: true,
                 unknown_licenses: false,
+                min_score: 0,
             },
             text,
             Some(&query),
@@ -1070,6 +1086,29 @@ mod tests {
         let percentage = compute_percentage_of_license_text(&query, &[detection]);
 
         assert_eq!(percentage, 33.33);
+    }
+
+    #[test]
+    fn test_scan_cache_fingerprint_changes_with_license_score() {
+        let text_options = crate::scanner::TextDetectionOptions::default();
+        let default_fingerprint = scan_cache_fingerprint(
+            &text_options,
+            LicenseScanOptions {
+                min_score: 0,
+                ..LicenseScanOptions::default()
+            },
+            true,
+        );
+        let filtered_fingerprint = scan_cache_fingerprint(
+            &text_options,
+            LicenseScanOptions {
+                min_score: 70,
+                ..LicenseScanOptions::default()
+            },
+            true,
+        );
+
+        assert_ne!(default_fingerprint, filtered_fingerprint);
     }
 
     #[test]
