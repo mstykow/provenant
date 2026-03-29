@@ -64,6 +64,8 @@ pub const SCANCODE_LICENSES_LICENSES_PATH: &str =
 #[allow(dead_code)]
 pub const SCANCODE_LICENSES_DATA_PATH: &str = "reference/scancode-toolkit/src/licensedcode/data";
 
+pub const DEFAULT_LICENSEDB_URL_TEMPLATE: &str = "https://scancode-licensedb.aboutcode.org/{}";
+
 pub(crate) use detection::{
     LicenseDetection, group_matches_by_region, post_process_detections, sort_matches_by_line,
 };
@@ -512,6 +514,16 @@ impl LicenseDetectionEngine {
         unknown_licenses: bool,
         binary_derived: bool,
     ) -> Result<Vec<LicenseDetection>> {
+        self.detect_with_kind_with_score(text, unknown_licenses, binary_derived, 0.0)
+    }
+
+    pub fn detect_with_kind_with_score(
+        &self,
+        text: &str,
+        unknown_licenses: bool,
+        binary_derived: bool,
+        min_score: f32,
+    ) -> Result<Vec<LicenseDetection>> {
         let clean_text = strip_utf8_bom_str(text);
 
         let content = truncate_detection_text(clean_text);
@@ -547,7 +559,7 @@ impl LicenseDetectionEngine {
                     })
                     .collect();
 
-                return Ok(post_process_detections(detections, 0.0));
+                return Ok(post_process_detections(detections, min_score));
             }
         }
 
@@ -648,7 +660,7 @@ impl LicenseDetectionEngine {
             })
             .collect();
 
-        let detections = post_process_detections(detections, 0.0);
+        let detections = post_process_detections(detections, min_score);
 
         Ok(detections)
     }
@@ -661,6 +673,20 @@ impl LicenseDetectionEngine {
         source_path: &str,
     ) -> Result<Vec<LicenseDetection>> {
         let mut detections = self.detect_with_kind(text, unknown_licenses, binary_derived)?;
+        attach_source_path_to_detections(&mut detections, source_path);
+        Ok(detections)
+    }
+
+    pub fn detect_with_kind_and_source_with_score(
+        &self,
+        text: &str,
+        unknown_licenses: bool,
+        binary_derived: bool,
+        source_path: &str,
+        min_score: f32,
+    ) -> Result<Vec<LicenseDetection>> {
+        let mut detections =
+            self.detect_with_kind_with_score(text, unknown_licenses, binary_derived, min_score)?;
         attach_source_path_to_detections(&mut detections, source_path);
         Ok(detections)
     }

@@ -500,8 +500,12 @@ pub(crate) fn compute_fixture_output(
     {
         let engine = test_license_engine();
         let license_detections = collect_top_level_license_detections(&files);
-        let (license_references, license_rule_references) =
-            collect_top_level_license_references(&files, &assembly_result.packages, engine.index());
+        let (license_references, license_rule_references) = collect_top_level_license_references(
+            &files,
+            &assembly_result.packages,
+            engine.index(),
+            DEFAULT_LICENSEDB_URL_TEMPLATE,
+        );
         (
             license_detections,
             license_references,

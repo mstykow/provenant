@@ -163,8 +163,12 @@ fn collect_top_level_license_references_includes_clues_packages_and_sorted_dedup
     package.package_type = Some(PackageType::Npm);
     package.declared_license_expression = Some("apache-2.0".to_string());
 
-    let (license_references, license_rule_references) =
-        collect_top_level_license_references(&[dir("project"), source], &[package], &license_index);
+    let (license_references, license_rule_references) = collect_top_level_license_references(
+        &[dir("project"), source],
+        &[package],
+        &license_index,
+        DEFAULT_LICENSEDB_URL_TEMPLATE,
+    );
 
     assert_eq!(
         license_references
@@ -218,6 +222,10 @@ fn collect_top_level_license_references_includes_clues_packages_and_sorted_dedup
         Some("Standard notice")
     );
     assert!(license_references[0].scancode_url.is_some());
+    assert_eq!(
+        license_references[0].licensedb_url.as_deref(),
+        Some("https://scancode-licensedb.aboutcode.org/apache-2.0")
+    );
     assert_eq!(license_rule_references[0].relevance, Some(100));
 }
 
@@ -225,8 +233,12 @@ fn collect_top_level_license_references_includes_clues_packages_and_sorted_dedup
 fn collect_top_level_license_references_returns_empty_for_empty_inputs() {
     let license_index = LicenseIndex::default();
 
-    let (license_references, license_rule_references) =
-        collect_top_level_license_references(&[], &[], &license_index);
+    let (license_references, license_rule_references) = collect_top_level_license_references(
+        &[],
+        &[],
+        &license_index,
+        DEFAULT_LICENSEDB_URL_TEMPLATE,
+    );
 
     assert!(license_references.is_empty());
     assert!(license_rule_references.is_empty());
@@ -301,14 +313,74 @@ fn collect_top_level_license_references_marks_synthetic_spdx_rules() {
         detection_log: vec![],
     }];
 
-    let (_, license_rule_references) =
-        collect_top_level_license_references(&[source], &[], &license_index);
+    let (_, license_rule_references) = collect_top_level_license_references(
+        &[source],
+        &[],
+        &license_index,
+        DEFAULT_LICENSEDB_URL_TEMPLATE,
+    );
 
     assert_eq!(license_rule_references.len(), 1);
     assert!(license_rule_references[0].is_synthetic);
     assert!(license_rule_references[0].rule_url.is_none());
     assert_eq!(license_rule_references[0].length, 0);
     assert!(!license_rule_references[0].skip_for_required_phrase_generation);
+}
+
+#[test]
+fn collect_top_level_license_references_applies_custom_license_url_template() {
+    let licenses = vec![sample_runtime_license("mit", "MIT License", Some("MIT"))];
+    let mut license_index = LicenseIndex::default();
+    for license in &licenses {
+        license_index
+            .licenses_by_key
+            .insert(license.key.clone(), license.clone());
+    }
+
+    let mut source = file("project/src/lib.rs");
+    source.license_expression = Some("mit".to_string());
+    source.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: Some("project/src/lib.rs".to_string()),
+            start_line: 1,
+            end_line: 1,
+            matcher: Some("1-hash".to_string()),
+            score: 100.0,
+            matched_length: Some(10),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("mit_1.RULE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        identifier: None,
+        detection_log: vec![],
+    }];
+
+    let (license_references, _) = collect_top_level_license_references(
+        &[dir("project"), source],
+        &[],
+        &license_index,
+        "https://licenses.example.test/{}/details",
+    );
+
+    assert_eq!(license_references.len(), 1);
+    assert_eq!(
+        license_references[0].licensedb_url.as_deref(),
+        Some("https://licenses.example.test/mit/details")
+    );
+    assert_eq!(
+        license_references[0].scancode_url.as_deref(),
+        Some(
+            "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE"
+        )
+    );
 }
 
 #[test]

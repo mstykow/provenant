@@ -11,8 +11,9 @@ use crate::cli::Cli;
 use crate::license_detection::LicenseDetectionEngine;
 use crate::output::{OutputWriteConfig, write_output_file};
 use crate::post_processing::{
-    CreateOutputContext, CreateOutputOptions, apply_package_reference_following, build_facet_rules,
-    collect_top_level_license_detections, collect_top_level_license_references, create_output,
+    CreateOutputContext, CreateOutputOptions, DEFAULT_LICENSEDB_URL_TEMPLATE,
+    apply_package_reference_following, build_facet_rules, collect_top_level_license_detections,
+    collect_top_level_license_references, create_output,
 };
 use crate::progress::{ProgressMode, ScanProgress};
 use crate::scan_result_shaping::{
@@ -171,6 +172,7 @@ fn run() -> Result<()> {
             include_text_diagnostics: cli.license_text_diagnostics,
             include_diagnostics: cli.license_diagnostics,
             unknown_licenses: cli.unknown_licenses,
+            min_score: cli.license_score,
         };
         let mut result = run_with_thread_pool(thread_count, || {
             Ok(process_collected(
@@ -304,7 +306,9 @@ fn run() -> Result<()> {
     let should_recompute_license_references = cli.from_json
         && (!preloaded_license_references.is_empty()
             || !preloaded_license_rule_references.is_empty()
-            || cli.license_references);
+            || cli.license_references
+            || (cli.license_url_template != DEFAULT_LICENSEDB_URL_TEMPLATE
+                && !preloaded_license_references.is_empty()));
 
     if should_recompute_license_references && active_license_engine.is_none() {
         active_license_engine = Some(init_license_engine(&cli.license_rules_path)?);
@@ -322,6 +326,7 @@ fn run() -> Result<()> {
                     &scan_result.files,
                     &assembly_result.packages,
                     engine.index(),
+                    &cli.license_url_template,
                 )
             } else {
                 (Vec::new(), Vec::new())
