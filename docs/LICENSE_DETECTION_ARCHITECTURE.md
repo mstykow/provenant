@@ -15,8 +15,7 @@ The license detection system is a multi-phase, multi-strategy detection engine t
 | `--license-rules-path` | Override to load custom license/rules from a directory |
 | `--include-text`       | Include matched text in output                         |
 
-**Default behavior**: Uses the built-in embedded license index. No external files are required, and
-no persistent cache is used unless `--cache license-index` (or `--cache all`) is specified.
+**Default behavior**: Uses the built-in embedded license index. No external files required.
 
 > Remaining public output and CLI parity work is tracked in
 > [`docs/implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md`](implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md).
@@ -30,13 +29,7 @@ main.rs::init_license_engine()
     │
     ├── No --license-rules-path specified (default)
     │       ↓
-    │   If --cache license-index is enabled:
-    │       ↓
-    │   Load validated local `license-index/snapshot.bin.zst` when present
-    │       ↓
-    │   Otherwise fall back to the embedded artifact path below and persist a warm cache snapshot
-    │
-    │   Embedded artifact path:
+    │   LicenseDetectionEngine::from_embedded()
     │       ↓
     │   Decompress embedded artifact (zstd)
     │       ↓
