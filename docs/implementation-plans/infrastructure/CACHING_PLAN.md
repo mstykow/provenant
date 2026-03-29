@@ -40,8 +40,8 @@ Persistent caching of scan results and compiled data structures to speed up repe
 - **Incremental Scanning**: Only scan files that changed since last scan (mtime + content hash check)
 - **Cache Invalidation**: Version-stamped caches with tool version + data version embedded in cache metadata
 - **Multi-Process Safety**: File locking for cache writes (parallel scans on same codebase)
-- **Cache Management CLI**: `--cache-dir`, `--cache-clear`, and parity-aligned memory/cache control (`--max-in-memory` equivalent)
-- **Optional Rust Convenience Flag**: `--no-cache` (if implemented, must be explicitly documented as Rust-specific and scoped to persistent cache read/write only)
+- **Cache Management CLI**: `--cache <kind>`, `--cache-dir`, `--cache-clear`, and parity-aligned memory/cache control (`--max-in-memory` equivalent)
+- **Default Behavior**: Persistent caches stay disabled unless explicitly enabled with `--cache`
 - **Configurable Cache Location**: XDG cache directory by default, overridable via environment variable and CLI flag
 
 **Out of Scope:**
@@ -58,14 +58,14 @@ Persistent caching of scan results and compiled data structures to speed up repe
 - ✅ Rule-driven detection pipeline architecture documented and integrated on story branch
 - ✅ SHA256 hash computation per file in `process_file()` (already available as cache key)
 - ✅ `FileInfo` struct with all scannable fields (package_data, license_detections, copyrights, etc.)
-- ✅ `src/cache/config.rs`: foundational cache directory helpers (`.provenant-cache`, index/scan-results dirs)
+- ✅ `src/cache/config.rs`: shared cache-root helpers with separate `license-index/` and `scan-results/` subdirectories
 - ✅ `src/cache/metadata.rs`: snapshot metadata + deterministic invalidation key compatibility checks
 - ✅ `src/cache/paths.rs`: SHA256 validation and deterministic sharded scan cache pathing (`.msgpack.zst`)
 - ✅ `src/cache/io.rs`: versioned snapshot envelope read/write with zstd + MessagePack and atomic temp-file rename
 - ✅ `src/cache/scan_cache.rs`: scan-result cache payload model + read/write helpers with metadata-key invalidation
 - ✅ `src/scanner/process.rs`: cache read-before-scan and write-after-scan integration
 - ✅ `src/main.rs`: cache bootstrap wiring with `PROVENANT_CACHE` + CLI overrides
-- ✅ CLI flags parsed and wired: `--cache-dir`, `--cache-clear`, `--max-in-memory` (placeholder semantics documented)
+- ✅ CLI flags parsed and wired: `--cache <kind>`, `--cache-dir`, `--cache-clear`, `--max-in-memory` (placeholder semantics documented)
 
 **Missing:**
 
@@ -77,13 +77,14 @@ Persistent caching of scan results and compiled data structures to speed up repe
 
 ### CLI Flag Positioning (Validated)
 
-| Flag                              | Decision               | Notes                                                                                                |
-| --------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| `--cache-dir`                     | Keep                   | Useful and safe once unified cache manager exists; aligns with env-var-based cache location control. |
-| `--cache-clear`                   | Keep                   | Good operational safety valve once cache ownership is centralized.                                   |
-| `--max-in-memory` (or equivalent) | Keep for parity        | Upstream uses this as current scan-time memory/disk-spill control.                                   |
-| `--no-cache`                      | Optional Rust-specific | Not parity-required. If added, scope to persistent cache read/write only.                            |
-| `--incremental`                   | Defer                  | Beyond parity; requires robust invalidation and deterministic behavior guarantees.                   |
+| Flag                              | Decision        | Notes                                                                                |
+| --------------------------------- | --------------- | ------------------------------------------------------------------------------------ |
+| `--cache <kind>`                  | Keep            | Explicitly enables persistent cache kinds while keeping default behavior cache-free. |
+| `--cache-dir`                     | Keep            | Shared cache-root selector; should not imply cache activation on its own.            |
+| `--cache-clear`                   | Keep            | Good operational safety valve once cache ownership is centralized.                   |
+| `--max-in-memory` (or equivalent) | Keep for parity | Upstream uses this as current scan-time memory/disk-spill control.                   |
+| `--no-cache`                      | Drop            | Redundant once persistent caches are opt-in by default.                              |
+| `--incremental`                   | Defer           | Beyond parity; requires robust invalidation and deterministic behavior guarantees.   |
 
 ---
 

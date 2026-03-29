@@ -6,7 +6,10 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::cache::{CACHE_DIR_ENV_VAR, CacheConfig, build_collection_exclude_patterns};
+use crate::cache::{
+    CACHE_DIR_ENV_VAR, CacheConfig, CacheKinds, build_collection_exclude_patterns,
+    load_or_build_embedded_license_index,
+};
 use crate::cli::Cli;
 use crate::license_detection::LicenseDetectionEngine;
 use crate::output::{OutputWriteConfig, write_output_file};
@@ -138,12 +141,10 @@ fn run() -> Result<()> {
 
         let license_engine = if cli.license {
             progress.start_license_detection_engine_creation();
-            let engine = init_license_engine(&cli.license_rules_path)?;
+            let (engine, source) =
+                init_license_engine(&cli.license_rules_path, Some(&cache_config))?;
             progress.finish_license_detection_engine_creation();
-            progress.output_written(&describe_license_engine_source(
-                &engine,
-                cli.license_rules_path.as_deref(),
-            ));
+            progress.output_written(&describe_license_engine_source(&engine, &source));
             Some(engine)
         } else {
             None
@@ -159,7 +160,9 @@ fn run() -> Result<()> {
             max_emails: cli.max_email,
             max_urls: cli.max_url,
             timeout_seconds: cli.timeout,
-            scan_cache_dir: Some(cache_config.scan_results_dir()),
+            scan_cache_dir: cache_config
+                .scan_results_enabled()
+                .then(|| cache_config.scan_results_dir()),
         };
 
         let thread_count = resolve_thread_count(cli.processes);
@@ -305,7 +308,7 @@ fn run() -> Result<()> {
             || cli.license_references);
 
     if should_recompute_license_references && active_license_engine.is_none() {
-        active_license_engine = Some(init_license_engine(&cli.license_rules_path)?);
+        active_license_engine = Some(init_license_engine(&cli.license_rules_path, None)?.0);
     }
 
     let (license_references, license_rule_references) =
@@ -385,6 +388,12 @@ fn validate_scan_option_compatibility(cli: &Cli) -> Result<()> {
         ));
     }
 
+    if cli.from_json && (!cli.cache.is_empty() || cli.cache_dir.is_some() || cli.cache_clear) {
+        return Err(anyhow!(
+            "Persistent cache options are only supported for directory scan mode, not --from-json"
+        ));
+    }
+
     if !cli.from_json && cli.dir_path.is_empty() {
         return Err(anyhow!("Directory path is required for scan operations"));
     }
@@ -400,18 +409,30 @@ fn validate_scan_option_compatibility(cli: &Cli) -> Result<()> {
 
 fn prepare_cache_for_scan(scan_path: &str, cli: &Cli) -> Result<CacheConfig> {
     let env_cache_dir = env::var_os(CACHE_DIR_ENV_VAR).map(PathBuf::from);
+    let cache_kinds = CacheKinds::from_cli(&cli.cache);
     let config = CacheConfig::from_overrides(
         Path::new(scan_path),
         cli.cache_dir.as_deref().map(Path::new),
         env_cache_dir.as_deref(),
+        cache_kinds,
     );
 
     if cli.cache_clear {
         config.clear()?;
     }
 
-    config.ensure_dirs()?;
+    if config.any_enabled() {
+        config.ensure_dirs()?;
+    }
+
     Ok(config)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum LicenseEngineSource {
+    RulesDirectory(PathBuf),
+    EmbeddedArtifact,
+    LicenseIndexCache,
 }
 
 fn compile_regex_patterns(option_name: &str, patterns: &[String]) -> Result<Vec<Regex>> {
@@ -481,7 +502,10 @@ where
     pool.install(f)
 }
 
-fn init_license_engine(rules_path: &Option<String>) -> Result<Arc<LicenseDetectionEngine>> {
+fn init_license_engine(
+    rules_path: &Option<String>,
+    cache_config: Option<&CacheConfig>,
+) -> Result<(Arc<LicenseDetectionEngine>, LicenseEngineSource)> {
     match rules_path {
         Some(p) => {
             let path = PathBuf::from(p);
@@ -489,27 +513,45 @@ fn init_license_engine(rules_path: &Option<String>) -> Result<Arc<LicenseDetecti
                 return Err(anyhow!("License rules path does not exist: {:?}", path));
             }
             let engine = LicenseDetectionEngine::from_directory(&path)?;
-            Ok(Arc::new(engine))
+            Ok((Arc::new(engine), LicenseEngineSource::RulesDirectory(path)))
         }
         None => {
+            if let Some(config) = cache_config {
+                let (index, source) = load_or_build_embedded_license_index(config)?;
+                let source = match source {
+                    crate::cache::LicenseIndexCacheSource::WarmCache => {
+                        LicenseEngineSource::LicenseIndexCache
+                    }
+                    crate::cache::LicenseIndexCacheSource::EmbeddedArtifact => {
+                        LicenseEngineSource::EmbeddedArtifact
+                    }
+                };
+                let engine = LicenseDetectionEngine::from_index(index)?;
+                return Ok((Arc::new(engine), source));
+            }
+
             let engine = LicenseDetectionEngine::from_embedded()?;
-            Ok(Arc::new(engine))
+            Ok((Arc::new(engine), LicenseEngineSource::EmbeddedArtifact))
         }
     }
 }
 
 fn describe_license_engine_source(
     engine: &LicenseDetectionEngine,
-    rules_path: Option<&str>,
+    source: &LicenseEngineSource,
 ) -> String {
-    match rules_path {
-        Some(path) => format!(
+    match source {
+        LicenseEngineSource::RulesDirectory(path) => format!(
             "License detection engine initialized with {} rules from {}",
             engine.index().rules_by_rid.len(),
-            path
+            path.display()
         ),
-        None => format!(
+        LicenseEngineSource::EmbeddedArtifact => format!(
             "License detection engine initialized with {} rules from embedded artifact",
+            engine.index().rules_by_rid.len()
+        ),
+        LicenseEngineSource::LicenseIndexCache => format!(
+            "License detection engine initialized with {} rules from local license-index cache",
             engine.index().rules_by_rid.len()
         ),
     }

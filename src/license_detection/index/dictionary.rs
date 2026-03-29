@@ -97,6 +97,14 @@ pub struct TokenMetadata {
     pub is_short_or_digit: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct TokenDictionarySnapshot {
+    tokens_to_ids: HashMap<String, TokenId>,
+    token_metadata: Vec<Option<TokenMetadata>>,
+    len_legalese: usize,
+    next_id: TokenId,
+}
+
 /// Token dictionary mapping token strings to unique integer IDs.
 ///
 /// Token IDs are assigned as follows:
@@ -284,6 +292,24 @@ impl TokenDictionary {
     #[allow(dead_code)]
     pub fn tokens_to_ids_len(&self) -> usize {
         self.tokens_to_ids.len()
+    }
+
+    pub(crate) fn to_snapshot(&self) -> TokenDictionarySnapshot {
+        TokenDictionarySnapshot {
+            tokens_to_ids: self.tokens_to_ids.clone(),
+            token_metadata: self.token_metadata.clone(),
+            len_legalese: self.len_legalese,
+            next_id: self.next_id,
+        }
+    }
+
+    pub(crate) fn from_snapshot(snapshot: TokenDictionarySnapshot) -> Self {
+        Self {
+            tokens_to_ids: snapshot.tokens_to_ids,
+            token_metadata: snapshot.token_metadata,
+            len_legalese: snapshot.len_legalese,
+            next_id: snapshot.next_id,
+        }
     }
 }
 

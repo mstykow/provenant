@@ -91,6 +91,10 @@ pub struct LicenseDetectionEngine {
     spdx_mapping: SpdxMapping,
 }
 
+pub(crate) fn embedded_artifact_bytes() -> &'static [u8] {
+    include_bytes!("../../resources/license_detection/license_index.zst")
+}
+
 const MAX_DETECTION_SIZE: usize = 10 * 1024 * 1024; // 10MB
 const MAX_REGULAR_SEQ_CANDIDATES: usize = 70;
 const MAX_REDUNDANT_SEQ_CONTAINER_BOUNDARY_GAP: usize = 8;
@@ -431,7 +435,7 @@ impl LicenseDetectionEngine {
     ///
     /// This is an internal constructor used by `from_directory()` and `from_embedded()`.
     /// It builds the SPDX mapping from the licenses in the index.
-    fn from_index(index: index::LicenseIndex) -> Result<Self> {
+    pub(crate) fn from_index(index: index::LicenseIndex) -> Result<Self> {
         let mut license_vec: Vec<_> = index.licenses_by_key.values().cloned().collect();
         license_vec.sort_by(|a, b| a.key.cmp(&b.key));
         let spdx_mapping = build_spdx_mapping(&license_vec);
@@ -451,8 +455,7 @@ impl LicenseDetectionEngine {
     /// # Returns
     /// A Result containing the engine or an error
     pub fn from_embedded() -> Result<Self> {
-        let artifact_bytes = include_bytes!("../../resources/license_detection/license_index.zst");
-        let index = load_license_index_from_bytes(artifact_bytes)
+        let index = load_license_index_from_bytes(embedded_artifact_bytes())
             .map_err(|e| anyhow::anyhow!("Failed to load embedded license index: {}", e))?;
         Self::from_index(index)
     }

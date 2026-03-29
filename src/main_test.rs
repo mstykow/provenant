@@ -4,7 +4,7 @@ use serde_json::json;
 use std::fs;
 use std::path::Path;
 
-use crate::cache::{DEFAULT_CACHE_DIR_NAME, build_collection_exclude_patterns};
+use crate::cache::{CacheConfig, DEFAULT_CACHE_DIR_NAME, build_collection_exclude_patterns};
 use crate::post_processing::collect_top_level_license_detections;
 use crate::scan_result_shaping::json_input::{
     JsonScanInput, load_scan_from_json, normalize_loaded_json_scan,
@@ -30,6 +30,23 @@ fn validate_scan_option_compatibility_rejects_scan_flags_with_from_json() {
     ])
     .unwrap();
     assert!(validate_scan_option_compatibility(&cli).is_err());
+}
+
+#[test]
+fn validate_scan_option_compatibility_rejects_cache_flags_with_from_json() {
+    let cli = crate::cli::Cli::try_parse_from([
+        "provenant",
+        "--json-pp",
+        "scan.json",
+        "--from-json",
+        "--cache",
+        "all",
+        "sample-scan.json",
+    ])
+    .unwrap();
+
+    let error = validate_scan_option_compatibility(&cli).unwrap_err();
+    assert!(error.to_string().contains("Persistent cache options"));
 }
 
 #[test]
@@ -438,7 +455,7 @@ fn progress_mode_from_cli_maps_quiet_verbose_default() {
 }
 
 #[test]
-fn prepare_cache_for_scan_defaults_to_scan_root_cache_directory() {
+fn prepare_cache_for_scan_defaults_to_scan_root_cache_directory_without_creating_dirs() {
     let temp_dir = tempfile::TempDir::new().expect("create temp dir");
     let scan_root = temp_dir.path().join("scan");
     fs::create_dir_all(&scan_root).expect("create scan root");
@@ -449,8 +466,8 @@ fn prepare_cache_for_scan_defaults_to_scan_root_cache_directory() {
     let config = prepare_cache_for_scan(scan_root.to_str().unwrap(), &cli).unwrap();
 
     assert_eq!(config.root_dir(), scan_root.join(DEFAULT_CACHE_DIR_NAME));
-    assert!(config.index_dir().exists());
-    assert!(config.scan_results_dir().exists());
+    assert!(!config.any_enabled());
+    assert!(!config.root_dir().exists());
 }
 
 #[test]
@@ -460,14 +477,16 @@ fn prepare_cache_for_scan_respects_cache_dir_and_cache_clear() {
     fs::create_dir_all(&scan_root).expect("create scan root");
 
     let explicit_cache_dir = temp_dir.path().join("explicit-cache");
-    fs::create_dir_all(explicit_cache_dir.join("index")).unwrap();
-    let stale_file = explicit_cache_dir.join("index").join("stale.txt");
+    fs::create_dir_all(explicit_cache_dir.join("license-index")).unwrap();
+    let stale_file = explicit_cache_dir.join("license-index").join("stale.txt");
     fs::write(&stale_file, "old").unwrap();
 
     let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
+        "--cache",
+        "all",
         "--cache-dir",
         explicit_cache_dir.to_str().unwrap(),
         "--cache-clear",
@@ -478,8 +497,31 @@ fn prepare_cache_for_scan_respects_cache_dir_and_cache_clear() {
 
     assert_eq!(config.root_dir(), explicit_cache_dir);
     assert!(!stale_file.exists());
-    assert!(config.index_dir().exists());
+    assert!(config.license_index_dir().exists());
     assert!(config.scan_results_dir().exists());
+}
+
+#[test]
+fn prepare_cache_for_scan_only_creates_requested_cache_subdirectories() {
+    let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+    let scan_root = temp_dir.path().join("scan");
+    fs::create_dir_all(&scan_root).expect("create scan root");
+
+    let cli = crate::cli::Cli::try_parse_from([
+        "provenant",
+        "--json-pp",
+        "scan.json",
+        "--cache",
+        "license-index",
+        "sample-dir",
+    ])
+    .unwrap();
+    let config = prepare_cache_for_scan(scan_root.to_str().unwrap(), &cli).unwrap();
+
+    assert!(!config.scan_results_enabled());
+    assert!(config.license_index_enabled());
+    assert!(config.license_index_dir().exists());
+    assert!(!config.scan_results_dir().exists());
 }
 
 #[test]
@@ -487,18 +529,18 @@ fn build_collection_exclude_patterns_skips_default_cache_dir() {
     let temp_dir = tempfile::TempDir::new().expect("create temp dir");
     let scan_root = temp_dir.path().join("scan");
     fs::create_dir_all(scan_root.join("src")).unwrap();
-    fs::create_dir_all(scan_root.join(DEFAULT_CACHE_DIR_NAME).join("index")).unwrap();
+    fs::create_dir_all(scan_root.join(DEFAULT_CACHE_DIR_NAME).join("license-index")).unwrap();
     fs::write(scan_root.join("src").join("main.rs"), "fn main() {}").unwrap();
     fs::write(
         scan_root
             .join(DEFAULT_CACHE_DIR_NAME)
-            .join("index")
+            .join("license-index")
             .join("stale.txt"),
         "cached",
     )
     .unwrap();
 
-    let config = crate::cache::CacheConfig::from_scan_root(&scan_root);
+    let config = CacheConfig::from_scan_root(&scan_root);
     let exclude_patterns = build_collection_exclude_patterns(&scan_root, config.root_dir());
     let collected = collect_paths(&scan_root, 0, &exclude_patterns);
 
@@ -527,7 +569,7 @@ fn build_collection_exclude_patterns_skips_explicit_in_tree_cache_dir() {
     )
     .unwrap();
 
-    let config = crate::cache::CacheConfig::new(explicit_cache_dir.clone());
+    let config = CacheConfig::new(explicit_cache_dir.clone());
     let exclude_patterns = build_collection_exclude_patterns(&scan_root, config.root_dir());
     let collected = collect_paths(&scan_root, 0, &exclude_patterns);
 
@@ -547,7 +589,7 @@ fn build_collection_exclude_patterns_does_not_exclude_scan_root_when_cache_root_
     fs::create_dir_all(scan_root.join("src")).unwrap();
     fs::write(scan_root.join("src").join("main.rs"), "fn main() {}").unwrap();
 
-    let config = crate::cache::CacheConfig::new(scan_root.clone());
+    let config = CacheConfig::new(scan_root.clone());
     let exclude_patterns = build_collection_exclude_patterns(&scan_root, config.root_dir());
     let collected = collect_paths(&scan_root, 0, &exclude_patterns);
 
