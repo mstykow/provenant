@@ -146,7 +146,7 @@ pub struct Cli {
         value_name = "KIND",
         value_enum,
         value_delimiter = ',',
-        help = "Enable one or more persistent caches: scan-results, license-index, all"
+        help = "Enable the persistent scan-results cache"
     )]
     pub cache: Vec<CacheKind>,
 
@@ -836,7 +836,7 @@ mod tests {
             "--json-pp",
             "scan.json",
             "--cache",
-            "scan-results,license-index",
+            "scan-results",
             "--cache-dir",
             "/tmp/sc-cache",
             "--cache-clear",
@@ -847,27 +847,24 @@ mod tests {
         .expect("cli parse should accept cache flags");
 
         assert_eq!(parsed.cache_dir.as_deref(), Some("/tmp/sc-cache"));
-        assert_eq!(
-            parsed.cache,
-            vec![CacheKind::ScanResults, CacheKind::LicenseIndex]
-        );
+        assert_eq!(parsed.cache, vec![CacheKind::ScanResults]);
         assert!(parsed.cache_clear);
         assert_eq!(parsed.max_in_memory, Some(5000));
     }
 
     #[test]
-    fn test_parses_cache_all_flag() {
+    fn test_parses_cache_alias_flag() {
         let parsed = Cli::try_parse_from([
             "provenant",
             "--json-pp",
             "scan.json",
             "--cache",
-            "all",
+            "scan",
             "samples",
         ])
-        .expect("cli parse should accept cache=all");
+        .expect("cli parse should accept cache=scan alias");
 
-        assert_eq!(parsed.cache, vec![CacheKind::All]);
+        assert_eq!(parsed.cache, vec![CacheKind::ScanResults]);
     }
 
     #[test]
