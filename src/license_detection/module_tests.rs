@@ -3,6 +3,8 @@ use once_cell::sync::Lazy;
 use std::path::PathBuf;
 use std::sync::Once;
 
+use crate::license_detection::tests::TestMatchBuilder;
+
 static TEST_ENGINE: Lazy<LicenseDetectionEngine> = Lazy::new(|| {
     LicenseDetectionEngine::from_embedded().expect("Should initialize from embedded artifact")
 });
@@ -24,24 +26,22 @@ fn make_test_match(
     end_token: usize,
     qspan_positions: Option<Vec<usize>>,
 ) -> LicenseMatch {
-    let matcher = matcher.to_string();
+    let matcher_str = matcher.to_string();
     let matched_length = qspan_positions
         .as_ref()
         .map(|positions| positions.len())
         .unwrap_or_else(|| end_token.saturating_sub(start_token));
 
-    LicenseMatch {
-        license_expression: expression.to_string(),
-        matcher: matcher.parse().expect("invalid test matcher"),
-        rule_identifier: rule_identifier.to_string(),
-        start_token,
-        end_token,
-        matched_length,
-        rule_length: matched_length,
-        match_coverage: 100.0,
-        qspan_positions,
-        ..Default::default()
-    }
+    TestMatchBuilder::default()
+        .license_expression(expression)
+        .rule_identifier(rule_identifier)
+        .matcher(matcher_str.parse().expect("invalid test matcher"))
+        .start_token(start_token)
+        .end_token(end_token)
+        .matched_length(matched_length)
+        .rule_length(matched_length)
+        .qspan_positions(qspan_positions)
+        .build_match()
 }
 
 #[test]

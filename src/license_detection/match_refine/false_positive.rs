@@ -169,6 +169,8 @@ pub fn filter_false_positive_license_lists_matches(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::license_detection::models::RuleKind;
+    use crate::license_detection::tests::TestMatchBuilder;
 
     #[allow(clippy::too_many_arguments)]
     fn create_test_match_with_flags(
@@ -186,43 +188,32 @@ mod tests {
         license_expression: &str,
     ) -> LicenseMatch {
         let rid = rule_identifier.trim_start_matches('#').parse().unwrap_or(0);
-        LicenseMatch {
-            rid,
-            license_expression: license_expression.to_string(),
-            license_expression_spdx: Some(license_expression.to_string()),
-            from_file: None,
-            start_line,
-            end_line,
-            start_token: 0,
-            end_token: 0,
-            matcher: matcher.parse().expect("invalid test matcher"),
-            score: 1.0,
-            matched_length,
-            rule_length,
-            match_coverage,
-            rule_relevance: 100,
-            rule_identifier: rule_identifier.to_string(),
-            rule_url: String::new(),
-            matched_text: None,
-            referenced_filenames: None,
-            rule_kind: crate::license_detection::models::RuleKind::from_match_flags(
-                false,
-                is_license_reference,
-                is_license_tag,
-                is_license_intro,
-                is_license_clue,
-            )
-            .unwrap(),
-            is_from_license: false,
-            matched_token_positions: None,
-            hilen: matched_length / 2,
-            rule_start_token: 0,
-            qspan_positions: Some((0..matched_length).collect()),
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        }
+        let rule_kind = RuleKind::from_match_flags(
+            false,
+            is_license_reference,
+            is_license_tag,
+            is_license_intro,
+            is_license_clue,
+        )
+        .unwrap();
+        let mut m = TestMatchBuilder::default()
+            .license_expression(license_expression)
+            .license_expression_spdx(Some(license_expression.to_string()))
+            .start_line(start_line)
+            .end_line(end_line)
+            .matcher(matcher.parse().expect("invalid test matcher"))
+            .score(1.0)
+            .matched_length(matched_length)
+            .rule_length(rule_length)
+            .match_coverage(match_coverage)
+            .rule_relevance(100)
+            .rule_identifier(rule_identifier)
+            .rule_kind(rule_kind)
+            .hilen(matched_length / 2)
+            .qspan_positions(Some((0..matched_length).collect()))
+            .build_match();
+        m.rid = rid;
+        m
     }
 
     #[test]
@@ -462,16 +453,15 @@ mod tests {
     fn test_min_unique_licenses_fallback() {
         let matches: Vec<LicenseMatch> = (0..20)
             .map(|i| {
-                let mut m = LicenseMatch {
-                    license_expression: format!("license-{}", i % 4),
-                    matcher: crate::license_detection::models::MatcherKind::Aho,
-                    matched_length: 10,
-                    match_coverage: 100.0,
-                    rule_relevance: 100,
-                    rule_identifier: "#1".to_string(),
-                    ..LicenseMatch::default()
-                };
-                m.rule_kind = crate::license_detection::models::RuleKind::Reference;
+                let mut m = TestMatchBuilder::default()
+                    .license_expression(format!("license-{}", i % 4))
+                    .matcher(MatcherKind::Aho)
+                    .matched_length(10)
+                    .match_coverage(100.0)
+                    .rule_relevance(100)
+                    .rule_identifier("#1")
+                    .rule_kind(RuleKind::Reference)
+                    .build_match();
                 m
             })
             .collect();

@@ -570,6 +570,7 @@ mod tests {
     use crate::license_detection::index::LicenseIndex;
     use crate::license_detection::index::dictionary::{TokenId, tid};
     use crate::license_detection::query::Query;
+    use crate::license_detection::tests::TestMatchBuilder;
 
     fn tids(values: &[u16]) -> Vec<TokenId> {
         values.iter().copied().map(tid).collect()
@@ -796,36 +797,24 @@ mod tests {
         let query = Query::from_extracted_text("some license text here", &index, false)
             .expect("Failed to create query");
 
-        let known_matches = vec![LicenseMatch {
-            rid: 0,
-            license_expression: "test".to_string(),
-            license_expression_spdx: Some("TEST".to_string()),
-            from_file: None,
-            start_line: 1,
-            end_line: 1,
-            start_token: 0,
-            end_token: 10,
-            matcher: MatcherKind::Aho,
-            score: 1.0,
-            matched_length: 6,
-            rule_length: 6,
-            matched_token_positions: None,
-            match_coverage: 100.0,
-            rule_relevance: 100,
-            rule_identifier: "test-rule".to_string(),
-            rule_url: String::new(),
-            matched_text: Some("matched text".to_string()),
-            referenced_filenames: None,
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_from_license: false,
-            hilen: 1,
-            rule_start_token: 0,
-            qspan_positions: Some(vec![0, 1, 2, 7, 8, 9]),
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        }];
+        let known_matches = vec![
+            TestMatchBuilder::default()
+                .license_expression("test")
+                .license_expression_spdx(Some("TEST".to_string()))
+                .start_line(1)
+                .end_line(1)
+                .start_token(0)
+                .end_token(10)
+                .matcher(MatcherKind::Aho)
+                .score(1.0)
+                .matched_length(6)
+                .rule_length(6)
+                .rule_identifier("test-rule")
+                .matched_text(Some("matched text".to_string()))
+                .hilen(1)
+                .qspan_positions(Some(vec![0, 1, 2, 7, 8, 9]))
+                .build_match(),
+        ];
 
         let covered = compute_covered_positions(&query, &known_matches);
 
@@ -847,36 +836,23 @@ mod tests {
         let query = Query::from_extracted_text("some license text here", &index, false)
             .expect("Failed to create query");
 
-        let known_matches = vec![LicenseMatch {
-            rid: 0,
-            license_expression: "test".to_string(),
-            license_expression_spdx: Some("TEST".to_string()),
-            from_file: None,
-            start_line: 1,
-            end_line: 1,
-            start_token: 5,
-            end_token: 10,
-            matcher: MatcherKind::Aho,
-            score: 1.0,
-            matched_length: 5,
-            rule_length: 5,
-            matched_token_positions: None,
-            match_coverage: 100.0,
-            rule_relevance: 100,
-            rule_identifier: "test-rule".to_string(),
-            rule_url: String::new(),
-            matched_text: Some("matched text".to_string()),
-            referenced_filenames: None,
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_from_license: false,
-            hilen: 1,
-            rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        }];
+        let known_matches = vec![
+            TestMatchBuilder::default()
+                .license_expression("test")
+                .license_expression_spdx(Some("TEST".to_string()))
+                .start_line(1)
+                .end_line(1)
+                .start_token(5)
+                .end_token(10)
+                .matcher(MatcherKind::Aho)
+                .score(1.0)
+                .matched_length(5)
+                .rule_length(5)
+                .rule_identifier("test-rule")
+                .matched_text(Some("matched text".to_string()))
+                .hilen(1)
+                .build_match(),
+        ];
 
         let covered = compute_covered_positions(&query, &known_matches);
 
@@ -899,36 +875,24 @@ mod tests {
         let query = Query::from_extracted_text("some license text here", &index, false)
             .expect("Failed to create query");
 
-        let known_matches = vec![LicenseMatch {
-            rid: 0,
-            license_expression: "test".to_string(),
-            license_expression_spdx: Some("TEST".to_string()),
-            from_file: None,
-            start_line: 1,
-            end_line: 1,
-            start_token: 0,
-            end_token: 15,
-            matcher: MatcherKind::Aho,
-            score: 1.0,
-            matched_length: 8,
-            rule_length: 8,
-            matched_token_positions: None,
-            match_coverage: 100.0,
-            rule_relevance: 100,
-            rule_identifier: "test-rule".to_string(),
-            rule_url: String::new(),
-            matched_text: Some("matched text".to_string()),
-            referenced_filenames: None,
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_from_license: false,
-            hilen: 1,
-            rule_start_token: 0,
-            qspan_positions: Some(vec![0, 1, 2, 3, 11, 12, 13, 14]),
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        }];
+        let known_matches = vec![
+            TestMatchBuilder::default()
+                .license_expression("test")
+                .license_expression_spdx(Some("TEST".to_string()))
+                .start_line(1)
+                .end_line(1)
+                .start_token(0)
+                .end_token(15)
+                .matcher(MatcherKind::Aho)
+                .score(1.0)
+                .matched_length(8)
+                .rule_length(8)
+                .rule_identifier("test-rule")
+                .matched_text(Some("matched text".to_string()))
+                .hilen(1)
+                .qspan_positions(Some(vec![0, 1, 2, 3, 11, 12, 13, 14]))
+                .build_match(),
+        ];
 
         let covered = compute_covered_positions(&query, &known_matches);
         let regions = find_unmatched_regions(20, &covered);
@@ -985,36 +949,23 @@ mod tests {
         let query =
             Query::from_extracted_text(text, &index, false).expect("Failed to create query");
 
-        let known_matches = vec![LicenseMatch {
-            rid: 0,
-            license_expression: "mit".to_string(),
-            license_expression_spdx: Some("MIT".to_string()),
-            from_file: None,
-            start_line: 1,
-            end_line: 1,
-            start_token: 0,
-            end_token: 5,
-            matcher: MatcherKind::Aho,
-            score: 1.0,
-            matched_length: 5,
-            rule_length: 5,
-            matched_token_positions: None,
-            match_coverage: 100.0,
-            rule_relevance: 100,
-            rule_identifier: "test-rule".to_string(),
-            rule_url: String::new(),
-            matched_text: Some("some text".to_string()),
-            referenced_filenames: None,
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_from_license: false,
-            hilen: 2,
-            rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        }];
+        let known_matches = vec![
+            TestMatchBuilder::default()
+                .license_expression("mit")
+                .license_expression_spdx(Some("MIT".to_string()))
+                .start_line(1)
+                .end_line(1)
+                .start_token(0)
+                .end_token(5)
+                .matcher(MatcherKind::Aho)
+                .score(1.0)
+                .matched_length(5)
+                .rule_length(5)
+                .rule_identifier("test-rule")
+                .matched_text(Some("some text".to_string()))
+                .hilen(2)
+                .build_match(),
+        ];
 
         let matches = unknown_match(&index, &query, &known_matches);
 

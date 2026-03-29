@@ -547,6 +547,7 @@ pub(crate) fn filter_too_short_matches(
 mod tests {
     use super::*;
     use crate::license_detection::models::Rule;
+    use crate::license_detection::tests::TestMatchBuilder;
     use crate::license_detection::unknown_match::MATCH_UNKNOWN;
 
     fn parse_rule_id(rule_identifier: &str) -> Option<usize> {
@@ -569,36 +570,25 @@ mod tests {
         let matched_len = end_line - start_line + 1;
         let rule_len = matched_len;
         let rid = parse_rule_id(rule_identifier).unwrap_or(0);
-        LicenseMatch {
-            rid,
-            license_expression: "mit".to_string(),
-            license_expression_spdx: Some("MIT".to_string()),
-            from_file: None,
-            start_line,
-            end_line,
-            start_token: start_line,
-            end_token: end_line + 1,
-            matcher: crate::license_detection::models::MatcherKind::Aho,
-            score,
-            matched_length: matched_len,
-            rule_length: rule_len,
-            matched_token_positions: None,
-            match_coverage: coverage,
-            rule_relevance: relevance,
-            rule_identifier: rule_identifier.to_string(),
-            rule_url: "https://example.com".to_string(),
-            matched_text: None,
-            referenced_filenames: None,
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_from_license: false,
-            hilen: 50,
-            rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        }
+        let mut m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .license_expression_spdx(Some("MIT".to_string()))
+            .start_line(start_line)
+            .end_line(end_line)
+            .start_token(start_line)
+            .end_token(end_line + 1)
+            .matcher(MatcherKind::Aho)
+            .score(score)
+            .matched_length(matched_len)
+            .rule_length(rule_len)
+            .match_coverage(coverage)
+            .rule_relevance(relevance)
+            .rule_identifier(rule_identifier)
+            .rule_url("https://example.com".to_string())
+            .hilen(50)
+            .build_match();
+        m.rid = rid;
+        m
     }
 
     fn create_test_match_with_tokens(
@@ -608,36 +598,25 @@ mod tests {
         matched_length: usize,
     ) -> LicenseMatch {
         let rid = parse_rule_id(rule_identifier).unwrap_or(0);
-        LicenseMatch {
-            rid,
-            license_expression: "mit".to_string(),
-            license_expression_spdx: Some("MIT".to_string()),
-            from_file: None,
-            start_line: start_token,
-            end_line: end_token.saturating_sub(1),
-            start_token,
-            end_token,
-            matcher: crate::license_detection::models::MatcherKind::Aho,
-            score: 1.0,
-            matched_length,
-            rule_length: matched_length,
-            match_coverage: 100.0,
-            rule_relevance: 100,
-            rule_identifier: rule_identifier.to_string(),
-            rule_url: "https://example.com".to_string(),
-            matched_text: None,
-            referenced_filenames: None,
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_from_license: false,
-            matched_token_positions: None,
-            hilen: matched_length / 2,
-            rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        }
+        let mut m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .license_expression_spdx(Some("MIT".to_string()))
+            .start_line(start_token)
+            .end_line(end_token.saturating_sub(1))
+            .start_token(start_token)
+            .end_token(end_token)
+            .matcher(MatcherKind::Aho)
+            .score(1.0)
+            .matched_length(matched_length)
+            .rule_length(matched_length)
+            .match_coverage(100.0)
+            .rule_relevance(100)
+            .rule_identifier(rule_identifier)
+            .rule_url("https://example.com".to_string())
+            .hilen(matched_length / 2)
+            .build_match();
+        m.rid = rid;
+        m
     }
 
     #[test]

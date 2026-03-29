@@ -53,38 +53,26 @@ pub struct LicenseDetection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::license_detection::tests::TestMatchBuilder;
 
     fn create_test_match(start_line: usize, end_line: usize) -> LicenseMatch {
-        LicenseMatch {
-            rid: 0,
-            license_expression: "mit".to_string(),
-            license_expression_spdx: Some("MIT".to_string()),
-            from_file: Some("test.txt".to_string()),
-            start_line,
-            end_line,
-            start_token: 0,
-            end_token: 0,
-            matcher: crate::license_detection::models::MatcherKind::Hash,
-            score: 95.0,
-            matched_length: 100,
-            match_coverage: 95.0,
-            rule_relevance: 100,
-            rule_identifier: "mit.LICENSE".to_string(),
-            rule_url: "https://example.com".to_string(),
-            matched_text: Some("MIT License".to_string()),
-            referenced_filenames: None,
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_from_license: false,
-            rule_length: 100,
-            matched_token_positions: None,
-            hilen: 50,
-            rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        }
+        TestMatchBuilder::default()
+            .license_expression("mit")
+            .license_expression_spdx(Some("MIT".to_string()))
+            .from_file(Some("test.txt".to_string()))
+            .start_line(start_line)
+            .end_line(end_line)
+            .matcher(crate::license_detection::models::MatcherKind::Hash)
+            .score(95.0)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(95.0)
+            .rule_relevance(100)
+            .rule_identifier("mit.LICENSE")
+            .rule_url("https://example.com".to_string())
+            .matched_text(Some("MIT License".to_string()))
+            .hilen(50)
+            .build_match()
     }
 
     #[test]

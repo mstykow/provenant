@@ -329,6 +329,7 @@ fn filter_binary_low_coverage_same_expression_seq_bridges(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::license_detection::tests::TestMatchBuilder;
 
     fn parse_rule_id(rule_identifier: &str) -> Option<usize> {
         let trimmed = rule_identifier.trim();
@@ -350,36 +351,25 @@ mod tests {
         let matched_len = end_line - start_line + 1;
         let rule_len = matched_len;
         let rid = parse_rule_id(rule_identifier).unwrap_or(0);
-        LicenseMatch {
-            rid,
-            license_expression: "mit".to_string(),
-            license_expression_spdx: Some("MIT".to_string()),
-            from_file: None,
-            start_line,
-            end_line,
-            start_token: start_line,
-            end_token: end_line + 1,
-            matcher: crate::license_detection::models::MatcherKind::Aho,
-            score,
-            matched_length: matched_len,
-            rule_length: rule_len,
-            matched_token_positions: None,
-            match_coverage: coverage,
-            rule_relevance: relevance,
-            rule_identifier: rule_identifier.to_string(),
-            rule_url: "https://example.com".to_string(),
-            matched_text: None,
-            referenced_filenames: None,
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_from_license: false,
-            hilen: 50,
-            rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        }
+        let mut m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .license_expression_spdx(Some("MIT".to_string()))
+            .start_line(start_line)
+            .end_line(end_line)
+            .start_token(start_line)
+            .end_token(end_line + 1)
+            .matcher(MatcherKind::Aho)
+            .score(score)
+            .matched_length(matched_len)
+            .rule_length(rule_len)
+            .match_coverage(coverage)
+            .rule_relevance(relevance)
+            .rule_identifier(rule_identifier)
+            .rule_url("https://example.com".to_string())
+            .hilen(50)
+            .build_match();
+        m.rid = rid;
+        m
     }
 
     #[test]
@@ -550,15 +540,14 @@ mod tests {
 
     #[test]
     fn test_split_weak_matches_has_unknown() {
-        let mut m = LicenseMatch {
-            license_expression: "unknown".to_string(),
-            matcher: crate::license_detection::models::MatcherKind::Hash,
-            matched_length: 100,
-            match_coverage: 100.0,
-            ..LicenseMatch::default()
-        };
-        m.end_token = 100;
-        m.rule_length = 100;
+        let mut m = TestMatchBuilder::default()
+            .license_expression("unknown")
+            .matcher(MatcherKind::Hash)
+            .matched_length(100)
+            .match_coverage(100.0)
+            .rule_length(100)
+            .end_token(100)
+            .build_match();
 
         let index = LicenseIndex::with_legalese_count(10);
         let (good, weak) = split_weak_matches(&index, &[m.clone()]);
@@ -568,15 +557,14 @@ mod tests {
 
     #[test]
     fn test_split_weak_matches_short_seq_low_coverage() {
-        let mut m = LicenseMatch {
-            license_expression: "mit".to_string(),
-            matcher: crate::license_detection::models::MatcherKind::Seq,
-            matched_length: 10,
-            match_coverage: 20.0,
-            ..LicenseMatch::default()
-        };
-        m.end_token = 10;
-        m.rule_length = 50;
+        let mut m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(MatcherKind::Seq)
+            .matched_length(10)
+            .match_coverage(20.0)
+            .rule_length(50)
+            .end_token(10)
+            .build_match();
 
         let index = LicenseIndex::with_legalese_count(10);
         let (good, weak) = split_weak_matches(&index, &[m.clone()]);
@@ -586,15 +574,14 @@ mod tests {
 
     #[test]
     fn test_split_weak_matches_keeps_false_positive_unknown_out_of_weak_bucket() {
-        let m = LicenseMatch {
-            rid: 42,
-            license_expression: "unknown".to_string(),
-            matcher: crate::license_detection::models::MatcherKind::Aho,
-            matched_length: 3,
-            rule_length: 3,
-            match_coverage: 100.0,
-            ..LicenseMatch::default()
-        };
+        let mut m = TestMatchBuilder::default()
+            .license_expression("unknown")
+            .matcher(MatcherKind::Aho)
+            .matched_length(3)
+            .rule_length(3)
+            .match_coverage(100.0)
+            .build_match();
+        m.rid = 42;
 
         let mut index = LicenseIndex::with_legalese_count(10);
         index.false_positive_rids.insert(42);
@@ -606,15 +593,14 @@ mod tests {
 
     #[test]
     fn test_split_weak_matches_short_seq_high_coverage() {
-        let mut m = LicenseMatch {
-            license_expression: "mit".to_string(),
-            matcher: crate::license_detection::models::MatcherKind::Seq,
-            matched_length: 10,
-            match_coverage: 80.0,
-            ..LicenseMatch::default()
-        };
-        m.end_token = 10;
-        m.rule_length = 15;
+        let mut m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(MatcherKind::Seq)
+            .matched_length(10)
+            .match_coverage(80.0)
+            .rule_length(15)
+            .end_token(10)
+            .build_match();
 
         let index = LicenseIndex::with_legalese_count(10);
         let (good, weak) = split_weak_matches(&index, &[m.clone()]);
@@ -624,15 +610,14 @@ mod tests {
 
     #[test]
     fn test_split_weak_matches_non_seq_short() {
-        let mut m = LicenseMatch {
-            license_expression: "mit".to_string(),
-            matcher: crate::license_detection::models::MatcherKind::Hash,
-            matched_length: 10,
-            match_coverage: 20.0,
-            ..LicenseMatch::default()
-        };
-        m.end_token = 10;
-        m.rule_length = 15;
+        let mut m = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(MatcherKind::Hash)
+            .matched_length(10)
+            .match_coverage(20.0)
+            .rule_length(15)
+            .end_token(10)
+            .build_match();
 
         let index = LicenseIndex::with_legalese_count(10);
         let (good, weak) = split_weak_matches(&index, &[m.clone()]);
@@ -642,35 +627,32 @@ mod tests {
 
     #[test]
     fn test_split_weak_matches_mixed() {
-        let mut good_match = LicenseMatch {
-            license_expression: "mit".to_string(),
-            matcher: crate::license_detection::models::MatcherKind::Hash,
-            matched_length: 50,
-            match_coverage: 95.0,
-            ..LicenseMatch::default()
-        };
-        good_match.end_token = 50;
-        good_match.rule_length = 50;
+        let mut good_match = TestMatchBuilder::default()
+            .license_expression("mit")
+            .matcher(MatcherKind::Hash)
+            .matched_length(50)
+            .match_coverage(95.0)
+            .rule_length(50)
+            .end_token(50)
+            .build_match();
 
-        let mut weak_unknown = LicenseMatch {
-            license_expression: "unknown".to_string(),
-            matcher: crate::license_detection::models::MatcherKind::Unknown,
-            matched_length: 30,
-            match_coverage: 50.0,
-            ..LicenseMatch::default()
-        };
-        weak_unknown.end_token = 30;
-        weak_unknown.rule_length = 30;
+        let mut weak_unknown = TestMatchBuilder::default()
+            .license_expression("unknown")
+            .matcher(MatcherKind::Unknown)
+            .matched_length(30)
+            .match_coverage(50.0)
+            .rule_length(30)
+            .end_token(30)
+            .build_match();
 
-        let mut weak_seq = LicenseMatch {
-            license_expression: "apache-2.0".to_string(),
-            matcher: crate::license_detection::models::MatcherKind::Seq,
-            matched_length: 10,
-            match_coverage: 20.0,
-            ..LicenseMatch::default()
-        };
-        weak_seq.end_token = 10;
-        weak_seq.rule_length = 50;
+        let mut weak_seq = TestMatchBuilder::default()
+            .license_expression("apache-2.0")
+            .matcher(MatcherKind::Seq)
+            .matched_length(10)
+            .match_coverage(20.0)
+            .rule_length(50)
+            .end_token(10)
+            .build_match();
 
         let matches = vec![good_match.clone(), weak_unknown.clone(), weak_seq.clone()];
         let index = LicenseIndex::with_legalese_count(10);

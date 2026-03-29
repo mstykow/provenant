@@ -485,38 +485,26 @@ pub(super) fn classify_detection(detection: &LicenseDetection, min_score: f32) -
 mod tests {
     use super::*;
     use crate::license_detection::models::{LicenseMatch, MatcherKind};
+    use crate::license_detection::tests::TestMatchBuilder;
 
     fn create_test_match(coverage: f32, rule_identifier: &str) -> LicenseMatch {
-        LicenseMatch {
-            rid: 0,
-            license_expression: "mit".to_string(),
-            license_expression_spdx: Some("MIT".to_string()),
-            from_file: Some("test.txt".to_string()),
-            start_line: 1,
-            end_line: 10,
-            start_token: 0,
-            end_token: 0,
-            matcher: crate::license_detection::models::MatcherKind::Hash,
-            score: 95.0,
-            matched_length: 100,
-            match_coverage: coverage,
-            rule_relevance: 100,
-            rule_identifier: rule_identifier.to_string(),
-            rule_url: "https://example.com".to_string(),
-            matched_text: Some("MIT License".to_string()),
-            referenced_filenames: None,
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_from_license: false,
-            rule_length: 100,
-            matched_token_positions: None,
-            hilen: 50,
-            rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        }
+        TestMatchBuilder::default()
+            .license_expression("mit")
+            .license_expression_spdx(Some("MIT".to_string()))
+            .from_file(Some("test.txt".to_string()))
+            .start_line(1)
+            .end_line(10)
+            .matcher(MatcherKind::Hash)
+            .score(95.0)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(coverage)
+            .rule_relevance(100)
+            .rule_identifier(rule_identifier)
+            .rule_url("https://example.com".to_string())
+            .matched_text(Some("MIT License".to_string()))
+            .hilen(50)
+            .build_match()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -532,36 +520,23 @@ mod tests {
         rule_relevance: u8,
         rule_identifier: &str,
     ) -> LicenseMatch {
-        LicenseMatch {
-            rid: 0,
-            license_expression: license_expression.to_string(),
-            license_expression_spdx: Some(license_expression.to_string()),
-            from_file: Some("test.txt".to_string()),
-            start_line,
-            end_line,
-            start_token: 0,
-            end_token: 0,
-            matcher: matcher.parse().expect("invalid test matcher"),
-            score,
-            matched_length,
-            rule_length,
-            match_coverage,
-            rule_relevance,
-            rule_identifier: rule_identifier.to_string(),
-            rule_url: "https://example.com".to_string(),
-            matched_text: Some("License text".to_string()),
-            referenced_filenames: None,
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_from_license: false,
-            matched_token_positions: None,
-            hilen: matched_length / 2,
-            rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        }
+        TestMatchBuilder::default()
+            .license_expression(license_expression)
+            .license_expression_spdx(Some(license_expression.to_string()))
+            .from_file(Some("test.txt".to_string()))
+            .start_line(start_line)
+            .end_line(end_line)
+            .matcher(matcher.parse().expect("invalid test matcher"))
+            .score(score)
+            .matched_length(matched_length)
+            .rule_length(rule_length)
+            .match_coverage(match_coverage)
+            .rule_relevance(rule_relevance)
+            .rule_identifier(rule_identifier)
+            .rule_url("https://example.com".to_string())
+            .matched_text(Some("License text".to_string()))
+            .hilen(matched_length / 2)
+            .build_match()
     }
 
     #[test]

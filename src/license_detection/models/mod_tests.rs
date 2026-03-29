@@ -3,6 +3,7 @@ mod tests {
     use crate::license_detection::index::LicenseIndex;
     use crate::license_detection::index::dictionary::tid;
     use crate::license_detection::models::{License, LicenseMatch, MatcherKind, Rule, RuleKind};
+    use crate::license_detection::tests::TestMatchBuilder;
     use crate::models::Match as OutputMatch;
     use std::collections::HashMap;
 
@@ -86,36 +87,25 @@ mod tests {
     }
 
     fn create_license_match() -> LicenseMatch {
-        LicenseMatch {
-            rid: 0,
-            license_expression: "mit".to_string(),
-            license_expression_spdx: Some("MIT".to_string()),
-            from_file: Some("README.md".to_string()),
-            start_line: 1,
-            end_line: 5,
-            start_token: 0,
-            end_token: 100,
-            matcher: crate::license_detection::models::MatcherKind::Hash,
-            score: 0.95,
-            matched_length: 100,
-            rule_length: 100,
-            matched_token_positions: None,
-            match_coverage: 95.0,
-            rule_relevance: 100,
-            rule_identifier: "mit.LICENSE".to_string(),
-            rule_url: "https://scancode-licensedb.aboutcode.org/mit".to_string(),
-            matched_text: Some("MIT License text...".to_string()),
-            referenced_filenames: None,
-            rule_kind: RuleKind::None,
-            is_from_license: false,
-            hilen: 50,
-            rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        }
+        TestMatchBuilder::default()
+            .license_expression("mit")
+            .license_expression_spdx(Some("MIT".to_string()))
+            .from_file(Some("README.md".to_string()))
+            .start_line(1)
+            .end_line(5)
+            .start_token(0)
+            .end_token(100)
+            .matcher(MatcherKind::Hash)
+            .score(0.95)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(95.0)
+            .rule_relevance(100)
+            .rule_identifier("mit.LICENSE")
+            .rule_url("https://scancode-licensedb.aboutcode.org/mit".to_string())
+            .matched_text(Some("MIT License text...".to_string()))
+            .hilen(50)
+            .build_match()
     }
 
     #[test]
@@ -505,36 +495,21 @@ mod tests {
 
     #[test]
     fn test_license_match_creation_with_minimal_fields() {
-        let match_result = LicenseMatch {
-            rid: 0,
-            license_expression: "mit".to_string(),
-            license_expression_spdx: Some("MIT".to_string()),
-            from_file: None,
-            start_line: 0,
-            end_line: 0,
-            start_token: 0,
-            end_token: 0,
-            matcher: MatcherKind::Hash,
-            score: 0.0,
-            matched_length: 0,
-            rule_length: 0,
-            match_coverage: 0.0,
-            rule_relevance: 0,
-            rule_identifier: String::new(),
-            rule_url: String::new(),
-            matched_text: None,
-            referenced_filenames: None,
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_from_license: false,
-            matched_token_positions: None,
-            hilen: 0,
-            rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        };
+        let match_result = TestMatchBuilder::default()
+            .license_expression("mit")
+            .license_expression_spdx(Some("MIT".to_string()))
+            .start_line(0)
+            .end_line(0)
+            .start_token(0)
+            .end_token(0)
+            .score(0.0)
+            .matched_length(0)
+            .rule_length(0)
+            .match_coverage(0.0)
+            .rule_relevance(0)
+            .rule_identifier(String::new())
+            .matched_text(None)
+            .build_match();
 
         assert!(match_result.from_file.is_none());
         assert_eq!(match_result.start_line, 0);
@@ -650,36 +625,26 @@ mod tests {
 
     #[test]
     fn test_license_match_with_referenced_filenames() {
-        let match_result = LicenseMatch {
-            rid: 0,
-            license_expression: "mit".to_string(),
-            license_expression_spdx: Some("MIT".to_string()),
-            from_file: Some("README.md".to_string()),
-            start_line: 1,
-            end_line: 5,
-            start_token: 0,
-            end_token: 100,
-            matcher: crate::license_detection::models::MatcherKind::Hash,
-            score: 0.95,
-            matched_length: 100,
-            rule_length: 100,
-            matched_token_positions: None,
-            match_coverage: 95.0,
-            rule_relevance: 100,
-            rule_identifier: "mit.LICENSE".to_string(),
-            rule_url: "https://scancode-licensedb.aboutcode.org/mit".to_string(),
-            matched_text: Some("MIT License text...".to_string()),
-            referenced_filenames: Some(vec!["LICENSE".to_string(), "COPYING".to_string()]),
-            rule_kind: crate::license_detection::models::RuleKind::None,
-            is_from_license: false,
-            hilen: 50,
-            rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
-            candidate_resemblance: 0.0,
-            candidate_containment: 0.0,
-        };
+        let match_result = TestMatchBuilder::default()
+            .license_expression("mit")
+            .license_expression_spdx(Some("MIT".to_string()))
+            .from_file(Some("README.md".to_string()))
+            .start_line(1)
+            .end_line(5)
+            .start_token(0)
+            .end_token(100)
+            .matcher(MatcherKind::Hash)
+            .score(0.95)
+            .matched_length(100)
+            .rule_length(100)
+            .match_coverage(95.0)
+            .rule_relevance(100)
+            .rule_identifier("mit.LICENSE")
+            .rule_url("https://scancode-licensedb.aboutcode.org/mit".to_string())
+            .matched_text(Some("MIT License text...".to_string()))
+            .referenced_filenames(Some(vec!["LICENSE".to_string(), "COPYING".to_string()]))
+            .hilen(50)
+            .build_match();
 
         assert_eq!(
             match_result.referenced_filenames,
