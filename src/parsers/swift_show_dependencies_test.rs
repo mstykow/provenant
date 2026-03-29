@@ -14,6 +14,9 @@ mod tests {
         assert!(SwiftShowDependenciesParser::is_match(&PathBuf::from(
             "some/dir/swift-show-dependencies.deplock"
         )));
+        assert!(SwiftShowDependenciesParser::is_match(&PathBuf::from(
+            "swift-show-dependencies.deplock"
+        )));
         assert!(!SwiftShowDependenciesParser::is_match(&PathBuf::from(
             "Package.swift"
         )));

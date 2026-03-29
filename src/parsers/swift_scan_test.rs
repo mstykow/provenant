@@ -5,6 +5,7 @@ mod tests {
 
     use regex::Regex;
     use serde_json::{Value, json};
+    use tempfile::TempDir;
 
     use super::super::scan_test_utils::scan_and_assemble_with_stripped_root;
 
@@ -231,6 +232,44 @@ mod tests {
         assert_swift_scan_matches_expected(
             "testdata/swift-golden/packages/mapboxmaps_manifest_and_resolved",
             "testdata/swift-golden/swift-mapboxmaps-manifest-and-resolved-package-expected.json",
+        );
+    }
+
+    #[test]
+    fn test_swift_scan_supports_manifest_and_resolved_alias_surfaces() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        fs::copy(
+            "testdata/swift/Package.swift.deplock",
+            temp_dir.path().join("Package.swift.deplock"),
+        )
+        .expect("copy manifest alias fixture");
+        fs::copy(
+            "testdata/swift/Package-v1.resolved",
+            temp_dir.path().join(".package.resolved"),
+        )
+        .expect("copy resolved alias fixture");
+
+        let scanned = swift_scan_and_assemble(temp_dir.path());
+        let packages = scanned
+            .get("packages")
+            .and_then(|value| value.as_array())
+            .expect("packages should be present");
+
+        assert_eq!(packages.len(), 1);
+        let package = &packages[0];
+        let datafile_paths = package
+            .get("datafile_paths")
+            .and_then(|value| value.as_array())
+            .expect("datafile_paths should be present");
+        assert!(
+            datafile_paths
+                .iter()
+                .any(|path| path.as_str() == Some("Package.swift.deplock"))
+        );
+        assert!(
+            datafile_paths
+                .iter()
+                .any(|path| path.as_str() == Some(".package.resolved"))
         );
     }
 }

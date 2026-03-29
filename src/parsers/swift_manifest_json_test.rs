@@ -3,10 +3,7 @@ mod tests {
     use crate::models::DatasourceId;
     use crate::models::PackageType;
     use crate::parsers::PackageParser;
-    use crate::parsers::swift_manifest_json::{
-        SwiftManifestJsonParser, dump_package_json, get_namespace_and_name,
-        invoke_swift_dump_package,
-    };
+    use crate::parsers::swift_manifest_json::{SwiftManifestJsonParser, get_namespace_and_name};
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
@@ -19,7 +16,7 @@ mod tests {
         assert!(SwiftManifestJsonParser::is_match(&PathBuf::from(
             "/some/path/Package.swift.deplock"
         )));
-        assert!(SwiftManifestJsonParser::is_match(&PathBuf::from(
+        assert!(!SwiftManifestJsonParser::is_match(&PathBuf::from(
             "/some/path/Package.swift"
         )));
         assert!(!SwiftManifestJsonParser::is_match(&PathBuf::from(
@@ -307,33 +304,6 @@ mod tests {
         assert_eq!(
             data.dependencies[1].purl.as_deref(),
             Some("pkg:swift/github.com/org/repo@1.0.0")
-        );
-    }
-
-    #[test]
-    fn test_invoke_swift_dump_package_missing_swift() {
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let result = invoke_swift_dump_package(temp_dir.path());
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_dump_package_json_without_swift() {
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let swift_path = temp_dir.path().join("Package.swift");
-        fs::write(
-            &swift_path,
-            "// swift-tools-version: 5.7\nimport PackageDescription\n",
-        )
-        .expect("Failed to write");
-
-        let result = dump_package_json(&swift_path);
-        assert!(result.is_err());
-        let err_msg = result.unwrap_err();
-        assert!(
-            err_msg.contains("swift") || err_msg.contains("Swift"),
-            "Error should mention swift: {}",
-            err_msg
         );
     }
 
