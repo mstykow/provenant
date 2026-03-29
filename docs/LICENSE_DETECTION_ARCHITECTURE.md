@@ -23,7 +23,7 @@ The license detection system is a multi-phase, multi-strategy detection engine t
 
 **Default behavior**: Uses the built-in embedded license index. No external files required.
 
-> Remaining public output and CLI parity work is tracked in
+> The completed public output and CLI parity rollout is recorded in
 > [`docs/implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md`](implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md).
 
 **Custom rules**: Use `--license-rules-path /path/to/rules` to load from a custom directory containing `.LICENSE` and `.RULE` files.

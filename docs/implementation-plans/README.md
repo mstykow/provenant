@@ -17,11 +17,6 @@ implementation-plans/
 
 ## Active Plans
 
-### Text Detection (`text-detection/`)
-
-- **[LICENSE_DETECTION_PLAN.md](text-detection/LICENSE_DETECTION_PLAN.md)** - Remaining license detection output, CLI, and downstream parity work
-  - Status: 🟡 Active — core engine implementation is complete, but the remaining public output, diagnostics, references, and CLI parity work is now tracked in [LICENSE_DETECTION_PLAN.md](text-detection/LICENSE_DETECTION_PLAN.md)
-
 ### Post-Processing (`post-processing/`)
 
 - **[SUMMARIZATION_PLAN.md](post-processing/SUMMARIZATION_PLAN.md)** - License/copyright tallies, facets, classification
@@ -52,8 +47,11 @@ These topics are implemented. Some remain as completed historical plans, while o
 
 ### Text Detection (`text-detection/`)
 
+- **[LICENSE_DETECTION_PLAN.md](text-detection/LICENSE_DETECTION_PLAN.md)** - Completed public license-result, CLI, and downstream parity rollout record
+  - Status: 🟢 Complete — the public license-result, diagnostics, references, clue handling, and CLI parity work tracked in [LICENSE_DETECTION_PLAN.md](text-detection/LICENSE_DETECTION_PLAN.md) is implemented; the document remains as the completed implementation record
+
 - **[LICENSE_DETECTION_ARCHITECTURE.md](../LICENSE_DETECTION_ARCHITECTURE.md)** - Evergreen architecture reference for the implemented license-detection engine
-  - Status: 🟢 Reference — the evergreen engine architecture lives in [LICENSE_DETECTION_ARCHITECTURE.md](../LICENSE_DETECTION_ARCHITECTURE.md), while active output/CLI parity follow-up now lives in [LICENSE_DETECTION_PLAN.md](text-detection/LICENSE_DETECTION_PLAN.md)
+  - Status: 🟢 Reference — the evergreen engine architecture lives in [LICENSE_DETECTION_ARCHITECTURE.md](../LICENSE_DETECTION_ARCHITECTURE.md), and the completed public-surface rollout is recorded in [LICENSE_DETECTION_PLAN.md](text-detection/LICENSE_DETECTION_PLAN.md)
 
 - **[COPYRIGHT_DETECTION_PLAN.md](text-detection/COPYRIGHT_DETECTION_PLAN.md)** - Copyright statement extraction
   - Status: 🟢 Complete — scanner/runtime ingestion now covers decoded non-UTF text, PDF text, and binary printable strings; Rust also adds supported-image EXIF/XMP metadata as a beyond-parity clue source, and intentional divergences are tracked in the plan
