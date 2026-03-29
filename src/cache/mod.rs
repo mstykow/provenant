@@ -4,13 +4,11 @@ use glob::Pattern;
 
 mod config;
 mod io;
-mod license_index_cache;
 mod metadata;
 mod paths;
 mod scan_cache;
 
 pub use config::{CACHE_DIR_ENV_VAR, CacheConfig, CacheKind, CacheKinds, DEFAULT_CACHE_DIR_NAME};
-pub use license_index_cache::{LicenseIndexCacheSource, load_or_build_embedded_license_index};
 pub use scan_cache::{CachedScanFindings, read_cached_findings, write_cached_findings};
 
 pub fn build_collection_exclude_patterns(scan_root: &Path, cache_root: &Path) -> Vec<Pattern> {
