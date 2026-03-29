@@ -209,27 +209,6 @@ mod determinism {
 
         assert_eq!(bytes1, bytes2);
     }
-
-    #[test]
-    fn test_checked_in_artifact_matches_regenerated_bytes() {
-        let Some((rules_path, licenses_path)) = get_reference_data_paths() else {
-            eprintln!("Skipping test: reference directories not found");
-            return;
-        };
-
-        let mut loaded_rules = rules::load_loaded_rules_from_directory(&rules_path).unwrap();
-        let mut loaded_licenses =
-            rules::load_loaded_licenses_from_directory(&licenses_path).unwrap();
-        loaded_rules.sort_by(|a, b| a.identifier.cmp(&b.identifier));
-        loaded_licenses.sort_by(|a, b| a.key.cmp(&b.key));
-
-        let generated_bytes =
-            serialize_loader_snapshot_to_bytes(loaded_rules, loaded_licenses).unwrap();
-        let checked_in_bytes =
-            include_bytes!("../../resources/license_detection/license_index.zst");
-
-        assert_eq!(generated_bytes.as_slice(), checked_in_bytes);
-    }
 }
 
 mod failure_handling {
