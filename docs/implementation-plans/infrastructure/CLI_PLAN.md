@@ -141,11 +141,12 @@ CLI backlog, including upstream flags that would otherwise remain implicit gaps.
 
 | Flag                 | What it does                                        | Status          | Notes                                                                                                     |
 | -------------------- | --------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------- |
-| `--cache-dir`        | Chooses the persistent cache location               | `Done`          | Implemented and wired at runtime startup.                                                                 |
-| `--cache-clear`      | Clears persisted cache entries before scanning      | `Done`          | Implemented and wired before directory scans.                                                             |
+| `--cache <kind>`     | Opts into specific persistent cache kinds           | `Done`          | Repeated/CSV flag; currently `scan-results`, `license-index`, `all`.                                      |
+| `--cache-dir`        | Chooses the shared persistent cache root            | `Done`          | Root selector only; does not enable caching by itself.                                                    |
+| `--cache-clear`      | Clears the selected persistent cache root           | `Done`          | Clears cache state before scanning without implicitly enabling caches.                                    |
 | `--max-in-memory`    | Caps in-memory scan buffering before spill behavior | `Partial`       | Currently parse-only; upstream default `10000`, `-1` acceptance, and spill semantics are not yet matched. |
 | `--no-assemble`      | Skips package assembly after manifest detection     | `Rust-specific` | Provenant-only convenience; Python ScanCode always assembles.                                             |
-| `--no-cache`         | Disables Provenant caching                          | `Rust-specific` | Optional convenience, not a parity requirement.                                                           |
+| `--no-cache`         | Disables Provenant caching                          | `Won't do`      | No longer needed because persistent caches are opt-in by default.                                         |
 | `--incremental`      | Enables future incremental scan behavior            | `Rust-specific` | Beyond-parity idea; deferred until the caching model is robust.                                           |
 | `--show_attribution` | Prints embedded-data attribution notices            | `Rust-specific` | Provenant-only convenience for bundled license-detection data notices.                                    |
 

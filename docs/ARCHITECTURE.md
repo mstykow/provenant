@@ -9,7 +9,7 @@ Provenant is a complete rewrite of [ScanCode Toolkit](https://github.com/aboutco
 - **Enhanced security**: No code execution, comprehensive DoS protection
 - **Feature parity or better**: 100% compatibility plus intentional improvements
 
-**Current Status**: See [SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md) for the full list of supported ecosystems and formats.
+See [SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md) for the full list of supported ecosystems and formats.
 
 ## Core Principles
 
@@ -115,11 +115,10 @@ Provenant implements a multi-phase processing pipeline based on Python ScanCode'
 
 ### Implementation Status
 
-Implementation details in this document are intentionally architecture-focused.
-For current capabilities and behavior, use:
+This document stays architecture-focused. For concrete feature and support status, use:
 
 - **[README.md](../README.md)** for user-facing features and usage
-- **[SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md)** for currently supported formats and ecosystems
+- **[SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md)** for supported formats and ecosystems
 - **[TESTING_STRATEGY.md](TESTING_STRATEGY.md)** for verification and regression approach
 
 ### Plugin Architecture
@@ -132,7 +131,7 @@ Python ScanCode uses a plugin-based architecture with 5 plugin types:
 4. **OutputFilter Plugins**: License policy filtering, custom filters
 5. **Output Plugins**: Format-specific output (SPDX, CycloneDX, etc.)
 
-The Rust implementation currently uses static, compile-time wiring (trait-based parsers and explicit pipeline stages).
+Provenant keeps the same high-level stages, but wires them statically through trait-based parsers and explicit pipeline stages instead of a runtime plugin system.
 
 ## Architecture Components
 
@@ -517,7 +516,7 @@ _(To be added: criterion benchmarks for parser performance)_
 
 1. **Parallel Processing**: Uses all CPU cores via rayon
 2. **Zero-Copy Parsing**: `&str` instead of `String` where possible
-3. **Compile-Time Embedding**: License data embedded via `include_dir!`
+3. **Embedded License Artifact**: License loader snapshot embedded via `include_bytes!`
 4. **Lazy Evaluation**: Iterators instead of eager Vec building
 5. **Efficient Parsers**: quick-xml, toml, serde_json (production-grade)
 
@@ -665,34 +664,28 @@ Module location: `src/finder/`
 
 **Plugin System**:
 
-- No runtime plugin system is planned in current Provenant scope
+- No runtime plugin system is planned for Provenant
 - Compile-time integration points are preferred over a public plugin ABI
 - Revisit only if concrete extension needs justify the complexity
 
 **Caching**:
 
-Caching is currently split between transition-state behavior on `main` and the target runtime-rule-loading license engine architecture.
+Provenant uses one shared persistent cache root with separate subdirectories for each cache kind:
 
-**Transition state (`main` at time of writing):**
+1. **License Index Cache**: optional local warm cache for the embedded license-index startup path, stored under `license-index/`
+2. **Scan Result Cache**: optional content-addressed per-file cache keyed by SHA256, stored under `scan-results/`
+3. **Incremental Scanning**: still deferred future work
 
-1. Legacy askalono-based startup still exists.
-2. Parser-local Swift cache persists `Package.swift` dump output under an XDG/HOME-derived cache path.
+The cache implementation lives in `src/cache/` (`config`, `metadata`, `paths`, `io`, `scan_cache`, `license_index_cache`). It provides cache-root selection, snapshot metadata and invalidation, sharded scan-result paths, and atomic snapshot persistence.
 
-**Target unified caching architecture (aligned with `feat-add-license-parsing`):**
+User-facing behavior is:
 
-1. **License Index Cache**: Persist versioned `LicenseIndex` snapshots generated from ScanCode rules loaded at runtime.
-2. **Scan Result Cache** (beyond parity — Python has none): Content-addressed per-file cache keyed by SHA256.
-3. **Incremental Scanning** (beyond parity — Python has none): manifest-guided re-scan of changed files only.
+1. `--cache <kind>` enables `license-index`, `scan-results`, or `all`
+2. `--cache-dir` and `PROVENANT_CACHE` select the shared cache root
+3. `--cache-clear` clears that root before scanning
+4. persistent caching is opt-in; nothing is written unless `--cache` is specified
 
-Current caching modules on `main` live in `src/cache/` (`config`, `metadata`, `paths`, `io`, `scan_cache`) with snapshot envelope read/write, compatibility checks, sharded scan-result paths, and atomic temp-file + rename persistence.
-
-Runtime wiring is now active for scan-result caching in scanner/main:
-
-1. scanner read-before-scan and write-after-scan integration in `src/scanner/process.rs`
-2. startup cache bootstrap and clear wiring in `src/main.rs`
-3. cache CLI controls `--cache-dir` and `--cache-clear`, plus `PROVENANT_CACHE` override
-
-Remaining follow-up work is focused on index snapshot integration for the new license engine, lock-managed multi-process coordination, incremental scanning, and unified XDG-default cache ownership.
+Follow-up work is focused on multi-process coordination, incremental scanning, and a more unified default cache-root strategy.
 
 **Progress Tracking**:
 

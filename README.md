@@ -90,7 +90,7 @@ Commonly used options include:
 - `--spdx-tv`, `--spdx-rdf`, `--cyclonedx`, `--cyclonedx-xml`
 - `--custom-output`, `--custom-template`
 - `--exclude/--ignore`, `--include`, `--max-depth`, `--processes`
-- `--cache-dir`, `--cache-clear`, `--from-json`, `--no-assemble`
+- `--cache`, `--cache-dir`, `--cache-clear`, `--from-json`, `--no-assemble`
 - `--filter-clues`, `--only-findings`, `--mark-source`
 - `--license`, `--copyright`, `--email`, `--url`
 - `--classify`, `--summary`, `--license-clarity-score`, `--tallies`
@@ -105,7 +105,9 @@ provenant --json-pp scan-results.json ~/projects/my-codebase --ignore "*.git*" -
 Use `-` as `FILE` to write an output stream to stdout, for example `--json-pp -`.
 Multiple output flags can be used in a single run, matching ScanCode CLI behavior.
 When using `--from-json`, you can pass multiple JSON inputs. Directory scan mode currently supports one input path.
-Cache location can also be controlled with the `PROVENANT_CACHE` environment variable.
+Persistent caching is opt-in. Use `--cache scan-results`, `--cache license-index`, or
+`--cache all` to enable cache kinds under one shared root. The cache root can also be controlled
+with the `PROVENANT_CACHE` environment variable or `--cache-dir`.
 
 For the generated package-format support matrix, see [Supported Formats](docs/SUPPORTED_FORMATS.md).
 

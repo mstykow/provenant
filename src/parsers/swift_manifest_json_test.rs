@@ -4,7 +4,7 @@ mod tests {
     use crate::models::PackageType;
     use crate::parsers::PackageParser;
     use crate::parsers::swift_manifest_json::{
-        SwiftManifestJsonParser, dump_package_cached, get_namespace_and_name,
+        SwiftManifestJsonParser, dump_package_json, get_namespace_and_name,
         invoke_swift_dump_package,
     };
     use std::fs;
@@ -318,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cache_roundtrip() {
+    fn test_dump_package_json_without_swift() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let swift_path = temp_dir.path().join("Package.swift");
         fs::write(
@@ -327,7 +327,7 @@ mod tests {
         )
         .expect("Failed to write");
 
-        let result = dump_package_cached(&swift_path);
+        let result = dump_package_json(&swift_path);
         assert!(result.is_err());
         let err_msg = result.unwrap_err();
         assert!(

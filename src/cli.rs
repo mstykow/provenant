@@ -1,5 +1,6 @@
 use clap::{ArgGroup, Parser};
 
+use crate::cache::CacheKind;
 use crate::output::OutputFormat;
 
 #[derive(Parser, Debug)]
@@ -139,6 +140,15 @@ pub struct Cli {
 
     #[arg(long = "cache-dir", value_name = "PATH")]
     pub cache_dir: Option<String>,
+
+    #[arg(
+        long = "cache",
+        value_name = "KIND",
+        value_enum,
+        value_delimiter = ',',
+        help = "Enable one or more persistent caches: scan-results, license-index, all"
+    )]
+    pub cache: Vec<CacheKind>,
 
     #[arg(long = "cache-clear")]
     pub cache_clear: bool,
@@ -825,6 +835,8 @@ mod tests {
             "provenant",
             "--json-pp",
             "scan.json",
+            "--cache",
+            "scan-results,license-index",
             "--cache-dir",
             "/tmp/sc-cache",
             "--cache-clear",
@@ -835,8 +847,27 @@ mod tests {
         .expect("cli parse should accept cache flags");
 
         assert_eq!(parsed.cache_dir.as_deref(), Some("/tmp/sc-cache"));
+        assert_eq!(
+            parsed.cache,
+            vec![CacheKind::ScanResults, CacheKind::LicenseIndex]
+        );
         assert!(parsed.cache_clear);
         assert_eq!(parsed.max_in_memory, Some(5000));
+    }
+
+    #[test]
+    fn test_parses_cache_all_flag() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--cache",
+            "all",
+            "samples",
+        ])
+        .expect("cli parse should accept cache=all");
+
+        assert_eq!(parsed.cache, vec![CacheKind::All]);
     }
 
     #[test]
