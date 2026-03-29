@@ -2744,7 +2744,7 @@ fn package_primary_detected_license_values(file: &FileInfo, skip_unknown: bool) 
         values.retain(|expression| expression != "unknown-license-reference");
     }
 
-    values
+    unique(&values)
 }
 
 fn package_other_detected_license_values(file: &FileInfo, skip_unknown: bool) -> Vec<String> {
@@ -2769,7 +2769,7 @@ fn package_other_detected_license_values(file: &FileInfo, skip_unknown: bool) ->
         values.retain(|expression| expression != "unknown-license-reference");
     }
 
-    values
+    unique(&values)
 }
 
 fn key_file_has_license_text(file: &FileInfo) -> bool {
