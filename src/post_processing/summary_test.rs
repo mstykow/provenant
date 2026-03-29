@@ -311,6 +311,116 @@ fn compute_summary_prefers_file_license_detections_over_duplicate_package_data_d
 }
 
 #[test]
+fn compute_summary_deduplicates_duplicate_other_license_package_data_entries_per_file() {
+    let other_detection = crate::models::LicenseDetection {
+        license_expression: "gpl-2.0-only".to_string(),
+        license_expression_spdx: "GPL-2.0-only".to_string(),
+        matches: vec![Match {
+            license_expression: "gpl-2.0-only".to_string(),
+            license_expression_spdx: "GPL-2.0-only".to_string(),
+            from_file: Some("project/package.json".to_string()),
+            start_line: 1,
+            end_line: 1,
+            matcher: Some("parser-declared-license".to_string()),
+            score: 100.0,
+            matched_length: Some(1),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: None,
+            rule_url: None,
+            matched_text: Some("GPL-2.0-only".to_string()),
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        identifier: Some("gpl-package-id".to_string()),
+        detection_log: vec![],
+    };
+
+    let mut manifest = file("project/package.json");
+    manifest.package_data = vec![
+        crate::models::PackageData {
+            package_type: Some(PackageType::Npm),
+            other_license_detections: vec![other_detection.clone()],
+            ..Default::default()
+        },
+        crate::models::PackageData {
+            package_type: Some(PackageType::Npm),
+            other_license_detections: vec![other_detection],
+            ..Default::default()
+        },
+    ];
+
+    let summary = compute_summary(&[manifest], &[]).expect("summary exists");
+
+    assert_eq!(summary.declared_license_expression, None);
+    assert_eq!(summary.other_license_expressions.len(), 1);
+    assert_eq!(
+        summary.other_license_expressions[0].value.as_deref(),
+        Some("gpl-2.0-only")
+    );
+    assert_eq!(summary.other_license_expressions[0].count, 1);
+}
+
+#[test]
+fn compute_summary_deduplicates_duplicate_primary_package_data_entries_per_file() {
+    let detection = crate::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: Some("project/Cargo.toml".to_string()),
+            start_line: 1,
+            end_line: 1,
+            matcher: Some("parser-declared-license".to_string()),
+            score: 100.0,
+            matched_length: Some(1),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: None,
+            rule_url: None,
+            matched_text: Some("MIT".to_string()),
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        identifier: Some("mit-package-id".to_string()),
+        detection_log: vec![],
+    };
+
+    let mut manifest = file("project/Cargo.toml");
+    manifest.is_manifest = true;
+    manifest.is_key_file = true;
+    manifest.is_top_level = true;
+    manifest.package_data = vec![
+        crate::models::PackageData {
+            package_type: Some(PackageType::Cargo),
+            datasource_id: Some(DatasourceId::CargoToml),
+            declared_license_expression: Some("mit".to_string()),
+            declared_license_expression_spdx: Some("MIT".to_string()),
+            license_detections: vec![detection.clone()],
+            ..Default::default()
+        },
+        crate::models::PackageData {
+            package_type: Some(PackageType::Cargo),
+            datasource_id: Some(DatasourceId::CargoToml),
+            declared_license_expression: Some("mit".to_string()),
+            declared_license_expression_spdx: Some("MIT".to_string()),
+            license_detections: vec![detection],
+            ..Default::default()
+        },
+    ];
+
+    let summary = compute_summary(&[manifest], &[]).expect("summary exists");
+
+    assert_eq!(summary.declared_license_expression.as_deref(), Some("mit"));
+    assert!(summary.other_license_expressions.is_empty());
+    let score = summary.license_clarity_score.expect("score exists");
+    assert_eq!(score.score, 90);
+    assert!(score.declared_license);
+    assert!(score.identification_precision);
+}
+
+#[test]
 fn compute_summary_uses_root_prefixed_top_level_key_files() {
     let mut files = vec![dir("project"), file("project/LICENSE")];
     files[1].license_expression = Some("mit".to_string());
