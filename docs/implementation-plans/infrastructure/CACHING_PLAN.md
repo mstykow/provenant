@@ -35,7 +35,6 @@ Persistent caching of scan results and compiled data structures to speed up repe
 
 **In Scope:**
 
-- **License Index Caching**: Persistent cache of compiled `LicenseIndex` artifacts produced by the runtime rule-loading license engine
 - **Scan Result Caching**: Cache `FileInfo` results per file keyed by SHA256 content hash
 - **Incremental Scanning**: Only scan files that changed since last scan (mtime + content hash check)
 - **Cache Invalidation**: Version-stamped caches with tool version + data version embedded in cache metadata
@@ -58,7 +57,7 @@ Persistent caching of scan results and compiled data structures to speed up repe
 - ✅ Rule-driven detection pipeline architecture documented and integrated on story branch
 - ✅ SHA256 hash computation per file in `process_file()` (already available as cache key)
 - ✅ `FileInfo` struct with all scannable fields (package_data, license_detections, copyrights, etc.)
-- ✅ `src/cache/config.rs`: shared cache-root helpers with separate `license-index/` and `scan-results/` subdirectories
+- ✅ `src/cache/config.rs`: shared cache-root helpers for the opt-in `scan-results/` cache
 - ✅ `src/cache/metadata.rs`: snapshot metadata + deterministic invalidation key compatibility checks
 - ✅ `src/cache/paths.rs`: SHA256 validation and deterministic sharded scan cache pathing (`.msgpack.zst`)
 - ✅ `src/cache/io.rs`: versioned snapshot envelope read/write with zstd + MessagePack and atomic temp-file rename
@@ -69,7 +68,6 @@ Persistent caching of scan results and compiled data structures to speed up repe
 
 **Missing:**
 
-- ❌ Persistent license index snapshot cache for the new `LicenseIndex` artifacts
 - ❌ Incremental scanning logic
 - ❌ Multi-process file locking
 - ❌ Cache hit/miss statistics integration in progress/summary output
@@ -224,11 +222,10 @@ Python's invalidation is **minimal**:
 ### Design Philosophy
 
 1. **Content-addressed scan result cache** — the major beyond-parity win
-2. **Version-stamped index caches** — embed tool version + data version in cache metadata
-3. **Engine-owned index snapshot caching** — cache contract belongs to `LicenseDetectionEngine`/`LicenseIndex`, not legacy askalono internals
-4. **XDG-compliant cache location** — platform-native defaults, overridable
-5. **Thread-safe by design** — no global mutable state, file locking for multi-process
-6. **Safe serialization** — `rmp-serde` + `zstd`, never pickle-equivalent
+2. **Version-stamped cache metadata** — embed tool version + build options in cache metadata
+3. **XDG-compliant cache location** — platform-native defaults, overridable
+4. **Thread-safe by design** — no global mutable state, file locking for multi-process
+5. **Safe serialization** — `rmp-serde` + `zstd`, never pickle-equivalent
 
 ### High-Level Architecture
 
@@ -237,16 +234,15 @@ Python's invalidation is **minimal**:
 │                        Caching Architecture                              │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
-│  ┌─────────────────────┐     ┌──────────────────────────────────────┐  │
-│  │ License Index Cache  │     │ Scan Result Cache                    │  │
-│  │                      │     │                                      │  │
-│  │ • LicenseIndex snapshot│   │ • Per-file FileInfo results          │  │
-│  │ • MsgPack + zstd     │     │ • Keyed by SHA256 content hash      │  │
-│  │ • Version-stamped    │     │ • Version-stamped metadata           │  │
-│  │ • Built once, loaded │     │ • Written during scan, read on       │  │
-│  │   on subsequent runs │     │   subsequent scans                   │  │
-│  │ • ~3-5 MB compressed │     │ • Sharded by hash prefix             │  │
-│  └─────────────────────┘     └──────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │ Scan Result Cache                                                │  │
+│  │                                                                  │  │
+│  │ • Per-file FileInfo results                                      │  │
+│  │ • Keyed by SHA256 content hash                                   │  │
+│  │ • Version-stamped metadata                                       │  │
+│  │ • Written during scan, read on subsequent scans                  │  │
+│  │ • Sharded by hash prefix                                         │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
 │                                                                          │
 │  ┌─────────────────────┐     ┌──────────────────────────────────────┐  │
 │  │ Cache Manager        │     │ File Locking                         │  │
@@ -266,9 +262,6 @@ Python's invalidation is **minimal**:
 ```text
 <scan-root>/.provenant-cache/               # Current groundwork default (XDG/env/CLI override planned)
 ├── metadata.json                          # Planned cache-manager metadata file
-├── license-index/
-│   ├── snapshot.bin.zst                   # Cached engine index snapshot envelope (msgpack + zstd)
-│   └── store.lock                         # Lock file for index rebuild
 ├── scan-results/
 │   ├── ab/
 │   │   ├── cd/

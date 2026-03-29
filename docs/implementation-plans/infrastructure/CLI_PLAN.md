@@ -141,7 +141,7 @@ CLI backlog, including upstream flags that would otherwise remain implicit gaps.
 
 | Flag                 | What it does                                        | Status          | Notes                                                                                                     |
 | -------------------- | --------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------- |
-| `--cache <kind>`     | Opts into specific persistent cache kinds           | `Done`          | Repeated/CSV flag; currently `scan-results`, `license-index`, `all`.                                      |
+| `--cache <kind>`     | Opts into specific persistent cache kinds           | `Done`          | Repeated/CSV flag; currently only `scan-results` is implemented.                                          |
 | `--cache-dir`        | Chooses the shared persistent cache root            | `Done`          | Root selector only; does not enable caching by itself.                                                    |
 | `--cache-clear`      | Clears the selected persistent cache root           | `Done`          | Clears cache state before scanning without implicitly enabling caches.                                    |
 | `--max-in-memory`    | Caps in-memory scan buffering before spill behavior | `Partial`       | Currently parse-only; upstream default `10000`, `-1` acceptance, and spill semantics are not yet matched. |
