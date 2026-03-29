@@ -58,8 +58,9 @@ impl PackageParser for SwiftShowDependenciesParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn is_match(path: &Path) -> bool {
-        path.to_str()
-            .is_some_and(|p| p.ends_with("/swift-show-dependencies.deplock"))
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name == "swift-show-dependencies.deplock")
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {

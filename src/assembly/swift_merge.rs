@@ -111,8 +111,7 @@ fn manifest_priority(path: &str) -> u8 {
     match Path::new(path).file_name().and_then(|name| name.to_str()) {
         Some("Package.swift.json") => 0,
         Some("Package.swift.deplock") => 1,
-        Some("Package.swift") => 2,
-        _ => 3,
+        _ => 2,
     }
 }
 
@@ -350,10 +349,7 @@ fn assign_swift_resources(
 }
 
 fn is_swift_manifest_filename(file_name: &str) -> bool {
-    matches!(
-        file_name,
-        "Package.swift" | "Package.swift.json" | "Package.swift.deplock"
-    )
+    matches!(file_name, "Package.swift.json" | "Package.swift.deplock")
 }
 
 fn is_swift_resolved_filename(file_name: &str) -> bool {
