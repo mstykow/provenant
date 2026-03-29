@@ -458,7 +458,13 @@ pub static ASSEMBLERS: &[AssemblerConfig] = &[
             DatasourceId::SwiftPackageResolved,
             DatasourceId::SwiftPackageShowDependencies,
         ],
-        sibling_file_patterns: &["Package.swift", "Package.resolved"],
+        sibling_file_patterns: &[
+            "Package.swift.json",
+            "Package.swift.deplock",
+            "Package.resolved",
+            ".package.resolved",
+            "swift-show-dependencies.deplock",
+        ],
         mode: AssemblyMode::SiblingMerge,
     },
     // ── Standalone assemblers (single file → single package) ──

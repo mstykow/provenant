@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
@@ -13,8 +12,8 @@ use super::PackageParser;
 
 /// Swift Package Manager manifest parser.
 ///
-/// The parser prefers pre-generated manifest JSON when present, but can also
-/// invoke the Swift toolchain for raw `Package.swift` inputs as a convenience.
+/// The parser reads pre-generated manifest JSON surfaces such as
+/// `Package.swift.json` and `Package.swift.deplock`.
 pub struct SwiftManifestJsonParser;
 
 impl PackageParser for SwiftManifestJsonParser {
@@ -23,12 +22,10 @@ impl PackageParser for SwiftManifestJsonParser {
     fn extract_packages(path: &Path) -> Vec<PackageData> {
         let filename = path.file_name().and_then(|n| n.to_str());
 
-        let is_json_file = filename
+        vec![if filename
             .map(|n| n.ends_with(".swift.json") || n.ends_with(".swift.deplock"))
-            .unwrap_or(false);
-        let is_raw_swift = filename.map(|n| n == "Package.swift").unwrap_or(false);
-
-        vec![if is_json_file {
+            .unwrap_or(false)
+        {
             let json_content = match read_swift_manifest_json(path) {
                 Ok(content) => content,
                 Err(e) => {
@@ -40,28 +37,6 @@ impl PackageParser for SwiftManifestJsonParser {
                 }
             };
             parse_swift_manifest(&json_content)
-        } else if is_raw_swift {
-            match dump_package_json(path) {
-                Ok(json_str) => match serde_json::from_str::<Value>(&json_str) {
-                    Ok(json) => parse_swift_manifest(&json),
-                    Err(e) => {
-                        warn!(
-                            "Swift toolchain generated invalid JSON for {:?}: {}",
-                            path, e
-                        );
-                        default_package_data(path)
-                    }
-                },
-                Err(e) => {
-                    warn!(
-                        "Cannot auto-generate Package.swift.json for {:?}: {}. \
-                             Swift toolchain may not be installed. \
-                             To scan this file, manually run: swift package dump-package > Package.swift.json",
-                        path, e
-                    );
-                    default_package_data(path)
-                }
-            }
         } else {
             default_package_data(path)
         }]
@@ -70,11 +45,7 @@ impl PackageParser for SwiftManifestJsonParser {
     fn is_match(path: &Path) -> bool {
         path.file_name()
             .and_then(|name| name.to_str())
-            .is_some_and(|name| {
-                name.ends_with(".swift.json")
-                    || name.ends_with(".swift.deplock")
-                    || name == "Package.swift"
-            })
+            .is_some_and(|name| name.ends_with(".swift.json") || name.ends_with(".swift.deplock"))
     }
 }
 
@@ -437,60 +408,6 @@ fn create_package_url(name: &Option<String>, version: &Option<String>) -> Option
     })
 }
 
-pub fn invoke_swift_dump_package(package_dir: &Path) -> Result<String, String> {
-    let output = Command::new("swift")
-        .args(["package", "dump-package"])
-        .current_dir(package_dir)
-        .output()
-        .map_err(|e| {
-            format!(
-                "Failed to execute 'swift package dump-package' in {:?}: {}. \
-                 Is the Swift toolchain installed and available on PATH?",
-                package_dir, e
-            )
-        })?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!(
-            "'swift package dump-package' failed in {:?} (exit code: {:?}): {}",
-            package_dir,
-            output.status.code(),
-            stderr.trim()
-        ));
-    }
-
-    String::from_utf8(output.stdout)
-        .map_err(|e| format!("swift dump-package output is not valid UTF-8: {}", e))
-}
-
-/// Generate manifest JSON for a raw `Package.swift` file.
-///
-/// This validates that the source file is readable, runs `swift package
-/// dump-package` from the manifest directory, and rejects invalid JSON output.
-pub fn dump_package_json(package_swift_path: &Path) -> Result<String, String> {
-    fs::read_to_string(package_swift_path).map_err(|e| {
-        format!(
-            "Failed to read Package.swift at {:?}: {}",
-            package_swift_path, e
-        )
-    })?;
-
-    let parent_dir = package_swift_path.parent().ok_or_else(|| {
-        format!(
-            "Cannot determine parent directory of {:?}",
-            package_swift_path
-        )
-    })?;
-
-    let json_output = invoke_swift_dump_package(parent_dir)?;
-
-    serde_json::from_str::<Value>(&json_output)
-        .map_err(|e| format!("swift dump-package produced invalid JSON: {}", e))?;
-
-    Ok(json_output)
-}
-
 fn default_package_data(path: &Path) -> PackageData {
     let _ = path;
 
@@ -503,12 +420,8 @@ fn default_package_data(path: &Path) -> PackageData {
 }
 
 crate::register_parser!(
-    "Swift Package Manager manifest (Package.swift, Package.swift.json, Package.swift.deplock)",
-    &[
-        "**/Package.swift",
-        "**/Package.swift.json",
-        "**/Package.swift.deplock"
-    ],
+    "Swift Package Manager manifest JSON (Package.swift.json, Package.swift.deplock)",
+    &["**/Package.swift.json", "**/Package.swift.deplock"],
     "swift",
     "Swift",
     Some("https://docs.swift.org/package-manager/PackageDescription/PackageDescription.html"),
