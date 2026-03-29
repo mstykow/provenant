@@ -17,14 +17,14 @@
     "other_languages": []
   },
   "tallies": {
-    "detected_license_expression": [{ "value": "mit", "count": 4 }],
+    "detected_license_expression": [{ "value": "mit", "count": 2 }],
     "copyrights": [],
     "holders": [],
     "authors": [{ "value": "Example Corp.", "count": 1 }],
     "programming_language": []
   },
   "tallies_of_key_files": {
-    "detected_license_expression": [{ "value": "mit", "count": 4 }],
+    "detected_license_expression": [{ "value": "mit", "count": 2 }],
     "copyrights": [],
     "holders": [],
     "authors": [{ "value": "Example Corp.", "count": 1 }],
