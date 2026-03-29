@@ -247,24 +247,24 @@ pub(crate) fn get_unique_detections(detections: &[LicenseDetection]) -> Vec<Uniq
 }
 
 fn collect_file_regions_from_matches(matches: &[LicenseMatch]) -> Vec<FileRegion> {
-    let mut seen = BTreeSet::new();
-    let mut regions = Vec::new();
+    let Some(first_path) = matches
+        .iter()
+        .find_map(|match_item| match_item.from_file.clone())
+    else {
+        return Vec::new();
+    };
 
-    for match_item in matches {
-        let Some(path) = match_item.from_file.as_ref() else {
-            continue;
-        };
-        let key = (path.clone(), match_item.start_line, match_item.end_line);
-        if seen.insert(key) {
-            regions.push(FileRegion {
-                path: path.clone(),
-                start_line: match_item.start_line,
-                end_line: match_item.end_line,
-            });
-        }
+    let start_line = matches.iter().map(|match_item| match_item.start_line).min();
+    let end_line = matches.iter().map(|match_item| match_item.end_line).max();
+
+    match (start_line, end_line) {
+        (Some(start_line), Some(end_line)) => vec![FileRegion {
+            path: first_path,
+            start_line,
+            end_line,
+        }],
+        _ => Vec::new(),
     }
-
-    regions
 }
 
 fn attach_aggregated_file_regions(detections: &mut [LicenseDetection]) {
@@ -1358,6 +1358,29 @@ mod tests {
         assert_eq!(detections[0].file_regions[0].path, "src/lib.rs");
         assert_eq!(detections[0].file_regions[0].start_line, 4);
         assert_eq!(detections[0].file_regions[0].end_line, 8);
+    }
+
+    #[test]
+    fn test_attach_source_path_to_detections_uses_single_detection_region_span() {
+        let mut first = create_perfect_match(4, 8);
+        first.from_file = None;
+        let mut second = create_perfect_match(20, 25);
+        second.from_file = None;
+        let mut detections = vec![LicenseDetection {
+            license_expression: Some("mit".to_string()),
+            license_expression_spdx: Some("MIT".to_string()),
+            matches: vec![first, second],
+            detection_log: vec![],
+            identifier: Some("mit-1".to_string()),
+            file_regions: Vec::new(),
+        }];
+
+        attach_source_path_to_detections(&mut detections, "src/lib.rs");
+
+        assert_eq!(detections[0].file_regions.len(), 1);
+        assert_eq!(detections[0].file_regions[0].path, "src/lib.rs");
+        assert_eq!(detections[0].file_regions[0].start_line, 4);
+        assert_eq!(detections[0].file_regions[0].end_line, 25);
     }
 
     #[test]

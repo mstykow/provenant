@@ -252,7 +252,7 @@ pub(crate) fn collect_top_level_license_detections(
         }
 
         for detection in file_detections {
-            internal_detections.push(public_detection_to_internal(detection));
+            internal_detections.push(public_detection_to_internal(detection, &file.path));
         }
     }
 
@@ -275,52 +275,38 @@ pub(crate) fn collect_top_level_license_detections(
                 }
                 acc
             });
-    let matches_by_identifier: HashMap<_, Vec<_>> = internal_detections
-        .iter()
-        .filter_map(|detection| {
-            detection
-                .identifier
-                .as_ref()
-                .map(|id| (id.clone(), detection.matches.clone()))
-        })
-        .fold(HashMap::new(), |mut acc, (identifier, matches)| {
-            let seen = acc
-                .entry(identifier)
-                .or_insert_with(Vec::<crate::license_detection::models::LicenseMatch>::new);
-            for match_item in matches {
-                if !seen.iter().any(|existing| {
-                    existing.rule_identifier == match_item.rule_identifier
-                        && existing.start_line == match_item.start_line
-                        && existing.end_line == match_item.end_line
-                        && existing.from_file == match_item.from_file
-                }) {
-                    seen.push(match_item);
-                }
-            }
-            acc
-        });
-
     let mut unique_detections: Vec<_> = get_unique_detections(&internal_detections)
         .into_iter()
         .filter_map(|unique| {
             representative_detections
                 .get(&unique.identifier)
-                .map(|detection| TopLevelLicenseDetection {
-                    identifier: unique.identifier.clone(),
-                    license_expression: detection.license_expression.clone().unwrap_or_default(),
-                    license_expression_spdx: detection
+                .map(|detection| {
+                    let license_expression = detection
+                        .license_expression
+                        .clone()
+                        .filter(|expression| !expression.is_empty())
+                        .or_else(|| determine_license_expression(&detection.matches).ok())
+                        .unwrap_or_default();
+                    let license_expression_spdx = detection
                         .license_expression_spdx
                         .clone()
-                        .unwrap_or_default(),
-                    detection_count: unique.file_regions.len(),
-                    detection_log: detection.detection_log.clone(),
-                    reference_matches: matches_by_identifier
-                        .get(&unique.identifier)
-                        .cloned()
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(internal_match_to_public)
-                        .collect(),
+                        .filter(|expression| !expression.is_empty())
+                        .or_else(|| determine_spdx_expression(&detection.matches).ok())
+                        .unwrap_or_default();
+
+                    TopLevelLicenseDetection {
+                        identifier: unique.identifier.clone(),
+                        license_expression,
+                        license_expression_spdx,
+                        detection_count: unique.file_regions.len(),
+                        detection_log: detection.detection_log.clone(),
+                        reference_matches: detection
+                            .matches
+                            .iter()
+                            .cloned()
+                            .map(internal_match_to_public)
+                            .collect(),
+                    }
                 })
         })
         .collect();
@@ -799,10 +785,10 @@ fn apply_resolved_reference_targets(
         return false;
     }
 
-    let mut internal_detection = public_detection_to_internal(detection);
+    let mut internal_detection = public_detection_to_internal(detection, current_path);
     for target in &referenced_targets {
         for referenced_detection in &target.detections {
-            let mut internal = public_detection_to_internal(referenced_detection);
+            let mut internal = public_detection_to_internal(referenced_detection, &target.path);
             for match_item in &mut internal.matches {
                 if target.preserve_match_from_file {
                     match_item
@@ -1041,33 +1027,36 @@ fn use_referenced_license_expression(
 
 fn public_detection_to_internal(
     detection: &LicenseDetection,
+    owning_path: &str,
 ) -> crate::license_detection::LicenseDetection {
     let matches: Vec<_> = detection
         .matches
         .iter()
         .map(public_match_to_internal)
         .collect();
+    let file_regions = if matches.is_empty() {
+        Vec::new()
+    } else {
+        let start_line = matches.iter().map(|match_item| match_item.start_line).min();
+        let end_line = matches.iter().map(|match_item| match_item.end_line).max();
+        match (start_line, end_line) {
+            (Some(start_line), Some(end_line)) => vec![InternalFileRegion {
+                path: owning_path.to_string(),
+                start_line,
+                end_line,
+            }],
+            _ => Vec::new(),
+        }
+    };
     crate::license_detection::LicenseDetection {
-        license_expression: Some(detection.license_expression.clone()),
-        license_expression_spdx: Some(detection.license_expression_spdx.clone()),
+        license_expression: (!detection.license_expression.is_empty())
+            .then(|| detection.license_expression.clone()),
+        license_expression_spdx: (!detection.license_expression_spdx.is_empty())
+            .then(|| detection.license_expression_spdx.clone()),
         matches: matches.clone(),
         detection_log: detection.detection_log.clone(),
         identifier: detection.identifier.clone(),
-        file_regions: matches
-            .iter()
-            .filter_map(|match_item| {
-                match_item
-                    .from_file
-                    .as_ref()
-                    .map(|from_file| InternalFileRegion {
-                        path: from_file.clone(),
-                        start_line: match_item.start_line,
-                        end_line: match_item.end_line,
-                    })
-            })
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect(),
+        file_regions,
     }
 }
 
