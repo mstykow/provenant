@@ -2155,18 +2155,25 @@ fn compute_license_score(
         score: 0,
         declared_license: key_files.iter().any(|file| {
             !file.license_detections.is_empty()
-                || file
-                    .package_data
-                    .iter()
-                    .any(|package_data| !package_data.license_detections.is_empty())
+                || (file.license_detections.is_empty()
+                    && file
+                        .package_data
+                        .iter()
+                        .any(|package_data| !package_data.license_detections.is_empty()))
         }),
         identification_precision: key_files
             .iter()
             .flat_map(|file| {
                 file.license_detections.iter().chain(
-                    file.package_data
-                        .iter()
-                        .flat_map(|package_data| package_data.license_detections.iter()),
+                    file.license_detections
+                        .is_empty()
+                        .then_some(())
+                        .into_iter()
+                        .flat_map(|_| {
+                            file.package_data
+                                .iter()
+                                .flat_map(|package_data| package_data.license_detections.iter())
+                        }),
                 )
             })
             .flat_map(|detection| detection.matches.iter())
@@ -2654,19 +2661,22 @@ fn clean_legal_holder_candidate(holder: &str) -> Option<String> {
 }
 
 fn summary_license_expression(file: &FileInfo) -> Option<String> {
-    let detection_expressions = unique(
-        &file
-            .license_detections
-            .iter()
-            .map(|detection| detection.license_expression.clone())
-            .chain(
-                file.package_data
-                    .iter()
-                    .flat_map(|package_data| package_data.license_detections.iter())
-                    .map(|detection| detection.license_expression.clone()),
-            )
-            .collect::<Vec<_>>(),
-    );
+    let mut detection_expressions: Vec<_> = file
+        .license_detections
+        .iter()
+        .map(|detection| detection.license_expression.clone())
+        .collect();
+
+    if detection_expressions.is_empty() {
+        detection_expressions.extend(
+            file.package_data
+                .iter()
+                .flat_map(|package_data| package_data.license_detections.iter())
+                .map(|detection| detection.license_expression.clone()),
+        );
+    }
+
+    let detection_expressions = unique(&detection_expressions);
 
     if !detection_expressions.is_empty() {
         return if detection_expressions.len() == 1 {
@@ -2686,6 +2696,10 @@ fn summary_license_expression(file: &FileInfo) -> Option<String> {
 }
 
 fn package_primary_detected_license_values(file: &FileInfo, skip_unknown: bool) -> Vec<String> {
+    if !file.license_detections.is_empty() {
+        return Vec::new();
+    }
+
     let mut values = file
         .package_data
         .iter()
@@ -2739,9 +2753,15 @@ fn key_file_has_license_text(file: &FileInfo) -> bool {
     file.license_detections
         .iter()
         .chain(
-            file.package_data
-                .iter()
-                .flat_map(|package_data| package_data.license_detections.iter()),
+            file.license_detections
+                .is_empty()
+                .then_some(())
+                .into_iter()
+                .flat_map(|_| {
+                    file.package_data
+                        .iter()
+                        .flat_map(|package_data| package_data.license_detections.iter())
+                }),
         )
         .flat_map(|detection| detection.matches.iter())
         .any(|m| {
