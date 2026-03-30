@@ -108,6 +108,12 @@ Rare exceptions should stay rare, bounded, and documented:
   `WHEEL` files because those files are part of the same Python metadata surface. File ownership
   resolution still belongs in assembly (`src/assembly/file_ref_resolve.rs`), and new parsers should
   not copy this pattern unless an explicit assembly pass is genuinely infeasible.
+- `compiled_binary.rs` is an opt-in scanner-owned detector for raw executables with trustworthy
+  embedded package metadata. It is intentionally **not** a `PackageParser`: raw binaries do not
+  have stable filename ownership, so scanner wiring passes already-read bytes through the dedicated
+  `--package-in-compiled` path instead of broad path matching. New compiled-binary detectors should
+  stay bounded, consume scanner-provided bytes where possible, and follow this explicit exception
+  pattern rather than stretching `PackageParser` beyond its path-matching design.
 
 ### Declared-license contract
 
@@ -239,6 +245,12 @@ Then generate the exact expected files you need. See [`scripts/README.md`](../sc
 and [`TESTING_STRATEGY.md`](TESTING_STRATEGY.md) for the current command patterns and golden-test
 feature-gating.
 
+Scanner-owned detector surfaces that do **not** implement `PackageParser` still need fixture-backed
+contract coverage. For those cases, add dedicated detector goldens near the owning detector module
+and register them in the centralized golden suite, but do not force them through
+`register_package_handlers!` or the parser-golden maintenance tool if the runtime surface is
+intentionally scanner-gated.
+
 ### Parser-adjacent scan tests
 
 Add `src/parsers/<ecosystem>_scan_test.rs` when parser correctness depends on scanner wiring,
@@ -252,6 +264,10 @@ including:
 - `datafile_paths`
 - dependency hoisting or manifest/lockfile interaction
 - `PackageData.file_references`
+
+Scanner-owned compiled-binary detectors belong here too: if extraction only happens through scanner
+gating, add at least one focused contract test proving the packages appear only when the detector's
+scan option is enabled.
 
 See `src/parsers/cargo_scan_test.rs` for a minimal example.
 
@@ -356,3 +372,7 @@ Before considering a new parser complete, make sure all of these are true:
 - every new datasource is classified in `src/assembly/assemblers.rs`
 - file-reference ownership is wired when the parser emits `PackageData.file_references`
 - behavior has been validated against the Python reference or authoritative spec
+
+For intentionally scanner-gated detector surfaces such as compiled-binary package extraction,
+substitute the parser-registry-specific checklist items with documented exception handling,
+detector-level goldens, and scanner contract tests that cover the real runtime path.
