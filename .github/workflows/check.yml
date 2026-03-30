@@ -77,6 +77,33 @@ jobs:
       - name: Check for unused dependencies
         run: ./scripts/check_unused_deps.sh
 
+  rust-quality-windows:
+    name: Code Quality (Windows)
+    runs-on: windows-latest
+    if: |
+      !(github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/'))
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        with:
+          submodules: recursive
+          lfs: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.94.0
+        with:
+          components: clippy
+
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-quality-windows
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Check compilation
+        run: cargo check --all --verbose
+
   rust-scan-integration-tests:
     name: Scan and Integration Tests (${{ matrix.shard }})
     runs-on: ubuntu-latest

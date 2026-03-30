@@ -23,9 +23,14 @@ use std::path::Path;
 
 use crate::parser_warn as warn;
 
-use crate::models::{DatasourceId, Dependency, FileReference, PackageData, PackageType};
+use crate::models::{DatasourceId, PackageData, PackageType};
+
+#[cfg(unix)]
+use crate::models::{Dependency, FileReference};
 
 use super::PackageParser;
+
+#[cfg(unix)]
 use super::rpm_parser::infer_rpm_namespace;
 
 const PACKAGE_TYPE: PackageType = PackageType::Rpm;
@@ -277,6 +282,7 @@ fn parse_rpm_database(
     }
 }
 
+#[cfg(unix)]
 fn build_evr_version(epoch: i32, version: &str, release: &str) -> Option<String> {
     if version.is_empty() {
         return None;
@@ -298,6 +304,7 @@ fn build_evr_version(epoch: i32, version: &str, release: &str) -> Option<String>
     Some(evr)
 }
 
+#[cfg(unix)]
 fn build_file_references(
     base_names: &[String],
     dir_indexes: &[i32],
@@ -374,6 +381,7 @@ mod tests {
         )));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_build_evr_version_full() {
         assert_eq!(
@@ -382,6 +390,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_build_evr_version_no_epoch() {
         assert_eq!(
@@ -390,11 +399,13 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_build_evr_version_no_release() {
         assert_eq!(build_evr_version(0, "1.0.0", ""), Some("1.0.0".to_string()));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_build_evr_version_empty() {
         assert_eq!(build_evr_version(0, "", ""), None);
@@ -429,6 +440,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_build_file_references_skips_invalid_entries() {
         let file_refs = build_file_references(
