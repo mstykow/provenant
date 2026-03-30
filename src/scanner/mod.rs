@@ -647,6 +647,94 @@ mod tests {
     }
 
     #[test]
+    fn directory_omits_info_fields_when_info_disabled() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        fs::create_dir_all(temp_dir.path().join("nested")).expect("create nested dir");
+
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+        let result = process_collected(
+            &collected,
+            Arc::new(ScanProgress::new(ProgressMode::Quiet)),
+            None,
+            LicenseScanOptions::default(),
+            &TextDetectionOptions {
+                collect_info: false,
+                detect_packages: false,
+                detect_application_packages: false,
+                detect_system_packages: false,
+                detect_packages_in_compiled: false,
+                detect_copyrights: false,
+                detect_generated: false,
+                detect_emails: false,
+                detect_urls: false,
+                max_emails: 50,
+                max_urls: 50,
+                timeout_seconds: 120.0,
+                scan_cache_dir: None,
+            },
+        );
+
+        let directory = result
+            .files
+            .into_iter()
+            .find(|entry| entry.file_type == FileType::Directory && entry.path.ends_with("nested"))
+            .expect("directory entry");
+
+        assert!(directory.date.is_none());
+        assert!(directory.file_type_label.is_none());
+        assert!(directory.is_binary.is_none());
+        assert!(directory.is_text.is_none());
+        assert!(directory.is_archive.is_none());
+        assert!(directory.is_media.is_none());
+        assert!(directory.is_source.is_none());
+        assert!(directory.is_script.is_none());
+    }
+
+    #[test]
+    fn directory_includes_info_fields_when_info_enabled() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        fs::create_dir_all(temp_dir.path().join("nested")).expect("create nested dir");
+
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+        let result = process_collected(
+            &collected,
+            Arc::new(ScanProgress::new(ProgressMode::Quiet)),
+            None,
+            LicenseScanOptions::default(),
+            &TextDetectionOptions {
+                collect_info: true,
+                detect_packages: false,
+                detect_application_packages: false,
+                detect_system_packages: false,
+                detect_packages_in_compiled: false,
+                detect_copyrights: false,
+                detect_generated: false,
+                detect_emails: false,
+                detect_urls: false,
+                max_emails: 50,
+                max_urls: 50,
+                timeout_seconds: 120.0,
+                scan_cache_dir: None,
+            },
+        );
+
+        let directory = result
+            .files
+            .into_iter()
+            .find(|entry| entry.file_type == FileType::Directory && entry.path.ends_with("nested"))
+            .expect("directory entry");
+
+        assert!(directory.date.is_some());
+        assert_eq!(directory.file_type_label.as_deref(), Some("directory"));
+        assert_eq!(directory.is_binary, Some(false));
+        assert_eq!(directory.is_text, Some(false));
+        assert_eq!(directory.is_archive, Some(false));
+        assert_eq!(directory.is_media, Some(false));
+        assert_eq!(directory.is_source, Some(false));
+        assert_eq!(directory.is_script, Some(false));
+    }
+
+    #[test]
     fn collect_paths_includes_root_directory_entry() {
         let temp_dir = TempDir::new().expect("create temp dir");
         fs::create_dir_all(temp_dir.path().join("src")).expect("create nested dir");
