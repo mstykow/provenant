@@ -51,6 +51,7 @@ mod clojure;
 mod clojure_test;
 #[cfg(test)]
 mod cocoapods_scan_test;
+mod compiled_binary;
 mod composer;
 #[cfg(test)]
 mod composer_scan_test;
@@ -450,6 +451,7 @@ pub use self::cargo::CargoParser;
 pub use self::cargo_lock::CargoLockParser;
 pub use self::chef::{ChefMetadataJsonParser, ChefMetadataRbParser};
 pub use self::clojure::{ClojureDepsEdnParser, ClojureProjectCljParser};
+pub(crate) use self::compiled_binary::try_parse_compiled_file;
 pub use self::composer::{ComposerJsonParser, ComposerLockParser};
 pub use self::conan::{ConanFilePyParser, ConanLockParser, ConanfileTxtParser};
 pub use self::conan_data::ConanDataParser;

@@ -23,6 +23,9 @@ pub struct LicenseScanOptions {
 pub struct TextDetectionOptions {
     pub collect_info: bool,
     pub detect_packages: bool,
+    pub detect_application_packages: bool,
+    pub detect_system_packages: bool,
+    pub detect_packages_in_compiled: bool,
     pub detect_copyrights: bool,
     pub detect_generated: bool,
     pub detect_emails: bool,
@@ -38,6 +41,9 @@ impl Default for TextDetectionOptions {
         Self {
             collect_info: false,
             detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
             detect_copyrights: true,
             detect_generated: false,
             detect_emails: false,
@@ -57,9 +63,12 @@ pub use self::process::process_collected;
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::fs::File;
     use std::sync::Arc;
 
     use tempfile::TempDir;
+    use zip::ZipWriter;
+    use zip::write::SimpleFileOptions;
 
     use crate::models::FileType;
     use crate::progress::{ProgressMode, ScanProgress};
@@ -101,11 +110,45 @@ mod tests {
             .expect("scanned file entry")
     }
 
+    fn scan_file_at_relative_path(
+        relative_path: &str,
+        content: &[u8],
+        options: &TextDetectionOptions,
+    ) -> crate::models::FileInfo {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let file_path = temp_dir.path().join(relative_path);
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent).expect("create parent dirs");
+        }
+        fs::write(&file_path, content).expect("write test file");
+
+        let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+        let result = process_collected(
+            &collected,
+            progress,
+            None,
+            LicenseScanOptions::default(),
+            options,
+        );
+
+        result
+            .files
+            .into_iter()
+            .find(|entry| {
+                entry.file_type == FileType::File && entry.path == file_path.to_string_lossy()
+            })
+            .expect("scanned file entry")
+    }
+
     #[test]
     fn scanner_reports_repeated_email_occurrences() {
         let options = TextDetectionOptions {
             collect_info: false,
             detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
             detect_copyrights: false,
             detect_generated: false,
             detect_emails: true,
@@ -144,6 +187,9 @@ mod tests {
         let options = TextDetectionOptions {
             collect_info: false,
             detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
             detect_copyrights: true,
             detect_generated: false,
             detect_emails: true,
@@ -201,6 +247,9 @@ mod tests {
         let options = TextDetectionOptions {
             collect_info: false,
             detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
             detect_copyrights: true,
             detect_generated: false,
             detect_emails: false,
@@ -240,6 +289,9 @@ mod tests {
         let options = TextDetectionOptions {
             collect_info: false,
             detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
             detect_copyrights: false,
             detect_generated: true,
             detect_emails: false,
@@ -263,6 +315,9 @@ mod tests {
         let options = TextDetectionOptions {
             collect_info: false,
             detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
             detect_copyrights: false,
             detect_generated: false,
             detect_emails: false,
@@ -286,6 +341,9 @@ mod tests {
         let options = TextDetectionOptions {
             collect_info: true,
             detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
             detect_copyrights: false,
             detect_generated: false,
             detect_emails: false,
@@ -318,6 +376,9 @@ mod tests {
         let options = TextDetectionOptions {
             collect_info: false,
             detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
             detect_copyrights: false,
             detect_generated: false,
             detect_emails: false,
@@ -353,6 +414,9 @@ mod tests {
         let options = TextDetectionOptions {
             collect_info: false,
             detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
             detect_copyrights: false,
             detect_generated: false,
             detect_emails: false,
@@ -380,6 +444,9 @@ mod tests {
         let options = TextDetectionOptions {
             collect_info: false,
             detect_packages: true,
+            detect_application_packages: true,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
             detect_copyrights: false,
             detect_generated: false,
             detect_emails: false,
@@ -404,10 +471,147 @@ mod tests {
     }
 
     #[test]
+    fn scanner_skips_application_packages_when_only_system_packages_enabled() {
+        let options = TextDetectionOptions {
+            collect_info: false,
+            detect_packages: true,
+            detect_application_packages: false,
+            detect_system_packages: true,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: false,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+        let scanned = scan_single_file(
+            "package.json",
+            r#"{"name":"demo","version":"1.0.0"}"#,
+            &options,
+        );
+
+        assert!(
+            scanned.package_data.is_empty(),
+            "package_data: {:#?}",
+            scanned.package_data
+        );
+    }
+
+    #[test]
+    fn scanner_parses_system_package_files_when_enabled() {
+        let options = TextDetectionOptions {
+            collect_info: false,
+            detect_packages: true,
+            detect_application_packages: false,
+            detect_system_packages: true,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: false,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+        let scanned = scan_file_at_relative_path(
+            "var/lib/dpkg/status",
+            b"Package: demo\nVersion: 1.0\nArchitecture: all\nDescription: demo package\n\n",
+            &options,
+        );
+
+        assert!(
+            !scanned.package_data.is_empty(),
+            "package_data: {:#?}",
+            scanned.package_data
+        );
+    }
+
+    #[test]
+    fn scanner_only_parses_archive_packages_when_package_in_compiled_is_enabled() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let file_path = temp_dir.path().join("demo.egg");
+        let file = File::create(&file_path).expect("create archive");
+        let mut zip = ZipWriter::new(file);
+        zip.start_file("EGG-INFO/PKG-INFO", SimpleFileOptions::default())
+            .expect("start egg info entry");
+        use std::io::Write as _;
+        zip.write_all(b"Metadata-Version: 1.0\nName: demo\nVersion: 1.0.0\n")
+            .expect("write egg info");
+        zip.finish().expect("finish archive");
+
+        let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+
+        let without_compiled = process_collected(
+            &collected,
+            Arc::clone(&progress),
+            None,
+            LicenseScanOptions::default(),
+            &TextDetectionOptions {
+                collect_info: false,
+                detect_packages: true,
+                detect_application_packages: true,
+                detect_system_packages: false,
+                detect_packages_in_compiled: false,
+                detect_copyrights: false,
+                detect_generated: false,
+                detect_emails: false,
+                detect_urls: false,
+                max_emails: 50,
+                max_urls: 50,
+                timeout_seconds: 120.0,
+                scan_cache_dir: None,
+            },
+        );
+        let with_compiled = process_collected(
+            &collected,
+            progress,
+            None,
+            LicenseScanOptions::default(),
+            &TextDetectionOptions {
+                collect_info: false,
+                detect_packages: true,
+                detect_application_packages: true,
+                detect_system_packages: false,
+                detect_packages_in_compiled: true,
+                detect_copyrights: false,
+                detect_generated: false,
+                detect_emails: false,
+                detect_urls: false,
+                max_emails: 50,
+                max_urls: 50,
+                timeout_seconds: 120.0,
+                scan_cache_dir: None,
+            },
+        );
+
+        let without_compiled = without_compiled
+            .files
+            .into_iter()
+            .find(|entry| entry.file_type == FileType::File)
+            .expect("archive file present");
+        let with_compiled = with_compiled
+            .files
+            .into_iter()
+            .find(|entry| entry.file_type == FileType::File)
+            .expect("archive file present");
+
+        assert!(without_compiled.package_data.is_empty());
+        assert!(!with_compiled.package_data.is_empty());
+    }
+
+    #[test]
     fn scanner_sets_is_source_only_when_info_enabled() {
         let without_info = TextDetectionOptions {
             collect_info: false,
             detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
             detect_copyrights: false,
             detect_generated: false,
             detect_emails: false,

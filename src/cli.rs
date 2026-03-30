@@ -177,6 +177,21 @@ pub struct Cli {
     #[arg(short = 'p', long)]
     pub package: bool,
 
+    /// Scan input for installed system package databases (RPM, dpkg, apk, etc.)
+    #[arg(long = "system-package")]
+    pub system_package: bool,
+
+    /// Scan compiled executables (ELF, etc.) for embedded package metadata
+    #[arg(long = "package-in-compiled")]
+    pub package_in_compiled: bool,
+
+    /// Restrict output and scanning to package-focused results only
+    #[arg(
+        long = "package-only",
+        conflicts_with_all = ["license", "summary", "package", "system_package"]
+    )]
+    pub package_only: bool,
+
     /// Disable package assembly (merging related manifest/lockfiles into packages)
     #[arg(long)]
     pub no_assemble: bool,
@@ -742,6 +757,71 @@ mod tests {
             .expect("cli parse should succeed");
 
         assert!(!parsed.package);
+    }
+
+    #[test]
+    fn test_parses_system_package_flag() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--system-package",
+            "samples",
+        ])
+        .expect("cli parse should succeed");
+
+        assert!(parsed.system_package);
+    }
+
+    #[test]
+    fn test_parses_package_in_compiled_flag() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--package-in-compiled",
+            "samples",
+        ])
+        .expect("cli parse should succeed");
+
+        assert!(parsed.package_in_compiled);
+    }
+
+    #[test]
+    fn test_parses_package_only_flag() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--package-only",
+            "samples",
+        ])
+        .expect("cli parse should succeed");
+
+        assert!(parsed.package_only);
+    }
+
+    #[test]
+    fn test_package_only_conflicts_with_upstream_incompatible_flags() {
+        let with_license = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--package-only",
+            "--license",
+            "samples",
+        ]);
+        assert!(with_license.is_err());
+
+        let with_package = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--package-only",
+            "--package",
+            "samples",
+        ]);
+        assert!(with_package.is_err());
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use content_inspector::{ContentType, inspect};
 
 use crate::license_detection::LicenseDetectionEngine;
-use crate::parsers::try_parse_file;
+use crate::parsers::{try_parse_compiled_file, try_parse_file};
 use crate::utils::hash::{calculate_md5, calculate_sha1, calculate_sha1_git, calculate_sha256};
 use crate::utils::language::detect_language;
 use crate::utils::text::{is_source, remove_verbatim_escape_sequences};
@@ -21,8 +21,8 @@ use crate::finder::{self, DetectionConfig};
 use crate::license_detection::models::LicenseMatch as InternalLicenseMatch;
 use crate::license_detection::query::Query;
 use crate::models::{
-    Author, Copyright, FileInfo, FileInfoBuilder, FileType, Holder, LicenseDetection, Match,
-    OutputEmail, OutputURL,
+    Author, Copyright, DatasourceId, FileInfo, FileInfoBuilder, FileType, Holder, LicenseDetection,
+    Match, OutputEmail, OutputURL,
 };
 use crate::progress::ScanProgress;
 use crate::scanner::collect::CollectedPaths;
@@ -261,11 +261,33 @@ fn extract_information_from_content(
 
     // Package parsing and text-based detection (copyright, license) are independent.
     // Python ScanCode runs all enabled plugins on every file, so we do the same.
-    if text_options.detect_packages
-        && let Some(parse_result) = try_parse_file(path)
-    {
-        file_info_builder.package_data(parse_result.packages);
-        scan_errors.extend(parse_result.scan_errors);
+    if text_options.detect_packages {
+        let parse_result = try_parse_file(path).or_else(|| {
+            text_options
+                .detect_packages_in_compiled
+                .then(|| try_parse_compiled_file(path))
+                .flatten()
+        });
+
+        if let Some(parse_result) = parse_result {
+            let packages = parse_result
+                .packages
+                .into_iter()
+                .filter(|package| {
+                    let is_system_package = package
+                        .datasource_id
+                        .as_ref()
+                        .is_some_and(is_system_datasource);
+                    if is_system_package {
+                        text_options.detect_system_packages
+                    } else {
+                        text_options.detect_application_packages
+                    }
+                })
+                .collect();
+            file_info_builder.package_data(packages);
+            scan_errors.extend(parse_result.scan_errors);
+        }
     }
 
     if is_timeout_exceeded(started, text_options.timeout_seconds) {
@@ -415,6 +437,22 @@ fn detect_info_flags(
         );
 
     (is_binary, is_text, is_archive, is_media, is_script)
+}
+
+fn is_system_datasource(datasource_id: &DatasourceId) -> bool {
+    matches!(
+        datasource_id,
+        DatasourceId::AlpineInstalledDb
+            | DatasourceId::DebianDistrolessInstalledDb
+            | DatasourceId::DebianInstalledFilesList
+            | DatasourceId::DebianInstalledMd5Sums
+            | DatasourceId::DebianInstalledStatusDb
+            | DatasourceId::FreebsdCompactManifest
+            | DatasourceId::RpmInstalledDatabaseBdb
+            | DatasourceId::RpmInstalledDatabaseNdb
+            | DatasourceId::RpmInstalledDatabaseSqlite
+            | DatasourceId::RpmYumdb
+    )
 }
 
 fn extract_copyright_information(

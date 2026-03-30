@@ -19,10 +19,10 @@ use crate::post_processing::{
 use crate::progress::{ProgressMode, ScanProgress};
 use crate::scan_result_shaping::{
     apply_cli_path_selection_filter, apply_ignore_resource_filter, apply_mark_source,
-    apply_only_findings_filter, apply_user_path_filters_to_collected, filter_redundant_clues,
-    filter_redundant_clues_with_rules, load_and_merge_json_inputs, normalize_paths,
-    normalize_top_level_output_paths, prepare_filter_clue_rule_lookup, resolve_native_scan_inputs,
-    trim_preloaded_assembly_to_files,
+    apply_only_findings_filter, apply_package_only_filter, apply_user_path_filters_to_collected,
+    filter_redundant_clues, filter_redundant_clues_with_rules, load_and_merge_json_inputs,
+    normalize_paths, normalize_top_level_output_paths, prepare_filter_clue_rule_lookup,
+    resolve_native_scan_inputs, trim_preloaded_assembly_to_files,
 };
 use crate::scanner::{LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected};
 
@@ -151,13 +151,31 @@ fn run() -> Result<()> {
             None
         };
 
+        // Determine package-related detection modes. Flags that enable package
+        // behaviors should also enable generic package parsing.
+        let enable_application_packages =
+            cli.package || cli.package_in_compiled || cli.package_only;
+        let enable_system_packages = cli.system_package || cli.package_only;
+        let enable_packages = enable_application_packages || enable_system_packages;
+        // If --package-only is requested, restrict other text-detection features to
+        // minimize work and match upstream "package-only" semantics.
+        let (detect_copyrights, detect_emails, detect_urls, detect_generated) = if cli.package_only
+        {
+            (false, false, false, cli.generated)
+        } else {
+            (cli.copyright, cli.email, cli.url, cli.generated)
+        };
+
         let text_options = TextDetectionOptions {
             collect_info: cli.info,
-            detect_packages: cli.package,
-            detect_copyrights: cli.copyright,
-            detect_generated: cli.generated,
-            detect_emails: cli.email,
-            detect_urls: cli.url,
+            detect_packages: enable_packages,
+            detect_application_packages: enable_application_packages,
+            detect_system_packages: enable_system_packages,
+            detect_packages_in_compiled: cli.package_in_compiled,
+            detect_copyrights,
+            detect_generated,
+            detect_emails,
+            detect_urls,
             max_emails: cli.max_email,
             max_urls: cli.max_url,
             timeout_seconds: cli.timeout,
@@ -239,6 +257,11 @@ fn run() -> Result<()> {
         file.backfill_license_provenance();
     }
 
+    if cli.package_only {
+        // Restrict output to files that contain package evidence only (and their ancestor dirs).
+        apply_package_only_filter(&mut scan_result.files);
+    }
+
     if let Some(policy_path) = cli.license_policy.as_deref() {
         apply_license_policy_from_file(&mut scan_result.files, Path::new(policy_path))?;
     }
@@ -256,13 +279,15 @@ fn run() -> Result<()> {
         .iter()
         .map(|file| file.package_data.len())
         .sum();
+    let skip_assembly = cli.no_assemble || cli.package_only;
+
     let mut assembly_result = if cli.from_json
         && (!preloaded_assembly.packages.is_empty() || !preloaded_assembly.dependencies.is_empty())
     {
         progress.start_assembly();
         progress.finish_assembly(preloaded_assembly.packages.len(), manifests_seen);
         preloaded_assembly
-    } else if cli.no_assemble {
+    } else if skip_assembly {
         assembly::AssemblyResult {
             packages: Vec::new(),
             dependencies: Vec::new(),
@@ -391,7 +416,16 @@ fn run() -> Result<()> {
 }
 
 fn validate_scan_option_compatibility(cli: &Cli) -> Result<()> {
-    if cli.from_json && (cli.package || cli.copyright || cli.email || cli.url || cli.generated) {
+    if cli.from_json
+        && (cli.package
+            || cli.system_package
+            || cli.package_in_compiled
+            || cli.package_only
+            || cli.copyright
+            || cli.email
+            || cli.url
+            || cli.generated)
+    {
         return Err(anyhow!(
             "When using --from-json, file scan options like --package/--copyright/--email/--url/--generated are not allowed"
         ));
@@ -479,6 +513,11 @@ fn configured_scan_names(cli: &Cli) -> String {
         names.push("info");
     }
     if cli.package {
+        names.push("packages");
+    }
+    if (cli.system_package || cli.package_in_compiled || cli.package_only)
+        && !names.contains(&"packages")
+    {
         names.push("packages");
     }
     if cli.copyright {
