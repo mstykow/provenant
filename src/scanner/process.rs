@@ -205,7 +205,7 @@ impl FileInfoSpillStore {
         let path = self
             .temp_dir
             .path()
-            .join(format!("batch-{:06}.msgpack.zst", self.batch_index));
+            .join(format!("batch-{:06}.json.zst", self.batch_index));
         self.batch_index += 1;
 
         let payload = serde_json::to_vec(&files).expect("encode spilled file batch");

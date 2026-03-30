@@ -24,9 +24,6 @@ implementation-plans/
 
 ### Infrastructure (`infrastructure/`)
 
-- **[CLI_PLAN.md](infrastructure/CLI_PLAN.md)** - Command-line interface parameter parity
-  - Status: 🟡 Active — implemented and pending CLI parity items are tracked in [CLI_PLAN.md](infrastructure/CLI_PLAN.md)
-
 - **[CACHING_PLAN.md](infrastructure/CACHING_PLAN.md)** - Scan result caching and incremental scanning
   - Status: 🟡 Active — cache CLI/runtime integration is tracked in [CACHING_PLAN.md](infrastructure/CACHING_PLAN.md)
 
@@ -65,6 +62,9 @@ These topics are implemented. Some remain as completed historical plans, while o
   - Status: 🟢 Complete — shaping-specific CLI behavior now lives in `src/scan_result_shaping/`, scanner path selection, and the main orchestration pipeline; remaining non-shaping parity follow-up is tracked in adjacent plans
 
 ### Infrastructure (`infrastructure/`)
+
+- **[CLI_PLAN.md](infrastructure/CLI_PLAN.md)** - Completed command-line interface parity rollout record
+  - Status: 🟢 Complete — the current ScanCode-facing CLI surface and explicit `Won't do` scope decisions are implemented and recorded in [CLI_PLAN.md](infrastructure/CLI_PLAN.md)
 
 - **[PROGRESS_TRACKING_PLAN.md](infrastructure/PROGRESS_TRACKING_PLAN.md)** - Enhanced progress reporting
   - Status: 🟢 Implemented — progress manager, mode handling, summary/reporting, and integration tests are tracked in the plan document
