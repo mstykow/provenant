@@ -84,23 +84,12 @@ For the complete CLI surface, run:
 provenant --help
 ```
 
-Commonly used options include:
-
-- `--json`, `--json-pp`, `--json-lines`, `--yaml`, `--html`, `--csv`, `--debian`
-- `--spdx-tv`, `--spdx-rdf`, `--cyclonedx`, `--cyclonedx-xml`
-- `--custom-output`, `--custom-template`
-- `--exclude/--ignore`, `--include`, `--max-depth`, `--processes`, `--info`
-- `--cache`, `--cache-dir`, `--cache-clear`, `--from-json`, `--no-assemble`
-- `--max-in-memory`, `--package`, `--system-package`, `--package-in-compiled`, `--package-only`
-- `--filter-clues`, `--only-findings`, `--mark-source`
-- `--license`, `--license-policy`, `--copyright`, `--email`, `--url`
-- `--classify`, `--summary`, `--license-clarity-score`, `--tallies`
-- `--tallies-key-files`, `--tallies-with-details`, `--facet`, `--tallies-by-facet`, `--generated`
+For guided workflows and important flag combinations, see the [CLI Guide](docs/CLI_GUIDE.md).
 
 ### Example
 
 ```sh
-provenant --json-pp scan-results.json ~/projects/my-codebase --ignore "*.git*" --ignore "target/*" --ignore "node_modules/*"
+provenant --json-pp scan-results.json --license --package ~/projects/my-codebase --ignore "*.git*" --ignore "target/*" --ignore "node_modules/*"
 ```
 
 Use `-` as `FILE` to write an output stream to stdout, for example `--json-pp -`.
@@ -138,6 +127,7 @@ Output architecture and compatibility approach are documented in:
 ## Documentation
 
 - **[Documentation Index](docs/DOCUMENTATION_INDEX.md)** - Best starting point for navigating the docs set
+- **[CLI Guide](docs/CLI_GUIDE.md)** - Common workflows and important flag combinations
 - **[Architecture](docs/ARCHITECTURE.md)** - System design, processing pipeline, and design decisions
 - **[Supported Formats](docs/SUPPORTED_FORMATS.md)** - Generated support matrix for package ecosystems and file formats
 - **[How to Add a Parser](docs/HOW_TO_ADD_A_PARSER.md)** - Step-by-step guide for adding new parsers

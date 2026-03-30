@@ -5,6 +5,7 @@ This index helps you find the right documentation for your needs.
 ## For Users
 
 - **[README.md](../README.md)** - Installation, usage, and quick start
+- **[CLI_GUIDE.md](CLI_GUIDE.md)** - Command-line workflows and important flag combinations
 - **[SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md)** - List of all supported package formats
 
 ## For Contributors
@@ -32,6 +33,7 @@ This index helps you find the right documentation for your needs.
 
 ```text
 docs/
+├── CLI_GUIDE.md                      # Evergreen: User-facing CLI workflows
 ├── ARCHITECTURE.md                    # Evergreen: System design
 ├── LICENSE_DETECTION_ARCHITECTURE.md  # Evergreen: License-detection subsystem
 ├── RELEASING.md                       # Evergreen: Maintainer release process
@@ -64,6 +66,9 @@ docs/
 **...see what formats are supported**
 → [SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md)
 
+**...learn CLI usage and flag combinations**
+→ [CLI_GUIDE.md](CLI_GUIDE.md)
+
 **...understand a design decision**
 → [adr/README.md](adr/README.md)
 
@@ -81,6 +86,7 @@ docs/
 ### Evergreen Documents (Permanent)
 
 - **ARCHITECTURE.md** - Updated as architecture evolves
+- **CLI_GUIDE.md** - Updated as the public CLI workflows evolve
 - **LICENSE_DETECTION_ARCHITECTURE.md** - Updated as the license-detection subsystem evolves
 - **RELEASING.md** - Updated as the release workflow changes
 - **HOW_TO_ADD_A_PARSER.md** - Updated as parser patterns change
