@@ -118,7 +118,7 @@ fn truncate_detection_text(clean_text: &str) -> &str {
 }
 
 fn query_span_for_match(m: &LicenseMatch) -> Option<query::PositionSpan> {
-    (m.end_token > m.start_token).then(|| query::PositionSpan::new(m.start_token, m.end_token - 1))
+    (m.end_token > m.start_token).then(|| query::PositionSpan::new(m.start_token, m.end_token))
 }
 
 fn has_full_match_coverage(m: &LicenseMatch) -> bool {
@@ -404,7 +404,7 @@ fn collect_whole_query_exact_followup_matches(
 
             for m in &near_dupe_matches {
                 if m.end_token > m.start_token {
-                    let span = query::PositionSpan::new(m.start_token, m.end_token - 1);
+                    let span = query::PositionSpan::new(m.start_token, m.end_token);
                     query.subtract(&span);
                     matched_qspans.push(span);
                 }

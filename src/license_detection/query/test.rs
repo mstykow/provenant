@@ -4,8 +4,8 @@
 mod tests {
     use std::collections::HashSet;
 
+    use crate::license_detection::index::dictionary::{tid, TokenId};
     use crate::license_detection::index::LicenseIndex;
-    use crate::license_detection::index::dictionary::{TokenId, tid};
     use crate::license_detection::query::{PositionSpan, Query, QueryRun};
     use crate::license_detection::test_utils::create_test_index;
 
@@ -367,7 +367,7 @@ mod tests {
         let query = build_query("license copyright permission", &index).unwrap();
         let run = QueryRun::new(&query, 0, Some(2));
 
-        let exclude_span = PositionSpan::new(0, 1);
+        let exclude_span = PositionSpan::new(0, 2);
         assert!(run.is_matchable(false, &[exclude_span]));
     }
 
@@ -389,7 +389,7 @@ mod tests {
         let index = create_query_test_index();
         let mut query = build_query("license copyright permission", &index).unwrap();
 
-        let span = PositionSpan::new(0, 1);
+        let span = PositionSpan::new(0, 2);
         query.subtract(&span);
 
         assert!(!query.high_matchables.contains(0));
@@ -474,7 +474,7 @@ mod tests {
         let index = create_query_test_index();
         let mut query = build_query("license copyright permission", &index).unwrap();
 
-        let span = PositionSpan::new(0, 1);
+        let span = PositionSpan::new(0, 2);
         query.subtract(&span);
 
         let matched = query_matched(&query);
@@ -513,7 +513,7 @@ mod tests {
         let query = build_query("license copyright permission", &index).unwrap();
         let run = QueryRun::new(&query, 0, Some(2));
 
-        let exclude_span = PositionSpan::new(0, 2);
+        let exclude_span = PositionSpan::new(0, 3);
         assert!(!run.is_matchable(false, &[exclude_span]));
     }
 
@@ -847,7 +847,7 @@ mod tests {
         assert!(query.high_matchables.contains(0));
         assert!(query.high_matchables.contains(1));
 
-        let span = PositionSpan::new(0, 1);
+        let span = PositionSpan::new(0, 2);
         query.subtract(&span);
 
         assert!(!query.high_matchables.contains(0));
@@ -863,10 +863,10 @@ mod tests {
 
         assert!(run.is_matchable(false, &[]));
 
-        let exclude = vec![PositionSpan::new(0, 1)];
+        let exclude = vec![PositionSpan::new(0, 2)];
         assert!(run.is_matchable(false, &exclude));
 
-        let exclude_all = vec![PositionSpan::new(0, 2)];
+        let exclude_all = vec![PositionSpan::new(0, 3)];
         assert!(!run.is_matchable(false, &exclude_all));
     }
 
@@ -878,7 +878,7 @@ mod tests {
         assert!(query.high_matchables.contains(0));
         assert!(query.high_matchables.contains(1));
 
-        let near_dupe_span = PositionSpan::new(0, 1);
+        let near_dupe_span = PositionSpan::new(0, 2);
         query.subtract(&near_dupe_span);
 
         assert!(!query.high_matchables.contains(0));
@@ -899,7 +899,7 @@ mod tests {
         assert!(before_subtraction.contains(1));
         assert!(before_subtraction.contains(2));
 
-        query.subtract(&PositionSpan::new(0, 1));
+        query.subtract(&PositionSpan::new(0, 2));
 
         let snapshot_after_subtraction = whole_run.high_matchables();
         assert_eq!(snapshot_after_subtraction, before_subtraction);

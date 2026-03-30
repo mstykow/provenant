@@ -30,7 +30,7 @@ struct MatchedTextToken {
 /// A span representing a range of token positions.
 ///
 /// Used for tracking matched token positions and performing position arithmetic.
-/// This is a single continuous range of token positions (start..=end, inclusive).
+/// This is a single continuous range of token positions [start, end) (exclusive end).
 ///
 /// Distinct from `spans::Span` which tracks multiple byte ranges for coverage.
 ///
@@ -48,11 +48,11 @@ impl PositionSpan {
     }
 
     pub fn contains(&self, pos: usize) -> bool {
-        self.start <= pos && pos <= self.end
+        self.start <= pos && pos < self.end
     }
 
     pub fn iter(&self) -> impl Iterator<Item = usize> + '_ {
-        self.start..=self.end
+        self.start..self.end
     }
 }
 
@@ -1058,9 +1058,9 @@ impl<'a> QueryRun<'a> {
         self.cached_high_matchables
             .get_or_init(|| {
                 let start = self.start;
-                let end = self.end;
+                let end = self.end.map(|e| e + 1).unwrap_or(usize::MAX);
                 let source = self.source_high_matchables();
-                let live_span = PositionSpan::new(start, end.unwrap_or(usize::MAX));
+                let live_span = PositionSpan::new(start, end);
                 source
                     .iter()
                     .filter(|&pos| live_span.contains(pos))
@@ -1073,9 +1073,9 @@ impl<'a> QueryRun<'a> {
         self.cached_low_matchables
             .get_or_init(|| {
                 let start = self.start;
-                let end = self.end;
+                let end = self.end.map(|e| e + 1).unwrap_or(usize::MAX);
                 let source = self.source_low_matchables();
-                let live_span = PositionSpan::new(start, end.unwrap_or(usize::MAX));
+                let live_span = PositionSpan::new(start, end);
                 source
                     .iter()
                     .filter(|&pos| live_span.contains(pos))
