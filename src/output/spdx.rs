@@ -319,7 +319,7 @@ fn spdx_package_verification_code(files: &[&FileInfo]) -> String {
     for sha1 in file_sha1s {
         hasher.update(sha1.as_bytes());
     }
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 fn spdx_file_license_info(file: &FileInfo) -> Vec<String> {
