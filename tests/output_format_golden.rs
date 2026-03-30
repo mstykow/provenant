@@ -9,6 +9,8 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs;
 
+const EMPTY_SHA1: &str = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
+
 #[test]
 fn test_spdx_empty_matches_local_python_golden() {
     let output = empty_output();
@@ -90,6 +92,67 @@ fn test_json_lines_contract_shape_matches_python_fixture_structure() {
     assert!(lines[0].get("headers").is_some());
     assert!(expected_array[0].get("headers").is_some());
     assert!(lines.iter().any(|line| line.get("files").is_some()));
+}
+
+#[test]
+fn test_debian_output_matches_local_expected_fixture() {
+    let mut file = sample_plain_text_file(
+        "main.rs",
+        "main",
+        ".rs",
+        "scan/src/main.rs",
+        42,
+        EMPTY_SHA1,
+        vec![],
+    );
+    file.holders = vec![Holder {
+        holder: "Example Org".to_string(),
+        start_line: 1,
+        end_line: 1,
+    }];
+    file.license_expression = Some("MIT".to_string());
+    file.license_detections = vec![provenant::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![provenant::models::Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: Some("scan/src/main.rs".to_string()),
+            start_line: 1,
+            end_line: 1,
+            matcher: Some("1-hash".to_string()),
+            score: 100.0,
+            matched_length: Some(1),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("mit_1.RULE".to_string()),
+            rule_url: None,
+            matched_text: Some("Permission is hereby granted.".to_string()),
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: None,
+    }];
+
+    let output = sample_output_with_sections(1, 0, vec![], vec![], vec![file]);
+    let mut bytes = Vec::new();
+    writer_for_format(OutputFormat::Debian)
+        .write(
+            &output,
+            &mut bytes,
+            &OutputWriteConfig {
+                format: OutputFormat::Debian,
+                custom_template: None,
+                scanned_path: Some("scan".to_string()),
+            },
+        )
+        .expect("debian output should be generated");
+
+    let actual = String::from_utf8(bytes).expect("debian output should be utf-8");
+    let expected = fs::read_to_string("testdata/output-formats/debian-basic-expected.copyright")
+        .expect("debian expected fixture should be readable");
+    assert_eq!(actual, expected);
 }
 
 #[test]

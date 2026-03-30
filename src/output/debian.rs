@@ -45,7 +45,7 @@ fn write_file_paragraph(writer: &mut dyn Write, file: &FileInfo) -> io::Result<(
         write_multiline_field(writer, "Copyright", &copyright_lines)?;
     }
 
-    if let Some(license_expression) = file.license_expression.as_deref() {
+    if let Some(license_expression) = detected_license_expression(file) {
         writer.write_all(format!("License: {license_expression}\n").as_bytes())?;
 
         let license_texts = unique_license_texts(&file.license_detections);
@@ -61,6 +61,21 @@ fn write_file_paragraph(writer: &mut dyn Write, file: &FileInfo) -> io::Result<(
     }
 
     writer.write_all(b"\n")
+}
+
+fn detected_license_expression(file: &FileInfo) -> Option<String> {
+    let expressions: Vec<String> = file
+        .license_detections
+        .iter()
+        .map(|detection| detection.license_expression.clone())
+        .filter(|expression| !expression.is_empty())
+        .collect();
+
+    if !expressions.is_empty() {
+        return crate::utils::spdx::combine_license_expressions(expressions);
+    }
+
+    file.license_expression.clone()
 }
 
 fn write_multiline_field(writer: &mut dyn Write, key: &str, lines: &[&str]) -> io::Result<()> {
@@ -102,8 +117,8 @@ fn unique_license_texts(detections: &[crate::models::LicenseDetection]) -> Vec<&
 
 #[cfg(test)]
 mod tests {
-    use super::unique_license_texts;
-    use crate::models::{LicenseDetection, Match};
+    use super::{detected_license_expression, unique_license_texts};
+    use crate::models::{FileInfo, FileType, LicenseDetection, Match};
 
     #[test]
     fn unique_license_texts_deduplicates_by_region_and_rule() {
@@ -151,5 +166,44 @@ mod tests {
         }];
 
         assert_eq!(unique_license_texts(&detections), vec!["MIT text"]);
+    }
+
+    #[test]
+    fn detected_license_expression_prefers_non_spdx_detection_expression() {
+        let mut file = FileInfo::new(
+            "LICENSE".to_string(),
+            "LICENSE".to_string(),
+            String::new(),
+            "LICENSE".to_string(),
+            FileType::File,
+            None,
+            None,
+            0,
+            None,
+            None,
+            None,
+            None,
+            None,
+            vec![],
+            Some("MIT".to_string()),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
+        file.license_detections = vec![LicenseDetection {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            matches: vec![],
+            detection_log: vec![],
+            identifier: None,
+        }];
+
+        assert_eq!(detected_license_expression(&file).as_deref(), Some("mit"));
     }
 }
