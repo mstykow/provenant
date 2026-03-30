@@ -18,6 +18,12 @@
 //! - Database location detection (/var/lib/rpm/Packages or variants)
 //! - Graceful error handling for unreadable or corrupted databases
 //! - Returns package data for each installed package entry
+//! - Currently limited to Unix targets because the underlying `rpmdb` dependency
+//!   uses Unix-specific file-locking support in its NDB reader
+//!
+//! This restriction applies to installed RPM database parsing only. Standalone
+//! `.rpm` archives are parsed separately by `rpm_parser.rs` and do not share this
+//! Unix-only limitation.
 
 use std::path::Path;
 
@@ -276,7 +282,7 @@ fn parse_rpm_database(
     {
         let _ = (path, datasource_id);
         Err(format!(
-            "RPM database parsing is only supported on Unix targets (current target: {})",
+            "RPM database parsing is only supported on Unix targets because the current rpmdb dependency uses Unix-specific locking in its NDB backend (current target: {})",
             std::env::consts::OS
         ))
     }
