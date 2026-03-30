@@ -37,9 +37,8 @@ regions. The remaining missing Python features are:
    local-file resolution paths,
 2. any output surface equivalent to Python's todo / ambiguous-detection flow.
 
-These missing pieces still block the remaining provenance-sensitive license-output
-parity work tracked in
-[`../implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md`](../implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md),
+These missing pieces still block fuller provenance-sensitive license-output
+parity,
 especially:
 
 - the remaining top-level unique `license_detections` edge cases that still

@@ -23,8 +23,7 @@ The license detection system is a multi-phase, multi-strategy detection engine t
 
 **Default behavior**: Uses the built-in embedded license index. No external files required.
 
-> The completed public output and CLI parity rollout is recorded in
-> [`docs/implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md`](implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md).
+> This document describes the current public license-detection surface and its stable architecture.
 
 **Custom rules**: Use `--license-rules-path /path/to/rules` to load from a custom directory containing `.LICENSE` and `.RULE` files.
 
@@ -45,9 +44,8 @@ When license scanning is enabled, the current ScanCode-style public surface is:
 recompute the top-level license outputs when the loaded scan is reshaped or when
 license-reference generation is explicitly requested.
 
-The public-surface parity work that used to live in the active rollout plan is
-complete. The historical rollout record remains in
-[`docs/implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md`](implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md).
+The public-surface parity work is complete. This document is the evergreen
+reference for the current public license-detection surface.
 
 ### Initialization Flow
 
@@ -456,8 +454,7 @@ reference-following now consumes that metadata internally, but some downstream
 package/reference consumers are still not fully represented in the current
 serialized surfaces.
 
-The completed public-output rollout is recorded in
-[`docs/implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md`](implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md),
+The current public-output structure is described here,
 and the focused file-region design history remains in
 [`docs/license-detection/PLAN-019-file-region-and-unique-detection.md`](license-detection/PLAN-019-file-region-and-unique-detection.md).
 

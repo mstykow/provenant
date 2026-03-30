@@ -125,4 +125,3 @@ Rejected because many package relationships are only knowable after the full sca
 - [`src/models/datasource_id.rs`](../../src/models/datasource_id.rs) - Global datasource enum contract
 - [`src/assembly/mod.rs`](../../src/assembly/mod.rs) - Core assembly pipeline implementation
 - [`src/assembly/assemblers.rs`](../../src/assembly/assemblers.rs) - Central assembler policy and datasource coverage checks
-- [`docs/implementation-plans/package-detection/ASSEMBLY_PLAN.md`](../implementation-plans/package-detection/ASSEMBLY_PLAN.md) - Historical assembly implementation record
