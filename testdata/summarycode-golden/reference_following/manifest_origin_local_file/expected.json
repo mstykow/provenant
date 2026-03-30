@@ -17,14 +17,24 @@
     "other_languages": []
   },
   "tallies": {
-    "detected_license_expression": [{ "value": "mit", "count": 2 }],
+    "detected_license_expression": [
+      {
+        "value": "mit",
+        "count": 2
+      }
+    ],
     "copyrights": [],
     "holders": [],
     "authors": [],
     "programming_language": []
   },
   "tallies_of_key_files": {
-    "detected_license_expression": [{ "value": "mit", "count": 2 }],
+    "detected_license_expression": [
+      {
+        "value": "mit",
+        "count": 2
+      }
+    ],
     "copyrights": [],
     "holders": [],
     "authors": [],
@@ -32,18 +42,12 @@
   },
   "license_detections": [
     {
-      "identifier": "mit-424eb7f7-65d2-bbe6-ee7c-127238c95c99",
+      "identifier": "mit-0417f034-29de-3369-3be1-60a79938d91c",
       "license_expression": "mit",
       "license_expression_spdx": "MIT",
-      "detection_count": 3,
-      "detection_log": ["unknown-reference-to-local-file"],
+      "detection_count": 1,
+      "detection_log": [],
       "reference_matches": [
-        {
-          "from_file": "codebase/Cargo.toml",
-          "license_expression": "unknown-license-reference",
-          "license_expression_spdx": "LicenseRef-scancode-unknown-license-reference",
-          "rule_identifier": "unknown-license-reference_see_license_at_manifest_1.RULE"
-        },
         {
           "from_file": "codebase/LICENSE",
           "license_expression": "mit",
@@ -59,12 +63,18 @@
       ]
     },
     {
-      "identifier": "mit-0417f034-29de-3369-3be1-60a79938d91c",
+      "identifier": "mit-424eb7f7-65d2-bbe6-ee7c-127238c95c99",
       "license_expression": "mit",
       "license_expression_spdx": "MIT",
-      "detection_count": 2,
-      "detection_log": [],
+      "detection_count": 1,
+      "detection_log": ["unknown-reference-to-local-file"],
       "reference_matches": [
+        {
+          "from_file": "codebase/Cargo.toml",
+          "license_expression": "unknown-license-reference",
+          "license_expression_spdx": "LicenseRef-scancode-unknown-license-reference",
+          "rule_identifier": "unknown-license-reference_see_license_at_manifest_1.RULE"
+        },
         {
           "from_file": "codebase/LICENSE",
           "license_expression": "mit",
