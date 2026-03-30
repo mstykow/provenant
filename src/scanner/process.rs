@@ -393,6 +393,14 @@ fn extract_information_from_content(
             .is_archive(Some(is_archive))
             .is_media(Some(is_media))
             .is_script(Some(is_script));
+    } else {
+        file_info_builder
+            .sha1_git(None)
+            .is_binary(Some(false))
+            .is_text(Some(false))
+            .is_archive(Some(false))
+            .is_media(Some(false))
+            .is_script(Some(false));
     }
 
     if should_skip_text_detection(path, &buffer) {
@@ -440,11 +448,17 @@ fn extract_information_from_content(
                 .packages
                 .into_iter()
                 .filter(|package| {
+                    let is_compiled_package = package
+                        .datasource_id
+                        .as_ref()
+                        .is_some_and(is_compiled_datasource);
                     let is_system_package = package
                         .datasource_id
                         .as_ref()
                         .is_some_and(is_system_datasource);
-                    if is_system_package {
+                    if is_compiled_package {
+                        text_options.detect_packages_in_compiled
+                    } else if is_system_package {
                         text_options.detect_system_packages
                     } else {
                         text_options.detect_application_packages
@@ -641,6 +655,13 @@ fn is_system_datasource(datasource_id: &DatasourceId) -> bool {
             | DatasourceId::RpmInstalledDatabaseNdb
             | DatasourceId::RpmInstalledDatabaseSqlite
             | DatasourceId::RpmYumdb
+    )
+}
+
+fn is_compiled_datasource(datasource_id: &DatasourceId) -> bool {
+    matches!(
+        datasource_id,
+        DatasourceId::GoBinary | DatasourceId::RustBinary
     )
 }
 
@@ -1156,12 +1177,12 @@ fn process_directory(
         for_packages: Vec::new(),
         scan_errors: Vec::new(),
         license_policy: Vec::new(),
-        is_binary: collect_info.then_some(false),
-        is_text: collect_info.then_some(false),
-        is_archive: collect_info.then_some(false),
-        is_media: collect_info.then_some(false),
-        is_source: collect_info.then_some(false),
-        is_script: collect_info.then_some(false),
+        is_binary: Some(false),
+        is_text: Some(false),
+        is_archive: Some(false),
+        is_media: Some(false),
+        is_source: Some(false),
+        is_script: Some(false),
         source_count: None,
         is_legal: false,
         is_manifest: false,
