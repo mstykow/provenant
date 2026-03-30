@@ -17,17 +17,37 @@
     "other_languages": []
   },
   "tallies": {
-    "detected_license_expression": [{ "value": "bsd-new", "count": 2 }],
+    "detected_license_expression": [
+      {
+        "value": "bsd-new",
+        "count": 2
+      }
+    ],
     "copyrights": [],
     "holders": [],
-    "authors": [{ "value": "Example Corp.", "count": 1 }],
+    "authors": [
+      {
+        "value": "Example Corp.",
+        "count": 1
+      }
+    ],
     "programming_language": []
   },
   "tallies_of_key_files": {
-    "detected_license_expression": [{ "value": "bsd-new", "count": 1 }],
+    "detected_license_expression": [
+      {
+        "value": "bsd-new",
+        "count": 1
+      }
+    ],
     "copyrights": [],
     "holders": [],
-    "authors": [{ "value": "Example Corp.", "count": 1 }],
+    "authors": [
+      {
+        "value": "Example Corp.",
+        "count": 1
+      }
+    ],
     "programming_language": []
   },
   "license_detections": [
@@ -35,7 +55,7 @@
       "identifier": "bsd_new-0e3f702d-39dc-889e-6409-d34b37057fe4",
       "license_expression": "bsd-new",
       "license_expression_spdx": "BSD-3-Clause",
-      "detection_count": 2,
+      "detection_count": 1,
       "detection_log": ["unknown-reference-in-file-to-package"],
       "reference_matches": [
         {

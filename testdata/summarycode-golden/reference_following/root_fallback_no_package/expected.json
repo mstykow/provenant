@@ -17,14 +17,24 @@
     "other_languages": []
   },
   "tallies": {
-    "detected_license_expression": [{ "value": "mit", "count": 2 }],
+    "detected_license_expression": [
+      {
+        "value": "mit",
+        "count": 2
+      }
+    ],
     "copyrights": [],
     "holders": [],
     "authors": [],
     "programming_language": []
   },
   "tallies_of_key_files": {
-    "detected_license_expression": [{ "value": "mit", "count": 1 }],
+    "detected_license_expression": [
+      {
+        "value": "mit",
+        "count": 1
+      }
+    ],
     "copyrights": [],
     "holders": [],
     "authors": [],
@@ -32,18 +42,12 @@
   },
   "license_detections": [
     {
-      "identifier": "mit-5089aa6b-4f82-800f-b5c6-8fd0ba9f46d1",
+      "identifier": "mit-0417f034-29de-3369-3be1-60a79938d91c",
       "license_expression": "mit",
       "license_expression_spdx": "MIT",
-      "detection_count": 3,
-      "detection_log": ["unknown-reference-in-file-to-nonexistent-package"],
+      "detection_count": 1,
+      "detection_log": [],
       "reference_matches": [
-        {
-          "from_file": "codebase/django.po",
-          "license_expression": "free-unknown",
-          "license_expression_spdx": "LicenseRef-scancode-free-unknown",
-          "rule_identifier": "free-unknown-package_1.RULE"
-        },
         {
           "from_file": "codebase/COPYING",
           "license_expression": "mit",
@@ -59,12 +63,18 @@
       ]
     },
     {
-      "identifier": "mit-0417f034-29de-3369-3be1-60a79938d91c",
+      "identifier": "mit-5089aa6b-4f82-800f-b5c6-8fd0ba9f46d1",
       "license_expression": "mit",
       "license_expression_spdx": "MIT",
-      "detection_count": 2,
-      "detection_log": [],
+      "detection_count": 1,
+      "detection_log": ["unknown-reference-in-file-to-nonexistent-package"],
       "reference_matches": [
+        {
+          "from_file": "codebase/django.po",
+          "license_expression": "free-unknown",
+          "license_expression_spdx": "LicenseRef-scancode-free-unknown",
+          "rule_identifier": "free-unknown-package_1.RULE"
+        },
         {
           "from_file": "codebase/COPYING",
           "license_expression": "mit",
