@@ -601,13 +601,13 @@ mod tests {
         let without_compiled = without_compiled
             .files
             .into_iter()
-            .find(|entry| entry.file_type == FileType::File)
-            .expect("archive file present");
+            .find(|entry| entry.file_type == FileType::File && entry.path.ends_with("/demo"))
+            .expect("compiled artifact present");
         let with_compiled = with_compiled
             .files
             .into_iter()
-            .find(|entry| entry.file_type == FileType::File)
-            .expect("archive file present");
+            .find(|entry| entry.file_type == FileType::File && entry.path.ends_with("/demo"))
+            .expect("compiled artifact present");
 
         assert!(
             without_compiled.package_data.is_empty(),

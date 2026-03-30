@@ -1743,48 +1743,53 @@ fn sample_output() -> Output {
 }
 
 fn sample_html_simple_output() -> Output {
+    let mut file = FileInfo::new(
+        "copyright_acme_c-c.c".to_string(),
+        "copyright_acme_c-c".to_string(),
+        ".c".to_string(),
+        "simple/copyright_acme_c-c.c".to_string(),
+        FileType::File,
+        Some("text/plain".to_string()),
+        None,
+        55,
+        None,
+        Some("e2466d5b764d27fb301ceb439ffb5da22e43ab1d".to_string()),
+        Some("bdf7c572beb4094c2059508fa73c05a4".to_string()),
+        None,
+        Some("C".to_string()),
+        vec![],
+        None,
+        vec![],
+        vec![],
+        vec![Copyright {
+            copyright: "Copyright (c) 2000 ACME, Inc.".to_string(),
+            start_line: 1,
+            end_line: 1,
+        }],
+        vec![Holder {
+            holder: "ACME, Inc.".to_string(),
+            start_line: 1,
+            end_line: 1,
+        }],
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+    );
+    file.is_binary = Some(false);
+    file.is_text = Some(true);
+    file.is_archive = Some(false);
+    file.is_media = Some(false);
+    file.is_source = Some(true);
+    file.is_script = Some(false);
+
     sample_output_with_sections(
         1,
         1,
         vec![],
         vec![],
-        vec![
-            sample_directory_file("simple"),
-            FileInfo::new(
-                "copyright_acme_c-c.c".to_string(),
-                "copyright_acme_c-c".to_string(),
-                ".c".to_string(),
-                "simple/copyright_acme_c-c.c".to_string(),
-                FileType::File,
-                Some("text/plain".to_string()),
-                None,
-                55,
-                None,
-                Some("e2466d5b764d27fb301ceb439ffb5da22e43ab1d".to_string()),
-                Some("bdf7c572beb4094c2059508fa73c05a4".to_string()),
-                Some("UTF-8 Unicode text, with no line terminators".to_string()),
-                Some("C".to_string()),
-                vec![],
-                None,
-                vec![],
-                vec![],
-                vec![Copyright {
-                    copyright: "Copyright (c) 2000 ACME, Inc.".to_string(),
-                    start_line: 1,
-                    end_line: 1,
-                }],
-                vec![Holder {
-                    holder: "ACME, Inc.".to_string(),
-                    start_line: 1,
-                    end_line: 1,
-                }],
-                vec![],
-                vec![],
-                vec![],
-                vec![],
-                vec![],
-            ),
-        ],
+        vec![sample_directory_file("simple"), file],
     )
 }
 
