@@ -86,13 +86,14 @@ provenant --help
 
 Commonly used options include:
 
-- `--json`, `--json-pp`, `--json-lines`, `--yaml`, `--html`, `--csv`
+- `--json`, `--json-pp`, `--json-lines`, `--yaml`, `--html`, `--csv`, `--debian`
 - `--spdx-tv`, `--spdx-rdf`, `--cyclonedx`, `--cyclonedx-xml`
 - `--custom-output`, `--custom-template`
-- `--exclude/--ignore`, `--include`, `--max-depth`, `--processes`
+- `--exclude/--ignore`, `--include`, `--max-depth`, `--processes`, `--info`
 - `--cache`, `--cache-dir`, `--cache-clear`, `--from-json`, `--no-assemble`
+- `--max-in-memory`, `--package`, `--system-package`, `--package-in-compiled`, `--package-only`
 - `--filter-clues`, `--only-findings`, `--mark-source`
-- `--license`, `--copyright`, `--email`, `--url`
+- `--license`, `--license-policy`, `--copyright`, `--email`, `--url`
 - `--classify`, `--summary`, `--license-clarity-score`, `--tallies`
 - `--tallies-key-files`, `--tallies-with-details`, `--facet`, `--tallies-by-facet`, `--generated`
 
