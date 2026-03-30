@@ -467,10 +467,10 @@ pub(crate) fn compute_fixture_output(
         Some(test_license_engine()),
         LicenseScanOptions::default(),
         &TextDetectionOptions {
-            collect_info: false,
+            collect_info: true,
             detect_packages: true,
             detect_application_packages: true,
-            detect_system_packages: false,
+            detect_system_packages: true,
             detect_packages_in_compiled: false,
             detect_generated: options.include_generated,
             ..TextDetectionOptions::default()
@@ -567,10 +567,10 @@ pub(crate) fn compute_fixture_summary(
         Some(test_license_engine()),
         LicenseScanOptions::default(),
         &TextDetectionOptions {
-            collect_info: false,
+            collect_info: true,
             detect_packages: true,
             detect_application_packages: true,
-            detect_system_packages: false,
+            detect_system_packages: true,
             detect_packages_in_compiled: false,
             ..TextDetectionOptions::default()
         },
@@ -1195,10 +1195,10 @@ pub(crate) fn assert_classify_fixture_matches_expected(
         Some(test_license_engine()),
         LicenseScanOptions::default(),
         &TextDetectionOptions {
-            collect_info: false,
+            collect_info: true,
             detect_packages: true,
             detect_application_packages: true,
-            detect_system_packages: false,
+            detect_system_packages: true,
             detect_packages_in_compiled: false,
             ..TextDetectionOptions::default()
         },
@@ -1269,10 +1269,10 @@ pub(crate) fn scan_and_assemble_with_keyfiles(
         None,
         LicenseScanOptions::default(),
         &TextDetectionOptions {
-            collect_info: false,
+            collect_info: true,
             detect_packages: true,
             detect_application_packages: true,
-            detect_system_packages: false,
+            detect_system_packages: true,
             detect_packages_in_compiled: false,
             ..TextDetectionOptions::default()
         },

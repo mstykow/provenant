@@ -20,10 +20,10 @@ pub(crate) fn scan_and_assemble(path: &Path) -> (Vec<FileInfo>, assembly::Assemb
         None,
         LicenseScanOptions::default(),
         &TextDetectionOptions {
-            collect_info: false,
+            collect_info: true,
             detect_packages: true,
             detect_application_packages: true,
-            detect_system_packages: false,
+            detect_system_packages: true,
             detect_packages_in_compiled: false,
             ..TextDetectionOptions::default()
         },
