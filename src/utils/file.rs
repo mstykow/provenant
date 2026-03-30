@@ -92,7 +92,7 @@ pub fn extract_text_for_detection(path: &Path, bytes: &[u8]) -> (String, Extract
         .map(|s| s.to_ascii_lowercase());
 
     if matches!(ext.as_deref(), Some("pdf")) {
-        let text = extract_pdf_text(bytes);
+        let text = extract_pdf_text(path, bytes);
         return if text.is_empty() {
             (String::new(), ExtractedTextKind::None)
         } else {
@@ -406,9 +406,69 @@ fn normalize_metadata_value(value: &str) -> String {
         .to_string()
 }
 
-fn extract_pdf_text(bytes: &[u8]) -> String {
+fn extract_pdf_text(path: &Path, bytes: &[u8]) -> String {
     if bytes.len() < 5 || &bytes[..5] != b"%PDF-" {
         return String::new();
+    }
+
+    let extracted = catch_unwind(AssertUnwindSafe(|| pdf_extract::extract_text(path)));
+    if let Ok(Ok(text)) = extracted {
+        let normalized = text.replace(['\r', '\u{0c}'], "\n");
+        if !normalized.trim().is_empty() {
+            return normalized;
+        }
+    }
+
+    let extracted = catch_unwind(AssertUnwindSafe(
+        || -> Result<String, Box<dyn std::error::Error>> {
+            let mut document = pdf_oxide::document::PdfDocument::open(path)?;
+            let page_count = document.page_count()?;
+            let mut pages = Vec::new();
+            for page_idx in 0..page_count {
+                let text = document.extract_text(page_idx)?;
+                if !text.trim().is_empty() {
+                    pages.push(text);
+                }
+            }
+            Ok(pages.join("\n"))
+        },
+    ));
+    if let Ok(Ok(text)) = extracted {
+        let normalized = text.replace(['\r', '\u{0c}'], "\n");
+        if !normalized.trim().is_empty() {
+            return normalized;
+        }
+    }
+
+    let extracted = catch_unwind(AssertUnwindSafe(
+        || -> Result<String, Box<dyn std::error::Error>> {
+            let mut document = pdf_oxide::document::PdfDocument::from_bytes(bytes.to_vec())?;
+            let page_count = document.page_count()?;
+            let mut pages = Vec::new();
+            for page_idx in 0..page_count {
+                let text = document.extract_text(page_idx)?;
+                if !text.trim().is_empty() {
+                    pages.push(text);
+                }
+            }
+            Ok(pages.join("\n"))
+        },
+    ));
+    if let Ok(Ok(text)) = extracted {
+        let normalized = text.replace(['\r', '\u{0c}'], "\n");
+        if !normalized.trim().is_empty() {
+            return normalized;
+        }
+    }
+
+    let extracted = catch_unwind(AssertUnwindSafe(|| {
+        pdf_extract::extract_text_from_mem(bytes)
+    }));
+    if let Ok(Ok(text)) = extracted {
+        let normalized = text.replace(['\r', '\u{0c}'], "\n");
+        if !normalized.trim().is_empty() {
+            return normalized;
+        }
     }
 
     let extracted = catch_unwind(AssertUnwindSafe(|| {
@@ -416,10 +476,11 @@ fn extract_pdf_text(bytes: &[u8]) -> String {
     }));
     match extracted {
         Ok(Ok(pages)) => {
-            let Some(text) = pages.into_iter().next() else {
-                return String::new();
-            };
-            let normalized = text.replace(['\r', '\u{0c}'], "\n");
+            let normalized = pages
+                .into_iter()
+                .map(|page| page.replace(['\r', '\u{0c}'], "\n"))
+                .collect::<Vec<_>>()
+                .join("\n");
             if normalized.trim().is_empty() {
                 String::new()
             } else {
@@ -515,5 +576,16 @@ mod tests {
 
         assert!(text.is_empty());
         assert_eq!(kind, ExtractedTextKind::None);
+    }
+
+    #[test]
+    fn test_extract_text_for_detection_reads_pdf_fixture_text() {
+        let path = Path::new("testdata/license-golden/datadriven/lic2/bsd-new_156.pdf");
+        let bytes = std::fs::read(path).expect("failed to read pdf fixture");
+
+        let (text, kind) = extract_text_for_detection(path, &bytes);
+
+        assert_eq!(kind, ExtractedTextKind::Pdf);
+        assert!(text.contains("Redistribution and use in source and binary forms"));
     }
 }
