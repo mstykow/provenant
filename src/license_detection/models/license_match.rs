@@ -2,11 +2,10 @@
 
 use serde::de::Error as _;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::fmt;
 use std::str::FromStr;
 
-use crate::license_detection::models::position_span::SpanIter;
+use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::RuleKind;
 use crate::license_detection::position_set::PositionSet;
 
@@ -165,19 +164,13 @@ pub struct LicenseMatch {
     pub rule_start_token: usize,
 
     /// Token positions matched in the query text.
-    /// None means contiguous range [start_token, end_token).
-    /// Some(positions) contains exact positions for non-contiguous matches (after merge).
-    pub qspan_positions: Option<Vec<usize>>,
+    pub qspan: PositionSpan,
 
     /// Token positions matched in the rule text.
-    /// None means contiguous range [rule_start_token, rule_start_token + matched_length).
-    /// Some(positions) contains exact positions for non-contiguous matches (after merge).
-    pub ispan_positions: Option<Vec<usize>>,
+    pub ispan: PositionSpan,
 
     /// Token positions in the rule that are high-value legalese tokens.
-    /// None means hispan can be computed from rule_start_token (contiguous case).
-    /// Some(positions) contains exact positions for non-contiguous hispans (after merge).
-    pub hispan_positions: Option<Vec<usize>>,
+    pub hispan: PositionSpan,
 
     /// Candidate resemblance score from set similarity.
     /// Used for cross-license tie-breaking when matches overlap.
@@ -359,9 +352,9 @@ impl<'de> Deserialize<'de> for LicenseMatch {
             is_from_license: value.is_from_license,
             hilen: value.hilen,
             rule_start_token: value.rule_start_token,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
+            qspan: PositionSpan::empty(),
+            ispan: PositionSpan::empty(),
+            hispan: PositionSpan::empty(),
             candidate_resemblance: value.candidate_resemblance,
             candidate_containment: value.candidate_containment,
         })
@@ -393,9 +386,9 @@ impl Default for LicenseMatch {
             is_from_license: false,
             hilen: 0,
             rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
+            qspan: PositionSpan::empty(),
+            ispan: PositionSpan::empty(),
+            hispan: PositionSpan::empty(),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }
@@ -444,10 +437,11 @@ impl LicenseMatch {
     }
 
     pub fn qstart(&self) -> usize {
-        if let Some(positions) = &self.qspan_positions {
-            positions.iter().copied().min().unwrap_or(self.start_token)
-        } else {
+        let (min, _) = self.qspan.bounds();
+        if min == 0 && self.qspan.is_empty() {
             self.start_token
+        } else {
+            min
         }
     }
 
@@ -467,33 +461,26 @@ impl LicenseMatch {
     }
 
     pub(crate) fn len(&self) -> usize {
-        if let Some(positions) = &self.qspan_positions {
-            positions.len()
+        let qspan_len = self.qspan.len();
+        if qspan_len == 0 && self.start_token < self.end_token {
+            self.end_token - self.start_token
         } else {
-            self.end_token.saturating_sub(self.start_token)
+            qspan_len
         }
     }
 
     fn qregion_len(&self) -> usize {
-        if let Some(positions) = &self.qspan_positions {
-            if positions.is_empty() {
-                return 0;
-            }
-            let min_pos = *positions.iter().min().unwrap_or(&0);
-            let max_pos = *positions.iter().max().unwrap_or(&0);
-            max_pos - min_pos + 1
-        } else {
+        let (min, max) = self.qspan.bounds();
+        if min == max && min == 0 {
             self.end_token.saturating_sub(self.start_token)
+        } else {
+            max.saturating_sub(min)
         }
     }
 
     pub fn qmagnitude(&self, query: &crate::license_detection::query::Query) -> usize {
         let qregion_len = self.qregion_len();
-        let positions: Vec<usize> = if let Some(qspan_positions) = &self.qspan_positions {
-            qspan_positions.clone()
-        } else {
-            (self.start_token..self.end_token).collect()
-        };
+        let positions: Vec<usize> = self.qspan.to_vec();
         if positions.is_empty() {
             return qregion_len;
         }
@@ -519,24 +506,12 @@ impl LicenseMatch {
     }
 
     pub fn idensity(&self) -> f32 {
-        let ispan_len = if let Some(positions) = &self.ispan_positions {
-            positions.len()
-        } else {
-            self.matched_length
-        };
+        let ispan_len = self.ispan.len();
         if ispan_len == 0 {
             return 0.0;
         }
-        let ispan_magnitude = if let Some(positions) = &self.ispan_positions {
-            if positions.is_empty() {
-                return 0.0;
-            }
-            let min_pos = *positions.iter().min().unwrap();
-            let max_pos = *positions.iter().max().unwrap();
-            max_pos - min_pos + 1
-        } else {
-            self.matched_length
-        };
+        let (min, max) = self.ispan.bounds();
+        let ispan_magnitude = max.saturating_sub(min);
         if ispan_magnitude == 0 {
             return 0.0;
         }
@@ -551,83 +526,33 @@ impl LicenseMatch {
     }
 
     pub fn surround(&self, other: &LicenseMatch) -> bool {
-        let (self_qstart, self_qend) = self.qspan_bounds();
-        let (other_qstart, other_qend) = other.qspan_bounds();
+        let (self_qstart, self_qend) = self.qspan.bounds();
+        let (other_qstart, other_qend) = other.qspan.bounds();
         self_qstart <= other_qstart && self_qend >= other_qend
     }
 
     pub fn qcontains(&self, other: &LicenseMatch) -> bool {
-        if let (Some(self_positions), Some(other_positions)) =
-            (&self.qspan_positions, &other.qspan_positions)
-        {
-            let self_set: HashSet<usize> = self_positions.iter().copied().collect();
-            return other_positions.iter().all(|p| self_set.contains(p));
-        }
-
-        if let (Some(self_positions), None) = (&self.qspan_positions, &other.qspan_positions) {
-            let self_set: HashSet<usize> = self_positions.iter().copied().collect();
-            return (other.start_token..other.end_token).all(|p| self_set.contains(&p));
-        }
-
-        if let (None, Some(other_positions)) = (&self.qspan_positions, &other.qspan_positions) {
-            return other_positions
-                .iter()
-                .all(|&p| p >= self.start_token && p < self.end_token);
-        }
-
-        if self.start_token == 0
-            && self.end_token == 0
-            && other.start_token == 0
-            && other.end_token == 0
-        {
+        if self.qspan.is_empty() && other.qspan.is_empty() {
             return self.start_line <= other.start_line && self.end_line >= other.end_line;
         }
-        self.start_token <= other.start_token && self.end_token >= other.end_token
+        let self_set = self.qspan.to_position_set();
+        for pos in other.qspan.iter() {
+            if !self_set.contains(pos) {
+                return false;
+            }
+        }
+        true
     }
 
     pub fn qoverlap(&self, other: &LicenseMatch) -> usize {
-        if let (Some(self_positions), Some(other_positions)) =
-            (&self.qspan_positions, &other.qspan_positions)
-        {
-            let self_set: HashSet<usize> = self_positions.iter().copied().collect();
-            return other_positions
-                .iter()
-                .filter(|p| self_set.contains(p))
-                .count();
-        }
-
-        if let (Some(self_positions), None) = (&self.qspan_positions, &other.qspan_positions) {
-            let self_set: HashSet<usize> = self_positions.iter().copied().collect();
-            return (other.start_token..other.end_token)
-                .filter(|p| self_set.contains(p))
-                .count();
-        }
-
-        if let (None, Some(other_positions)) = (&self.qspan_positions, &other.qspan_positions) {
-            return other_positions
-                .iter()
-                .filter(|&&p| p >= self.start_token && p < self.end_token)
-                .count();
-        }
-
-        if self.start_token == 0
-            && self.end_token == 0
-            && other.start_token == 0
-            && other.end_token == 0
-        {
-            let start = self.start_line.max(other.start_line);
-            let end = self.end_line.min(other.end_line);
-            return if start <= end { end - start + 1 } else { 0 };
-        }
-        let start = self.start_token.max(other.start_token);
-        let end = self.end_token.min(other.end_token);
-        end.saturating_sub(start)
+        let self_set = self.qspan.to_position_set();
+        other.qspan.iter().filter(|&p| self_set.contains(p)).count()
     }
 
     pub fn qspan_overlap(&self, other: &LicenseMatch) -> usize {
-        let self_qspan: HashSet<usize> = self.qspan().into_iter().collect();
-        let other_qspan: HashSet<usize> = other.qspan().into_iter().collect();
-        self_qspan.intersection(&other_qspan).count()
+        let self_set = self.qspan.to_position_set();
+        let other_set = other.qspan.to_position_set();
+        self_set.intersection_len(&other_set)
     }
 
     /// Return true if all matched tokens are continuous without gaps or unknowns.
@@ -639,103 +564,28 @@ impl LicenseMatch {
         len == qregion_len && qregion_len == qmagnitude
     }
 
-    pub fn ispan(&self) -> Vec<usize> {
-        if let Some(positions) = &self.ispan_positions {
-            positions.clone()
-        } else {
-            (self.rule_start_token..self.rule_start_token + self.matched_length).collect()
-        }
-    }
-
-    pub fn ispan_iter(&self) -> SpanIter<'_> {
-        match &self.ispan_positions {
-            Some(positions) => SpanIter::Slice(positions.iter().copied()),
-            None => {
-                SpanIter::Range(self.rule_start_token..self.rule_start_token + self.matched_length)
-            }
-        }
-    }
-
-    pub fn hispan(&self) -> Vec<usize> {
-        if let Some(positions) = &self.hispan_positions {
-            positions.clone()
-        } else {
-            (self.rule_start_token..self.rule_start_token + self.hilen).collect()
-        }
-    }
-
-    pub fn qspan(&self) -> Vec<usize> {
-        if let Some(positions) = &self.qspan_positions {
-            positions.clone()
-        } else {
-            (self.start_token..self.end_token).collect()
-        }
-    }
-
-    pub fn qspan_iter(&self) -> SpanIter<'_> {
-        match &self.qspan_positions {
-            Some(positions) => SpanIter::Slice(positions.iter().copied()),
-            None => SpanIter::Range(self.start_token..self.end_token),
-        }
-    }
-
     pub fn overlaps_with(&self, other: &PositionSet) -> bool {
-        if let Some(positions) = &self.qspan_positions {
-            // positions is sorted, so first/last give us bounds
-            if positions.is_empty() {
-                return false;
-            }
-            let my_min = positions[0];
-            let my_max = positions[positions.len() - 1];
-
-            // Bounds pre-check using PositionSet's cached bounds
-            if !other.may_overlap_range(my_min, my_max + 1) {
-                return false;
-            }
-
-            positions.iter().any(|&p| other.contains(p))
-        } else {
-            // Contiguous range
-            if !other.may_overlap_range(self.start_token, self.end_token) {
-                return false;
-            }
-            (self.start_token..self.end_token).any(|p| other.contains(p))
+        let (my_min, my_max) = self.qspan.bounds();
+        if my_min == my_max {
+            return false;
         }
+        if !other.may_overlap_range(my_min, my_max) {
+            return false;
+        }
+        self.qspan.iter().any(|p| other.contains(p))
     }
 
     pub fn qspan_eq(&self, other: &LicenseMatch) -> bool {
-        match (&self.qspan_positions, &other.qspan_positions) {
-            (Some(self_positions), Some(other_positions)) => {
-                self_positions.len() == other_positions.len()
-                    && self_positions.iter().collect::<HashSet<_>>()
-                        == other_positions.iter().collect::<HashSet<_>>()
-            }
-            (Some(self_positions), None) => {
-                let range_len = other.end_token.saturating_sub(other.start_token);
-                self_positions.len() == range_len
-                    && self_positions
-                        .iter()
-                        .all(|&p| p >= other.start_token && p < other.end_token)
-            }
-            (None, Some(other_positions)) => {
-                let range_len = self.end_token.saturating_sub(self.start_token);
-                other_positions.len() == range_len
-                    && other_positions
-                        .iter()
-                        .all(|&p| p >= self.start_token && p < self.end_token)
-            }
-            (None, None) => {
-                if self.start_token == 0
-                    && self.end_token == 0
-                    && other.start_token == 0
-                    && other.end_token == 0
-                {
-                    self.start_line == other.start_line && self.end_line == other.end_line
-                } else {
-                    self.start_token == other.start_token && self.end_token == other.end_token
-                }
+        if self.qspan.len() != other.qspan.len() {
+            return false;
+        }
+        let self_set = self.qspan.to_position_set();
+        for pos in other.qspan.iter() {
+            if !self_set.contains(pos) {
+                return false;
             }
         }
+        true
     }
 
     pub fn qdistance_to(&self, other: &LicenseMatch) -> usize {
@@ -743,8 +593,8 @@ impl LicenseMatch {
             return 0;
         }
 
-        let (self_start, self_end_exclusive) = self.qspan_bounds();
-        let (other_start, other_end_exclusive) = other.qspan_bounds();
+        let (self_start, self_end_exclusive) = self.qspan.bounds();
+        let (other_start, other_end_exclusive) = other.qspan.bounds();
         let self_end = self_end_exclusive.saturating_sub(1);
         let other_end = other_end_exclusive.saturating_sub(1);
 
@@ -760,44 +610,21 @@ impl LicenseMatch {
     }
 
     pub fn qspan_bounds(&self) -> (usize, usize) {
-        if let Some(positions) = &self.qspan_positions {
-            if positions.is_empty() {
-                return (0, 0);
-            }
-            (
-                *positions.iter().min().unwrap(),
-                *positions.iter().max().unwrap() + 1,
-            )
-        } else {
-            (self.start_token, self.end_token)
-        }
+        self.qspan.bounds()
     }
 
     pub fn qspan_magnitude(&self) -> usize {
-        let (start, end) = self.qspan_bounds();
+        let (start, end) = self.qspan.bounds();
         end.saturating_sub(start)
     }
 
     pub fn ispan_bounds(&self) -> (usize, usize) {
-        if let Some(positions) = &self.ispan_positions {
-            if positions.is_empty() {
-                return (0, 0);
-            }
-            (
-                *positions.iter().min().unwrap(),
-                *positions.iter().max().unwrap() + 1,
-            )
-        } else {
-            (
-                self.rule_start_token,
-                self.rule_start_token + self.matched_length,
-            )
-        }
+        self.ispan.bounds()
     }
 
     pub fn idistance_to(&self, other: &LicenseMatch) -> usize {
-        let (self_start, self_end) = self.ispan_bounds();
-        let (other_start, other_end) = other.ispan_bounds();
+        let (self_start, self_end) = self.ispan.bounds();
+        let (other_start, other_end) = other.ispan.bounds();
 
         if self_start < other_end && other_start < self_end {
             return 0;
@@ -815,13 +642,13 @@ impl LicenseMatch {
     }
 
     pub fn is_after(&self, other: &LicenseMatch) -> bool {
-        let (self_qstart, _self_qend) = self.qspan_bounds();
-        let (_other_qstart, other_qend) = other.qspan_bounds();
+        let (self_qstart, _self_qend) = self.qspan.bounds();
+        let (_other_qstart, other_qend) = other.qspan.bounds();
 
         let q_after = self_qstart >= other_qend;
 
-        let (self_istart, _self_iend) = self.ispan_bounds();
-        let (_other_istart, other_iend) = other.ispan_bounds();
+        let (self_istart, _self_iend) = self.ispan.bounds();
+        let (_other_istart, other_iend) = other.ispan.bounds();
 
         let i_after = self_istart >= other_iend;
 
@@ -829,39 +656,8 @@ impl LicenseMatch {
     }
 
     pub fn ispan_overlap(&self, other: &LicenseMatch) -> usize {
-        if let (Some(self_positions), Some(other_positions)) =
-            (&self.ispan_positions, &other.ispan_positions)
-        {
-            let self_set: HashSet<usize> = self_positions.iter().copied().collect();
-            return other_positions
-                .iter()
-                .filter(|p| self_set.contains(p))
-                .count();
-        }
-
-        if let (Some(self_positions), None) = (&self.ispan_positions, &other.ispan_positions) {
-            let self_set: HashSet<usize> = self_positions.iter().copied().collect();
-            return (other.rule_start_token..other.rule_start_token + other.matched_length)
-                .filter(|p| self_set.contains(p))
-                .count();
-        }
-
-        if let (None, Some(other_positions)) = (&self.ispan_positions, &other.ispan_positions) {
-            return other_positions
-                .iter()
-                .filter(|&&p| {
-                    p >= self.rule_start_token && p < self.rule_start_token + self.matched_length
-                })
-                .count();
-        }
-
-        let (self_start, self_end) = self.ispan_bounds();
-        let (other_start, other_end) = other.ispan_bounds();
-
-        let overlap_start = self_start.max(other_start);
-        let overlap_end = self_end.min(other_end);
-
-        overlap_end.saturating_sub(overlap_start)
+        let self_set = self.ispan.to_position_set();
+        other.ispan.iter().filter(|&p| self_set.contains(p)).count()
     }
 
     pub fn has_unknown(&self) -> bool {

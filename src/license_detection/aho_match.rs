@@ -9,8 +9,9 @@
 
 use bit_set::BitSet;
 
-use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::{TokenId, TokenKind};
+use crate::license_detection::index::LicenseIndex;
+use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::{LicenseMatch, MatcherKind};
 use crate::license_detection::query::QueryRun;
 
@@ -155,8 +156,8 @@ pub fn aho_match_with_extra_matchables(
                 1.0
             };
 
-            let qspan_positions: Vec<usize> = (qstart..qend).collect();
-            let ispan_positions: Vec<usize> = (0..matched_length).collect();
+            let qspan = PositionSpan::range(qstart, qend);
+            let ispan = PositionSpan::range(0, matched_length);
             let hispan_positions: Vec<usize> = (0..matched_length)
                 .filter(|&p| index.dictionary.token_kind(rule_tids[p]) == TokenKind::Legalese)
                 .collect();
@@ -187,9 +188,9 @@ pub fn aho_match_with_extra_matchables(
                 is_from_license: rule.is_from_license,
                 hilen: hispan_count,
                 rule_start_token: 0,
-                qspan_positions: Some(qspan_positions),
-                ispan_positions: Some(ispan_positions),
-                hispan_positions: Some(hispan_positions),
+                qspan,
+                ispan,
+                hispan: PositionSpan::from_positions(hispan_positions),
                 candidate_resemblance: 0.0,
                 candidate_containment: 0.0,
             };
@@ -239,8 +240,8 @@ pub fn aho_match_with_extra_matchables(
 mod tests {
     use super::*;
     use crate::license_detection::automaton::AutomatonBuilder;
+    use crate::license_detection::index::dictionary::{tid, TokenId};
     use crate::license_detection::index::IndexedRuleMetadata;
-    use crate::license_detection::index::dictionary::{TokenId, tid};
     use crate::license_detection::test_utils::{
         create_mock_query_with_tokens, create_mock_rule, create_test_index_default,
     };

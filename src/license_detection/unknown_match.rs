@@ -7,6 +7,7 @@ use sha1::{Digest, Sha1};
 
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::{TokenId, TokenKind};
+use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::{LicenseMatch, MatcherKind};
 use crate::license_detection::query::Query;
 use crate::license_detection::tokenize::STOPWORDS;
@@ -122,7 +123,12 @@ fn compute_covered_positions(
     let mut covered = std::collections::HashSet::new();
 
     for m in known_matches {
-        for pos in m.qspan() {
+        let positions: Box<dyn Iterator<Item = usize>> = if m.qspan.is_empty() && m.start_token < m.end_token {
+            Box::new(m.start_token..m.end_token)
+        } else {
+            Box::new(m.qspan.iter())
+        };
+        for pos in positions {
             covered.insert(pos);
         }
     }
@@ -284,9 +290,9 @@ fn create_unknown_match_from_qspan(
         is_from_license: false,
         hilen: hispan,
         rule_start_token: 0,
-        qspan_positions: Some(qspan_positions),
-        ispan_positions: None,
-        hispan_positions: None,
+        qspan: PositionSpan::from_positions(qspan_positions),
+        ispan: PositionSpan::empty(),
+        hispan: PositionSpan::empty(),
         candidate_resemblance: 0.0,
         candidate_containment: 0.0,
     }
@@ -818,9 +824,9 @@ mod tests {
             is_from_license: false,
             hilen: 1,
             rule_start_token: 0,
-            qspan_positions: Some(vec![0, 1, 2, 7, 8, 9]),
-            ispan_positions: None,
-            hispan_positions: None,
+            qspan: PositionSpan::from_positions(vec![0, 1, 2, 7, 8, 9]),
+            ispan: PositionSpan::empty(),
+            hispan: PositionSpan::empty(),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }];
@@ -868,9 +874,9 @@ mod tests {
             is_from_license: false,
             hilen: 1,
             rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
+            qspan: PositionSpan::empty(),
+            ispan: PositionSpan::empty(),
+            hispan: PositionSpan::empty(),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }];
@@ -919,9 +925,9 @@ mod tests {
             is_from_license: false,
             hilen: 1,
             rule_start_token: 0,
-            qspan_positions: Some(vec![0, 1, 2, 3, 11, 12, 13, 14]),
-            ispan_positions: None,
-            hispan_positions: None,
+            qspan: PositionSpan::from_positions(vec![0, 1, 2, 3, 11, 12, 13, 14]),
+            ispan: PositionSpan::empty(),
+            hispan: PositionSpan::empty(),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }];
@@ -971,7 +977,7 @@ mod tests {
         let m = match_result.unwrap();
         assert_eq!(m.license_expression, "unknown");
         assert_eq!(m.matcher, MATCH_UNKNOWN);
-        assert!(m.qspan_positions.is_some());
+        assert!(!m.qspan.is_empty());
     }
 
     #[test]
@@ -1004,9 +1010,9 @@ mod tests {
             is_from_license: false,
             hilen: 2,
             rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
+            qspan: PositionSpan::empty(),
+            ispan: PositionSpan::empty(),
+            hispan: PositionSpan::empty(),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }];

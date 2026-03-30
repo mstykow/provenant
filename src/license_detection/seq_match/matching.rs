@@ -2,6 +2,7 @@
 
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::TokenId;
+use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::LicenseMatch;
 use crate::license_detection::query::QueryRun;
 use bit_set::BitSet;
@@ -332,9 +333,9 @@ pub fn seq_match_with_candidates(
                         is_from_license: candidate.rule.is_from_license,
                         hilen: hispan_count,
                         rule_start_token: ipos,
-                        qspan_positions: Some(qspan_positions),
-                        ispan_positions: Some(ispan_positions),
-                        hispan_positions: Some(hispan_positions),
+                        qspan: PositionSpan::from_positions(qspan_positions),
+                        ispan: PositionSpan::from_positions(ispan_positions),
+                        hispan: PositionSpan::from_positions(hispan_positions),
                         candidate_resemblance: candidate.score_vec_full.resemblance,
                         candidate_containment: candidate.score_vec_full.containment,
                     };

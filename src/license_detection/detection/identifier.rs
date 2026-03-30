@@ -163,7 +163,7 @@ pub(super) fn compute_detection_coverage(matches: &[LicenseMatch]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::license_detection::models::LicenseMatch;
+    use crate::license_detection::models::{LicenseMatch, PositionSpan};
 
     fn create_test_match() -> LicenseMatch {
         LicenseMatch {
@@ -189,9 +189,9 @@ mod tests {
             rule_length: 100,
             hilen: 50,
             rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
+            qspan: PositionSpan::empty(),
+            ispan: PositionSpan::empty(),
+            hispan: PositionSpan::empty(),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }

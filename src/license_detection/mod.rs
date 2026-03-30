@@ -135,7 +135,7 @@ fn is_redundant_same_expression_seq_container(
         return false;
     }
 
-    let container_qspan_set: PositionSet = container.qspan().into_iter().collect();
+    let container_qspan_set: PositionSet = container.qspan.to_position_set();
 
     let mut contained: Vec<(&LicenseMatch, Vec<usize>)> = candidate_contained_matches
         .iter()
@@ -145,7 +145,7 @@ fn is_redundant_same_expression_seq_container(
                 && m.license_expression == container.license_expression
                 && m.overlaps_with(&container_qspan_set)
             {
-                Some((m, m.qspan()))
+                Some((m, m.qspan.to_vec()))
             } else {
                 None
             }
@@ -258,7 +258,7 @@ fn is_redundant_low_coverage_composite_seq_wrapper(
         return false;
     }
 
-    let container_qspan_set: PositionSet = container.qspan().into_iter().collect();
+    let container_qspan_set: PositionSet = container.qspan.to_position_set();
 
     let children: Vec<(&LicenseMatch, Vec<usize>)> = candidate_contained_matches
         .iter()
@@ -268,7 +268,7 @@ fn is_redundant_low_coverage_composite_seq_wrapper(
                 && m.license_expression != container.license_expression
                 && m.overlaps_with(&container_qspan_set)
             {
-                Some((m, m.qspan()))
+                Some((m, m.qspan.to_vec()))
             } else {
                 None
             }

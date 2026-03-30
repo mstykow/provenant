@@ -87,6 +87,14 @@ impl PositionSet {
         result
     }
 
+    /// Count elements in the intersection of self and other.
+    pub fn intersection_len(&self, other: &PositionSet) -> usize {
+        self.bitset
+            .iter()
+            .filter(|&p| other.bitset.contains(p))
+            .count()
+    }
+
     /// Iterate over positions.
     pub fn iter(&self) -> impl Iterator<Item = usize> + '_ {
         self.bitset.iter()

@@ -125,6 +125,9 @@ impl PositionSpan {
         }
     }
 
+    /// Returns true if the positions form a contiguous range with no gaps.
+    /// This is always true for `Range` variants, and checks adjacency for `Discrete`.
+    #[allow(dead_code)]
     pub fn is_contiguous(&self) -> bool {
         match self {
             PositionSpan::Range { .. } => true,

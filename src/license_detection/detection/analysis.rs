@@ -481,7 +481,7 @@ pub(super) fn classify_detection(detection: &LicenseDetection, min_score: f32) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::license_detection::models::{LicenseMatch, MatcherKind};
+    use crate::license_detection::models::{LicenseMatch, MatcherKind, PositionSpan};
 
     fn create_test_match(coverage: f32, rule_identifier: &str) -> LicenseMatch {
         LicenseMatch {
@@ -507,9 +507,9 @@ mod tests {
             rule_length: 100,
             hilen: 50,
             rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
+            qspan: PositionSpan::empty(),
+            ispan: PositionSpan::empty(),
+            hispan: PositionSpan::empty(),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }
@@ -551,9 +551,9 @@ mod tests {
             is_from_license: false,
             hilen: matched_length / 2,
             rule_start_token: 0,
-            qspan_positions: None,
-            ispan_positions: None,
-            hispan_positions: None,
+            qspan: PositionSpan::empty(),
+            ispan: PositionSpan::empty(),
+            hispan: PositionSpan::empty(),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }

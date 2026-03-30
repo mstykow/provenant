@@ -3,6 +3,8 @@ use once_cell::sync::Lazy;
 use std::path::PathBuf;
 use std::sync::Once;
 
+use crate::license_detection::models::position_span::PositionSpan;
+
 static TEST_ENGINE: Lazy<LicenseDetectionEngine> = Lazy::new(|| {
     LicenseDetectionEngine::from_embedded().expect("Should initialize from embedded artifact")
 });
@@ -30,6 +32,11 @@ fn make_test_match(
         .map(|positions| positions.len())
         .unwrap_or_else(|| end_token.saturating_sub(start_token));
 
+    let qspan = match qspan_positions {
+        Some(positions) => PositionSpan::from_positions(positions),
+        None => PositionSpan::range(start_token, end_token),
+    };
+
     LicenseMatch {
         license_expression: expression.to_string(),
         matcher: matcher.parse().expect("invalid test matcher"),
@@ -39,7 +46,7 @@ fn make_test_match(
         matched_length,
         rule_length: matched_length,
         match_coverage: 100.0,
-        qspan_positions,
+        qspan,
         ..Default::default()
     }
 }

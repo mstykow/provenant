@@ -11,7 +11,7 @@ pub use license::License;
 pub use license_match::{LicenseMatch, MatcherKind};
 pub use loaded_license::LoadedLicense;
 pub use loaded_rule::LoadedRule;
-pub use position_span::{PositionSpan, SpanIter};
+pub use position_span::PositionSpan;
 pub use rule::{Rule, RuleKind};
 
 #[cfg(test)]
