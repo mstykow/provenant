@@ -34,6 +34,9 @@ fn scanner_matches_structured_credits_fixture() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: true,
         detect_generated: false,
         detect_emails: false,

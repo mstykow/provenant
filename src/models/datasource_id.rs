@@ -79,6 +79,7 @@ pub enum DatasourceId {
     // ── Cargo/Rust ──
     CargoLock,
     CargoToml,
+    RustBinary,
 
     // ── Chef ──
     /// Matches Python reference value.
@@ -164,6 +165,7 @@ pub enum DatasourceId {
 
     // ── Go ──
     Godeps,
+    GoBinary,
     GoMod,
     GoModGraph,
     GoSum,
@@ -364,6 +366,7 @@ impl DatasourceId {
             // Cargo/Rust
             Self::CargoLock => "cargo_lock",
             Self::CargoToml => "cargo_toml",
+            Self::RustBinary => "rust_binary",
 
             // Chef
             Self::ChefCookbookMetadataJson => "chef_cookbook_metadata_json",
@@ -427,6 +430,7 @@ impl DatasourceId {
 
             // Go
             Self::Godeps => "godeps",
+            Self::GoBinary => "go_binary",
             Self::GoMod => "go_mod",
             Self::GoModGraph => "go_mod_graph",
             Self::GoSum => "go_sum",

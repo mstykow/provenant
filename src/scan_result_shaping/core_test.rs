@@ -63,6 +63,28 @@ fn only_findings_keeps_file_with_findings_and_parent_dirs() {
 }
 
 #[test]
+fn package_only_filter_keeps_package_files_and_parent_dirs() {
+    let mut files = vec![
+        dir("project"),
+        dir("project/src"),
+        file("project/src/package.json"),
+        file("project/src/lib.rs"),
+    ];
+    files[2].package_data = vec![PackageData {
+        datasource_id: Some(DatasourceId::NpmPackageJson),
+        ..Default::default()
+    }];
+
+    apply_package_only_filter(&mut files);
+
+    let paths: HashSet<_> = files.into_iter().map(|f| f.path).collect();
+    assert!(paths.contains("project"));
+    assert!(paths.contains("project/src"));
+    assert!(paths.contains("project/src/package.json"));
+    assert!(!paths.contains("project/src/lib.rs"));
+}
+
+#[test]
 fn filter_redundant_clues_dedupes_exact_duplicates() {
     let mut files = vec![file("project/a.txt")];
     files[0].authors = vec![

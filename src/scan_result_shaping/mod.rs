@@ -64,6 +64,12 @@ pub(crate) fn apply_only_findings_filter(files: &mut Vec<FileInfo>) {
     retain_matching_files_with_ancestor_dirs(files, has_findings);
 }
 
+pub(crate) fn apply_package_only_filter(files: &mut Vec<FileInfo>) {
+    retain_matching_files_with_ancestor_dirs(files, |file| {
+        file.file_type == crate::models::FileType::File && !file.package_data.is_empty()
+    });
+}
+
 fn matches_any_regex<'a, I>(patterns: &[Regex], values: I) -> bool
 where
     I: IntoIterator<Item = &'a str>,

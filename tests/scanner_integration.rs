@@ -37,6 +37,9 @@ fn package_scan_options() -> TextDetectionOptions {
     TextDetectionOptions {
         collect_info: false,
         detect_packages: true,
+        detect_application_packages: true,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         ..TextDetectionOptions::default()
     }
 }
@@ -559,6 +562,9 @@ fn test_scanner_detects_emails_and_urls_when_enabled() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: true,
         detect_generated: false,
         detect_emails: true,
@@ -603,6 +609,9 @@ fn test_scanner_detects_copyrights_in_latin1_text() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: true,
         detect_generated: false,
         detect_emails: false,
@@ -650,6 +659,9 @@ fn test_scanner_detects_copyrights_in_pdf_text() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: true,
         detect_generated: false,
         detect_emails: false,
@@ -710,6 +722,9 @@ fn test_scanner_detects_emails_and_urls_in_pdf_text() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: false,
         detect_generated: false,
         detect_emails: true,
@@ -772,6 +787,9 @@ fn test_scanner_detects_copyrights_in_supported_image_exif_containers() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: true,
         detect_generated: false,
         detect_emails: false,
@@ -848,6 +866,9 @@ fn test_scanner_detects_emails_and_urls_in_xmp_metadata() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: false,
         detect_generated: false,
         detect_emails: true,
@@ -926,6 +947,9 @@ fn test_scanner_detects_urls_in_additional_xmp_fields() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: false,
         detect_generated: false,
         detect_emails: true,
@@ -989,6 +1013,9 @@ fn test_scanner_detects_emails_in_exif_user_comment() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: false,
         detect_generated: false,
         detect_emails: true,
@@ -1042,6 +1069,9 @@ fn test_scanner_ignores_non_clue_image_metadata() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: true,
         detect_generated: false,
         detect_emails: true,
@@ -1087,6 +1117,9 @@ fn test_scanner_ignores_xml_namespace_garbage_in_copyright_detection() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: true,
         detect_generated: false,
         detect_emails: false,
@@ -1144,6 +1177,9 @@ fn test_scanner_detects_copyrights_in_windows_dll_strings() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: true,
         detect_generated: false,
         detect_emails: false,
@@ -1191,6 +1227,9 @@ fn test_scanner_avoids_false_positive_copyrights_in_executable_strings() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: true,
         detect_generated: false,
         detect_emails: false,
@@ -1245,6 +1284,9 @@ fn test_scanner_respects_email_url_thresholds() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: true,
         detect_generated: false,
         detect_emails: true,
@@ -1290,6 +1332,9 @@ fn test_scanner_persists_scan_result_cache_entries() {
     let options = TextDetectionOptions {
         collect_info: false,
         detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
         detect_copyrights: true,
         detect_generated: false,
         detect_emails: true,
