@@ -253,6 +253,7 @@ fn process_file(
     let started = Instant::now();
 
     let mut generated_flag = None;
+    let mut cache_key_sha256 = None;
     match extract_information_from_content(
         &mut file_info_builder,
         &mut scan_errors,
@@ -261,7 +262,10 @@ fn process_file(
         license_options,
         text_options,
     ) {
-        Ok(is_generated) => generated_flag = is_generated,
+        Ok((is_generated, sha256)) => {
+            generated_flag = is_generated;
+            cache_key_sha256 = Some(sha256);
+        }
         Err(e) => scan_errors.push(e.to_string()),
     };
 
@@ -324,7 +328,7 @@ fn process_file(
 
     if let (Some(scan_results_dir), Some(sha256)) = (
         text_options.scan_cache_dir.as_deref(),
-        file_info.sha256.as_deref(),
+        cache_key_sha256.as_deref(),
     ) && file_info.scan_errors.is_empty()
     {
         let findings = CachedScanFindings::from_file_info(&file_info);
@@ -349,7 +353,7 @@ fn extract_information_from_content(
     license_engine: Option<Arc<LicenseDetectionEngine>>,
     license_options: LicenseScanOptions,
     text_options: &TextDetectionOptions,
-) -> Result<Option<bool>, Error> {
+) -> Result<(Option<bool>, String), Error> {
     let started = Instant::now();
     let buffer = fs::read(path)?;
     let license_enabled = license_engine.is_some();
@@ -399,7 +403,7 @@ fn extract_information_from_content(
     }
 
     if should_skip_text_detection(path, &buffer) {
-        return Ok(is_generated);
+        return Ok((is_generated, sha256));
     }
 
     if let Some(scan_results_dir) = text_options.scan_cache_dir.as_deref() {
@@ -419,7 +423,7 @@ fn extract_information_from_content(
                     .emails(findings.emails)
                     .urls(findings.urls)
                     .programming_language(findings.programming_language);
-                return Ok(is_generated);
+                return Ok((is_generated, sha256));
             }
             Ok(None) => {}
             Err(err) => {
@@ -483,7 +487,7 @@ fn extract_information_from_content(
     }
 
     if text_content.is_empty() {
-        return Ok(is_generated);
+        return Ok((is_generated, sha256));
     }
 
     if text_options.detect_copyrights {
@@ -528,7 +532,7 @@ fn extract_information_from_content(
         from_binary_strings,
     )?;
 
-    Ok(is_generated)
+    Ok((is_generated, sha256))
 }
 
 fn is_timeout_exceeded(started: Instant, timeout_seconds: f64) -> bool {
