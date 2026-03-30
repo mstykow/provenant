@@ -1,5 +1,5 @@
 use md5::{Digest as Md5Digest, Md5};
-use sha1::{Digest as Sha1Digest, Sha1};
+use sha1::Sha1;
 use sha2::Sha256;
 
 /// Calculate SHA1 hash of content and return it as a hex string
