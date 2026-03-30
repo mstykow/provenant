@@ -4,14 +4,8 @@ use std::process::Command;
 use tempfile::TempDir;
 
 fn provenant_command() -> Command {
-    let mut command = Command::new("cargo");
-    command.current_dir(env!("CARGO_MANIFEST_DIR")).args([
-        "run",
-        "--quiet",
-        "--bin",
-        "provenant",
-        "--",
-    ]);
+    let mut command = Command::new(env!("CARGO_BIN_EXE_provenant"));
+    command.current_dir(env!("CARGO_MANIFEST_DIR"));
     command
 }
 
