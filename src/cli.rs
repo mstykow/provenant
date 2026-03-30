@@ -85,7 +85,7 @@ fn parse_license_policy_arg(value: &str) -> Result<String, String> {
     )
 )]
 pub struct Cli {
-    /// File or directory path to scan
+    /// File or directory paths to scan
     #[arg(required = false)]
     pub dir_path: Vec<String>,
 
@@ -109,7 +109,7 @@ pub struct Cli {
     #[arg(long = "csv", value_name = "FILE", allow_hyphen_values = true)]
     pub output_csv: Option<String>,
 
-    /// Write scan output in machine-readable Debian copyright format to FILE
+    /// Write scan output in machine-readable Debian copyright format to FILE (requires --license, --copyright, and --license-text)
     #[arg(
         long = "debian",
         value_name = "FILE",
@@ -513,6 +513,7 @@ impl Cli {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::CommandFactory;
 
     #[test]
     fn test_requires_at_least_one_output_option() {
@@ -564,6 +565,22 @@ mod tests {
         assert_eq!(parsed.output_targets().len(), 1);
         assert_eq!(parsed.output_targets()[0].format, OutputFormat::Debian);
         assert_eq!(parsed.output_debian.as_deref(), Some("scan.copyright"));
+    }
+
+    #[test]
+    fn test_debian_help_mentions_required_companion_flags() {
+        let command = Cli::command();
+        let debian_arg = command
+            .get_arguments()
+            .find(|arg| arg.get_long() == Some("debian"))
+            .expect("debian arg should exist");
+
+        let help = debian_arg
+            .get_help()
+            .expect("debian arg should have help text")
+            .to_string();
+
+        assert!(help.contains("requires --license, --copyright, and --license-text"));
     }
 
     #[test]
