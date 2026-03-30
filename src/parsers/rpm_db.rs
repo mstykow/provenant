@@ -345,6 +345,8 @@ fn build_file_references(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
     use crate::models::DatasourceId;
     use std::path::PathBuf;
 
