@@ -45,6 +45,13 @@ Parsers still MUST NOT:
 
 Parsers MAY populate `declared_license_expression`, `declared_license_expression_spdx`, and deterministic parser-side `license_detections` when the source field is a bounded, trustworthy declared-license surface such as an SPDX-expression-compatible manifest field.
 
+Most package extraction in Provenant is path-owned and flows through `PackageParser` or
+recognizer registration. A small set of scanner-owned exceptions can exist when the package surface
+is content-aware rather than filename-aware. The current example is compiled-binary package
+detection behind `--package-in-compiled`: the scanner already has the file bytes in memory, raw
+executables do not have stable manifest-like filenames, and the detector must stay explicitly
+bounded and opt-in.
+
 See [ADR 0002: Extraction vs Detection Separation](adr/0002-extraction-vs-detection.md) for details.
 
 ## System Architecture Overview
@@ -217,6 +224,10 @@ register_package_handlers! {
 
 **Critical:** If a parser is implemented but not listed in this macro, it will **never be called** by the scanner, even if fully implemented and tested. Integration coverage verifies that parser registration stays aligned with the scanner entry points.
 
+This registration path is intentionally for path-matched parsers and recognizers. Content-aware
+scanner-owned package detectors, such as compiled-binary package extraction, are exceptional
+surfaces wired from the scanner rather than through `register_package_handlers!`.
+
 ### Unified Data Model
 
 All parsers output a single `PackageData` struct:
@@ -275,6 +286,11 @@ pub struct PackageData {
 - Single source of truth for structure
 
 ### Scanner Pipeline
+
+The scanner also owns a small number of opt-in content-aware package detector paths in addition to
+the normal parser/recognizer dispatch. Those paths should reuse the scanner's already-read bytes,
+remain explicitly bounded, and carry their own scanner-contract and golden coverage because they do
+not travel through the standard parser registry.
 
 ```text
 ┌────────────────────────────────────────────────────────────┐

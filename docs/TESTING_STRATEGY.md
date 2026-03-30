@@ -193,6 +193,11 @@ full-system integration (file discovery → parsing → assembly/output contract
 **Why This Matters**: Parser golden tests prove extraction; scanner/assembly contract tests prove
 that the extracted data survives the real scan pipeline and assembly behavior.
 
+Scanner-owned detector surfaces that do not implement `PackageParser` still belong to this layer.
+For example, compiled-binary package extraction is intentionally gated by scanner options rather
+than path-based parser registration, so its default contract tests should prove both the opt-in gate
+and the resulting package data shape.
+
 ---
 
 ### Layer 4: System Integration Tests
@@ -236,6 +241,9 @@ and user-facing.
 
 For parsers that emit meaningful downstream package/dependency data, Layer 3 should be treated as
 the default expectation rather than an optional extra.
+
+When a detector surface is intentionally scanner-gated, pair Layer 3 tests with detector-level
+goldens near the owning module so extraction drift and scanner-wiring drift are both covered.
 
 **Layer 4 Example**:
 
