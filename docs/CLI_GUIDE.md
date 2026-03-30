@@ -1,6 +1,6 @@
 # CLI Guide
 
-This guide is for people using `provenant` for the first time.
+This guide is for anyone using `provenant`, especially when choosing among common scan workflows or coming back to them later.
 
 Use it to answer practical questions such as:
 
@@ -18,9 +18,9 @@ provenant --help
 
 This guide does **not** try to repeat every flag from `--help`. Instead, it focuses on the workflows most users actually need.
 
-## Start Here: Your First Useful Scan
+## Start Here: A Strong Default Scan
 
-If you are scanning a source tree for the first time, start with pretty JSON and explicitly ask for the scan types you care about:
+If you are starting a new scan and want a strong default, start with pretty JSON and explicitly ask for the scan types you care about:
 
 ```sh
 provenant --json-pp scan.json --license --package /path/to/project
