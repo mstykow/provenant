@@ -17,6 +17,13 @@ use crate::license_detection::automaton::Automaton;
 use crate::license_detection::index::dictionary::{TokenDictionary, TokenId};
 use std::collections::{HashMap, HashSet};
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct IndexedRuleMetadata {
+    pub license_expression_spdx: Option<String>,
+    pub skip_for_required_phrase_generation: bool,
+    pub replaced_by: Vec<String>,
+}
+
 /// License index containing all data structures for efficient license detection.
 ///
 /// The LicenseIndex holds multiple index structures that enable different matching
@@ -99,6 +106,8 @@ pub struct LicenseIndex {
     ///
     /// Corresponds to Python: `self.sets_by_rid = []` (line 212)
     pub sets_by_rid: HashMap<usize, TokenSet>,
+
+    pub rule_metadata_by_identifier: HashMap<String, IndexedRuleMetadata>,
 
     /// Token ID multisets per rule for candidate ranking.
     ///
@@ -226,6 +235,7 @@ impl LicenseIndex {
             rules_automaton: AutomatonBuilder::new().build(),
             unknown_automaton: AutomatonBuilder::new().build(),
             sets_by_rid: HashMap::new(),
+            rule_metadata_by_identifier: HashMap::new(),
             msets_by_rid: HashMap::new(),
             high_sets_by_rid: HashMap::new(),
             high_postings_by_rid: HashMap::new(),

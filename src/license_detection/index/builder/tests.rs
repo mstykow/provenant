@@ -1094,6 +1094,7 @@ SOFTWARE."#;
             rule_kind: RuleKind::Text,
             is_false_positive: false,
             is_required_phrase: false,
+            skip_for_required_phrase_generation: false,
             relevance: Some(100),
             minimum_coverage: None,
             has_stored_minimum_coverage: false,
@@ -1107,6 +1108,7 @@ SOFTWARE."#;
             language: None,
             notes: None,
             is_deprecated: false,
+            replaced_by: vec![],
         };
 
         let deprecated_rule = LoadedRule {
@@ -1116,6 +1118,7 @@ SOFTWARE."#;
             rule_kind: RuleKind::Text,
             is_false_positive: false,
             is_required_phrase: false,
+            skip_for_required_phrase_generation: false,
             relevance: Some(100),
             minimum_coverage: None,
             has_stored_minimum_coverage: false,
@@ -1129,6 +1132,7 @@ SOFTWARE."#;
             language: None,
             notes: None,
             is_deprecated: true,
+            replaced_by: vec!["mit".to_string()],
         };
 
         let active_license = LoadedLicense {
@@ -1215,6 +1219,20 @@ SOFTWARE."#;
                 .any(|r| r.identifier == "deprecated.RULE"),
             "Should NOT include deprecated rule"
         );
+        assert_eq!(
+            index_without_deprecated
+                .rule_metadata_by_identifier
+                .get("active.RULE")
+                .and_then(|metadata| metadata.license_expression_spdx.as_deref()),
+            Some("MIT")
+        );
+        assert_eq!(
+            index_without_deprecated
+                .rule_metadata_by_identifier
+                .get("active.RULE")
+                .map(|metadata| metadata.skip_for_required_phrase_generation),
+            Some(false)
+        );
         assert!(
             index_without_deprecated.licenses_by_key.contains_key("mit"),
             "Should include active license"
@@ -1245,6 +1263,13 @@ SOFTWARE."#;
                 .iter()
                 .any(|r| r.identifier == "deprecated.RULE"),
             "Should include deprecated rule when with_deprecated=true"
+        );
+        assert_eq!(
+            index_with_deprecated
+                .rule_metadata_by_identifier
+                .get("deprecated.RULE")
+                .map(|metadata| metadata.replaced_by.clone()),
+            Some(vec!["mit".to_string()])
         );
         assert!(
             index_with_deprecated.licenses_by_key.contains_key("mit"),

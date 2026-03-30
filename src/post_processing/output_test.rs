@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use super::test_utils::{dir, file};
 use super::*;
 use crate::assembly;
-use crate::license_detection::index::LicenseIndex;
+use crate::license_detection::index::{IndexedRuleMetadata, LicenseIndex};
 use crate::license_detection::models::{License as RuntimeLicense, Rule, RuleKind};
 use crate::models::{Copyright, Holder, Match, Package, PackageData, PackageType, Tallies};
 use crate::scan_result_shaping::normalize_paths;
@@ -380,6 +380,66 @@ fn collect_top_level_license_references_applies_custom_license_url_template() {
         Some(
             "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE"
         )
+    );
+}
+
+#[test]
+fn collect_top_level_license_references_preserves_rule_metadata() {
+    let licenses = vec![sample_runtime_license("mit", "MIT License", Some("MIT"))];
+    let mut license_index = LicenseIndex::default();
+    for license in &licenses {
+        license_index
+            .licenses_by_key
+            .insert(license.key.clone(), license.clone());
+    }
+
+    license_index.rules_by_rid = vec![sample_rule("mit_1.RULE", "mit", RuleKind::Text)];
+    license_index.rule_metadata_by_identifier.insert(
+        "mit_1.RULE".to_string(),
+        IndexedRuleMetadata {
+            license_expression_spdx: Some("MIT".to_string()),
+            skip_for_required_phrase_generation: true,
+            replaced_by: vec!["apache-2.0".to_string()],
+        },
+    );
+
+    let mut source = file("project/src/lib.rs");
+    source.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: None,
+            start_line: 1,
+            end_line: 1,
+            matcher: Some("1-hash".to_string()),
+            score: 100.0,
+            matched_length: Some(2),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("mit_1.RULE".to_string()),
+            rule_url: None,
+            matched_text: Some("MIT License".to_string()),
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        identifier: Some("mit-id".to_string()),
+        detection_log: vec![],
+    }];
+
+    let (_, license_rule_references) = collect_top_level_license_references(
+        &[source],
+        &[],
+        &license_index,
+        DEFAULT_LICENSEDB_URL_TEMPLATE,
+    );
+
+    assert_eq!(license_rule_references.len(), 1);
+    assert!(license_rule_references[0].skip_for_required_phrase_generation);
+    assert_eq!(
+        license_rule_references[0].replaced_by,
+        vec!["apache-2.0".to_string()]
     );
 }
 
@@ -1379,6 +1439,7 @@ fn create_output_preserves_top_level_license_references_from_context() {
                 rule_url: None,
                 is_required_phrase: false,
                 skip_for_required_phrase_generation: false,
+                replaced_by: vec![],
                 is_continuous: false,
                 is_synthetic: false,
                 is_from_license: false,

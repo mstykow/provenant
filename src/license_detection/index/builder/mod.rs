@@ -24,6 +24,7 @@ use crate::license_detection::rules::legalese;
 use crate::license_detection::rules::thresholds::{
     SMALL_RULE, TINY_RULE, compute_thresholds_occurrences, compute_thresholds_unique,
 };
+use crate::license_detection::spdx_mapping::build_spdx_mapping;
 use crate::license_detection::tokenize::{
     parse_required_phrase_spans, tokenize, tokenize_with_stopwords,
 };
@@ -72,6 +73,45 @@ fn add_deprecated_spdx_aliases(rid_by_spdx_key: &mut HashMap<String, usize>) {
         if let Some(&rid) = rid_by_spdx_key.get(*replacement) {
             rid_by_spdx_key.insert(deprecated.to_string(), rid);
         }
+    }
+}
+
+fn populate_precomputed_rule_spdx(index: &mut LicenseIndex) {
+    let licenses: Vec<_> = index.licenses_by_key.values().cloned().collect();
+    let mapping = build_spdx_mapping(&licenses);
+
+    for rule in &index.rules_by_rid {
+        let Ok(license_expression_spdx) =
+            mapping.expression_scancode_to_spdx(&rule.license_expression)
+        else {
+            continue;
+        };
+
+        index
+            .rule_metadata_by_identifier
+            .entry(rule.identifier.clone())
+            .or_default()
+            .license_expression_spdx = Some(license_expression_spdx);
+    }
+}
+
+fn apply_loaded_rule_metadata(
+    index: &mut LicenseIndex,
+    loaded_rules: &[LoadedRule],
+    with_deprecated: bool,
+) {
+    for loaded_rule in loaded_rules {
+        if !with_deprecated && loaded_rule.is_deprecated {
+            continue;
+        }
+
+        let metadata = index
+            .rule_metadata_by_identifier
+            .entry(loaded_rule.identifier.clone())
+            .or_default();
+        metadata.skip_for_required_phrase_generation =
+            loaded_rule.skip_for_required_phrase_generation;
+        metadata.replaced_by = loaded_rule.replaced_by.clone();
     }
 }
 
@@ -512,7 +552,7 @@ pub fn build_index(rules: Vec<Rule>, licenses: Vec<License>) -> LicenseIndex {
         builder.build()
     };
 
-    LicenseIndex {
+    let mut index = LicenseIndex {
         dictionary,
         len_legalese,
         rid_by_hash,
@@ -521,6 +561,7 @@ pub fn build_index(rules: Vec<Rule>, licenses: Vec<License>) -> LicenseIndex {
         rules_automaton,
         unknown_automaton,
         sets_by_rid,
+        rule_metadata_by_identifier: HashMap::new(),
         msets_by_rid,
         high_sets_by_rid,
         high_postings_by_rid,
@@ -531,7 +572,9 @@ pub fn build_index(rules: Vec<Rule>, licenses: Vec<License>) -> LicenseIndex {
         rid_by_spdx_key,
         unknown_spdx_rid,
         rids_by_high_tid,
-    }
+    };
+    populate_precomputed_rule_spdx(&mut index);
+    index
 }
 
 /// Convert a `LoadedRule` to a runtime `Rule`.
@@ -637,6 +680,7 @@ pub fn build_index_from_loaded(
     loaded_licenses: Vec<LoadedLicense>,
     with_deprecated: bool,
 ) -> LicenseIndex {
+    let rule_metadata = loaded_rules.clone();
     let rules: Vec<Rule> = loaded_rules
         .into_iter()
         .filter(|r| with_deprecated || !r.is_deprecated)
@@ -649,7 +693,9 @@ pub fn build_index_from_loaded(
         .map(loaded_license_to_license)
         .collect();
 
-    build_index(rules, licenses)
+    let mut index = build_index(rules, licenses);
+    apply_loaded_rule_metadata(&mut index, &rule_metadata, with_deprecated);
+    index
 }
 
 /// Build a `LicenseIndex` from loaded rules and licenses.
@@ -674,6 +720,7 @@ pub fn build_index_from_loaded_with_automatons(
     unknown_automaton: Automaton,
     pattern_id_to_rid: Vec<Vec<usize>>,
 ) -> LicenseIndex {
+    let rule_metadata = loaded_rules.clone();
     let rules: Vec<Rule> = loaded_rules
         .into_iter()
         .filter(|r| with_deprecated || !r.is_deprecated)
@@ -686,13 +733,15 @@ pub fn build_index_from_loaded_with_automatons(
         .map(loaded_license_to_license)
         .collect();
 
-    build_index_with_automatons(
+    let mut index = build_index_with_automatons(
         rules,
         licenses,
         rules_automaton,
         unknown_automaton,
         pattern_id_to_rid,
-    )
+    );
+    apply_loaded_rule_metadata(&mut index, &rule_metadata, with_deprecated);
+    index
 }
 
 /// Build a `LicenseIndex`.
@@ -995,7 +1044,7 @@ fn build_index_with_automatons(
 
     add_deprecated_spdx_aliases(&mut rid_by_spdx_key);
 
-    LicenseIndex {
+    let mut index = LicenseIndex {
         dictionary,
         len_legalese,
         rid_by_hash,
@@ -1004,6 +1053,7 @@ fn build_index_with_automatons(
         rules_automaton,
         unknown_automaton,
         sets_by_rid,
+        rule_metadata_by_identifier: HashMap::new(),
         msets_by_rid,
         high_sets_by_rid,
         high_postings_by_rid,
@@ -1014,7 +1064,9 @@ fn build_index_with_automatons(
         rid_by_spdx_key,
         unknown_spdx_rid,
         rids_by_high_tid,
-    }
+    };
+    populate_precomputed_rule_spdx(&mut index);
+    index
 }
 
 #[cfg(test)]

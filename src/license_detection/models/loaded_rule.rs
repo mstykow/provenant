@@ -40,6 +40,9 @@ pub struct LoadedRule {
     /// True if this rule text is a required phrase.
     pub is_required_phrase: bool,
 
+    #[serde(default)]
+    pub skip_for_required_phrase_generation: bool,
+
     /// Relevance score 0-100 (100 is most relevant).
     /// Stored as Option to distinguish between explicit 100 and default 100.
     pub relevance: Option<u8>,
@@ -79,6 +82,9 @@ pub struct LoadedRule {
 
     /// Whether this rule is deprecated.
     pub is_deprecated: bool,
+
+    #[serde(default)]
+    pub replaced_by: Vec<String>,
 }
 
 /// Loader-stage normalization functions for rule data.
@@ -431,6 +437,7 @@ mod tests {
             rule_kind: RuleKind::Text,
             is_false_positive: false,
             is_required_phrase: false,
+            skip_for_required_phrase_generation: false,
             relevance: Some(100),
             minimum_coverage: Some(90),
             has_stored_minimum_coverage: true,
@@ -444,6 +451,7 @@ mod tests {
             language: None,
             notes: Some("Test note".to_string()),
             is_deprecated: false,
+            replaced_by: vec![],
         };
 
         let json = serde_json::to_string(&rule).unwrap();

@@ -384,6 +384,9 @@ pub fn parse_rule_to_loaded(path: &Path) -> Result<LoadedRule> {
         rule_kind,
         is_false_positive,
         is_required_phrase: fm.is_required_phrase.unwrap_or(false),
+        skip_for_required_phrase_generation: fm
+            .skip_for_required_phrase_generation
+            .unwrap_or(false),
         relevance,
         minimum_coverage,
         has_stored_minimum_coverage: parsed.has_stored_minimum_coverage,
@@ -401,6 +404,7 @@ pub fn parse_rule_to_loaded(path: &Path) -> Result<LoadedRule> {
         language: LoadedRule::normalize_optional_string(fm.language.as_deref()),
         notes: LoadedRule::normalize_optional_string(fm.notes.as_deref()),
         is_deprecated: fm.is_deprecated.unwrap_or(false),
+        replaced_by: fm.replaced_by.unwrap_or_default(),
     })
 }
 

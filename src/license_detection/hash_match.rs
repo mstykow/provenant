@@ -81,7 +81,10 @@ pub fn hash_match(index: &LicenseIndex, query_run: &QueryRun) -> Vec<LicenseMatc
 
         let license_match = LicenseMatch {
             license_expression: rule.license_expression.clone(),
-            license_expression_spdx: None,
+            license_expression_spdx: index
+                .rule_metadata_by_identifier
+                .get(&rule.identifier)
+                .and_then(|metadata| metadata.license_expression_spdx.clone()),
             from_file: None,
             start_line,
             end_line,

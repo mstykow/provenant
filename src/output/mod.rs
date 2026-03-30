@@ -884,6 +884,7 @@ mod tests {
             rule_url: None,
             is_required_phrase: false,
             skip_for_required_phrase_generation: false,
+            replaced_by: vec![],
             is_continuous: false,
             is_synthetic: false,
             is_from_license: false,

@@ -1262,6 +1262,9 @@ pub(crate) fn collect_top_level_license_references(
         .filter_map(|identifier| {
             rules_by_identifier.get(identifier.as_str()).map(|rule| {
                 let is_synthetic = is_synthetic_rule(rule);
+                let metadata = license_index
+                    .rule_metadata_by_identifier
+                    .get(identifier.as_str());
                 LicenseRuleReference {
                     identifier: rule.identifier.clone(),
                     license_expression: rule.license_expression.clone(),
@@ -1274,7 +1277,12 @@ pub(crate) fn collect_top_level_license_references(
                     language: rule.language.clone(),
                     rule_url: (!is_synthetic).then(|| rule.rule_url()).flatten(),
                     is_required_phrase: rule.is_required_phrase,
-                    skip_for_required_phrase_generation: false,
+                    skip_for_required_phrase_generation: metadata
+                        .map(|metadata| metadata.skip_for_required_phrase_generation)
+                        .unwrap_or(false),
+                    replaced_by: metadata
+                        .map(|metadata| metadata.replaced_by.clone())
+                        .unwrap_or_default(),
                     is_continuous: rule.is_continuous,
                     is_synthetic,
                     is_from_license: rule.is_from_license,

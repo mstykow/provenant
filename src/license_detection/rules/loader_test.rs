@@ -729,6 +729,28 @@ Text."#;
 }
 
 #[test]
+fn test_parse_rule_preserves_required_phrase_generation_metadata() {
+    let content = r#"---
+license_expression: mit
+is_license_notice: yes
+skip_for_required_phrase_generation: yes
+replaced_by:
+  - apache-2.0
+---
+MIT License"#;
+
+    let temp_path = std::env::temp_dir().join("metadata.RULE");
+    std::fs::write(&temp_path, content).unwrap();
+
+    let result = parse_rule_to_loaded(&temp_path);
+    let _ = std::fs::remove_file(&temp_path);
+    assert!(result.is_ok());
+    let rule = result.unwrap();
+    assert!(rule.skip_for_required_phrase_generation);
+    assert_eq!(rule.replaced_by, vec!["apache-2.0".to_string()]);
+}
+
+#[test]
 fn test_ibmpl_rule_loaded() {
     let Some(engine) = crate::license_detection::LicenseDetectionEngine::from_embedded().ok()
     else {

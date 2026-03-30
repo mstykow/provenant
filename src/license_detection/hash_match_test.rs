@@ -1,4 +1,5 @@
 use super::*;
+use crate::license_detection::index::IndexedRuleMetadata;
 use crate::license_detection::index::dictionary::TokenId;
 use crate::license_detection::models::Rule;
 use crate::license_detection::test_utils::{create_mock_query_with_tokens, create_test_index};
@@ -173,6 +174,29 @@ fn test_hash_match_with_match() {
     assert_eq!(matches[0].matcher, MATCH_HASH);
     assert_eq!(matches[0].score, 1.0);
     assert_eq!(matches[0].match_coverage, 100.0);
+}
+
+#[test]
+fn test_hash_match_uses_precomputed_spdx_expression() {
+    let mut index = create_test_index(&[("mit", 0), ("license", 1)], 2);
+
+    index.rid_by_hash.insert(compute_hash(&tids(&[0, 1])), 0);
+    index.rules_by_rid = vec![create_test_rules_by_rid()[0].clone()];
+    index.tids_by_rid = vec![tids(&[0, 1])];
+    index.rule_metadata_by_identifier.insert(
+        "mit.LICENSE".to_string(),
+        IndexedRuleMetadata {
+            license_expression_spdx: Some("MIT".to_string()),
+            skip_for_required_phrase_generation: false,
+            replaced_by: vec![],
+        },
+    );
+
+    let query_index = create_test_index(&[("token", 0)], 1);
+    let query = create_mock_query_with_tokens(&[0, 1], &query_index);
+    let matches = hash_match(&index, &query.whole_query_run());
+
+    assert_eq!(matches[0].license_expression_spdx.as_deref(), Some("MIT"));
 }
 
 #[test]

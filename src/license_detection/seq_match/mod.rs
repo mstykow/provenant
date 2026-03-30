@@ -38,6 +38,7 @@ pub const MAX_NEAR_DUPE_CANDIDATES: usize = 10;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::license_detection::index::IndexedRuleMetadata;
     use crate::license_detection::index::LicenseIndex;
     use crate::license_detection::index::dictionary::{TokenId, TokenKind};
     use crate::license_detection::index::token_sets::build_set_and_mset;
@@ -160,6 +161,29 @@ mod tests {
 
         assert!(!matches.is_empty());
         assert_eq!(matches[0].matcher, MATCH_SEQ);
+    }
+
+    #[test]
+    fn test_seq_match_uses_precomputed_spdx_expression() {
+        let mut index = create_seq_match_test_index();
+
+        add_test_rule(&mut index, "license copyright", "mit");
+        index.rule_metadata_by_identifier.insert(
+            "mit.test".to_string(),
+            IndexedRuleMetadata {
+                license_expression_spdx: Some("MIT".to_string()),
+                skip_for_required_phrase_generation: false,
+                replaced_by: vec![],
+            },
+        );
+
+        let text = "license copyright";
+        let query = Query::from_extracted_text(text, &index, false).unwrap();
+        let query_run = query.whole_query_run();
+        let candidates = compute_candidates_with_msets(&index, &query_run, false, 50);
+        let matches = seq_match_with_candidates(&index, &query_run, &candidates);
+
+        assert_eq!(matches[0].license_expression_spdx.as_deref(), Some("MIT"));
     }
 
     #[test]

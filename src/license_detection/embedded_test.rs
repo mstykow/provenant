@@ -38,6 +38,7 @@ fn create_test_loaded_rule() -> LoadedRule {
         rule_kind: RuleKind::Text,
         is_false_positive: false,
         is_required_phrase: false,
+        skip_for_required_phrase_generation: false,
         relevance: Some(100),
         minimum_coverage: None,
         has_stored_minimum_coverage: false,
@@ -51,6 +52,7 @@ fn create_test_loaded_rule() -> LoadedRule {
         language: None,
         notes: None,
         is_deprecated: false,
+        replaced_by: vec![],
     }
 }
 

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::license_detection::models::{LoadedLicense, LoadedRule};
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmbeddedLoaderSnapshot {

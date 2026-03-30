@@ -163,7 +163,10 @@ pub fn aho_match_with_extra_matchables(
 
             let license_match = LicenseMatch {
                 license_expression: rule.license_expression.clone(),
-                license_expression_spdx: None,
+                license_expression_spdx: index
+                    .rule_metadata_by_identifier
+                    .get(&rule.identifier)
+                    .and_then(|metadata| metadata.license_expression_spdx.clone()),
                 from_file: None,
                 start_line,
                 end_line,
@@ -237,6 +240,7 @@ pub fn aho_match_with_extra_matchables(
 mod tests {
     use super::*;
     use crate::license_detection::automaton::AutomatonBuilder;
+    use crate::license_detection::index::IndexedRuleMetadata;
     use crate::license_detection::index::dictionary::{TokenId, tid};
     use crate::license_detection::test_utils::{
         create_mock_query_with_tokens, create_mock_rule, create_test_index_default,
@@ -613,6 +617,36 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].start_line, 5);
         assert_eq!(matches[0].end_line, 5);
+    }
+
+    #[test]
+    fn test_aho_match_uses_precomputed_spdx_expression() {
+        let mut index = create_test_index_default();
+
+        let pattern = tokens_to_bytes(&tids(&[0u16, 1]));
+        let mut builder = AutomatonBuilder::new();
+        builder.add_pattern(&pattern);
+
+        index.rules_automaton = builder.build();
+        index
+            .rules_by_rid
+            .push(create_mock_rule("mit", vec![0, 1], true, false));
+        index.tids_by_rid.push(tids(&[0, 1]));
+        index.pattern_id_to_rid.push(vec![0]);
+        index.rule_metadata_by_identifier.insert(
+            "mit.LICENSE".to_string(),
+            IndexedRuleMetadata {
+                license_expression_spdx: Some("MIT".to_string()),
+                skip_for_required_phrase_generation: false,
+                replaced_by: vec![],
+            },
+        );
+
+        let query = create_mock_query_with_tokens(&[0, 1], &index);
+        let run = query.whole_query_run();
+        let matches = aho_match(run.get_index(), &run);
+
+        assert_eq!(matches[0].license_expression_spdx.as_deref(), Some("MIT"));
     }
 
     #[test]

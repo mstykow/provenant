@@ -207,6 +207,8 @@ pub struct LicenseRuleReference {
     pub is_required_phrase: bool,
     #[serde(default)]
     pub skip_for_required_phrase_generation: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub replaced_by: Vec<String>,
     #[serde(default)]
     pub is_continuous: bool,
     #[serde(default)]
