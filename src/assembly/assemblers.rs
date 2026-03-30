@@ -647,6 +647,7 @@ pub static UNASSEMBLED_DATASOURCE_IDS: &[DatasourceId] = &[
     DatasourceId::ClojureProjectClj,
     DatasourceId::DebianInstalledFilesList,
     DatasourceId::DebianInstalledMd5Sums,
+    DatasourceId::GoBinary,
     DatasourceId::DebianSourceControlDsc,
     DatasourceId::Dockerfile,
     DatasourceId::HexMixLock,
@@ -657,6 +658,7 @@ pub static UNASSEMBLED_DATASOURCE_IDS: &[DatasourceId] = &[
     DatasourceId::NugetDirectoryBuildProps,
     DatasourceId::NugetDirectoryPackagesProps,
     DatasourceId::RpmPackageLicenses,
+    DatasourceId::RustBinary,
     DatasourceId::SbtBuildSbt,
     DatasourceId::VcpkgJson,
 ];
