@@ -724,14 +724,17 @@ mod tests {
             .find(|entry| entry.file_type == FileType::Directory && entry.path.ends_with("nested"))
             .expect("directory entry");
 
-        assert!(directory.date.is_some());
-        assert_eq!(directory.file_type_label.as_deref(), Some("directory"));
+        assert!(directory.date.is_none());
+        assert!(directory.file_type_label.is_none());
         assert_eq!(directory.is_binary, Some(false));
         assert_eq!(directory.is_text, Some(false));
         assert_eq!(directory.is_archive, Some(false));
         assert_eq!(directory.is_media, Some(false));
         assert_eq!(directory.is_source, Some(false));
         assert_eq!(directory.is_script, Some(false));
+        assert_eq!(directory.files_count, Some(0));
+        assert_eq!(directory.dirs_count, Some(0));
+        assert_eq!(directory.size_count, Some(0));
     }
 
     #[test]
