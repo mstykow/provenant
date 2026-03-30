@@ -118,8 +118,9 @@ license-output data.
 
 ### Compatibility Notes
 
-- ⚠️ Upstream `--is-license-text` is no longer a live parity target; current
-  parity should instead track the emitted `percentage_of_license_text` field
+- `--is-license-text` is a removed upstream legacy flag and therefore a
+  `Won't do` compatibility surface; current parity tracks the emitted
+  `percentage_of_license_text` field instead
 
 ## Root Causes
 
