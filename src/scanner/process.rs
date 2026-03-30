@@ -1162,16 +1162,16 @@ fn process_directory(
         sha256: None,
         sha1_git: None,
         programming_language: None,
-        package_data: Vec::new(), // TODO: implement
+        package_data: Vec::new(),
         license_expression: None,
-        license_detections: Vec::new(), // TODO: implement
-        license_clues: Vec::new(),      // TODO: implement
+        license_detections: Vec::new(),
+        license_clues: Vec::new(),
         percentage_of_license_text: license_enabled.then_some(0.0),
-        copyrights: Vec::new(), // TODO: implement
-        holders: Vec::new(),    // TODO: implement
-        authors: Vec::new(),    // TODO: implement
-        emails: Vec::new(),     // TODO: implement
-        urls: Vec::new(),       // TODO: implement
+        copyrights: Vec::new(),
+        holders: Vec::new(),
+        authors: Vec::new(),
+        emails: Vec::new(),
+        urls: Vec::new(),
         for_packages: Vec::new(),
         scan_errors: Vec::new(),
         license_policy: None,
