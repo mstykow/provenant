@@ -35,7 +35,7 @@ fn hidden_progress() -> Arc<ScanProgress> {
 
 fn package_scan_options() -> TextDetectionOptions {
     TextDetectionOptions {
-        collect_info: false,
+        collect_info: true,
         detect_packages: true,
         detect_application_packages: true,
         detect_system_packages: false,
