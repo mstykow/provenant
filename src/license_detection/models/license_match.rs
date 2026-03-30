@@ -171,13 +171,6 @@ pub struct LicenseMatch {
     /// Rules from LICENSE files have relevance=100 and should take priority over decomposed expressions.
     pub is_from_license: bool,
 
-    /// Token positions matched by this license (for span subtraction).
-    ///
-    /// Populated during matching to enable double-match prevention.
-    /// None means contiguous range [start_token, end_token).
-    /// Some(positions) contains the exact positions for non-contiguous matches.
-    pub matched_token_positions: Option<Vec<usize>>,
-
     /// Count of matched high-value legalese tokens (token IDs < len_legalese).
     ///
     /// Corresponds to Python's `len(self.hispan)` - the number of matched positions
@@ -386,7 +379,6 @@ impl<'de> Deserialize<'de> for LicenseMatch {
             referenced_filenames: value.referenced_filenames,
             rule_kind,
             is_from_license: value.is_from_license,
-            matched_token_positions: None,
             hilen: value.hilen,
             rule_start_token: value.rule_start_token,
             qspan_positions: None,
@@ -421,7 +413,6 @@ impl Default for LicenseMatch {
             referenced_filenames: None,
             rule_kind: RuleKind::None,
             is_from_license: false,
-            matched_token_positions: None,
             hilen: 0,
             rule_start_token: 0,
             qspan_positions: None,
@@ -500,8 +491,6 @@ impl LicenseMatch {
     pub(crate) fn len(&self) -> usize {
         if let Some(positions) = &self.qspan_positions {
             positions.len()
-        } else if let Some(positions) = &self.matched_token_positions {
-            positions.len()
         } else {
             self.end_token.saturating_sub(self.start_token)
         }
@@ -509,13 +498,6 @@ impl LicenseMatch {
 
     fn qregion_len(&self) -> usize {
         if let Some(positions) = &self.qspan_positions {
-            if positions.is_empty() {
-                return 0;
-            }
-            let min_pos = *positions.iter().min().unwrap_or(&0);
-            let max_pos = *positions.iter().max().unwrap_or(&0);
-            max_pos - min_pos + 1
-        } else if let Some(positions) = &self.matched_token_positions {
             if positions.is_empty() {
                 return 0;
             }
@@ -673,9 +655,6 @@ impl LicenseMatch {
     /// Return true if all matched tokens are continuous without gaps or unknowns.
     /// Python: len() == qregion_len() == qmagnitude()
     pub fn is_continuous(&self, query: &crate::license_detection::query::Query) -> bool {
-        if self.matched_token_positions.is_some() {
-            return false;
-        }
         let len = self.len();
         let qregion_len = self.qregion_len();
         let qmagnitude = self.qmagnitude(query);

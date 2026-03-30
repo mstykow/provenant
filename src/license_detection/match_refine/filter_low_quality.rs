@@ -582,7 +582,6 @@ mod tests {
             score,
             matched_length: matched_len,
             rule_length: rule_len,
-            matched_token_positions: None,
             match_coverage: coverage,
             rule_relevance: relevance,
             rule_identifier: rule_identifier.to_string(),
@@ -629,7 +628,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
-            matched_token_positions: None,
             hilen: matched_length / 2,
             rule_start_token: 0,
             qspan_positions: None,
@@ -722,7 +720,7 @@ mod tests {
         let mut m = create_test_match("#1", 1, 10, 1.0, 100.0, 100);
         m.matcher = crate::license_detection::models::MatcherKind::Seq;
         m.matched_length = 50;
-        m.matched_token_positions = Some((0..50).collect());
+        m.qspan_positions = Some((0..50).collect());
 
         let matches = vec![m];
         let filtered = filter_spurious_matches(&matches, &query);
@@ -738,7 +736,7 @@ mod tests {
         m.matched_length = 5;
         m.start_token = 0;
         m.end_token = 100;
-        m.matched_token_positions = Some(vec![0, 50, 75, 80, 99]);
+        m.qspan_positions = Some(vec![0, 50, 75, 80, 99]);
 
         let matches = vec![m];
         let filtered = filter_spurious_matches(&matches, &query);
@@ -754,7 +752,7 @@ mod tests {
         m.matched_length = 5;
         m.start_token = 0;
         m.end_token = 100;
-        m.matched_token_positions = Some(vec![0, 50, 75, 80, 99]);
+        m.qspan_positions = Some(vec![0, 50, 75, 80, 99]);
 
         let matches = vec![m];
         let filtered = filter_spurious_matches(&matches, &query);
@@ -770,7 +768,7 @@ mod tests {
         m.matched_length = 25;
         m.start_token = 0;
         m.end_token = 30;
-        m.matched_token_positions = Some((0..25).collect());
+        m.qspan_positions = Some((0..25).collect());
         m.hilen = 10;
 
         let matches = vec![m];

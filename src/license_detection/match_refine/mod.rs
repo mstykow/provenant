@@ -363,7 +363,6 @@ mod tests {
             score,
             matched_length: matched_len,
             rule_length: rule_len,
-            matched_token_positions: None,
             match_coverage: coverage,
             rule_relevance: relevance,
             rule_identifier: rule_identifier.to_string(),

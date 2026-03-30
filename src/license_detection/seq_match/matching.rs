@@ -330,7 +330,6 @@ pub fn seq_match_with_candidates(
                         referenced_filenames: candidate.rule.referenced_filenames.clone(),
                         rule_kind: candidate.rule.kind(),
                         is_from_license: candidate.rule.is_from_license,
-                        matched_token_positions: None,
                         hilen: hispan_count,
                         rule_start_token: ipos,
                         qspan_positions: Some(qspan_positions),

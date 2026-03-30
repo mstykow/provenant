@@ -364,7 +364,6 @@ pub fn spdx_lid_match(index: &LicenseIndex, query: &Query) -> Vec<LicenseMatch> 
                 referenced_filenames,
                 rule_kind: crate::license_detection::models::RuleKind::Tag,
                 is_from_license: false,
-                matched_token_positions: None,
                 hilen: 0,
                 rule_start_token: 0,
                 qspan_positions: None,

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::license_detection::index::LicenseIndex;
     use crate::license_detection::index::dictionary::tid;
+    use crate::license_detection::index::LicenseIndex;
     use crate::license_detection::models::{License, LicenseMatch, MatcherKind, Rule, RuleKind};
     use crate::models::Match as OutputMatch;
     use std::collections::HashMap;
@@ -99,7 +99,6 @@ mod tests {
             score: 0.95,
             matched_length: 100,
             rule_length: 100,
-            matched_token_positions: None,
             match_coverage: 95.0,
             rule_relevance: 100,
             rule_identifier: "mit.LICENSE".to_string(),
@@ -526,7 +525,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
-            matched_token_positions: None,
             hilen: 0,
             rule_start_token: 0,
             qspan_positions: None,
@@ -672,7 +670,6 @@ mod tests {
             score: 0.95,
             matched_length: 100,
             rule_length: 100,
-            matched_token_positions: None,
             match_coverage: 95.0,
             rule_relevance: 100,
             rule_identifier: "mit.LICENSE".to_string(),
@@ -705,7 +702,7 @@ mod tests {
     #[test]
     fn test_len_non_contiguous() {
         let mut match_result = create_license_match();
-        match_result.matched_token_positions = Some(vec![0, 2, 5, 10]);
+        match_result.qspan_positions = Some(vec![0, 2, 5, 10]);
         assert_eq!(match_result.len(), 4);
     }
 
@@ -744,7 +741,7 @@ mod tests {
         use std::collections::{HashMap, HashSet};
         let index = create_test_index();
         let mut match_result = create_license_match();
-        match_result.matched_token_positions = Some(vec![0, 10]);
+        match_result.qspan_positions = Some(vec![0, 10]);
         let query = crate::license_detection::query::Query {
             text: String::new(),
             tokens: vec![],
@@ -794,7 +791,7 @@ mod tests {
         let mut match_result = create_license_match();
         match_result.start_token = 0;
         match_result.end_token = 10;
-        match_result.matched_token_positions = Some(vec![0, 5, 9]);
+        match_result.qspan_positions = Some(vec![0, 5, 9]);
         let mut unknowns_by_pos = HashMap::new();
         unknowns_by_pos.insert(Some(0), 2);
         unknowns_by_pos.insert(Some(5), 3);

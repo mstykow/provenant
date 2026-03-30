@@ -1170,7 +1170,6 @@ fn public_match_to_internal(
         referenced_filenames: detection_match.referenced_filenames.clone(),
         rule_kind: crate::license_detection::models::RuleKind::None,
         is_from_license: false,
-        matched_token_positions: None,
         hilen: 0,
         rule_start_token: 0,
         qspan_positions: None,

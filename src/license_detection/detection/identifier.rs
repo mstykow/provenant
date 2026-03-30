@@ -187,7 +187,6 @@ mod tests {
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
             rule_length: 100,
-            matched_token_positions: None,
             hilen: 50,
             rule_start_token: 0,
             qspan_positions: None,

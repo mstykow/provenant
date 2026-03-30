@@ -103,7 +103,6 @@ pub fn hash_match(index: &LicenseIndex, query_run: &QueryRun) -> Vec<LicenseMatc
             referenced_filenames: rule.referenced_filenames.clone(),
             rule_kind: rule.kind(),
             is_from_license: rule.is_from_license,
-            matched_token_positions: None,
             hilen: hispan_positions.len(),
             rule_start_token: 0,
             qspan_positions: Some(qspan_positions),

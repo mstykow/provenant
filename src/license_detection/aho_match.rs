@@ -185,7 +185,6 @@ pub fn aho_match_with_extra_matchables(
                 referenced_filenames: rule.referenced_filenames.clone(),
                 rule_kind: rule.kind(),
                 is_from_license: rule.is_from_license,
-                matched_token_positions: None,
                 hilen: hispan_count,
                 rule_start_token: 0,
                 qspan_positions: Some(qspan_positions),

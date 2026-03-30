@@ -214,7 +214,6 @@ mod tests {
             )
             .unwrap(),
             is_from_license: false,
-            matched_token_positions: None,
             hilen: matched_length / 2,
             rule_start_token: 0,
             qspan_positions: Some((0..matched_length).collect()),

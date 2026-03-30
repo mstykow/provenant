@@ -1147,7 +1147,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: RuleKind::Text,
             is_from_license: true,
-            matched_token_positions: None,
             hilen: 3,
             rule_start_token: 0,
             qspan_positions: None,
