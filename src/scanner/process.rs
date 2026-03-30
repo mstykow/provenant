@@ -393,14 +393,6 @@ fn extract_information_from_content(
             .is_archive(Some(is_archive))
             .is_media(Some(is_media))
             .is_script(Some(is_script));
-    } else {
-        file_info_builder
-            .sha1_git(None)
-            .is_binary(Some(false))
-            .is_text(Some(false))
-            .is_archive(Some(false))
-            .is_media(Some(false))
-            .is_script(Some(false));
     }
 
     if should_skip_text_detection(path, &buffer) {
