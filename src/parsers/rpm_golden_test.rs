@@ -2,6 +2,8 @@
 mod golden_tests {
     use crate::parsers::PackageParser;
     use crate::parsers::golden_test_utils::compare_package_data_parser_only;
+
+    #[cfg(unix)]
     use crate::parsers::rpm_db::{
         RpmBdbDatabaseParser, RpmNdbDatabaseParser, RpmSqliteDatabaseParser,
     };
