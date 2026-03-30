@@ -4,7 +4,6 @@ use std::path::Path;
 
 use anyhow::{Result, anyhow};
 use serde::Deserialize;
-use serde_yaml::Value;
 
 use crate::license_detection::expression::{LicenseExpression, parse_expression};
 use crate::models::{FileInfo, LicensePolicyEntry};
@@ -35,50 +34,6 @@ pub(crate) fn apply_license_policy_from_file(
             Ok(vec![error])
         }
     }
-}
-
-pub(crate) fn validate_license_policy_path(policy_path: &Path) -> Result<()> {
-    let metadata = fs::metadata(policy_path).map_err(|err| {
-        anyhow!(
-            "Failed to read license policy file {:?}: {err}",
-            policy_path
-        )
-    })?;
-    if !metadata.is_file() {
-        return Err(anyhow!(
-            "License policy path {:?} is not a regular file",
-            policy_path
-        ));
-    }
-
-    let policy_text = fs::read_to_string(policy_path).map_err(|err| {
-        anyhow!(
-            "Failed to read license policy file {:?}: {err}",
-            policy_path
-        )
-    })?;
-    if policy_text.trim().is_empty() {
-        return Err(anyhow!("License policy file {:?} is empty", policy_path));
-    }
-
-    let policy_value: Value = serde_yaml::from_str(&policy_text).map_err(|err| {
-        anyhow!(
-            "Failed to parse license policy file {:?}: {err}",
-            policy_path
-        )
-    })?;
-    let has_license_policies = policy_value
-        .as_mapping()
-        .and_then(|mapping| mapping.get(Value::String("license_policies".to_string())))
-        .is_some();
-    if !has_license_policies {
-        return Err(anyhow!(
-            "License policy file {:?} is missing a 'license_policies' attribute",
-            policy_path
-        ));
-    }
-
-    Ok(())
 }
 
 fn load_license_policy(policy_path: &Path) -> Result<PolicyFileStatus> {
@@ -165,7 +120,7 @@ fn collect_expression_keys(expression: &LicenseExpression, keys: &mut BTreeSet<S
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_license_policy_from_file, validate_license_policy_path};
+    use super::apply_license_policy_from_file;
     use crate::models::{FileInfo, FileType, LicenseDetection};
 
     #[test]
@@ -276,27 +231,5 @@ mod tests {
                 .iter()
                 .any(|error| error.contains("duplicate license key"))
         );
-    }
-
-    #[test]
-    fn validate_license_policy_path_rejects_missing_license_policies_attribute() {
-        let temp = tempfile::tempdir().expect("temp dir");
-        let policy_path = temp.path().join("policy.yml");
-        std::fs::write(&policy_path, "not_license_policies: []\n").expect("policy written");
-
-        let error = validate_license_policy_path(&policy_path)
-            .expect_err("missing license_policies should fail");
-
-        assert!(error.to_string().contains("license_policies"));
-    }
-
-    #[test]
-    fn validate_license_policy_path_accepts_empty_license_policies_list() {
-        let temp = tempfile::tempdir().expect("temp dir");
-        let policy_path = temp.path().join("policy.yml");
-        std::fs::write(&policy_path, "license_policies: []\n").expect("policy written");
-
-        validate_license_policy_path(&policy_path)
-            .expect("empty policy list should pass pre-scan validation");
     }
 }

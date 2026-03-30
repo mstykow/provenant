@@ -1,8 +1,56 @@
 use clap::{ArgGroup, Parser};
+use serde_yaml::Value;
+use std::fs;
+use std::path::Path;
 
 use crate::cache::CacheKind;
 use crate::license_detection::DEFAULT_LICENSEDB_URL_TEMPLATE;
 use crate::output::OutputFormat;
+
+fn parse_license_policy_arg(value: &str) -> Result<String, String> {
+    let policy_path = Path::new(value);
+    let metadata = fs::metadata(policy_path).map_err(|err| {
+        format!(
+            "Failed to read license policy file {:?}: {err}",
+            policy_path
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err(format!(
+            "License policy path {:?} is not a regular file",
+            policy_path
+        ));
+    }
+
+    let policy_text = fs::read_to_string(policy_path).map_err(|err| {
+        format!(
+            "Failed to read license policy file {:?}: {err}",
+            policy_path
+        )
+    })?;
+    if policy_text.trim().is_empty() {
+        return Err(format!("License policy file {:?} is empty", policy_path));
+    }
+
+    let policy_value: Value = serde_yaml::from_str(&policy_text).map_err(|err| {
+        format!(
+            "Failed to parse license policy file {:?}: {err}",
+            policy_path
+        )
+    })?;
+    let has_license_policies = policy_value
+        .as_mapping()
+        .and_then(|mapping| mapping.get(Value::String("license_policies".to_string())))
+        .is_some();
+    if !has_license_policies {
+        return Err(format!(
+            "License policy file {:?} is missing a 'license_policies' attribute",
+            policy_path
+        ));
+    }
+
+    Ok(value.to_string())
+}
 
 #[derive(Parser, Debug)]
 #[command(
@@ -275,7 +323,11 @@ pub struct Cli {
     pub license_references: bool,
 
     /// Evaluate file license detections against a YAML license policy file.
-    #[arg(long = "license-policy", value_name = "FILE")]
+    #[arg(
+        long = "license-policy",
+        value_name = "FILE",
+        value_parser = parse_license_policy_arg
+    )]
     pub license_policy: Option<String>,
 
     #[arg(long)]
@@ -516,17 +568,42 @@ mod tests {
 
     #[test]
     fn test_parses_license_policy_flag() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let policy_path = temp.path().join("policy.yml");
+        std::fs::write(&policy_path, "license_policies: []\n").expect("policy written");
+
         let parsed = Cli::try_parse_from([
             "provenant",
             "--json-pp",
             "scan.json",
             "--license-policy",
-            "policy.yml",
+            policy_path.to_str().expect("utf8 path"),
             "samples",
         ])
         .expect("cli parse should accept license-policy");
 
-        assert_eq!(parsed.license_policy.as_deref(), Some("policy.yml"));
+        assert_eq!(
+            parsed.license_policy.as_deref(),
+            Some(policy_path.to_str().expect("utf8 path"))
+        );
+    }
+
+    #[test]
+    fn test_rejects_invalid_license_policy_flag_value() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let policy_path = temp.path().join("policy.yml");
+        std::fs::write(&policy_path, "not_license_policies: []\n").expect("policy written");
+
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--license-policy",
+            policy_path.to_str().expect("utf8 path"),
+            "samples",
+        ]);
+
+        assert!(parsed.is_err());
     }
 
     #[test]
