@@ -1394,6 +1394,7 @@ fn create_output_preserves_top_level_license_references_from_context() {
                 ignorable_emails: vec![],
                 text: None,
             }],
+            extra_errors: vec![],
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -1457,6 +1458,7 @@ fn create_output_preserves_top_level_license_detections_from_context() {
             }],
             license_references: vec![],
             license_rule_references: vec![],
+            extra_errors: vec![],
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -1501,6 +1503,7 @@ fn create_output_gates_summary_tallies_and_generated_sections() {
             license_detections: vec![],
             license_references: vec![],
             license_rule_references: vec![],
+            extra_errors: vec![],
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -1567,6 +1570,7 @@ fn create_output_gates_summary_tallies_and_generated_sections() {
             license_detections: vec![],
             license_references: vec![],
             license_rule_references: vec![],
+            extra_errors: vec![],
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -1622,6 +1626,7 @@ fn create_output_preserves_scanner_generated_flags_without_scan_root() {
             license_detections: vec![],
             license_references: vec![],
             license_rule_references: vec![],
+            extra_errors: vec![],
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -1699,6 +1704,7 @@ fn create_output_score_only_keeps_clarity_without_full_summary_fields() {
             license_detections: vec![],
             license_references: vec![],
             license_rule_references: vec![],
+            extra_errors: vec![],
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -1764,6 +1770,7 @@ fn create_output_preserves_file_level_license_clues_in_json_shape() {
             license_detections: vec![],
             license_references: vec![],
             license_rule_references: vec![],
+            extra_errors: vec![],
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -1826,6 +1833,7 @@ fn create_output_preserves_empty_package_data_license_and_dependency_arrays() {
             license_detections: vec![],
             license_references: vec![],
             license_rule_references: vec![],
+            extra_errors: vec![],
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -1880,6 +1888,7 @@ fn create_output_tallies_by_facet_does_not_leak_resource_tallies() {
             license_detections: vec![],
             license_references: vec![],
             license_rule_references: vec![],
+            extra_errors: vec![],
             options: CreateOutputOptions {
                 facet_rules: &facet_rules,
                 include_classify: false,
@@ -1937,6 +1946,7 @@ fn create_output_promotes_package_metadata_without_summary_flags() {
             license_detections: vec![],
             license_references: vec![],
             license_rule_references: vec![],
+            extra_errors: vec![],
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2018,6 +2028,7 @@ fn create_output_summary_still_resolves_after_strip_root_normalization() {
             license_detections: vec![],
             license_references: vec![],
             license_rule_references: vec![],
+            extra_errors: vec![],
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2061,6 +2072,7 @@ fn create_output_classify_only_sets_key_file_flags() {
             license_detections: vec![],
             license_references: vec![],
             license_rule_references: vec![],
+            extra_errors: vec![],
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: true,

@@ -533,6 +533,7 @@ pub(crate) fn compute_fixture_output(
             license_detections,
             license_references,
             license_rule_references,
+            extra_errors: vec![],
             options: CreateOutputOptions {
                 facet_rules: &facet_rules,
                 include_classify: options.include_classify,

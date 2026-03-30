@@ -75,6 +75,7 @@ pub(crate) struct CreateOutputContext<'a> {
     pub(crate) license_detections: Vec<TopLevelLicenseDetection>,
     pub(crate) license_references: Vec<crate::models::LicenseReference>,
     pub(crate) license_rule_references: Vec<crate::models::LicenseRuleReference>,
+    pub(crate) extra_errors: Vec<String>,
     pub(crate) options: CreateOutputOptions<'a>,
 }
 
@@ -133,7 +134,7 @@ pub(crate) fn create_output(
         },
     };
 
-    let errors: Vec<String> = scan_result
+    let mut errors: Vec<String> = scan_result
         .files
         .iter()
         .filter_map(|file| {
@@ -150,6 +151,7 @@ pub(crate) fn create_output(
         })
         .flatten()
         .collect();
+    errors.extend(context.extra_errors);
 
     let mut files = scan_result.files;
     let assembly::AssemblyResult {

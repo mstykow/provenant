@@ -22,15 +22,17 @@ enum PolicyFileStatus {
 pub(crate) fn apply_license_policy_from_file(
     files: &mut [FileInfo],
     policy_path: &Path,
-) -> Result<()> {
+) -> Result<Vec<String>> {
     match load_license_policy(policy_path)? {
-        PolicyFileStatus::Ready(policies) => apply_license_policy(files, &policies),
+        PolicyFileStatus::Ready(policies) => {
+            apply_license_policy(files, &policies)?;
+            Ok(Vec::new())
+        }
         PolicyFileStatus::SoftError(error) => {
             for file in files {
-                file.scan_errors.push(error.clone());
                 file.license_policy = Some(vec![]);
             }
-            Ok(())
+            Ok(vec![error])
         }
     }
 }
@@ -264,13 +266,13 @@ mod tests {
             vec![],
         )];
 
-        apply_license_policy_from_file(&mut files, &policy_path)
+        let errors = apply_license_policy_from_file(&mut files, &policy_path)
             .expect("duplicate policy should not abort scan");
 
         assert_eq!(files[0].license_policy, Some(vec![]));
+        assert!(files[0].scan_errors.is_empty());
         assert!(
-            files[0]
-                .scan_errors
+            errors
                 .iter()
                 .any(|error| error.contains("duplicate license key"))
         );

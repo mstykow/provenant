@@ -263,8 +263,10 @@ fn run() -> Result<()> {
         file.backfill_license_provenance();
     }
 
+    let mut extra_errors = Vec::new();
     if let Some(policy_path) = cli.license_policy.as_deref() {
-        apply_license_policy_from_file(&mut scan_result.files, Path::new(policy_path))?;
+        extra_errors =
+            apply_license_policy_from_file(&mut scan_result.files, Path::new(policy_path))?;
     }
 
     if cli.from_json {
@@ -376,6 +378,7 @@ fn run() -> Result<()> {
             license_detections,
             license_references,
             license_rule_references,
+            extra_errors,
             options: CreateOutputOptions {
                 facet_rules: &facet_rules,
                 include_classify: cli.classify,
