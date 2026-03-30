@@ -118,8 +118,8 @@ license-output data.
 
 ### Compatibility Notes
 
-- ⚠️ Legacy `--include-text` remains as a compatibility alias; the upstream
-  public flag is now `--license-text`
+- `--include-text` is intentionally not part of the ScanCode-facing CLI surface;
+  parity targets only the upstream public flag `--license-text`
 - ⚠️ Upstream `--is-license-text` is no longer a live parity target; current
   parity should instead track the emitted `percentage_of_license_text` field
 
@@ -203,7 +203,7 @@ The repository still has a mix of:
    - Remaining work here is limited to any uncovered clue edge cases
 
 4. **Phase 3 — CLI flag parity**
-   - ✅ Resolve `--include-text` vs `--license-text`
+   - ✅ Expose `--license-text` as the ScanCode-facing flag without a Provenant-only legacy alias
    - ✅ Add remaining ScanCode-compatible license flags
    - Keep help text and docs aligned with the actual runtime surface
 
