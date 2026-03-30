@@ -177,7 +177,7 @@ pub struct Cli {
     pub license_rules_path: Option<String>,
 
     /// Include matched text in license detection output
-    #[arg(long = "license-text", alias = "include-text", requires = "license")]
+    #[arg(long = "license-text", requires = "license")]
     pub license_text: bool,
 
     #[arg(long = "license-text-diagnostics", requires = "license_text")]
@@ -737,6 +737,20 @@ mod tests {
     }
 
     #[test]
+    fn test_include_text_is_rejected() {
+        let result = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--license",
+            "--include-text",
+            "samples",
+        ]);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_license_text_diagnostics_requires_license_text() {
         let result = Cli::try_parse_from([
             "provenant",
@@ -867,18 +881,17 @@ mod tests {
     }
 
     #[test]
-    fn test_include_text_alias_still_parses_as_license_text() {
-        let parsed = Cli::try_parse_from([
+    fn test_include_text_alias_is_not_supported() {
+        let result = Cli::try_parse_from([
             "provenant",
             "--json-pp",
             "scan.json",
             "--license",
             "--include-text",
             "samples",
-        ])
-        .expect("cli parse should accept include-text alias");
+        ]);
 
-        assert!(parsed.license_text);
+        assert!(result.is_err());
     }
 
     #[test]
