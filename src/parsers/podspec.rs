@@ -559,7 +559,7 @@ fn get_hashed_path(name: &str) -> Option<String> {
 
     let mut hasher = Md5::new();
     hasher.update(name.as_bytes());
-    let hash_str = format!("{:x}", hasher.finalize());
+    let hash_str = hex::encode(hasher.finalize());
 
     Some(format!(
         "{}/{}/{}",
