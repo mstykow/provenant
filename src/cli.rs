@@ -249,6 +249,9 @@ pub struct Cli {
     #[arg(long = "license-references", requires = "license")]
     pub license_references: bool,
 
+    #[arg(long = "license-policy", value_name = "FILE")]
+    pub license_policy: Option<String>,
+
     #[arg(long)]
     pub tallies: bool,
 
@@ -473,6 +476,21 @@ mod tests {
         assert_eq!(parsed.output_targets().len(), 1);
         assert_eq!(parsed.output_targets()[0].format, OutputFormat::Debian);
         assert_eq!(parsed.output_debian.as_deref(), Some("scan.copyright"));
+    }
+
+    #[test]
+    fn test_parses_license_policy_flag() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--license-policy",
+            "policy.yml",
+            "samples",
+        ])
+        .expect("cli parse should accept license-policy");
+
+        assert_eq!(parsed.license_policy.as_deref(), Some("policy.yml"));
     }
 
     #[test]

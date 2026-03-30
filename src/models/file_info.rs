@@ -75,6 +75,9 @@ pub struct FileInfo {
     #[serde(default)]
     pub scan_errors: Vec<String>,
     #[builder(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub license_policy: Vec<LicensePolicyEntry>,
+    #[builder(default)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub is_generated: Option<bool>,
     #[builder(default)]
@@ -152,6 +155,7 @@ impl FileInfoBuilder {
             self.for_packages.clone().unwrap_or_default(),
             self.scan_errors.clone().unwrap_or_default(),
         );
+        file_info.license_policy = self.license_policy.clone().unwrap_or_default();
         file_info.sha1_git = self.sha1_git.clone().flatten();
         file_info.is_binary = self.is_binary.flatten();
         file_info.is_text = self.is_text.flatten();
@@ -244,6 +248,7 @@ impl FileInfo {
             urls,
             for_packages,
             scan_errors,
+            license_policy: vec![],
             is_generated: None,
             is_binary: None,
             is_text: None,
@@ -1242,6 +1247,14 @@ pub struct OutputURL {
     pub url: String,
     pub start_line: usize,
     pub end_line: usize,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct LicensePolicyEntry {
+    pub license_key: String,
+    pub label: String,
+    pub color_code: String,
+    pub icon: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]

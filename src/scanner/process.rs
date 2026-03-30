@@ -927,6 +927,7 @@ fn process_directory(
         urls: Vec::new(),       // TODO: implement
         for_packages: Vec::new(),
         scan_errors: Vec::new(),
+        license_policy: Vec::new(),
         is_binary: collect_info.then_some(false),
         is_text: collect_info.then_some(false),
         is_archive: collect_info.then_some(false),

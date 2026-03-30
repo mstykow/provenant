@@ -6,8 +6,8 @@ mod package_type;
 pub use datasource_id::DatasourceId;
 pub use file_info::{
     Author, Copyright, Dependency, FileInfo, FileInfoBuilder, FileReference, FileType, Holder,
-    LicenseDetection, Match, OutputEmail, OutputURL, Package, PackageData, Party, ResolvedPackage,
-    TopLevelDependency,
+    LicenseDetection, LicensePolicyEntry, Match, OutputEmail, OutputURL, Package, PackageData,
+    Party, ResolvedPackage, TopLevelDependency,
 };
 pub use package_type::PackageType;
 

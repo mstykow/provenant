@@ -14,6 +14,7 @@ use crate::post_processing::{
     CreateOutputContext, CreateOutputOptions, DEFAULT_LICENSEDB_URL_TEMPLATE,
     apply_package_reference_following, build_facet_rules, collect_top_level_license_detections,
     collect_top_level_license_references, create_output,
+    license_policy::apply_license_policy_from_file,
 };
 use crate::progress::{ProgressMode, ScanProgress};
 use crate::scan_result_shaping::{
@@ -236,6 +237,10 @@ fn run() -> Result<()> {
 
     for file in &mut scan_result.files {
         file.backfill_license_provenance();
+    }
+
+    if let Some(policy_path) = cli.license_policy.as_deref() {
+        apply_license_policy_from_file(&mut scan_result.files, Path::new(policy_path))?;
     }
 
     if cli.from_json {

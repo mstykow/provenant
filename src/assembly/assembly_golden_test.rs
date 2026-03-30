@@ -132,6 +132,7 @@ mod tests {
                 urls: vec![],
                 for_packages: vec![],
                 scan_errors: vec![],
+                license_policy: vec![],
                 is_source: None,
                 source_count: None,
                 is_legal: false,
