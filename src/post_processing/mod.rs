@@ -118,7 +118,11 @@ pub(crate) fn create_output(
     let duration = (end_time - start_time).num_nanoseconds().unwrap_or(0) as f64 / 1_000_000_000.0;
 
     let extra_data = ExtraData {
-        files_count: scan_result.files.len(),
+        files_count: scan_result
+            .files
+            .iter()
+            .filter(|file| file.file_type == FileType::File)
+            .count(),
         directories_count: context.total_dirs,
         excluded_count: scan_result.excluded_count,
         system_environment: SystemEnvironment {
