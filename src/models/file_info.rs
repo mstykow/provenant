@@ -1,6 +1,8 @@
 use derive_builder::Builder;
 use packageurl::PackageUrl;
-use serde::{Deserialize, Serialize};
+use serde::ser::Error as SerError;
+use serde::{Deserialize, Serialize, Serializer};
+use serde_json::{Map, Value};
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -12,7 +14,7 @@ use crate::license_detection::tokenize::tokenize_without_stopwords;
 use crate::models::output::Tallies;
 use crate::utils::spdx::combine_license_expressions;
 
-#[derive(Debug, Builder, Serialize, Deserialize)]
+#[derive(Debug, Builder, Deserialize)]
 #[builder(build_fn(skip))]
 /// File-level scan result containing metadata and detected findings.
 pub struct FileInfo {
@@ -186,6 +188,137 @@ impl FileInfoBuilder {
         file_info.size_count = self.size_count.flatten();
         Ok(file_info)
     }
+}
+
+impl Serialize for FileInfo {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = Map::new();
+        insert_json(&mut map, "path", &self.path)?;
+        insert_json(&mut map, "type", &self.file_type)?;
+        insert_json(&mut map, "name", &self.name)?;
+        insert_json(&mut map, "base_name", &self.base_name)?;
+        insert_json(&mut map, "extension", &self.extension)?;
+        insert_json(&mut map, "size", self.size)?;
+
+        if self.should_serialize_info_surface() {
+            insert_json(&mut map, "date", &self.date)?;
+            insert_json(&mut map, "sha1", &self.sha1)?;
+            insert_json(&mut map, "md5", &self.md5)?;
+            insert_json(&mut map, "sha256", &self.sha256)?;
+            insert_json(&mut map, "sha1_git", &self.sha1_git)?;
+            insert_json(&mut map, "mime_type", &self.mime_type)?;
+            insert_json(&mut map, "file_type", &self.file_type_label)?;
+            insert_json(&mut map, "programming_language", &self.programming_language)?;
+            insert_json(&mut map, "is_binary", self.is_binary)?;
+            insert_json(&mut map, "is_text", self.is_text)?;
+            insert_json(&mut map, "is_archive", self.is_archive)?;
+            insert_json(&mut map, "is_media", self.is_media)?;
+            insert_json(&mut map, "is_source", self.is_source)?;
+            insert_json(&mut map, "is_script", self.is_script)?;
+            insert_json(&mut map, "files_count", self.files_count)?;
+            insert_json(&mut map, "dirs_count", self.dirs_count)?;
+            insert_json(&mut map, "size_count", self.size_count)?;
+        }
+
+        insert_json(&mut map, "package_data", &self.package_data)?;
+        insert_json(
+            &mut map,
+            "detected_license_expression_spdx",
+            &self.license_expression,
+        )?;
+        insert_json(&mut map, "license_detections", &self.license_detections)?;
+        if !self.license_clues.is_empty() {
+            insert_json(&mut map, "license_clues", &self.license_clues)?;
+        }
+        if self.percentage_of_license_text.is_some() {
+            insert_json(
+                &mut map,
+                "percentage_of_license_text",
+                self.percentage_of_license_text,
+            )?;
+        }
+        insert_json(&mut map, "copyrights", &self.copyrights)?;
+        insert_json(&mut map, "holders", &self.holders)?;
+        insert_json(&mut map, "authors", &self.authors)?;
+        if !self.emails.is_empty() {
+            insert_json(&mut map, "emails", &self.emails)?;
+        }
+        insert_json(&mut map, "urls", &self.urls)?;
+        insert_json(&mut map, "for_packages", &self.for_packages)?;
+        insert_json(&mut map, "scan_errors", &self.scan_errors)?;
+        if self.license_policy.is_some() {
+            insert_json(&mut map, "license_policy", &self.license_policy)?;
+        }
+        if self.is_generated.is_some() {
+            insert_json(&mut map, "is_generated", self.is_generated)?;
+        }
+        if self.source_count.is_some() {
+            insert_json(&mut map, "source_count", self.source_count)?;
+        }
+        if self.is_legal {
+            insert_json(&mut map, "is_legal", self.is_legal)?;
+        }
+        if self.is_manifest {
+            insert_json(&mut map, "is_manifest", self.is_manifest)?;
+        }
+        if self.is_readme {
+            insert_json(&mut map, "is_readme", self.is_readme)?;
+        }
+        if self.is_top_level {
+            insert_json(&mut map, "is_top_level", self.is_top_level)?;
+        }
+        if self.is_key_file {
+            insert_json(&mut map, "is_key_file", self.is_key_file)?;
+        }
+        if self.is_community {
+            insert_json(&mut map, "is_community", self.is_community)?;
+        }
+        if !self.facets.is_empty() {
+            insert_json(&mut map, "facets", &self.facets)?;
+        }
+        if self.tallies.is_some() {
+            insert_json(&mut map, "tallies", &self.tallies)?;
+        }
+
+        map.serialize(serializer)
+    }
+}
+
+impl FileInfo {
+    fn should_serialize_info_surface(&self) -> bool {
+        self.date.is_some()
+            || self.sha1.is_some()
+            || self.md5.is_some()
+            || self.sha256.is_some()
+            || self.sha1_git.is_some()
+            || self.mime_type.is_some()
+            || self.file_type_label.is_some()
+            || self.programming_language.is_some()
+            || self.is_binary.is_some()
+            || self.is_text.is_some()
+            || self.is_archive.is_some()
+            || self.is_media.is_some()
+            || self.is_source.is_some()
+            || self.is_script.is_some()
+            || self.files_count.is_some()
+            || self.dirs_count.is_some()
+            || self.size_count.is_some()
+    }
+}
+
+fn insert_json<S: Serialize, E: SerError>(
+    map: &mut Map<String, Value>,
+    key: &str,
+    value: S,
+) -> Result<(), E> {
+    map.insert(
+        key.to_string(),
+        serde_json::to_value(value).map_err(E::custom)?,
+    );
+    Ok(())
 }
 
 impl FileInfo {
