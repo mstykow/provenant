@@ -640,6 +640,7 @@ fn json_file(path: &str, file_type: crate::models::FileType) -> crate::models::F
         path.to_string(),
         file_type,
         None,
+        None,
         0,
         None,
         None,

@@ -24,6 +24,9 @@ pub struct FileInfo {
     pub file_type: FileType,
     #[builder(default)]
     pub mime_type: Option<String>,
+    #[builder(default)]
+    #[serde(rename = "file_type", skip_serializing_if = "Option::is_none", default)]
+    pub file_type_label: Option<String>,
     pub size: u64,
     #[builder(default)]
     pub date: Option<String>,
@@ -137,6 +140,7 @@ impl FileInfoBuilder {
             self.path.clone().ok_or("Missing field: path")?,
             self.file_type.clone().ok_or("Missing field: file_type")?,
             self.mime_type.clone().flatten(),
+            self.file_type_label.clone().flatten(),
             self.size.ok_or("Missing field: size")?,
             self.date.clone().flatten(),
             self.sha1.clone().flatten(),
@@ -176,6 +180,7 @@ impl FileInfo {
         path: String,
         file_type: FileType,
         mime_type: Option<String>,
+        file_type_label: Option<String>,
         size: u64,
         date: Option<String>,
         sha1: Option<String>,
@@ -229,6 +234,7 @@ impl FileInfo {
             path,
             file_type,
             mime_type,
+            file_type_label,
             size,
             date,
             sha1,
@@ -1071,6 +1077,7 @@ mod tests {
             ".json".to_string(),
             "project/package.json".to_string(),
             FileType::File,
+            None,
             None,
             1,
             None,

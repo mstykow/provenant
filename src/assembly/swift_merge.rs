@@ -398,6 +398,7 @@ mod tests {
             path.to_string(),
             crate::models::FileType::File,
             None,
+            None,
             1,
             None,
             None,

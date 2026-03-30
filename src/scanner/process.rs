@@ -292,6 +292,7 @@ fn process_file(
                 .essence_str()
                 .to_string()
         }))
+        .file_type_label(None)
         .size(metadata.len())
         .date(
             text_options
@@ -371,12 +372,13 @@ fn extract_information_from_content(
             .first_or_octet_stream()
             .essence_str()
             .to_string();
-        let (is_binary, is_text, is_archive, is_media, is_script) = detect_info_flags(
-            path,
-            &buffer,
-            &mime_type,
-            Some(programming_language.as_str()),
-        );
+        let (file_type_label, is_binary, is_text, is_archive, is_media, is_script) =
+            detect_info_flags(
+                path,
+                &buffer,
+                &mime_type,
+                Some(programming_language.as_str()),
+            );
 
         file_info_builder
             .sha1(Some(calculate_sha1(&buffer)))
@@ -384,6 +386,7 @@ fn extract_information_from_content(
             .sha256(Some(sha256.clone()))
             .programming_language(Some(programming_language.clone()))
             .mime_type(Some(mime_type))
+            .file_type_label(Some(file_type_label))
             .sha1_git(Some(calculate_sha1_git(&buffer)))
             .is_binary(Some(is_binary))
             .is_text(Some(is_text))
@@ -554,7 +557,7 @@ fn detect_info_flags(
     buffer: &[u8],
     mime_type: &str,
     programming_language: Option<&str>,
-) -> (bool, bool, bool, bool, bool) {
+) -> (String, bool, bool, bool, bool, bool) {
     let is_binary = matches!(inspect(buffer), ContentType::BINARY);
     let is_text = !is_binary;
     let is_media = mime_type.starts_with("image/")
@@ -599,7 +602,30 @@ fn detect_info_flags(
             Some("Python" | "Ruby" | "PHP" | "JavaScript" | "TypeScript" | "Shell")
         );
 
-    (is_binary, is_text, is_archive, is_media, is_script)
+    let file_type_label = if is_archive {
+        "archive".to_string()
+    } else if is_media {
+        "media".to_string()
+    } else if is_binary {
+        "binary".to_string()
+    } else if is_script {
+        "script".to_string()
+    } else if programming_language.is_some() {
+        "source".to_string()
+    } else if mime_type.starts_with("text/") {
+        "text".to_string()
+    } else {
+        mime_type.to_string()
+    };
+
+    (
+        file_type_label,
+        is_binary,
+        is_text,
+        is_archive,
+        is_media,
+        is_script,
+    )
 }
 
 fn is_system_datasource(datasource_id: &DatasourceId) -> bool {
@@ -1109,6 +1135,7 @@ fn process_directory(
         path: path.to_string_lossy().to_string(),
         file_type: FileType::Directory,
         mime_type: None,
+        file_type_label: collect_info.then_some("directory".to_string()),
         size: 0,
         date: collect_info.then(|| get_creation_date(metadata)).flatten(),
         sha1: None,

@@ -492,6 +492,7 @@ mod tests {
             "project/Cargo.toml".to_string(),
             FileType::File,
             None,
+            None,
             1,
             None,
             None,

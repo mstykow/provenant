@@ -114,6 +114,7 @@ mod tests {
                 path: relative_path,
                 file_type: FileType::File,
                 mime_type: Some("text/plain".to_string()),
+                file_type_label: None,
                 size,
                 date: None,
                 sha1: None,
