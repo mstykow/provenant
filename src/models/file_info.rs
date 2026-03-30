@@ -109,6 +109,15 @@ pub struct FileInfo {
     pub is_script: Option<bool>,
     #[builder(default)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub files_count: Option<usize>,
+    #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub dirs_count: Option<usize>,
+    #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub size_count: Option<u64>,
+    #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub source_count: Option<usize>,
     #[builder(default)]
     #[serde(skip_serializing_if = "is_false", default)]
@@ -172,6 +181,9 @@ impl FileInfoBuilder {
         file_info.is_archive = self.is_archive.flatten();
         file_info.is_media = self.is_media.flatten();
         file_info.is_script = self.is_script.flatten();
+        file_info.files_count = self.files_count.flatten();
+        file_info.dirs_count = self.dirs_count.flatten();
+        file_info.size_count = self.size_count.flatten();
         Ok(file_info)
     }
 }
@@ -268,6 +280,9 @@ impl FileInfo {
             is_media: None,
             is_source: None,
             is_script: None,
+            files_count: None,
+            dirs_count: None,
+            size_count: None,
             source_count: None,
             is_legal: false,
             is_manifest: false,

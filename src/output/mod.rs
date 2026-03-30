@@ -296,6 +296,9 @@ mod tests {
         assert!(!object.contains_key("is_media"));
         assert!(!object.contains_key("is_source"));
         assert!(!object.contains_key("is_script"));
+        assert!(!object.contains_key("files_count"));
+        assert!(!object.contains_key("dirs_count"));
+        assert!(!object.contains_key("size_count"));
         assert!(!object.contains_key("license_policy"));
     }
 
@@ -335,6 +338,9 @@ mod tests {
         file.is_media = Some(false);
         file.is_source = Some(true);
         file.is_script = Some(false);
+        file.files_count = Some(0);
+        file.dirs_count = Some(0);
+        file.size_count = Some(0);
 
         let value = serde_json::to_value(&file).expect("file info serializes");
         let object = value.as_object().expect("file info object");
@@ -343,6 +349,9 @@ mod tests {
         assert_eq!(object.get("file_type"), Some(&serde_json::json!("text")));
         assert_eq!(object.get("is_binary"), Some(&serde_json::json!(false)));
         assert_eq!(object.get("is_text"), Some(&serde_json::json!(true)));
+        assert_eq!(object.get("files_count"), Some(&serde_json::json!(0)));
+        assert_eq!(object.get("dirs_count"), Some(&serde_json::json!(0)));
+        assert_eq!(object.get("size_count"), Some(&serde_json::json!(0)));
     }
 
     #[test]

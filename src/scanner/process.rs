@@ -392,7 +392,10 @@ fn extract_information_from_content(
             .is_text(Some(is_text))
             .is_archive(Some(is_archive))
             .is_media(Some(is_media))
-            .is_script(Some(is_script));
+            .is_script(Some(is_script))
+            .files_count(Some(0))
+            .dirs_count(Some(0))
+            .size_count(Some(0));
     }
 
     if should_skip_text_detection(path, &buffer) {
@@ -1130,7 +1133,7 @@ fn is_pem_certificate_file(_path: &Path, buffer: &[u8]) -> bool {
 
 fn process_directory(
     path: &Path,
-    metadata: &fs::Metadata,
+    _metadata: &fs::Metadata,
     collect_info: bool,
     license_enabled: bool,
 ) -> FileInfo {
@@ -1148,9 +1151,9 @@ fn process_directory(
         path: path.to_string_lossy().to_string(),
         file_type: FileType::Directory,
         mime_type: None,
-        file_type_label: collect_info.then_some("directory".to_string()),
+        file_type_label: None,
         size: 0,
-        date: collect_info.then(|| get_creation_date(metadata)).flatten(),
+        date: None,
         sha1: None,
         md5: None,
         sha256: None,
@@ -1175,6 +1178,9 @@ fn process_directory(
         is_media: collect_info.then_some(false),
         is_source: collect_info.then_some(false),
         is_script: collect_info.then_some(false),
+        files_count: collect_info.then_some(0),
+        dirs_count: collect_info.then_some(0),
+        size_count: collect_info.then_some(0),
         source_count: None,
         is_legal: false,
         is_manifest: false,

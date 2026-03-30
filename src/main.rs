@@ -255,6 +255,10 @@ fn run() -> Result<()> {
         apply_mark_source(&mut scan_result.files);
     }
 
+    if should_include_info_surface(&scan_result.files, &cli) {
+        populate_info_resource_counts(&mut scan_result.files);
+    }
+
     for file in &mut scan_result.files {
         file.backfill_license_provenance();
     }
@@ -527,6 +531,67 @@ fn configured_scan_names(cli: &Cli) -> String {
         names.push("urls");
     }
     names.join(", ")
+}
+
+fn should_include_info_surface(files: &[crate::models::FileInfo], cli: &Cli) -> bool {
+    cli.info
+        || files.iter().any(|file| {
+            file.date.is_some()
+                || file.sha1.is_some()
+                || file.md5.is_some()
+                || file.sha256.is_some()
+                || file.sha1_git.is_some()
+                || file.mime_type.is_some()
+                || file.file_type_label.is_some()
+                || file.programming_language.is_some()
+                || file.is_binary.is_some()
+                || file.is_text.is_some()
+                || file.is_archive.is_some()
+                || file.is_media.is_some()
+                || file.is_source.is_some()
+                || file.is_script.is_some()
+                || file.files_count.is_some()
+                || file.dirs_count.is_some()
+                || file.size_count.is_some()
+        })
+}
+
+fn populate_info_resource_counts(files: &mut [crate::models::FileInfo]) {
+    let snapshot: Vec<(String, crate::models::FileType, u64)> = files
+        .iter()
+        .map(|file| (file.path.clone(), file.file_type.clone(), file.size))
+        .collect();
+
+    for file in files {
+        match file.file_type {
+            crate::models::FileType::Directory => {
+                let prefix = format!("{}/", file.path);
+                let mut files_count = 0usize;
+                let mut dirs_count = 0usize;
+                let mut size_count = 0u64;
+                for (path, file_type, size) in &snapshot {
+                    if !path.starts_with(&prefix) {
+                        continue;
+                    }
+                    match file_type {
+                        crate::models::FileType::Directory => dirs_count += 1,
+                        crate::models::FileType::File => {
+                            files_count += 1;
+                            size_count += *size;
+                        }
+                    }
+                }
+                file.files_count = Some(files_count);
+                file.dirs_count = Some(dirs_count);
+                file.size_count = Some(size_count);
+            }
+            crate::models::FileType::File => {
+                file.files_count = Some(0);
+                file.dirs_count = Some(0);
+                file.size_count = Some(0);
+            }
+        }
+    }
 }
 
 fn run_with_thread_pool<T, F>(threads: usize, f: F) -> Result<T>
