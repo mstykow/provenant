@@ -153,12 +153,10 @@ fn run() -> Result<()> {
             None
         };
 
-        // Determine package-related detection modes. Flags that enable package
-        // behaviors should also enable generic package parsing.
-        let enable_application_packages =
-            cli.package || cli.package_in_compiled || cli.package_only;
+        let enable_application_packages = cli.package || cli.package_only;
         let enable_system_packages = cli.system_package || cli.package_only;
-        let enable_packages = enable_application_packages || enable_system_packages;
+        let enable_packages =
+            enable_application_packages || enable_system_packages || cli.package_in_compiled;
         let (detect_copyrights, detect_emails, detect_urls, detect_generated) = if cli.package_only
         {
             (false, cli.email, cli.url, cli.generated)
