@@ -14,7 +14,7 @@ use crate::post_processing::{
     CreateOutputContext, CreateOutputOptions, DEFAULT_LICENSEDB_URL_TEMPLATE,
     apply_package_reference_following, build_facet_rules, collect_top_level_license_detections,
     collect_top_level_license_references, create_output,
-    license_policy::apply_license_policy_from_file,
+    license_policy::{apply_license_policy_from_file, validate_license_policy_path},
 };
 use crate::progress::{ProgressMode, ScanProgress};
 use crate::scan_result_shaping::{
@@ -66,6 +66,9 @@ fn run() -> Result<()> {
     progress.init_logging_bridge();
 
     validate_scan_option_compatibility(&cli)?;
+    if let Some(policy_path) = cli.license_policy.as_deref() {
+        validate_license_policy_path(Path::new(policy_path))?;
+    }
     let facet_rules = build_facet_rules(&cli.facet)?;
 
     let ignore_author_patterns = compile_regex_patterns("--ignore-author", &cli.ignore_author)?;
