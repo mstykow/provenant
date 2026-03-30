@@ -118,8 +118,6 @@ license-output data.
 
 ### Compatibility Notes
 
-- `--include-text` is intentionally not part of the ScanCode-facing CLI surface;
-  parity targets only the upstream public flag `--license-text`
 - ⚠️ Upstream `--is-license-text` is no longer a live parity target; current
   parity should instead track the emitted `percentage_of_license_text` field
 
@@ -159,10 +157,9 @@ that work remains
 
 ### 4. CLI parity drift accumulated after the engine landed
 
-The repository still has a mix of:
+The repository accumulated a mix of:
 
-- current Rust-only flag names such as `--include-text`
-- upstream flags that are not implemented yet
+- upstream flags that were not implemented yet
 - outdated references to flags that are no longer current upstream targets
 
 ## Relationship to Other Plans
