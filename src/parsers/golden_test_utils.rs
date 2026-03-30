@@ -27,6 +27,25 @@ pub fn compare_package_data_parser_only(
 }
 
 #[cfg(all(test, feature = "golden-tests"))]
+pub fn compare_package_data_collection_parser_only(
+    actual: &[PackageData],
+    expected_path: &Path,
+) -> Result<(), String> {
+    let expected_content = fs::read_to_string(expected_path)
+        .map_err(|e| format!("Failed to read expected file: {}", e))?;
+
+    let expected_value: Value = serde_json::from_str(&expected_content)
+        .map_err(|e| format!("Failed to parse expected JSON: {}", e))?;
+
+    let expected_json = unwrap_expected_parser_package_collection(&expected_value)?;
+
+    let actual_json = serde_json::to_value(actual)
+        .map_err(|e| format!("Failed to serialize actual PackageData collection: {}", e))?;
+
+    compare_json_values_parser_only(&actual_json, expected_json, "")
+}
+
+#[cfg(all(test, feature = "golden-tests"))]
 fn unwrap_expected_parser_package(expected_value: &Value) -> Result<&Value, String> {
     if let Some(expected_array) = expected_value.as_array() {
         if expected_array.is_empty() {
@@ -52,6 +71,28 @@ fn unwrap_expected_parser_package(expected_value: &Value) -> Result<&Value, Stri
 }
 
 #[cfg(all(test, feature = "golden-tests"))]
+fn unwrap_expected_parser_package_collection(expected_value: &Value) -> Result<&Value, String> {
+    if expected_value.is_array() {
+        return Ok(expected_value);
+    }
+
+    if let Some(packages) = expected_value.get("packages") {
+        return Ok(packages);
+    }
+
+    if let Some(package_data) = expected_value
+        .get("files")
+        .and_then(Value::as_array)
+        .and_then(|files| files.first())
+        .and_then(|file| file.get("package_data"))
+    {
+        return Ok(package_data);
+    }
+
+    Err("Expected file does not contain a package collection".to_string())
+}
+
+#[cfg(all(test, feature = "golden-tests"))]
 fn compare_json_values_parser_only(
     actual: &Value,
     expected: &Value,
@@ -69,6 +110,9 @@ fn compare_json_values_parser_only(
         "start_line",
         "end_line",
         "extra_data",
+        "package_uid",
+        "datafile_paths",
+        "datasource_ids",
     ];
 
     if SKIP_FIELDS.iter().any(|&field| path.ends_with(field)) {

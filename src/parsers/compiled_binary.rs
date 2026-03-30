@@ -1,5 +1,5 @@
-use std::fs;
 use std::io::Read;
+#[cfg(test)]
 use std::path::Path;
 
 use flate2::read::ZlibDecoder;
@@ -52,9 +52,9 @@ const GO_BUILD_INFO_MAGIC: &[u8] = b"\xff Go buildinf:";
 const GO_BUILD_INFO_ALIGN: usize = 16;
 const GO_BUILD_INFO_HEADER_SIZE: usize = 32;
 
-pub(crate) fn try_parse_compiled_file(path: &Path) -> Option<ParsePackagesResult> {
-    let mut packages = parse_rust_binary(path);
-    packages.extend(parse_go_binary(path));
+pub(crate) fn try_parse_compiled_bytes(bytes: &[u8]) -> Option<ParsePackagesResult> {
+    let mut packages = parse_rust_binary_bytes(bytes);
+    packages.extend(parse_go_binary_bytes(bytes));
 
     (!packages.is_empty()).then_some(ParsePackagesResult {
         packages,
@@ -62,13 +62,18 @@ pub(crate) fn try_parse_compiled_file(path: &Path) -> Option<ParsePackagesResult
     })
 }
 
+#[cfg(test)]
 fn parse_rust_binary(path: &Path) -> Vec<PackageData> {
-    let bytes = match fs::read(path) {
+    let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,
         Err(_) => return Vec::new(),
     };
 
-    let object = match object::File::parse(&*bytes) {
+    parse_rust_binary_bytes(&bytes)
+}
+
+fn parse_rust_binary_bytes(bytes: &[u8]) -> Vec<PackageData> {
+    let object = match object::File::parse(bytes) {
         Ok(object) => object,
         Err(_) => return Vec::new(),
     };
@@ -79,15 +84,8 @@ fn parse_rust_binary(path: &Path) -> Vec<PackageData> {
         return Vec::new();
     };
 
-    let mut decoder = ZlibDecoder::new(compressed);
-    let mut decoded = Vec::new();
-    if decoder.read_to_end(&mut decoded).is_err() || decoded.len() > MAX_RUST_AUDIT_JSON_SIZE {
+    let Some(audit_data) = decode_rust_audit_data(compressed) else {
         return Vec::new();
-    }
-
-    let audit_data: RustBinaryAuditData = match serde_json::from_slice(&decoded) {
-        Ok(data) => data,
-        Err(_) => return Vec::new(),
     };
 
     audit_data
@@ -95,6 +93,17 @@ fn parse_rust_binary(path: &Path) -> Vec<PackageData> {
         .iter()
         .map(|package| build_rust_binary_package(package, &audit_data.packages))
         .collect()
+}
+
+fn decode_rust_audit_data(compressed: &[u8]) -> Option<RustBinaryAuditData> {
+    let decoder = ZlibDecoder::new(compressed);
+    let mut decoded = Vec::new();
+    let mut limited = decoder.take((MAX_RUST_AUDIT_JSON_SIZE as u64) + 1);
+    if limited.read_to_end(&mut decoded).is_err() || decoded.len() > MAX_RUST_AUDIT_JSON_SIZE {
+        return None;
+    };
+
+    serde_json::from_slice(&decoded).ok()
 }
 
 fn build_rust_binary_package(
@@ -164,12 +173,18 @@ fn create_cargo_purl(name: &str, version: &str) -> Option<String> {
     Some(purl.to_string())
 }
 
+#[cfg(test)]
 fn parse_go_binary(path: &Path) -> Vec<PackageData> {
-    let bytes = match fs::read(path) {
+    let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,
         Err(_) => return Vec::new(),
     };
-    let Some(header_offset) = find_aligned_magic(&bytes) else {
+
+    parse_go_binary_bytes(&bytes)
+}
+
+fn parse_go_binary_bytes(bytes: &[u8]) -> Vec<PackageData> {
+    let Some(header_offset) = find_aligned_magic(bytes) else {
         return Vec::new();
     };
     let header_end = match header_offset.checked_add(GO_BUILD_INFO_HEADER_SIZE) {
@@ -180,7 +195,7 @@ fn parse_go_binary(path: &Path) -> Vec<PackageData> {
     if header.get(15).copied().unwrap_or_default() & 0x2 == 0 {
         return Vec::new();
     }
-    let Some((_go_version, modinfo)) = decode_go_build_info_inline(&bytes, header_offset) else {
+    let Some((_go_version, modinfo)) = decode_go_build_info_inline(bytes, header_offset) else {
         return Vec::new();
     };
 
@@ -307,7 +322,11 @@ fn split_module_path(module_path: &str) -> (Option<String>, String) {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::process::Command;
+
+    use flate2::Compression;
+    use flate2::write::ZlibEncoder;
 
     use super::*;
 
@@ -375,5 +394,19 @@ mod tests {
                 .iter()
                 .all(|pkg| pkg.datasource_id == Some(DatasourceId::GoBinary))
         );
+    }
+
+    #[test]
+    fn decode_rust_audit_data_rejects_oversized_payloads() {
+        let oversized_json = format!(
+            "{{\"packages\":[{{\"name\":\"pkg\",\"version\":\"1.0.0\",\"source\":\"crates.io\",\"dependencies\":[],\"padding\":\"{}\"}}]}}",
+            "a".repeat(MAX_RUST_AUDIT_JSON_SIZE)
+        );
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        std::io::Write::write_all(&mut encoder, oversized_json.as_bytes())
+            .expect("write oversized audit payload");
+        let compressed = encoder.finish().expect("finish audit payload compression");
+
+        assert!(decode_rust_audit_data(&compressed).is_none());
     }
 }
