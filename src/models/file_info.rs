@@ -23,23 +23,29 @@ pub struct FileInfo {
     #[serde(rename = "type")] // name used by ScanCode
     pub file_type: FileType,
     #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub mime_type: Option<String>,
     #[builder(default)]
-    #[serde(rename = "file_type", default)]
+    #[serde(rename = "file_type", skip_serializing_if = "Option::is_none", default)]
     pub file_type_label: Option<String>,
     pub size: u64,
     #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub date: Option<String>,
     #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub sha1: Option<String>,
     #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub md5: Option<String>,
     #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub sha256: Option<String>,
     #[builder(default)]
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub sha1_git: Option<String>,
     #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub programming_language: Option<String>,
     #[builder(default)]
     #[serde(default)]
@@ -78,28 +84,28 @@ pub struct FileInfo {
     #[serde(default)]
     pub scan_errors: Vec<String>,
     #[builder(default)]
-    #[serde(default)]
-    pub license_policy: Vec<LicensePolicyEntry>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub license_policy: Option<Vec<LicensePolicyEntry>>,
     #[builder(default)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub is_generated: Option<bool>,
     #[builder(default)]
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub is_binary: Option<bool>,
     #[builder(default)]
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub is_text: Option<bool>,
     #[builder(default)]
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub is_archive: Option<bool>,
     #[builder(default)]
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub is_media: Option<bool>,
     #[builder(default)]
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub is_source: Option<bool>,
     #[builder(default)]
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub is_script: Option<bool>,
     #[builder(default)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -159,7 +165,7 @@ impl FileInfoBuilder {
             self.for_packages.clone().unwrap_or_default(),
             self.scan_errors.clone().unwrap_or_default(),
         );
-        file_info.license_policy = self.license_policy.clone().unwrap_or_default();
+        file_info.license_policy = self.license_policy.clone().flatten();
         file_info.sha1_git = self.sha1_git.clone().flatten();
         file_info.is_binary = self.is_binary.flatten();
         file_info.is_text = self.is_text.flatten();
@@ -254,7 +260,7 @@ impl FileInfo {
             urls,
             for_packages,
             scan_errors,
-            license_policy: vec![],
+            license_policy: None,
             is_generated: None,
             is_binary: None,
             is_text: None,

@@ -251,6 +251,101 @@ mod tests {
     }
 
     #[test]
+    fn test_file_info_serialization_omits_info_fields_when_unset() {
+        let file = FileInfo::new(
+            "main.rs".to_string(),
+            "main".to_string(),
+            "rs".to_string(),
+            "src/main.rs".to_string(),
+            FileType::File,
+            None,
+            None,
+            42,
+            None,
+            None,
+            None,
+            None,
+            None,
+            vec![],
+            None,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        let value = serde_json::to_value(&file).expect("file info serializes");
+        let object = value.as_object().expect("file info object");
+
+        assert!(!object.contains_key("date"));
+        assert!(!object.contains_key("sha1"));
+        assert!(!object.contains_key("md5"));
+        assert!(!object.contains_key("sha256"));
+        assert!(!object.contains_key("sha1_git"));
+        assert!(!object.contains_key("mime_type"));
+        assert!(!object.contains_key("file_type"));
+        assert!(!object.contains_key("programming_language"));
+        assert!(!object.contains_key("is_binary"));
+        assert!(!object.contains_key("is_text"));
+        assert!(!object.contains_key("is_archive"));
+        assert!(!object.contains_key("is_media"));
+        assert!(!object.contains_key("is_source"));
+        assert!(!object.contains_key("is_script"));
+        assert!(!object.contains_key("license_policy"));
+    }
+
+    #[test]
+    fn test_file_info_serialization_keeps_license_policy_when_enabled() {
+        let mut file = FileInfo::new(
+            "main.rs".to_string(),
+            "main".to_string(),
+            "rs".to_string(),
+            "src/main.rs".to_string(),
+            FileType::File,
+            Some("text/plain".to_string()),
+            Some("text".to_string()),
+            42,
+            Some("2026-01-01T00:00:00Z".to_string()),
+            Some(EMPTY_SHA1.to_string()),
+            Some("d41d8cd98f00b204e9800998ecf8427e".to_string()),
+            Some("e3b0c44298fc1c149afbf4c8996fb924".to_string()),
+            Some("Rust".to_string()),
+            vec![],
+            None,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
+        file.license_policy = Some(vec![]);
+        file.sha1_git = Some(EMPTY_SHA1.to_string());
+        file.is_binary = Some(false);
+        file.is_text = Some(true);
+        file.is_archive = Some(false);
+        file.is_media = Some(false);
+        file.is_source = Some(true);
+        file.is_script = Some(false);
+
+        let value = serde_json::to_value(&file).expect("file info serializes");
+        let object = value.as_object().expect("file info object");
+
+        assert_eq!(object.get("license_policy"), Some(&serde_json::json!([])));
+        assert_eq!(object.get("file_type"), Some(&serde_json::json!("text")));
+        assert_eq!(object.get("is_binary"), Some(&serde_json::json!(false)));
+        assert_eq!(object.get("is_text"), Some(&serde_json::json!(true)));
+    }
+
+    #[test]
     fn test_json_lines_writer_sorts_files_by_path_for_reproducibility() {
         let mut output = sample_output();
         output.files.reverse();

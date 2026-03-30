@@ -13,15 +13,28 @@ struct LicensePolicyFile {
     license_policies: Vec<LicensePolicyEntry>,
 }
 
+enum PolicyFileStatus {
+    Ready(Vec<LicensePolicyEntry>),
+    SoftError(String),
+}
+
 pub(crate) fn apply_license_policy_from_file(
     files: &mut [FileInfo],
     policy_path: &Path,
 ) -> Result<()> {
-    let policy_file = load_license_policy(policy_path)?;
-    apply_license_policy(files, &policy_file.license_policies)
+    match load_license_policy(policy_path)? {
+        PolicyFileStatus::Ready(policies) => apply_license_policy(files, &policies),
+        PolicyFileStatus::SoftError(error) => {
+            for file in files {
+                file.scan_errors.push(error.clone());
+                file.license_policy = Some(vec![]);
+            }
+            Ok(())
+        }
+    }
 }
 
-fn load_license_policy(policy_path: &Path) -> Result<LicensePolicyFile> {
+fn load_license_policy(policy_path: &Path) -> Result<PolicyFileStatus> {
     let policy_text = fs::read_to_string(policy_path).map_err(|err| {
         anyhow!(
             "Failed to read license policy file {:?}: {err}",
@@ -36,21 +49,23 @@ fn load_license_policy(policy_path: &Path) -> Result<LicensePolicyFile> {
     })?;
 
     if policy_file.license_policies.is_empty() {
-        return Err(anyhow!("License policy file {:?} is empty", policy_path));
+        return Ok(PolicyFileStatus::SoftError(format!(
+            "License policy file {:?} is empty",
+            policy_path
+        )));
     }
 
     let mut seen = BTreeSet::new();
     for policy in &policy_file.license_policies {
         if !seen.insert(policy.license_key.clone()) {
-            return Err(anyhow!(
+            return Ok(PolicyFileStatus::SoftError(format!(
                 "License policy file {:?} contains duplicate license key {:?}",
-                policy_path,
-                policy.license_key
-            ));
+                policy_path, policy.license_key
+            )));
         }
     }
 
-    Ok(policy_file)
+    Ok(PolicyFileStatus::Ready(policy_file.license_policies))
 }
 
 fn apply_license_policy(files: &mut [FileInfo], policies: &[LicensePolicyEntry]) -> Result<()> {
@@ -62,7 +77,7 @@ fn apply_license_policy(files: &mut [FileInfo], policies: &[LicensePolicyEntry])
             .cloned()
             .collect();
         matched_policies.sort_by(|left, right| left.license_key.cmp(&right.license_key));
-        file.license_policy = matched_policies;
+        file.license_policy = Some(matched_policies);
     }
 
     Ok(())
@@ -152,13 +167,17 @@ mod tests {
         apply_license_policy_from_file(&mut files, &policy_path)
             .expect("policy application succeeds");
 
-        assert_eq!(files[0].license_policy.len(), 1);
-        assert_eq!(files[0].license_policy[0].license_key, "mit");
-        assert_eq!(files[0].license_policy[0].label, "Approved");
+        let entries = files[0]
+            .license_policy
+            .as_ref()
+            .expect("license policy present");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].license_key, "mit");
+        assert_eq!(entries[0].label, "Approved");
     }
 
     #[test]
-    fn apply_license_policy_rejects_duplicate_license_keys() {
+    fn apply_license_policy_keeps_scan_running_on_duplicate_license_keys() {
         let temp = tempfile::tempdir().expect("temp dir");
         let policy_path = temp.path().join("policy.yml");
         std::fs::write(
@@ -167,10 +186,48 @@ mod tests {
         )
         .expect("policy written");
 
-        let mut files = Vec::new();
-        let error = apply_license_policy_from_file(&mut files, &policy_path)
-            .expect_err("duplicate policy should fail");
+        let mut files = vec![FileInfo::new(
+            "LICENSE".to_string(),
+            "LICENSE".to_string(),
+            String::new(),
+            "LICENSE".to_string(),
+            FileType::File,
+            None,
+            None,
+            0,
+            None,
+            None,
+            None,
+            None,
+            None,
+            vec![],
+            Some("mit".to_string()),
+            vec![LicenseDetection {
+                license_expression: "mit".to_string(),
+                license_expression_spdx: "MIT".to_string(),
+                matches: vec![],
+                detection_log: vec![],
+                identifier: None,
+            }],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        )];
 
-        assert!(error.to_string().contains("duplicate license key"));
+        apply_license_policy_from_file(&mut files, &policy_path)
+            .expect("duplicate policy should not abort scan");
+
+        assert_eq!(files[0].license_policy, Some(vec![]));
+        assert!(
+            files[0]
+                .scan_errors
+                .iter()
+                .any(|error| error.contains("duplicate license key"))
+        );
     }
 }
