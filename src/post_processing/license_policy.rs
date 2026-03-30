@@ -56,11 +56,13 @@ fn load_license_policy(policy_path: &Path) -> Result<LicensePolicyFile> {
 fn apply_license_policy(files: &mut [FileInfo], policies: &[LicensePolicyEntry]) -> Result<()> {
     for file in files {
         let license_keys = file_license_keys(file)?;
-        file.license_policy = policies
+        let mut matched_policies: Vec<_> = policies
             .iter()
             .filter(|policy| license_keys.contains(&policy.license_key))
             .cloned()
             .collect();
+        matched_policies.sort_by(|left, right| left.license_key.cmp(&right.license_key));
+        file.license_policy = matched_policies;
     }
 
     Ok(())
@@ -120,6 +122,7 @@ mod tests {
             String::new(),
             "LICENSE".to_string(),
             FileType::File,
+            None,
             None,
             0,
             None,

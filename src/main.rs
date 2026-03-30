@@ -159,11 +159,9 @@ fn run() -> Result<()> {
             cli.package || cli.package_in_compiled || cli.package_only;
         let enable_system_packages = cli.system_package || cli.package_only;
         let enable_packages = enable_application_packages || enable_system_packages;
-        // If --package-only is requested, restrict other text-detection features to
-        // minimize work and match upstream "package-only" semantics.
         let (detect_copyrights, detect_emails, detect_urls, detect_generated) = if cli.package_only
         {
-            (false, false, false, cli.generated)
+            (false, cli.email, cli.url, cli.generated)
         } else {
             (cli.copyright, cli.email, cli.url, cli.generated)
         };

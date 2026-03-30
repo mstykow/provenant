@@ -34,23 +34,38 @@ pub(crate) fn write_html_report(output: &Output, writer: &mut dyn Write) -> io::
         file_row.insert("md5".to_string(), html_opt(file.md5.as_deref()));
         file_row.insert("files_count".to_string(), String::new());
         file_row.insert("mime_type".to_string(), html_opt(file.mime_type.as_deref()));
-        file_row.insert("file_type".to_string(), html_opt(None));
+        file_row.insert(
+            "file_type".to_string(),
+            html_opt(file.file_type_label.as_deref()),
+        );
         file_row.insert(
             "programming_language".to_string(),
             html_opt(file.programming_language.as_deref()),
         );
-        file_row.insert("is_binary".to_string(), html_bool(false).to_string());
+        file_row.insert(
+            "is_binary".to_string(),
+            html_bool(file.is_binary.unwrap_or(false)).to_string(),
+        );
         file_row.insert(
             "is_text".to_string(),
-            html_bool(file.file_type == FileType::File).to_string(),
+            html_bool(file.is_text.unwrap_or(false)).to_string(),
         );
-        file_row.insert("is_archive".to_string(), html_bool(false).to_string());
-        file_row.insert("is_media".to_string(), html_bool(false).to_string());
+        file_row.insert(
+            "is_archive".to_string(),
+            html_bool(file.is_archive.unwrap_or(false)).to_string(),
+        );
+        file_row.insert(
+            "is_media".to_string(),
+            html_bool(file.is_media.unwrap_or(false)).to_string(),
+        );
         file_row.insert(
             "is_source".to_string(),
-            html_bool(file.programming_language.is_some()).to_string(),
+            html_bool(file.is_source.unwrap_or(false)).to_string(),
         );
-        file_row.insert("is_script".to_string(), html_bool(false).to_string());
+        file_row.insert(
+            "is_script".to_string(),
+            html_bool(file.is_script.unwrap_or(false)).to_string(),
+        );
         file_rows.push(file_row);
 
         for c in &file.copyrights {
