@@ -1,0 +1,13 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Comment: Generated with Provenant and provided on an "AS IS" BASIS, WITHOUT WARRANTIES
+         OR CONDITIONS OF ANY KIND, either express or implied. No content created from
+         Provenant should be considered or used as legal advice. Consult an attorney
+         for legal advice.
+         Provenant is a free software code scanning tool.
+         Visit https://github.com/mstykow/provenant/ for support and download.
+
+Files: scan/src/main.rs
+Copyright: Example Org
+License: mit
+ Permission is hereby granted.
+

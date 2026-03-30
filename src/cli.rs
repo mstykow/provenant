@@ -85,7 +85,7 @@ fn parse_license_policy_arg(value: &str) -> Result<String, String> {
     )
 )]
 pub struct Cli {
-    /// Directory path to scan
+    /// File or directory path to scan
     #[arg(required = false)]
     pub dir_path: Vec<String>,
 

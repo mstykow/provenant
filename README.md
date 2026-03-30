@@ -73,7 +73,7 @@ Cargo places the compiled binary under `target/release/`.
 ## Usage
 
 ```sh
-provenant --json-pp <FILE> [OPTIONS] <DIR_PATH>...
+provenant --json-pp <FILE> [OPTIONS] <INPUT>...
 ```
 
 At least one output option is required.
@@ -124,12 +124,11 @@ Implemented output formats include:
 - YAML
 - JSON Lines
 - CSV
+- Debian copyright
 - SPDX, Tag-Value and RDF/XML
 - CycloneDX, JSON and XML
 - HTML report
 - Custom template rendering
-
-Additional parity-oriented outputs exist in the codebase, but this README focuses on the primary user-facing formats above.
 
 Output architecture and compatibility approach are documented in:
 
