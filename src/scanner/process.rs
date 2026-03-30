@@ -1,6 +1,8 @@
+use content_inspector::{ContentType, inspect};
+
 use crate::license_detection::LicenseDetectionEngine;
 use crate::parsers::try_parse_file;
-use crate::utils::hash::{calculate_md5, calculate_sha1, calculate_sha256};
+use crate::utils::hash::{calculate_md5, calculate_sha1, calculate_sha1_git, calculate_sha256};
 use crate::utils::language::detect_language;
 use crate::utils::text::{is_source, remove_verbatim_escape_sequences};
 use anyhow::Error;
@@ -121,14 +123,19 @@ fn process_file(
         )
         .path(path.to_string_lossy().to_string())
         .file_type(FileType::File)
-        .mime_type(Some(
+        .mime_type(text_options.collect_info.then(|| {
             from_path(path)
                 .first_or_octet_stream()
                 .essence_str()
-                .to_string(),
-        ))
+                .to_string()
+        }))
         .size(metadata.len())
-        .date(get_creation_date(metadata))
+        .date(
+            text_options
+                .collect_info
+                .then(|| get_creation_date(metadata))
+                .flatten(),
+        )
         .scan_errors(scan_errors)
         .build()
         .expect("FileInformationBuild not completely initialized");
@@ -194,12 +201,33 @@ fn extract_information_from_content(
     let is_generated = text_options
         .detect_generated
         .then(|| !generated_code_hints_from_bytes(&buffer).is_empty());
+    let programming_language = detect_language(path, &buffer);
 
-    file_info_builder
-        .sha1(Some(calculate_sha1(&buffer)))
-        .md5(Some(calculate_md5(&buffer)))
-        .sha256(Some(sha256.clone()))
-        .programming_language(Some(detect_language(path, &buffer)));
+    if text_options.collect_info {
+        let mime_type = from_path(path)
+            .first_or_octet_stream()
+            .essence_str()
+            .to_string();
+        let (is_binary, is_text, is_archive, is_media, is_script) = detect_info_flags(
+            path,
+            &buffer,
+            &mime_type,
+            Some(programming_language.as_str()),
+        );
+
+        file_info_builder
+            .sha1(Some(calculate_sha1(&buffer)))
+            .md5(Some(calculate_md5(&buffer)))
+            .sha256(Some(sha256.clone()))
+            .programming_language(Some(programming_language.clone()))
+            .mime_type(Some(mime_type))
+            .sha1_git(Some(calculate_sha1_git(&buffer)))
+            .is_binary(Some(is_binary))
+            .is_text(Some(is_text))
+            .is_archive(Some(is_archive))
+            .is_media(Some(is_media))
+            .is_script(Some(is_script));
+    }
 
     if should_skip_text_detection(path, &buffer) {
         return Ok(is_generated);
@@ -318,7 +346,8 @@ fn scan_cache_fingerprint(
     license_enabled: bool,
 ) -> String {
     format!(
-        "packages={};copyrights={};emails={};urls={};max_emails={};max_urls={};timeout={:.6};license_enabled={};license_text={};license_text_diagnostics={};license_diagnostics={};unknown_licenses={};license_score={}",
+        "info={};packages={};copyrights={};emails={};urls={};max_emails={};max_urls={};timeout={:.6};license_enabled={};license_text={};license_text_diagnostics={};license_diagnostics={};unknown_licenses={};license_score={}",
+        text_options.collect_info,
         text_options.detect_packages,
         text_options.detect_copyrights,
         text_options.detect_emails,
@@ -333,6 +362,59 @@ fn scan_cache_fingerprint(
         license_options.unknown_licenses,
         license_options.min_score,
     )
+}
+
+fn detect_info_flags(
+    path: &Path,
+    buffer: &[u8],
+    mime_type: &str,
+    programming_language: Option<&str>,
+) -> (bool, bool, bool, bool, bool) {
+    let is_binary = matches!(inspect(buffer), ContentType::BINARY);
+    let is_text = !is_binary;
+    let is_media = mime_type.starts_with("image/")
+        || mime_type.starts_with("audio/")
+        || mime_type.starts_with("video/");
+    let lower_extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase());
+    let is_archive = matches!(
+        lower_extension.as_deref(),
+        Some(
+            "zip"
+                | "jar"
+                | "war"
+                | "ear"
+                | "tar"
+                | "gz"
+                | "tgz"
+                | "bz2"
+                | "xz"
+                | "7z"
+                | "rar"
+                | "apk"
+                | "deb"
+                | "rpm"
+                | "whl"
+                | "crate"
+        )
+    ) || mime_type.contains("zip")
+        || mime_type.contains("compressed")
+        || mime_type.contains("tar")
+        || mime_type.contains("x-rpm")
+        || mime_type.contains("debian");
+    let is_script = buffer.starts_with(b"#!")
+        || matches!(
+            lower_extension.as_deref(),
+            Some("sh" | "bash" | "zsh" | "fish" | "py" | "rb" | "pl" | "php" | "js" | "ts")
+        )
+        || matches!(
+            programming_language,
+            Some("Python" | "Ruby" | "PHP" | "JavaScript" | "TypeScript" | "Shell")
+        );
+
+    (is_binary, is_text, is_archive, is_media, is_script)
 }
 
 fn extract_copyright_information(
@@ -827,10 +909,11 @@ fn process_directory(
         file_type: FileType::Directory,
         mime_type: None,
         size: 0,
-        date: get_creation_date(metadata),
+        date: collect_info.then(|| get_creation_date(metadata)).flatten(),
         sha1: None,
         md5: None,
         sha256: None,
+        sha1_git: None,
         programming_language: None,
         package_data: Vec::new(), // TODO: implement
         license_expression: None,
@@ -844,7 +927,12 @@ fn process_directory(
         urls: Vec::new(),       // TODO: implement
         for_packages: Vec::new(),
         scan_errors: Vec::new(),
+        is_binary: collect_info.then_some(false),
+        is_text: collect_info.then_some(false),
+        is_archive: collect_info.then_some(false),
+        is_media: collect_info.then_some(false),
         is_source: collect_info.then_some(false),
+        is_script: collect_info.then_some(false),
         source_count: None,
         is_legal: false,
         is_manifest: false,
