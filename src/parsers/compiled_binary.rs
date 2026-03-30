@@ -8,9 +8,26 @@ use packageurl::PackageUrl;
 use serde::Deserialize;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
+use crate::register_parser;
 
 use super::ParsePackagesResult;
 use super::go::create_golang_purl;
+
+register_parser!(
+    "Go compiled binary with embedded build info",
+    &["<compiled Go binaries with Go build info>"],
+    "golang",
+    "Go",
+    Some("https://pkg.go.dev/runtime/debug#BuildInfo"),
+);
+
+register_parser!(
+    "Rust compiled binary with cargo-auditable dependency section",
+    &["<compiled Rust binaries with .dep-v0 sections>"],
+    "cargo",
+    "Rust",
+    Some("https://github.com/rust-secure-code/cargo-auditable"),
+);
 
 #[derive(Debug, Deserialize)]
 struct RustBinaryAuditData {
