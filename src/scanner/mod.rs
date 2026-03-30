@@ -56,9 +56,9 @@ impl Default for TextDetectionOptions {
     }
 }
 
-#[allow(unused_imports)]
 pub use self::collect::{CollectedPaths, collect_paths};
-pub use self::process::process_collected;
+#[allow(unused_imports)]
+pub use self::process::{process_collected, process_collected_with_memory_limit};
 
 #[cfg(test)]
 mod tests {
@@ -73,7 +73,10 @@ mod tests {
     use crate::models::FileType;
     use crate::progress::{ProgressMode, ScanProgress};
 
-    use super::{LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected};
+    use super::{
+        LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected,
+        process_collected_with_memory_limit,
+    };
 
     #[test]
     fn default_options_keep_copyright_detection_enabled() {
@@ -661,5 +664,70 @@ mod tests {
         assert_eq!(collected.files.len(), 1);
         assert!(collected.directories.is_empty());
         assert_eq!(collected.files[0].0, file_path);
+    }
+
+    #[test]
+    fn process_collected_with_memory_limit_preserves_results_when_spilling() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        fs::write(temp_dir.path().join("a.txt"), "hello").expect("write first file");
+        fs::write(temp_dir.path().join("b.txt"), "world").expect("write second file");
+
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+        let result = process_collected_with_memory_limit(
+            &collected,
+            Arc::new(ScanProgress::new(ProgressMode::Quiet)),
+            None,
+            LicenseScanOptions::default(),
+            &TextDetectionOptions {
+                collect_info: false,
+                detect_packages: false,
+                detect_application_packages: false,
+                detect_system_packages: false,
+                detect_packages_in_compiled: false,
+                detect_copyrights: false,
+                detect_generated: false,
+                detect_emails: false,
+                detect_urls: false,
+                max_emails: 50,
+                max_urls: 50,
+                timeout_seconds: 120.0,
+                scan_cache_dir: None,
+            },
+            1,
+        );
+
+        assert_eq!(result.files.len(), 3);
+    }
+
+    #[test]
+    fn process_collected_with_negative_one_uses_disk_only_mode() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        fs::write(temp_dir.path().join("a.txt"), "hello").expect("write first file");
+
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+        let result = process_collected_with_memory_limit(
+            &collected,
+            Arc::new(ScanProgress::new(ProgressMode::Quiet)),
+            None,
+            LicenseScanOptions::default(),
+            &TextDetectionOptions {
+                collect_info: false,
+                detect_packages: false,
+                detect_application_packages: false,
+                detect_system_packages: false,
+                detect_packages_in_compiled: false,
+                detect_copyrights: false,
+                detect_generated: false,
+                detect_emails: false,
+                detect_urls: false,
+                max_emails: 50,
+                max_urls: 50,
+                timeout_seconds: 120.0,
+                scan_cache_dir: None,
+            },
+            -1,
+        );
+
+        assert_eq!(result.files.len(), 2);
     }
 }

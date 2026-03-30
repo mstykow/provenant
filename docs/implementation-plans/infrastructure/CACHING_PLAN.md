@@ -64,7 +64,7 @@ Persistent caching of scan results and compiled data structures to speed up repe
 - ✅ `src/cache/scan_cache.rs`: scan-result cache payload model + read/write helpers with metadata-key invalidation
 - ✅ `src/scanner/process.rs`: cache read-before-scan and write-after-scan integration
 - ✅ `src/main.rs`: cache bootstrap wiring with `PROVENANT_CACHE` + CLI overrides
-- ✅ CLI flags parsed and wired: `--cache <kind>`, `--cache-dir`, `--cache-clear`, `--max-in-memory` (placeholder semantics documented)
+- ✅ CLI flags parsed and wired: `--cache <kind>`, `--cache-dir`, `--cache-clear`, `--max-in-memory` (with parity-aligned `10000` / `0` / `-1` semantics and in-run spill behavior)
 
 **Missing:**
 

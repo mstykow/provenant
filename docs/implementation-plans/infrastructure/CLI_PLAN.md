@@ -139,16 +139,16 @@ CLI backlog, including upstream flags that would otherwise remain implicit gaps.
 
 ### Cache & Rust-Specific Extras
 
-| Flag                 | What it does                                        | Status          | Notes                                                                                                     |
-| -------------------- | --------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------- |
-| `--cache <kind>`     | Opts into specific persistent cache kinds           | `Done`          | Repeated/CSV flag; currently only `scan-results` is implemented.                                          |
-| `--cache-dir`        | Chooses the shared persistent cache root            | `Done`          | Root selector only; does not enable caching by itself.                                                    |
-| `--cache-clear`      | Clears the selected persistent cache root           | `Done`          | Clears cache state before scanning without implicitly enabling caches.                                    |
-| `--max-in-memory`    | Caps in-memory scan buffering before spill behavior | `Partial`       | Currently parse-only; upstream default `10000`, `-1` acceptance, and spill semantics are not yet matched. |
-| `--no-assemble`      | Skips package assembly after manifest detection     | `Rust-specific` | Provenant-only convenience; Python ScanCode always assembles.                                             |
-| `--no-cache`         | Disables Provenant caching                          | `Won't do`      | No longer needed because persistent caches are opt-in by default.                                         |
-| `--incremental`      | Enables future incremental scan behavior            | `Rust-specific` | Beyond-parity idea; deferred until the caching model is robust.                                           |
-| `--show_attribution` | Prints embedded-data attribution notices            | `Rust-specific` | Provenant-only convenience for bundled license-detection data notices.                                    |
+| Flag                 | What it does                                        | Status          | Notes                                                                                                                                                                                                                   |
+| -------------------- | --------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--cache <kind>`     | Opts into specific persistent cache kinds           | `Done`          | Repeated/CSV flag; currently only `scan-results` is implemented.                                                                                                                                                        |
+| `--cache-dir`        | Chooses the shared persistent cache root            | `Done`          | Root selector only; does not enable caching by itself.                                                                                                                                                                  |
+| `--cache-clear`      | Clears the selected persistent cache root           | `Done`          | Clears cache state before scanning without implicitly enabling caches.                                                                                                                                                  |
+| `--max-in-memory`    | Caps in-memory scan buffering before spill behavior | `Done`          | Matches the current ScanCode-facing CLI contract: default `10000`, `0` for unlimited memory, `-1` for disk-only scan-detail spill, and bounded in-run spill of processed file details before post-scan output assembly. |
+| `--no-assemble`      | Skips package assembly after manifest detection     | `Rust-specific` | Provenant-only convenience; Python ScanCode always assembles.                                                                                                                                                           |
+| `--no-cache`         | Disables Provenant caching                          | `Won't do`      | No longer needed because persistent caches are opt-in by default.                                                                                                                                                       |
+| `--incremental`      | Enables future incremental scan behavior            | `Rust-specific` | Beyond-parity idea; deferred until the caching model is robust.                                                                                                                                                         |
+| `--show_attribution` | Prints embedded-data attribution notices            | `Rust-specific` | Provenant-only convenience for bundled license-detection data notices.                                                                                                                                                  |
 
 ## Key Design Decisions
 

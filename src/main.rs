@@ -24,7 +24,9 @@ use crate::scan_result_shaping::{
     normalize_paths, normalize_top_level_output_paths, prepare_filter_clue_rule_lookup,
     resolve_native_scan_inputs, trim_preloaded_assembly_to_files,
 };
-use crate::scanner::{LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected};
+use crate::scanner::{
+    LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected_with_memory_limit,
+};
 
 mod assembly;
 mod cache;
@@ -194,12 +196,13 @@ fn run() -> Result<()> {
             min_score: cli.license_score,
         };
         let mut result = run_with_thread_pool(thread_count, || {
-            Ok(process_collected(
+            Ok(process_collected_with_memory_limit(
                 &collected,
                 Arc::clone(&progress),
                 license_engine.clone(),
                 license_options,
                 &text_options,
+                cli.max_in_memory,
             ))
         })?;
 

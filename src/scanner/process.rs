@@ -8,7 +8,8 @@ use crate::utils::text::{is_source, remove_verbatim_escape_sequences};
 use anyhow::Error;
 use mime_guess::from_path;
 use rayon::prelude::*;
-use std::fs::{self};
+use std::fs::{self, File};
+use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -29,6 +30,7 @@ use crate::scanner::collect::CollectedPaths;
 use crate::scanner::{LicenseScanOptions, ProcessResult, TextDetectionOptions};
 use crate::utils::file::{ExtractedTextKind, extract_text_for_detection, get_creation_date};
 use crate::utils::generated::generated_code_hints_from_bytes;
+use tempfile::TempDir;
 
 const PEM_CERTIFICATE_HEADERS: &[(&str, &str)] = &[
     ("-----BEGIN CERTIFICATE-----", "-----END CERTIFICATE-----"),
@@ -73,6 +75,167 @@ pub fn process_collected(
     ProcessResult {
         files: all_files,
         excluded_count: collected.excluded_count,
+    }
+}
+
+pub fn process_collected_with_memory_limit(
+    collected: &CollectedPaths,
+    progress: Arc<ScanProgress>,
+    license_engine: Option<Arc<LicenseDetectionEngine>>,
+    license_options: LicenseScanOptions,
+    text_options: &TextDetectionOptions,
+    max_in_memory: i64,
+) -> ProcessResult {
+    if max_in_memory == 0 {
+        return process_collected(
+            collected,
+            progress,
+            license_engine,
+            license_options,
+            text_options,
+        );
+    }
+
+    let memory_limit = if max_in_memory < 0 {
+        0
+    } else {
+        max_in_memory as usize
+    };
+    let chunk_size = if max_in_memory < 0 {
+        256
+    } else {
+        memory_limit.max(1)
+    };
+
+    let mut retained_files = Vec::new();
+    let mut spill_store = None;
+
+    for chunk in collected.files.chunks(chunk_size) {
+        let processed_chunk: Vec<FileInfo> = chunk
+            .par_iter()
+            .map(|(path, metadata)| {
+                let file_entry = process_file(
+                    path,
+                    metadata,
+                    license_engine.clone(),
+                    license_options,
+                    text_options,
+                );
+                progress.file_completed(path, metadata.len(), &file_entry.scan_errors);
+                file_entry
+            })
+            .collect();
+
+        retain_or_spill_chunk(
+            processed_chunk,
+            &mut retained_files,
+            &mut spill_store,
+            memory_limit,
+        );
+    }
+
+    for (path, metadata) in &collected.directories {
+        let entry = process_directory(
+            path,
+            metadata,
+            text_options.collect_info,
+            license_engine.is_some(),
+        );
+        retain_or_spill_chunk(
+            vec![entry],
+            &mut retained_files,
+            &mut spill_store,
+            memory_limit,
+        );
+    }
+
+    if let Some(spill_store) = spill_store {
+        retained_files.extend(spill_store.load_all());
+    }
+
+    ProcessResult {
+        files: retained_files,
+        excluded_count: collected.excluded_count,
+    }
+}
+
+fn retain_or_spill_chunk(
+    chunk: Vec<FileInfo>,
+    retained_files: &mut Vec<FileInfo>,
+    spill_store: &mut Option<FileInfoSpillStore>,
+    memory_limit: usize,
+) {
+    if memory_limit == 0 {
+        spill_store
+            .get_or_insert_with(FileInfoSpillStore::new)
+            .spill(chunk);
+        return;
+    }
+
+    let remaining_capacity = memory_limit.saturating_sub(retained_files.len());
+    if remaining_capacity >= chunk.len() && spill_store.is_none() {
+        retained_files.extend(chunk);
+        return;
+    }
+
+    let mut chunk_iter = chunk.into_iter();
+    retained_files.extend(chunk_iter.by_ref().take(remaining_capacity));
+    let overflow: Vec<FileInfo> = chunk_iter.collect();
+    if !overflow.is_empty() {
+        spill_store
+            .get_or_insert_with(FileInfoSpillStore::new)
+            .spill(overflow);
+    }
+}
+
+struct FileInfoSpillStore {
+    temp_dir: TempDir,
+    batch_index: usize,
+}
+
+impl FileInfoSpillStore {
+    fn new() -> Self {
+        Self {
+            temp_dir: TempDir::new().expect("create spill dir"),
+            batch_index: 0,
+        }
+    }
+
+    fn spill(&mut self, files: Vec<FileInfo>) {
+        let path = self
+            .temp_dir
+            .path()
+            .join(format!("batch-{:06}.msgpack.zst", self.batch_index));
+        self.batch_index += 1;
+
+        let payload = serde_json::to_vec(&files).expect("encode spilled file batch");
+        let file = File::create(path).expect("create spill batch file");
+        let mut encoder = zstd::Encoder::new(file, 3).expect("create spill encoder");
+        encoder
+            .write_all(&payload)
+            .expect("write spilled file batch");
+        encoder.finish().expect("finish spill encoder");
+    }
+
+    fn load_all(self) -> Vec<FileInfo> {
+        let mut paths: Vec<_> = fs::read_dir(self.temp_dir.path())
+            .expect("read spill dir")
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .collect();
+        paths.sort();
+
+        let mut files = Vec::new();
+        for path in paths {
+            let file = File::open(path).expect("open spill batch");
+            let mut decoder = zstd::Decoder::new(file).expect("create spill decoder");
+            let mut payload = Vec::new();
+            decoder.read_to_end(&mut payload).expect("read spill batch");
+            let mut batch: Vec<FileInfo> =
+                serde_json::from_slice(&payload).expect("decode spilled file batch");
+            files.append(&mut batch);
+        }
+        files
     }
 }
 

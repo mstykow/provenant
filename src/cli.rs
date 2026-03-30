@@ -164,8 +164,14 @@ pub struct Cli {
     #[arg(long = "cache-clear")]
     pub cache_clear: bool,
 
-    #[arg(long = "max-in-memory", value_name = "INT")]
-    pub max_in_memory: Option<usize>,
+    #[arg(
+        long = "max-in-memory",
+        value_name = "INT",
+        default_value_t = 10000,
+        value_parser = parse_max_in_memory,
+        allow_hyphen_values = true
+    )]
+    pub max_in_memory: i64,
 
     #[arg(short = 'i', long)]
     pub info: bool,
@@ -316,6 +322,16 @@ pub struct Cli {
 fn default_processes() -> i32 {
     let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
     if cpus > 1 { (cpus - 1) as i32 } else { 1 }
+}
+
+fn parse_max_in_memory(value: &str) -> Result<i64, String> {
+    let parsed = value
+        .parse::<i64>()
+        .map_err(|_| format!("invalid integer value: {value}"))?;
+    if parsed < -1 {
+        return Err("--max-in-memory must be -1, 0, or a positive integer".to_string());
+    }
+    Ok(parsed)
 }
 
 #[derive(Debug, Clone)]
@@ -1089,7 +1105,51 @@ mod tests {
         assert_eq!(parsed.cache_dir.as_deref(), Some("/tmp/sc-cache"));
         assert_eq!(parsed.cache, vec![CacheKind::ScanResults]);
         assert!(parsed.cache_clear);
-        assert_eq!(parsed.max_in_memory, Some(5000));
+        assert_eq!(parsed.max_in_memory, 5000);
+    }
+
+    #[test]
+    fn test_max_in_memory_defaults_and_special_values() {
+        let default_parsed =
+            Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "samples"])
+                .expect("default max-in-memory should parse");
+        assert_eq!(default_parsed.max_in_memory, 10000);
+
+        let disk_only = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--max-in-memory",
+            "-1",
+            "samples",
+        ])
+        .expect("-1 should parse");
+        assert_eq!(disk_only.max_in_memory, -1);
+
+        let unlimited = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--max-in-memory",
+            "0",
+            "samples",
+        ])
+        .expect("0 should parse");
+        assert_eq!(unlimited.max_in_memory, 0);
+    }
+
+    #[test]
+    fn test_max_in_memory_rejects_values_below_negative_one() {
+        let result = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--max-in-memory",
+            "-2",
+            "samples",
+        ]);
+
+        assert!(result.is_err());
     }
 
     #[test]
