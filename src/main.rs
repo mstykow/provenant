@@ -19,10 +19,10 @@ use crate::post_processing::{
 use crate::progress::{ProgressMode, ScanProgress};
 use crate::scan_result_shaping::{
     apply_cli_path_selection_filter, apply_ignore_resource_filter, apply_mark_source,
-    apply_only_findings_filter, apply_package_only_filter, apply_user_path_filters_to_collected,
-    filter_redundant_clues, filter_redundant_clues_with_rules, load_and_merge_json_inputs,
-    normalize_paths, normalize_top_level_output_paths, prepare_filter_clue_rule_lookup,
-    resolve_native_scan_inputs, trim_preloaded_assembly_to_files,
+    apply_only_findings_filter, apply_user_path_filters_to_collected, filter_redundant_clues,
+    filter_redundant_clues_with_rules, load_and_merge_json_inputs, normalize_paths,
+    normalize_top_level_output_paths, prepare_filter_clue_rule_lookup, resolve_native_scan_inputs,
+    trim_preloaded_assembly_to_files,
 };
 use crate::scanner::{
     LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected_with_memory_limit,
@@ -254,11 +254,6 @@ fn run() -> Result<()> {
 
     for file in &mut scan_result.files {
         file.backfill_license_provenance();
-    }
-
-    if cli.package_only {
-        // Restrict output to files that contain package evidence only (and their ancestor dirs).
-        apply_package_only_filter(&mut scan_result.files);
     }
 
     if let Some(policy_path) = cli.license_policy.as_deref() {

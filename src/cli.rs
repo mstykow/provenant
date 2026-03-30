@@ -195,7 +195,7 @@ pub struct Cli {
     #[arg(long = "package-in-compiled")]
     pub package_in_compiled: bool,
 
-    /// Restrict output and scanning to package-focused results only
+    /// Scan for system and application package data and skip license/copyright detection and top-level package creation.
     #[arg(
         long = "package-only",
         conflicts_with_all = ["license", "summary", "package", "system_package"]

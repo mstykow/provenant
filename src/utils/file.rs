@@ -23,9 +23,9 @@ pub enum ExtractedTextKind {
 const MAX_IMAGE_METADATA_VALUES: usize = 64;
 const MAX_IMAGE_METADATA_TEXT_BYTES: usize = 32 * 1024;
 
-/// Get the creation date of a file or directory as an RFC3339 string.
+/// Get the last modified date of a file or directory as an RFC3339 string.
 pub fn get_creation_date(metadata: &fs::Metadata) -> Option<String> {
-    metadata.created().ok().map(|time: std::time::SystemTime| {
+    metadata.modified().ok().map(|time: std::time::SystemTime| {
         let seconds_since_epoch = time
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
