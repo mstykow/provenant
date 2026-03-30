@@ -47,6 +47,7 @@ mod facet_test;
 mod generated_test;
 #[cfg(all(test, feature = "golden-tests"))]
 mod golden_test;
+pub(crate) mod license_policy;
 #[cfg(test)]
 mod output_test;
 #[cfg(test)]
