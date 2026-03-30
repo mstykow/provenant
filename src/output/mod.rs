@@ -5,6 +5,7 @@ use crate::models::Output;
 
 mod csv;
 mod cyclonedx;
+mod debian;
 mod html;
 mod html_app;
 mod jsonl;
@@ -23,6 +24,7 @@ pub enum OutputFormat {
     Yaml,
     Csv,
     JsonLines,
+    Debian,
     Html,
     HtmlApp,
     CustomTemplate,
@@ -75,6 +77,7 @@ impl OutputWriter for FormatWriter {
             OutputFormat::Yaml => write_yaml(output, writer),
             OutputFormat::Csv => csv::write_csv(output, writer),
             OutputFormat::JsonLines => jsonl::write_json_lines(output, writer),
+            OutputFormat::Debian => debian::write_debian_copyright(output, writer),
             OutputFormat::Html => html::write_html_report(output, writer),
             OutputFormat::CustomTemplate => template::write_custom_template(output, writer, config),
             OutputFormat::SpdxTv => spdx::write_spdx_tag_value(output, writer, config),
@@ -157,6 +160,93 @@ mod tests {
         for line in lines {
             serde_json::from_str::<Value>(line).expect("each line should be valid json");
         }
+    }
+
+    #[test]
+    fn test_debian_writer_outputs_dep5_style_document() {
+        let mut output = sample_output();
+        output.files[0].license_expression = Some("mit".to_string());
+        output.files[0].license_detections[0].matches[0].matched_text = Some(
+            "Permission is hereby granted, free of charge, to any person obtaining a copy"
+                .to_string(),
+        );
+
+        let mut bytes = Vec::new();
+        writer_for_format(OutputFormat::Debian)
+            .write(&output, &mut bytes, &OutputWriteConfig::default())
+            .expect("debian write should succeed");
+
+        let rendered = String::from_utf8(bytes).expect("debian output should be utf-8");
+        assert!(rendered.contains(
+            "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/"
+        ));
+        assert!(rendered.contains("Comment: Generated with Provenant"));
+        assert!(rendered.contains("Files: src/main.rs"));
+        assert!(rendered.contains("Copyright: Example Org"));
+        assert!(rendered.contains("License: mit"));
+        assert!(rendered.contains(" Permission is hereby granted, free of charge"));
+    }
+
+    #[test]
+    fn test_debian_writer_skips_directories_and_deduplicates_license_texts() {
+        let mut output = sample_output();
+        output.files.insert(
+            0,
+            FileInfo::new(
+                "src".to_string(),
+                "src".to_string(),
+                String::new(),
+                "src".to_string(),
+                FileType::Directory,
+                None,
+                0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                vec![],
+                None,
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            ),
+        );
+        output.files[1].license_expression = Some("mit".to_string());
+        output.files[1].license_detections[0].matches[0].matched_text =
+            Some("Same text".to_string());
+        output.files[1].license_detections[0].matches.push(Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: Some("src/main.rs".to_string()),
+            start_line: 1,
+            end_line: 1,
+            matcher: Some("2-aho".to_string()),
+            score: 100.0,
+            matched_length: Some(1),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("mit_rule".to_string()),
+            rule_url: None,
+            matched_text: Some("Same text again".to_string()),
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        });
+
+        let mut bytes = Vec::new();
+        writer_for_format(OutputFormat::Debian)
+            .write(&output, &mut bytes, &OutputWriteConfig::default())
+            .expect("debian write should succeed");
+
+        let rendered = String::from_utf8(bytes).expect("debian output should be utf-8");
+        assert!(!rendered.contains("Files: src\n"));
+        assert_eq!(rendered.matches(" Same text").count(), 1);
     }
 
     #[test]

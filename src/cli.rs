@@ -24,6 +24,7 @@ use crate::output::OutputFormat;
                 "output_json_lines",
                 "output_yaml",
                 "output_csv",
+                "output_debian",
                 "output_html",
                 "output_html_app",
                 "output_spdx_tv",
@@ -59,6 +60,15 @@ pub struct Cli {
     /// [DEPRECATED in Python] Write scan output as CSV to FILE
     #[arg(long = "csv", value_name = "FILE", allow_hyphen_values = true)]
     pub output_csv: Option<String>,
+
+    /// Write scan output in machine-readable Debian copyright format to FILE
+    #[arg(
+        long = "debian",
+        value_name = "FILE",
+        allow_hyphen_values = true,
+        requires_all = ["copyright", "license", "license_text"]
+    )]
+    pub output_debian: Option<String>,
 
     /// Write scan output as HTML report to FILE
     #[arg(long = "html", value_name = "FILE", allow_hyphen_values = true)]
@@ -341,6 +351,14 @@ impl Cli {
             });
         }
 
+        if let Some(file) = &self.output_debian {
+            targets.push(OutputTarget {
+                format: OutputFormat::Debian,
+                file: file.clone(),
+                custom_template: None,
+            });
+        }
+
         if let Some(file) = &self.output_html {
             targets.push(OutputTarget {
                 format: OutputFormat::Html,
@@ -427,6 +445,34 @@ mod tests {
             .expect("cli parse should allow stdout dash output target");
 
         assert_eq!(parsed.output_json_pp.as_deref(), Some("-"));
+    }
+
+    #[test]
+    fn test_debian_requires_license_copyright_and_license_text() {
+        let missing_license_text = Cli::try_parse_from([
+            "provenant",
+            "--debian",
+            "scan.copyright",
+            "--license",
+            "--copyright",
+            "samples",
+        ]);
+        assert!(missing_license_text.is_err());
+
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--debian",
+            "scan.copyright",
+            "--license",
+            "--copyright",
+            "--license-text",
+            "samples",
+        ])
+        .expect("cli parse should accept debian output");
+
+        assert_eq!(parsed.output_targets().len(), 1);
+        assert_eq!(parsed.output_targets()[0].format, OutputFormat::Debian);
+        assert_eq!(parsed.output_debian.as_deref(), Some("scan.copyright"));
     }
 
     #[test]
