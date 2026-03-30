@@ -29,7 +29,9 @@ pub(crate) fn apply_license_policy_from_file(
         }
         PolicyFileStatus::SoftError(error) => {
             for file in files {
-                file.license_policy = Some(vec![]);
+                if file.file_type == crate::models::FileType::File {
+                    file.license_policy = Some(vec![]);
+                }
             }
             Ok(vec![error])
         }
@@ -72,6 +74,9 @@ fn load_license_policy(policy_path: &Path) -> Result<PolicyFileStatus> {
 
 fn apply_license_policy(files: &mut [FileInfo], policies: &[LicensePolicyEntry]) -> Result<()> {
     for file in files {
+        if file.file_type != crate::models::FileType::File {
+            continue;
+        }
         let license_keys = file_license_keys(file)?;
         let mut matched_policies: Vec<_> = policies
             .iter()
@@ -231,5 +236,48 @@ mod tests {
                 .iter()
                 .any(|error| error.contains("duplicate license key"))
         );
+    }
+
+    #[test]
+    fn apply_license_policy_skips_directory_resources() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let policy_path = temp.path().join("policy.yml");
+        std::fs::write(
+            &policy_path,
+            "license_policies:\n  - license_key: mit\n    label: Approved\n    color_code: '#00ff00'\n    icon: ok\n",
+        )
+        .expect("policy written");
+
+        let mut files = vec![FileInfo::new(
+            "src".to_string(),
+            "src".to_string(),
+            String::new(),
+            "src".to_string(),
+            FileType::Directory,
+            None,
+            None,
+            0,
+            None,
+            None,
+            None,
+            None,
+            None,
+            vec![],
+            None,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        )];
+
+        apply_license_policy_from_file(&mut files, &policy_path)
+            .expect("policy application succeeds");
+
+        assert!(files[0].license_policy.is_none());
     }
 }

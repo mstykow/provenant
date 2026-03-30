@@ -543,9 +543,12 @@ fn scan_cache_fingerprint(
     license_enabled: bool,
 ) -> String {
     format!(
-        "info={};packages={};copyrights={};emails={};urls={};max_emails={};max_urls={};timeout={:.6};license_enabled={};license_text={};license_text_diagnostics={};license_diagnostics={};unknown_licenses={};license_score={}",
+        "info={};packages={};app_packages={};system_packages={};compiled_packages={};copyrights={};emails={};urls={};max_emails={};max_urls={};timeout={:.6};license_enabled={};license_text={};license_text_diagnostics={};license_diagnostics={};unknown_licenses={};license_score={}",
         text_options.collect_info,
         text_options.detect_packages,
+        text_options.detect_application_packages,
+        text_options.detect_system_packages,
+        text_options.detect_packages_in_compiled,
         text_options.detect_copyrights,
         text_options.detect_emails,
         text_options.detect_urls,
