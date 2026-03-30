@@ -63,12 +63,9 @@ pub use self::process::{process_collected, process_collected_with_memory_limit};
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::fs::File;
     use std::sync::Arc;
 
     use tempfile::TempDir;
-    use zip::ZipWriter;
-    use zip::write::SimpleFileOptions;
 
     use crate::models::FileType;
     use crate::progress::{ProgressMode, ScanProgress};
@@ -534,17 +531,26 @@ mod tests {
     }
 
     #[test]
-    fn scanner_only_parses_archive_packages_when_package_in_compiled_is_enabled() {
+    fn scanner_only_parses_compiled_packages_when_package_in_compiled_is_enabled() {
         let temp_dir = TempDir::new().expect("create temp dir");
-        let file_path = temp_dir.path().join("demo.egg");
-        let file = File::create(&file_path).expect("create archive");
-        let mut zip = ZipWriter::new(file);
-        zip.start_file("EGG-INFO/PKG-INFO", SimpleFileOptions::default())
-            .expect("start egg info entry");
-        use std::io::Write as _;
-        zip.write_all(b"Metadata-Version: 1.0\nName: demo\nVersion: 1.0.0\n")
-            .expect("write egg info");
-        zip.finish().expect("finish archive");
+        fs::write(
+            temp_dir.path().join("go.mod"),
+            "module example.com/demo\n\ngo 1.23.0\n",
+        )
+        .expect("write go.mod");
+        fs::write(
+            temp_dir.path().join("main.go"),
+            "package main\nfunc main() {}\n",
+        )
+        .expect("write main.go");
+        let file_path = temp_dir.path().join("demo");
+        let status = std::process::Command::new("go")
+            .current_dir(temp_dir.path())
+            .args(["build", "-o"])
+            .arg(&file_path)
+            .status()
+            .expect("run go build");
+        assert!(status.success());
 
         let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
         let collected = collect_paths(temp_dir.path(), 0, &[]);
@@ -603,7 +609,11 @@ mod tests {
             .find(|entry| entry.file_type == FileType::File)
             .expect("archive file present");
 
-        assert!(without_compiled.package_data.is_empty());
+        assert!(
+            without_compiled.package_data.is_empty(),
+            "package_data: {:#?}",
+            without_compiled.package_data
+        );
         assert!(!with_compiled.package_data.is_empty());
     }
 
