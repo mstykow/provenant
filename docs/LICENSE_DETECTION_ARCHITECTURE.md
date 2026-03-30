@@ -45,9 +45,8 @@ When license scanning is enabled, the current ScanCode-style public surface is:
 recompute the top-level license outputs when the loaded scan is reshaped or when
 license-reference generation is explicitly requested.
 
-The remaining parity work is no longer about creating these public surfaces from
-scratch. The active gaps are the narrower clue/filter, unique-detection-edge,
-and documentation follow-ups tracked in
+The public-surface parity work that used to live in the active rollout plan is
+complete. The historical rollout record remains in
 [`docs/implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md`](implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md).
 
 ### Initialization Flow
@@ -457,9 +456,9 @@ reference-following now consumes that metadata internally, but some downstream
 package/reference consumers are still not fully represented in the current
 serialized surfaces.
 
-The remaining public-output parity work is tracked in
-[`docs/implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md`](implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md)
-and
+The completed public-output rollout is recorded in
+[`docs/implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md`](implementation-plans/text-detection/LICENSE_DETECTION_PLAN.md),
+and the focused file-region design history remains in
 [`docs/license-detection/PLAN-019-file-region-and-unique-detection.md`](license-detection/PLAN-019-file-region-and-unique-detection.md).
 
 ### Internal Detection Structure

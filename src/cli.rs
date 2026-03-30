@@ -164,6 +164,8 @@ pub struct Cli {
     #[arg(long = "cache-clear")]
     pub cache_clear: bool,
 
+    /// Maximum number of file and directory scan details kept in memory.
+    /// Use 0 for unlimited memory or -1 for disk-only spill during the scan.
     #[arg(
         long = "max-in-memory",
         value_name = "INT",
@@ -173,9 +175,11 @@ pub struct Cli {
     )]
     pub max_in_memory: i64,
 
+    /// Collect file information such as checksums, type hints, and source/script flags.
     #[arg(short = 'i', long)]
     pub info: bool,
 
+    /// Load one or more existing ScanCode-style JSON scans instead of rescanning inputs.
     #[arg(long)]
     pub from_json: bool,
 
@@ -187,7 +191,7 @@ pub struct Cli {
     #[arg(long = "system-package")]
     pub system_package: bool,
 
-    /// Scan compiled executables (ELF, etc.) for embedded package metadata
+    /// Scan supported compiled Go and Rust binaries for embedded package metadata.
     #[arg(long = "package-in-compiled")]
     pub package_in_compiled: bool,
 
@@ -270,6 +274,7 @@ pub struct Cli {
     #[arg(long = "license-references", requires = "license")]
     pub license_references: bool,
 
+    /// Evaluate file license detections against a YAML license policy file.
     #[arg(long = "license-policy", value_name = "FILE")]
     pub license_policy: Option<String>,
 

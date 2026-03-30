@@ -609,7 +609,7 @@ Cache load/decode/validation failures should degrade to cache miss + rebuild, no
 - [x] Corrupt cache entries are detected and rebuilt (degrade to cache miss)
 - [ ] Multi-process scans don't corrupt cache (file locking)
 - [x] `--cache-dir` and `--cache-clear` CLI flags are wired in runtime startup
-- [ ] `--max-in-memory` parity-equivalent behavior is fully implemented (currently CLI placeholder wiring)
+- [x] `--max-in-memory` parity-equivalent behavior is fully implemented
 - [ ] If implemented, `--no-cache` is clearly documented as Rust-specific and scoped to persistent cache read/write only
 - [x] `PROVENANT_CACHE` environment variable overrides cache location
 - [ ] Cross-project cache sharing works (same file content → same cache entry)

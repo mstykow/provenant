@@ -1,7 +1,6 @@
 use std::fs;
 use std::io::Read;
 use std::path::Path;
-use std::process::Command;
 
 use flate2::read::ZlibDecoder;
 use object::{Object, ObjectSection};
@@ -32,6 +31,9 @@ struct RustBinaryAuditPackage {
 }
 
 const MAX_RUST_AUDIT_JSON_SIZE: usize = 8 * 1024 * 1024;
+const GO_BUILD_INFO_MAGIC: &[u8] = b"\xff Go buildinf:";
+const GO_BUILD_INFO_ALIGN: usize = 16;
+const GO_BUILD_INFO_HEADER_SIZE: usize = 32;
 
 pub(crate) fn try_parse_compiled_file(path: &Path) -> Option<ParsePackagesResult> {
     let mut packages = parse_rust_binary(path);
@@ -146,43 +148,113 @@ fn create_cargo_purl(name: &str, version: &str) -> Option<String> {
 }
 
 fn parse_go_binary(path: &Path) -> Vec<PackageData> {
-    let output = match Command::new("go")
-        .arg("version")
-        .arg("-m")
-        .arg(path)
-        .output()
-    {
-        Ok(output) if output.status.success() => output,
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(_) => return Vec::new(),
+    };
+    let Some(header_offset) = find_aligned_magic(&bytes) else {
+        return Vec::new();
+    };
+    let header_end = match header_offset.checked_add(GO_BUILD_INFO_HEADER_SIZE) {
+        Some(end) if end <= bytes.len() => end,
         _ => return Vec::new(),
     };
+    let header = &bytes[header_offset..header_end];
+    if header.get(15).copied().unwrap_or_default() & 0x2 == 0 {
+        return Vec::new();
+    }
+    let Some((_go_version, modinfo)) = decode_go_build_info_inline(&bytes, header_offset) else {
+        return Vec::new();
+    };
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut packages = Vec::new();
+    parse_go_modinfo_packages(&modinfo)
+}
 
-    for line in stdout.lines() {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("path\t") {
-            packages.push(build_go_binary_package(rest, None, true));
-            continue;
+fn find_aligned_magic(bytes: &[u8]) -> Option<usize> {
+    bytes
+        .windows(GO_BUILD_INFO_MAGIC.len())
+        .enumerate()
+        .find_map(|(offset, window)| {
+            (offset % GO_BUILD_INFO_ALIGN == 0 && window == GO_BUILD_INFO_MAGIC).then_some(offset)
+        })
+}
+
+fn decode_go_build_info_inline(bytes: &[u8], header_offset: usize) -> Option<(String, String)> {
+    let payload = bytes.get(header_offset + GO_BUILD_INFO_HEADER_SIZE..)?;
+    let (go_version, payload) = decode_varint_string(payload)?;
+    let (modinfo, _) = decode_varint_bytes(payload)?;
+
+    let modinfo = if modinfo.len() >= 33 && modinfo.get(modinfo.len() - 17) == Some(&b'\n') {
+        String::from_utf8(modinfo[16..modinfo.len() - 16].to_vec()).ok()?
+    } else {
+        String::new()
+    };
+
+    Some((go_version, modinfo))
+}
+
+fn decode_varint_string(bytes: &[u8]) -> Option<(String, &[u8])> {
+    let (length, consumed) = decode_uvarint(bytes)?;
+    let start = consumed;
+    let end = start.checked_add(length)?;
+    let value = std::str::from_utf8(bytes.get(start..end)?)
+        .ok()?
+        .to_string();
+    Some((value, &bytes[end..]))
+}
+
+fn decode_varint_bytes(bytes: &[u8]) -> Option<(Vec<u8>, &[u8])> {
+    let (length, consumed) = decode_uvarint(bytes)?;
+    let start = consumed;
+    let end = start.checked_add(length)?;
+    Some((bytes.get(start..end)?.to_vec(), &bytes[end..]))
+}
+
+fn decode_uvarint(bytes: &[u8]) -> Option<(usize, usize)> {
+    let mut value = 0usize;
+    let mut shift = 0usize;
+
+    for (index, byte) in bytes.iter().copied().enumerate() {
+        value |= usize::from(byte & 0x7f) << shift;
+        if byte & 0x80 == 0 {
+            return Some((value, index + 1));
         }
-        if let Some(rest) = trimmed.strip_prefix("mod\t") {
-            let mut parts = rest.split('\t');
-            if let Some(module_path) = parts.next() {
-                let version = parts.next().map(str::to_string);
-                packages.push(build_go_binary_package(module_path, version, false));
-            }
-            continue;
-        }
-        if let Some(rest) = trimmed.strip_prefix("dep\t") {
-            let mut parts = rest.split('\t');
-            if let Some(module_path) = parts.next() {
-                let version = parts.next().map(str::to_string);
-                packages.push(build_go_binary_package(module_path, version, false));
-            }
+        shift += 7;
+        if shift >= usize::BITS as usize {
+            return None;
         }
     }
 
+    None
+}
+
+fn parse_go_modinfo_packages(modinfo: &str) -> Vec<PackageData> {
+    let mut packages = Vec::new();
+    for line in modinfo.lines() {
+        if let Some(rest) = line.strip_prefix("path\t") {
+            packages.push(build_go_binary_package(rest, None, true));
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("mod\t") {
+            if let Some((module_path, version)) = parse_go_module_line(rest) {
+                packages.push(build_go_binary_package(module_path, Some(version), false));
+            }
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("dep\t")
+            && let Some((module_path, version)) = parse_go_module_line(rest)
+        {
+            packages.push(build_go_binary_package(module_path, Some(version), false));
+        }
+    }
     packages
+}
+
+fn parse_go_module_line(line: &str) -> Option<(&str, String)> {
+    let mut parts = line.split('\t');
+    let module_path = parts.next()?;
+    let version = parts.next()?.to_string();
+    Some((module_path, version))
 }
 
 fn build_go_binary_package(
@@ -218,6 +290,8 @@ fn split_module_path(module_path: &str) -> (Option<String>, String) {
 
 #[cfg(test)]
 mod tests {
+    use std::process::Command;
+
     use super::*;
 
     #[test]
