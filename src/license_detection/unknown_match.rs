@@ -531,7 +531,7 @@ fn build_unknown_rule_identifier(rule_text: &str) -> String {
     hasher.update(content.as_bytes());
     let digest = hasher.finalize();
 
-    format!("license-detection-unknown-{digest:x}")
+    format!("license-detection-unknown-{}", hex::encode(digest))
 }
 
 fn python_str_repr(text: &str) -> String {

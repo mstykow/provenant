@@ -492,7 +492,7 @@ fn get_hashed_path(name: &str) -> Option<String> {
     let mut hasher = Md5::new();
     hasher.update(name.as_bytes());
     let result = hasher.finalize();
-    let hash_str = format!("{:x}", result);
+    let hash_str = hex::encode(result);
 
     if hash_str.len() >= 3 {
         Some(format!(
