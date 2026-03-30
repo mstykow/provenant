@@ -1,78 +1,51 @@
 # Plan 019: File Regions and Unique Detection Metadata
 
-## Current Decision
+## Status
 
-Rust previously carried a partial `FileRegion` type in `src/license_detection/detection/`
-but did not populate it correctly or use it anywhere meaningful. In particular,
-`path` was always set to an empty string and the metadata was dropped before output.
+Complete.
 
-We removed that incomplete Rust-only placeholder for now instead of keeping dead
-model fields that suggested parity we do not actually have.
+Rust now has the file-region and unique-detection behavior this plan reopened to
+track:
 
-## What Python Does
+1. source paths are threaded into license-detection entrypoints,
+2. detection-level file-region metadata is built with real `path`,
+   `start_line`, and `end_line` values,
+3. unique detections aggregate file regions across repeated occurrences, and
+4. current top-level license-detection/reference flows consume that region-aware
+   aggregation for live scan output.
 
-Python defines `FileRegion(path, start_line, end_line)` in
-`reference/scancode-toolkit/src/licensedcode/detection.py` and uses it as
-internal post-processing metadata.
+## What Changed
 
-Important observations from the reference:
+The original concern in this plan was that Rust carried incomplete placeholder
+file-region metadata and therefore could not support Python-style unique
+detection aggregation or provenance-sensitive post-processing.
 
-- `FileRegion` is built from a real file path plus detection line bounds.
-- Normal detection JSON serialization excludes `file_region`.
-- Python still uses file-region metadata for later stages such as:
-  - unique-detection aggregation across files,
-  - reference-following / post-scan logic that reads `file_region.path`,
-  - todo / ambiguous-detection reporting.
+That is no longer true. The current Rust implementation builds file-region data
+from real match provenance and uses it when computing top-level unique
+`license_detections` and synchronized reference matches.
 
-So this is not a core per-file output feature, but it is real detection metadata
-that supports other Python behaviors we do not implement yet.
+## Scope Clarification
 
-## Remaining Rust Features
+Python's review-oriented `summarycode/todo.py` flow also consumes `FileRegion`,
+but Provenant intentionally does not implement `--todo`.
 
-Rust now has detection-level file-region construction with a real source path and
-uses that internal metadata to aggregate unique detections across repeated
-regions. The remaining missing Python features are:
+That remaining difference is tracked as intentional product scope elsewhere:
 
-1. fuller package/file reference-following beyond the currently implemented
-   local-file resolution paths,
-2. any output surface equivalent to Python's todo / ambiguous-detection flow.
+- `docs/implementation-plans/infrastructure/CLI_PLAN.md`
+- `docs/implementation-plans/post-processing/SUMMARIZATION_PLAN.md`
 
-These missing pieces still block fuller provenance-sensitive license-output
-parity,
-especially:
+It should not be treated as an open license-detection engine gap.
 
-- the remaining top-level unique `license_detections` edge cases that still
-  depend on true file-region consumers rather than just region-aware
-  aggregation,
-- other post-scan consumers that need detection-to-file provenance.
+## Relevant Rust Implementation Points
 
-## Likely Reintroduction Path
-
-When we implement these Python features, reintroduce file-region metadata at the
-detection assembly boundary instead of in low-level matchers.
-
-Most likely work items:
-
-1. ✅ Thread source path from `src/scanner/process.rs` into license-detection
-   entrypoints.
-2. ✅ Reintroduce a detection-level file-region type in
-   `src/license_detection/detection/` with real `path`, `start_line`, and
-   `end_line` values.
-3. ✅ Implement the Python-style unique-detection / file-region aggregation step.
-4. ✅ Add the first real consumer for file-resource local-file reference-following.
-5. Add whichever additional consumer still needs the metadata before exposing it again.
+- `src/license_detection/detection/mod.rs`
+- `src/license_detection/detection/types.rs`
+- `src/models/file_info.rs`
+- `src/post_processing/mod.rs`
 
 ## Relevant Reference Points
 
 - Python `FileRegion` definition:
-  `reference/scancode-toolkit/src/licensedcode/detection.py:150`
-- Python `get_file_region()`:
-  `reference/scancode-toolkit/src/licensedcode/detection.py:293`
-- Python detection serialization excludes `file_region`:
-  `reference/scancode-toolkit/src/licensedcode/detection.py:476`
-- Python unique-detection serialization excludes `file_regions`:
-  `reference/scancode-toolkit/src/licensedcode/detection.py:963`
-- Rust detection assembly boundary:
-  `src/license_detection/detection/mod.rs`
-- Rust scanner call path that still has the source `Path`:
-  `src/scanner/process.rs`
+  `reference/scancode-toolkit/src/licensedcode/detection.py`
+- Python review/TODO consumer that remains intentionally out of scope:
+  `reference/scancode-toolkit/src/summarycode/todo.py`

@@ -289,13 +289,6 @@ mod golden_tests {
         );
 
         for test in &tests {
-            // Temporary documented gap: PDF text extraction for this fixture is
-            // still missing in Rust. See docs/license-detection/GAPS.md.
-            if test.name == "datadriven/lic2/bsd-new_156.pdf" {
-                result.skipped += 1;
-                continue;
-            }
-
             if test.yaml.expected_failure {
                 result.skipped += 1;
                 continue;
