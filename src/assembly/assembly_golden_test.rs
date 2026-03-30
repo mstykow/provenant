@@ -143,6 +143,12 @@ mod tests {
                 is_generated: None,
                 facets: vec![],
                 tallies: None,
+                sha1_git: None,
+                is_binary: None,
+                is_text: None,
+                is_archive: None,
+                is_media: None,
+                is_script: None,
             };
 
             file_infos.push(file_info);

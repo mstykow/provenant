@@ -34,6 +34,9 @@ pub struct FileInfo {
     #[builder(default)]
     pub sha256: Option<String>,
     #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub sha1_git: Option<String>,
+    #[builder(default)]
     pub programming_language: Option<String>,
     #[builder(default)]
     #[serde(default)]
@@ -76,7 +79,22 @@ pub struct FileInfo {
     pub is_generated: Option<bool>,
     #[builder(default)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub is_binary: Option<bool>,
+    #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub is_text: Option<bool>,
+    #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub is_archive: Option<bool>,
+    #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub is_media: Option<bool>,
+    #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub is_source: Option<bool>,
+    #[builder(default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub is_script: Option<bool>,
     #[builder(default)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub source_count: Option<usize>,
@@ -109,7 +127,7 @@ pub struct FileInfo {
 impl FileInfoBuilder {
     /// Build a [`FileInfo`] from the current builder state.
     pub fn build(&self) -> Result<FileInfo, String> {
-        Ok(FileInfo::new(
+        let mut file_info = FileInfo::new(
             self.name.clone().ok_or("Missing field: name")?,
             self.base_name.clone().ok_or("Missing field: base_name")?,
             self.extension.clone().ok_or("Missing field: extension")?,
@@ -133,7 +151,14 @@ impl FileInfoBuilder {
             self.urls.clone().unwrap_or_default(),
             self.for_packages.clone().unwrap_or_default(),
             self.scan_errors.clone().unwrap_or_default(),
-        ))
+        );
+        file_info.sha1_git = self.sha1_git.clone().flatten();
+        file_info.is_binary = self.is_binary.flatten();
+        file_info.is_text = self.is_text.flatten();
+        file_info.is_archive = self.is_archive.flatten();
+        file_info.is_media = self.is_media.flatten();
+        file_info.is_script = self.is_script.flatten();
+        Ok(file_info)
     }
 }
 
@@ -205,6 +230,7 @@ impl FileInfo {
             sha1,
             md5,
             sha256,
+            sha1_git: None,
             programming_language,
             package_data,
             license_expression,
@@ -219,7 +245,12 @@ impl FileInfo {
             for_packages,
             scan_errors,
             is_generated: None,
+            is_binary: None,
+            is_text: None,
+            is_archive: None,
+            is_media: None,
             is_source: None,
+            is_script: None,
             source_count: None,
             is_legal: false,
             is_manifest: false,

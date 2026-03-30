@@ -282,6 +282,73 @@ mod tests {
     }
 
     #[test]
+    fn scanner_populates_info_surface_when_enabled() {
+        let options = TextDetectionOptions {
+            collect_info: true,
+            detect_packages: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: false,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+        let scanned = scan_single_file(
+            "script.py",
+            "#!/usr/bin/env python3\nprint(\"hello\")\n",
+            &options,
+        );
+
+        assert!(scanned.sha1.is_some());
+        assert!(scanned.md5.is_some());
+        assert!(scanned.sha256.is_some());
+        assert!(scanned.sha1_git.is_some());
+        assert!(scanned.mime_type.is_some());
+        assert!(scanned.date.is_some());
+        assert_eq!(scanned.programming_language.as_deref(), Some("Python"));
+        assert_eq!(scanned.is_text, Some(true));
+        assert_eq!(scanned.is_script, Some(true));
+        assert_eq!(scanned.is_source, Some(true));
+    }
+
+    #[test]
+    fn scanner_omits_info_surface_when_disabled() {
+        let options = TextDetectionOptions {
+            collect_info: false,
+            detect_packages: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: false,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+        let scanned = scan_single_file(
+            "script.py",
+            "#!/usr/bin/env python3\nprint(\"hello\")\n",
+            &options,
+        );
+
+        assert!(scanned.sha1.is_none());
+        assert!(scanned.md5.is_none());
+        assert!(scanned.sha256.is_none());
+        assert!(scanned.sha1_git.is_none());
+        assert!(scanned.mime_type.is_none());
+        assert!(scanned.date.is_none());
+        assert!(scanned.programming_language.is_none());
+        assert!(scanned.is_binary.is_none());
+        assert!(scanned.is_text.is_none());
+        assert!(scanned.is_archive.is_none());
+        assert!(scanned.is_media.is_none());
+        assert!(scanned.is_script.is_none());
+        assert!(scanned.is_source.is_none());
+    }
+
+    #[test]
     fn scanner_skips_package_parsing_when_disabled() {
         let options = TextDetectionOptions {
             collect_info: false,

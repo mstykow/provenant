@@ -19,3 +19,11 @@ pub fn calculate_sha256(content: &[u8]) -> String {
     let digest = Sha256::digest(content);
     hex::encode(digest)
 }
+
+/// Calculate Git blob SHA1 hash of content and return it as a hex string.
+pub fn calculate_sha1_git(content: &[u8]) -> String {
+    let mut payload = Vec::with_capacity(content.len() + 32);
+    payload.extend_from_slice(format!("blob {}\0", content.len()).as_bytes());
+    payload.extend_from_slice(content);
+    calculate_sha1(&payload)
+}
