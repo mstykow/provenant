@@ -1,7 +1,7 @@
 use content_inspector::{ContentType, inspect};
 
 use crate::license_detection::LicenseDetectionEngine;
-use crate::parsers::{try_parse_compiled_file, try_parse_file};
+use crate::parsers::{try_parse_compiled_bytes, try_parse_file};
 use crate::utils::hash::{calculate_md5, calculate_sha1, calculate_sha1_git, calculate_sha256};
 use crate::utils::language::detect_language;
 use crate::utils::text::{is_source, remove_verbatim_escape_sequences};
@@ -438,7 +438,7 @@ fn extract_information_from_content(
         let parse_result = try_parse_file(path).or_else(|| {
             text_options
                 .detect_packages_in_compiled
-                .then(|| try_parse_compiled_file(path))
+                .then(|| try_parse_compiled_bytes(&buffer))
                 .flatten()
         });
 

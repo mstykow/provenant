@@ -1,0 +1,348 @@
+[
+  {
+    "type": "cargo",
+    "name": "aho-corasick",
+    "version": "0.5.3",
+    "primary_language": "Rust",
+    "parties": [],
+    "license_detections": [],
+    "dependencies": [
+      {
+        "purl": "pkg:cargo/memchr@0.1.11",
+        "extracted_requirement": "0.1.11",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      }
+    ],
+    "repository_homepage_url": "https://crates.io/crates/aho-corasick",
+    "repository_download_url": "https://crates.io/api/v1/crates/aho-corasick/0.5.3/download",
+    "api_data_url": "https://crates.io/api/v1/crates/aho-corasick",
+    "datasource_id": "rust_binary",
+    "purl": "pkg:cargo/aho-corasick@0.5.3"
+  },
+  {
+    "type": "cargo",
+    "name": "bitflags",
+    "version": "2.6.0",
+    "primary_language": "Rust",
+    "parties": [],
+    "license_detections": [],
+    "dependencies": [],
+    "repository_homepage_url": "https://crates.io/crates/bitflags",
+    "repository_download_url": "https://crates.io/api/v1/crates/bitflags/2.6.0/download",
+    "api_data_url": "https://crates.io/api/v1/crates/bitflags",
+    "datasource_id": "rust_binary",
+    "purl": "pkg:cargo/bitflags@2.6.0"
+  },
+  {
+    "type": "cargo",
+    "name": "cargo_dependencies",
+    "version": "0.1.0",
+    "primary_language": "Rust",
+    "parties": [],
+    "license_detections": [],
+    "is_private": true,
+    "dependencies": [
+      {
+        "purl": "pkg:cargo/bitflags@2.6.0",
+        "extracted_requirement": "2.6.0",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      },
+      {
+        "purl": "pkg:cargo/regex@0.1.80",
+        "extracted_requirement": "0.1.80",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      },
+      {
+        "purl": "pkg:cargo/time@0.1.45",
+        "extracted_requirement": "0.1.45",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      }
+    ],
+    "datasource_id": "rust_binary",
+    "purl": "pkg:cargo/cargo_dependencies@0.1.0"
+  },
+  {
+    "type": "cargo",
+    "name": "kernel32-sys",
+    "version": "0.2.2",
+    "primary_language": "Rust",
+    "parties": [],
+    "license_detections": [],
+    "dependencies": [
+      {
+        "purl": "pkg:cargo/winapi@0.2.8",
+        "extracted_requirement": "0.2.8",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      },
+      {
+        "purl": "pkg:cargo/winapi-build@0.1.1",
+        "extracted_requirement": "0.1.1",
+        "scope": "build",
+        "is_runtime": false,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      }
+    ],
+    "repository_homepage_url": "https://crates.io/crates/kernel32-sys",
+    "repository_download_url": "https://crates.io/api/v1/crates/kernel32-sys/0.2.2/download",
+    "api_data_url": "https://crates.io/api/v1/crates/kernel32-sys",
+    "datasource_id": "rust_binary",
+    "purl": "pkg:cargo/kernel32-sys@0.2.2"
+  },
+  {
+    "type": "cargo",
+    "name": "libc",
+    "version": "0.2.167",
+    "primary_language": "Rust",
+    "parties": [],
+    "license_detections": [],
+    "dependencies": [],
+    "repository_homepage_url": "https://crates.io/crates/libc",
+    "repository_download_url": "https://crates.io/api/v1/crates/libc/0.2.167/download",
+    "api_data_url": "https://crates.io/api/v1/crates/libc",
+    "datasource_id": "rust_binary",
+    "purl": "pkg:cargo/libc@0.2.167"
+  },
+  {
+    "type": "cargo",
+    "name": "memchr",
+    "version": "0.1.11",
+    "primary_language": "Rust",
+    "parties": [],
+    "license_detections": [],
+    "dependencies": [
+      {
+        "purl": "pkg:cargo/libc@0.2.167",
+        "extracted_requirement": "0.2.167",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      }
+    ],
+    "repository_homepage_url": "https://crates.io/crates/memchr",
+    "repository_download_url": "https://crates.io/api/v1/crates/memchr/0.1.11/download",
+    "api_data_url": "https://crates.io/api/v1/crates/memchr",
+    "datasource_id": "rust_binary",
+    "purl": "pkg:cargo/memchr@0.1.11"
+  },
+  {
+    "type": "cargo",
+    "name": "regex",
+    "version": "0.1.80",
+    "primary_language": "Rust",
+    "parties": [],
+    "license_detections": [],
+    "dependencies": [
+      {
+        "purl": "pkg:cargo/aho-corasick@0.5.3",
+        "extracted_requirement": "0.5.3",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      },
+      {
+        "purl": "pkg:cargo/memchr@0.1.11",
+        "extracted_requirement": "0.1.11",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      },
+      {
+        "purl": "pkg:cargo/regex-syntax@0.3.9",
+        "extracted_requirement": "0.3.9",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      },
+      {
+        "purl": "pkg:cargo/thread_local@0.2.7",
+        "extracted_requirement": "0.2.7",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      },
+      {
+        "purl": "pkg:cargo/utf8-ranges@0.1.3",
+        "extracted_requirement": "0.1.3",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      }
+    ],
+    "repository_homepage_url": "https://crates.io/crates/regex",
+    "repository_download_url": "https://crates.io/api/v1/crates/regex/0.1.80/download",
+    "api_data_url": "https://crates.io/api/v1/crates/regex",
+    "datasource_id": "rust_binary",
+    "purl": "pkg:cargo/regex@0.1.80"
+  },
+  {
+    "type": "cargo",
+    "name": "regex-syntax",
+    "version": "0.3.9",
+    "primary_language": "Rust",
+    "parties": [],
+    "license_detections": [],
+    "dependencies": [],
+    "repository_homepage_url": "https://crates.io/crates/regex-syntax",
+    "repository_download_url": "https://crates.io/api/v1/crates/regex-syntax/0.3.9/download",
+    "api_data_url": "https://crates.io/api/v1/crates/regex-syntax",
+    "datasource_id": "rust_binary",
+    "purl": "pkg:cargo/regex-syntax@0.3.9"
+  },
+  {
+    "type": "cargo",
+    "name": "thread-id",
+    "version": "2.0.0",
+    "primary_language": "Rust",
+    "parties": [],
+    "license_detections": [],
+    "dependencies": [
+      {
+        "purl": "pkg:cargo/kernel32-sys@0.2.2",
+        "extracted_requirement": "0.2.2",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      },
+      {
+        "purl": "pkg:cargo/libc@0.2.167",
+        "extracted_requirement": "0.2.167",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      }
+    ],
+    "repository_homepage_url": "https://crates.io/crates/thread-id",
+    "repository_download_url": "https://crates.io/api/v1/crates/thread-id/2.0.0/download",
+    "api_data_url": "https://crates.io/api/v1/crates/thread-id",
+    "datasource_id": "rust_binary",
+    "purl": "pkg:cargo/thread-id@2.0.0"
+  },
+  {
+    "type": "cargo",
+    "name": "thread_local",
+    "version": "0.2.7",
+    "primary_language": "Rust",
+    "parties": [],
+    "license_detections": [],
+    "dependencies": [
+      {
+        "purl": "pkg:cargo/thread-id@2.0.0",
+        "extracted_requirement": "2.0.0",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      }
+    ],
+    "repository_homepage_url": "https://crates.io/crates/thread_local",
+    "repository_download_url": "https://crates.io/api/v1/crates/thread_local/0.2.7/download",
+    "api_data_url": "https://crates.io/api/v1/crates/thread_local",
+    "datasource_id": "rust_binary",
+    "purl": "pkg:cargo/thread_local@0.2.7"
+  },
+  {
+    "type": "cargo",
+    "name": "time",
+    "version": "0.1.45",
+    "primary_language": "Rust",
+    "parties": [],
+    "license_detections": [],
+    "dependencies": [
+      {
+        "purl": "pkg:cargo/libc@0.2.167",
+        "extracted_requirement": "0.2.167",
+        "scope": null,
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      }
+    ],
+    "repository_homepage_url": "https://crates.io/crates/time",
+    "repository_download_url": "https://crates.io/api/v1/crates/time/0.1.45/download",
+    "api_data_url": "https://crates.io/api/v1/crates/time",
+    "datasource_id": "rust_binary",
+    "purl": "pkg:cargo/time@0.1.45"
+  },
+  {
+    "type": "cargo",
+    "name": "utf8-ranges",
+    "version": "0.1.3",
+    "primary_language": "Rust",
+    "parties": [],
+    "license_detections": [],
+    "dependencies": [],
+    "repository_homepage_url": "https://crates.io/crates/utf8-ranges",
+    "repository_download_url": "https://crates.io/api/v1/crates/utf8-ranges/0.1.3/download",
+    "api_data_url": "https://crates.io/api/v1/crates/utf8-ranges",
+    "datasource_id": "rust_binary",
+    "purl": "pkg:cargo/utf8-ranges@0.1.3"
+  },
+  {
+    "type": "cargo",
+    "name": "winapi",
+    "version": "0.2.8",
+    "primary_language": "Rust",
+    "parties": [],
+    "license_detections": [],
+    "dependencies": [],
+    "repository_homepage_url": "https://crates.io/crates/winapi",
+    "repository_download_url": "https://crates.io/api/v1/crates/winapi/0.2.8/download",
+    "api_data_url": "https://crates.io/api/v1/crates/winapi",
+    "datasource_id": "rust_binary",
+    "purl": "pkg:cargo/winapi@0.2.8"
+  },
+  {
+    "type": "cargo",
+    "name": "winapi-build",
+    "version": "0.1.1",
+    "primary_language": "Rust",
+    "parties": [],
+    "license_detections": [],
+    "dependencies": [],
+    "repository_homepage_url": "https://crates.io/crates/winapi-build",
+    "repository_download_url": "https://crates.io/api/v1/crates/winapi-build/0.1.1/download",
+    "api_data_url": "https://crates.io/api/v1/crates/winapi-build",
+    "datasource_id": "rust_binary",
+    "purl": "pkg:cargo/winapi-build@0.1.1"
+  }
+]

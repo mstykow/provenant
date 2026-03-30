@@ -1,0 +1,30 @@
+[
+  {
+    "type": "golang",
+    "namespace": "example.com",
+    "name": "demo",
+    "primary_language": "Go",
+    "parties": [],
+    "homepage_url": "https://pkg.go.dev/example.com/demo",
+    "license_detections": [],
+    "is_private": true,
+    "dependencies": [],
+    "repository_homepage_url": "https://pkg.go.dev/example.com/demo",
+    "datasource_id": "go_binary",
+    "purl": "pkg:golang/example.com/demo"
+  },
+  {
+    "type": "golang",
+    "namespace": "example.com",
+    "name": "demo",
+    "version": "(devel)",
+    "primary_language": "Go",
+    "parties": [],
+    "homepage_url": "https://pkg.go.dev/example.com/demo",
+    "license_detections": [],
+    "dependencies": [],
+    "repository_homepage_url": "https://pkg.go.dev/example.com/demo",
+    "datasource_id": "go_binary",
+    "purl": "pkg:golang/example.com/demo@(devel)"
+  }
+]

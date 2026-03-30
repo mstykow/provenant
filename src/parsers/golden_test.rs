@@ -26,6 +26,8 @@ mod chef_golden_test;
 mod clojure_golden_test;
 #[path = "cocoapods_golden_test.rs"]
 mod cocoapods_golden_test;
+#[path = "compiled_binary_golden_test.rs"]
+mod compiled_binary_golden_test;
 #[path = "composer_golden_test.rs"]
 mod composer_golden_test;
 #[path = "conan_golden_test.rs"]
