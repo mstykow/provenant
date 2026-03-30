@@ -38,6 +38,20 @@ This scorecard tracks parity against Python ScanCode output format behavior and 
   - Stable grouped column ordering
   - Deterministic row ordering
 
+### Debian copyright
+
+- **Reference fixtures**:
+  [`debian/basic/expected.copyright`](../../../reference/scancode-toolkit/tests/formattedcode/data/debian/basic/expected.copyright),
+  [`debian/multiple_files/expected.copyright`](../../../reference/scancode-toolkit/tests/formattedcode/data/debian/multiple_files/expected.copyright)
+- **Local fixture**:
+  [`testdata/output-formats/debian-basic-expected.copyright`](../../../testdata/output-formats/debian-basic-expected.copyright)
+- **Status**: 🟢 Semantically equivalent (fixture-backed)
+- **Acceptance criteria**:
+  - DEP-5 document header and notice block match the supported Provenant contract
+  - File paragraphs are path-sorted and omit directory entries
+  - `License:` fields prefer detected non-SPDX expressions before fallback file expressions
+  - Repeated matched license text blocks are deduplicated deterministically
+
 ### SPDX Tag-Value
 
 - **Reference fixtures**:
