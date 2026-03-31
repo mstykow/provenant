@@ -290,13 +290,6 @@ fn process_file(
         )
         .path(path.to_string_lossy().to_string())
         .file_type(FileType::File)
-        .mime_type(text_options.collect_info.then(|| {
-            from_path(path)
-                .first_or_octet_stream()
-                .essence_str()
-                .to_string()
-        }))
-        .file_type_label(None)
         .size(metadata.len())
         .date(
             text_options
@@ -372,10 +365,7 @@ fn extract_information_from_content(
     let programming_language = detect_language(path, &buffer);
 
     if text_options.collect_info {
-        let mime_type = from_path(path)
-            .first_or_octet_stream()
-            .essence_str()
-            .to_string();
+        let mime_type = detect_mime_type(path, &buffer);
         let (file_type_label, is_binary, is_text, is_archive, is_media, is_script) =
             detect_info_flags(
                 path,
@@ -642,6 +632,27 @@ fn detect_info_flags(
         is_media,
         is_script,
     )
+}
+
+fn detect_mime_type(path: &Path, buffer: &[u8]) -> String {
+    let mime_type = from_path(path)
+        .first_or_octet_stream()
+        .essence_str()
+        .to_string();
+
+    if should_normalize_typescript_mime(path, buffer, &mime_type) {
+        return "text/plain".to_string();
+    }
+
+    mime_type
+}
+
+fn should_normalize_typescript_mime(path: &Path, buffer: &[u8], mime_type: &str) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
+        && !matches!(inspect(buffer), ContentType::BINARY)
+        && mime_type.starts_with("video/")
 }
 
 fn is_system_datasource(datasource_id: &DatasourceId) -> bool {

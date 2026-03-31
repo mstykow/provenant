@@ -372,6 +372,61 @@ mod tests {
     }
 
     #[test]
+    fn scanner_treats_typescript_sources_as_text_not_video_media() {
+        let options = TextDetectionOptions {
+            collect_info: true,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: false,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+        let scanned = scan_single_file("main.ts", "export const answer: number = 42;\n", &options);
+
+        assert_eq!(scanned.programming_language.as_deref(), Some("TypeScript"));
+        assert_eq!(scanned.mime_type.as_deref(), Some("text/plain"));
+        assert_eq!(scanned.file_type_label.as_deref(), Some("script"));
+        assert_eq!(scanned.is_text, Some(true));
+        assert_eq!(scanned.is_media, Some(false));
+        assert_eq!(scanned.is_script, Some(true));
+        assert_eq!(scanned.is_source, Some(true));
+    }
+
+    #[test]
+    fn scanner_normalizes_sparse_ts_files_away_from_video_mime() {
+        let options = TextDetectionOptions {
+            collect_info: true,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: false,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+        let scanned = scan_single_file("main.ts", "// comment-only TypeScript fixture\n", &options);
+
+        assert_eq!(scanned.mime_type.as_deref(), Some("text/plain"));
+        assert_eq!(scanned.file_type_label.as_deref(), Some("script"));
+        assert_eq!(scanned.is_text, Some(true));
+        assert_eq!(scanned.is_media, Some(false));
+        assert_eq!(scanned.is_script, Some(true));
+        assert_eq!(scanned.is_source, Some(true));
+    }
+
+    #[test]
     fn scanner_omits_info_surface_when_disabled() {
         let options = TextDetectionOptions {
             collect_info: false,
