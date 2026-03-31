@@ -1,6 +1,6 @@
 # CLI Implementation Plan
 
-> **Status**: 🟢 Complete — current ScanCode-facing CLI parity tracked in this rollout is implemented
+> **Status**: 🟢 Complete — the ScanCode-facing CLI surface tracked in this rollout is implemented. Post-rollout parity audits still uncovered isolated gaps; those fixes now land as maintenance follow-up rather than reopening the rollout.
 > **Priority**: P1 - High (user-facing drop-in replacement parity)
 > **Dependencies**: Some flags depend on underlying features (license detection, post-scan processing, caching)
 
@@ -10,6 +10,8 @@ CLI parameter parity with Python ScanCode. Rust uses `clap`; Python uses
 `click` + plugin-provided options.
 
 This plan records the completed rollout toward a **drop-in replacement CLI surface**.
+Post-rollout parity audits remain part of ongoing maintenance and may tighten
+already-completed behaviors when real-world usage exposes mismatches.
 
 It records the implemented compatibility coverage and the final classification
 of upstream flags, including explicit `Won't do` decisions for deprecated,
