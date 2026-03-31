@@ -121,7 +121,10 @@ mod golden_tests {
                 } else {
                     Ok(Some((text, text_kind)))
                 }
-            } else if classification.is_source {
+            } else if crate::utils::text::should_remove_verbatim_escape_sequences(
+                &self.test_file,
+                classification.is_source,
+            ) {
                 Ok(Some((
                     crate::utils::text::remove_verbatim_escape_sequences(&text),
                     text_kind,

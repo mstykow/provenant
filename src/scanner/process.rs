@@ -1,7 +1,9 @@
 use crate::license_detection::LicenseDetectionEngine;
 use crate::parsers::{try_parse_compiled_bytes, try_parse_file};
 use crate::utils::hash::{calculate_md5, calculate_sha1, calculate_sha1_git, calculate_sha256};
-use crate::utils::text::remove_verbatim_escape_sequences;
+use crate::utils::text::{
+    remove_verbatim_escape_sequences, should_remove_verbatim_escape_sequences,
+};
 use anyhow::Error;
 use rayon::prelude::*;
 use std::fs::{self, File};
@@ -498,7 +500,7 @@ fn extract_information_from_content(
         } else {
             text_content
         }
-    } else if classification.is_source {
+    } else if should_remove_verbatim_escape_sequences(path, classification.is_source) {
         remove_verbatim_escape_sequences(&text_content)
     } else {
         text_content
