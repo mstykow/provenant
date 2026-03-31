@@ -155,6 +155,10 @@ numpy = ">=1.20.0"
         let package_data = PythonParser::extract_first_package(&file_path);
 
         assert_eq!(package_data.package_type, Some(PackageType::Pypi));
+        assert_eq!(
+            package_data.datasource_id,
+            Some(DatasourceId::PypiPyprojectToml)
+        );
         assert_eq!(package_data.name, Some("test-package".to_string()));
         assert_eq!(package_data.version, Some("0.1.0".to_string()));
         assert_eq!(
@@ -177,6 +181,26 @@ numpy = ">=1.20.0"
         assert_eq!(
             package_data.purl,
             Some("pkg:pypi/test-package@0.1.0".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_from_poetry_pyproject_toml_uses_poetry_datasource() {
+        let content = r#"
+[tool.poetry]
+name = "poetry-demo"
+version = "0.2.0"
+description = "demo"
+"#;
+
+        let (_temp_dir, file_path) = create_temp_file(content, "pyproject.toml");
+        let package_data = PythonParser::extract_first_package(&file_path);
+
+        assert_eq!(package_data.name.as_deref(), Some("poetry-demo"));
+        assert_eq!(package_data.version.as_deref(), Some("0.2.0"));
+        assert_eq!(
+            package_data.datasource_id,
+            Some(DatasourceId::PypiPoetryPyprojectToml)
         );
     }
 
@@ -1031,6 +1055,10 @@ Test package description.
         .expect("Failed to write installed-files.txt");
 
         let package_data = PythonParser::extract_first_package(&egg_info.join("PKG-INFO"));
+        assert_eq!(
+            package_data.datasource_id,
+            Some(DatasourceId::PypiEditableEggPkginfo)
+        );
         let file_paths: Vec<&str> = package_data
             .file_references
             .iter()
@@ -1059,6 +1087,10 @@ Test package description.
         .expect("Failed to write SOURCES.txt");
 
         let package_data = PythonParser::extract_first_package(&egg_info.join("PKG-INFO"));
+        assert_eq!(
+            package_data.datasource_id,
+            Some(DatasourceId::PypiEditableEggPkginfo)
+        );
         let file_paths: Vec<&str> = package_data
             .file_references
             .iter()
@@ -1086,6 +1118,26 @@ Test package description.
         assert_eq!(dep.scope.as_deref(), Some("install"));
         assert_eq!(dep.is_optional, Some(false));
         assert_eq!(dep.is_runtime, Some(true));
+    }
+
+    #[test]
+    fn test_extract_pkg_info_from_egg_info_dir_uses_extracted_egg_pkginfo_datasource() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let egg_info = temp_dir.path().join("EGG-INFO");
+        fs::create_dir_all(&egg_info).expect("Failed to create EGG-INFO dir");
+        fs::write(
+            egg_info.join("PKG-INFO"),
+            "Metadata-Version: 1.2\nName: extracted-egg\nVersion: 1.0.0\n",
+        )
+        .expect("Failed to write PKG-INFO");
+
+        let package_data = PythonParser::extract_first_package(&egg_info.join("PKG-INFO"));
+
+        assert_eq!(package_data.name.as_deref(), Some("extracted-egg"));
+        assert_eq!(
+            package_data.datasource_id,
+            Some(DatasourceId::PypiEggPkginfo)
+        );
     }
 
     #[test]
@@ -1372,10 +1424,7 @@ Test package description.
         assert_eq!(package_data.package_type, Some(PackageType::Pypi));
         assert_eq!(package_data.name.as_deref(), Some("pip"));
         assert_eq!(package_data.version.as_deref(), Some("22.0.4"));
-        assert_eq!(
-            package_data.datasource_id,
-            Some(DatasourceId::PypiSdistPkginfo)
-        );
+        assert_eq!(package_data.datasource_id, Some(DatasourceId::PypiSdist));
         assert_eq!(package_data.primary_language.as_deref(), Some("Python"));
         assert_eq!(
             package_data.homepage_url.as_deref(),
@@ -1404,10 +1453,7 @@ Test package description.
 
         assert_eq!(package_data.name.as_deref(), Some("demo"));
         assert_eq!(package_data.version.as_deref(), Some("1.0.0"));
-        assert_eq!(
-            package_data.datasource_id,
-            Some(DatasourceId::PypiSdistPkginfo)
-        );
+        assert_eq!(package_data.datasource_id, Some(DatasourceId::PypiSdist));
     }
 
     #[test]
@@ -1427,10 +1473,7 @@ Test package description.
         assert!(package_data.name.is_none());
         assert!(package_data.version.is_none());
         assert_eq!(package_data.package_type, Some(PackageType::Pypi));
-        assert_eq!(
-            package_data.datasource_id,
-            Some(DatasourceId::PypiSdistPkginfo)
-        );
+        assert_eq!(package_data.datasource_id, Some(DatasourceId::PypiSdist));
     }
 
     #[test]
@@ -1479,10 +1522,7 @@ Test package description.
 
         assert_eq!(package_data.name.as_deref(), Some("demo"));
         assert_eq!(package_data.version.as_deref(), Some("1.0.0"));
-        assert_eq!(
-            package_data.datasource_id,
-            Some(DatasourceId::PypiSdistPkginfo)
-        );
+        assert_eq!(package_data.datasource_id, Some(DatasourceId::PypiSdist));
     }
 
     #[test]

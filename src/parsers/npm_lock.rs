@@ -710,10 +710,6 @@ fn build_npm_dependency(
     }
 
     let resolved_package = ResolvedPackage {
-        package_type: NpmLockParser::PACKAGE_TYPE,
-        namespace: purl_namespace,
-        name: purl_name,
-        version: resolved_version,
         primary_language: Some("JavaScript".to_string()),
         download_url,
         sha1,
@@ -728,6 +724,12 @@ fn build_npm_dependency(
         api_data_url: None,
         datasource_id: Some(DatasourceId::NpmPackageLockJson),
         purl: None,
+        ..ResolvedPackage::new(
+            NpmLockParser::PACKAGE_TYPE,
+            purl_namespace,
+            purl_name,
+            resolved_version,
+        )
     };
 
     Dependency {

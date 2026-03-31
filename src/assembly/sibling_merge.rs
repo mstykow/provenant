@@ -203,9 +203,12 @@ fn has_assemblable_identity(pkg_data: &PackageData) -> bool {
 
 fn should_skip_python_uv_lock_merge(package: &Package, pkg_data: &PackageData) -> bool {
     pkg_data.datasource_id == Some(DatasourceId::PypiUvLock)
-        && package
-            .datasource_ids
-            .contains(&DatasourceId::PypiPyprojectToml)
+        && package.datasource_ids.iter().any(|id| {
+            matches!(
+                id,
+                DatasourceId::PypiPyprojectToml | DatasourceId::PypiPoetryPyprojectToml
+            )
+        })
         && !python_uv_identity_matches(package, pkg_data)
 }
 

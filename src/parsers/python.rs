@@ -119,7 +119,7 @@ impl PackageParser for PythonParser {
             } else if path.file_name().unwrap_or_default() == "setup.py" {
                 extract_from_setup_py(path)
             } else if path.file_name().unwrap_or_default() == "PKG-INFO" {
-                extract_from_rfc822_metadata(path, DatasourceId::PypiSdistPkginfo)
+                extract_from_rfc822_metadata(path, detect_pkg_info_datasource_id(path))
             } else if path.file_name().unwrap_or_default() == "METADATA" {
                 extract_from_rfc822_metadata(path, DatasourceId::PypiWheelMetadata)
             } else if is_pip_cache_origin_json(path) {
@@ -890,6 +890,7 @@ fn build_sdist_package_data(path: &Path, entries: Vec<(String, String)>) -> Pack
     merge_sdist_archive_dependencies(&entries, &metadata_path, &mut package_data);
     merge_sdist_archive_file_references(&entries, &metadata_path, &mut package_data);
     apply_sdist_name_version_fallback(path, &mut package_data);
+    package_data.datasource_id = Some(DatasourceId::PypiSdist);
     package_data
 }
 
@@ -1984,6 +1985,10 @@ fn extract_from_pyproject_toml(path: &Path) -> PackageData {
     };
 
     let tool_table = toml_content.get("tool").and_then(|v| v.as_table());
+    let is_poetry_pyproject = tool_table
+        .and_then(|tool| tool.get("poetry"))
+        .and_then(|value| value.as_table())
+        .is_some();
 
     // Handle both PEP 621 (project table) and poetry formats
     let project_table =
@@ -2136,8 +2141,23 @@ fn extract_from_pyproject_toml(path: &Path) -> PackageData {
         repository_homepage_url: None,
         repository_download_url: None,
         api_data_url,
-        datasource_id: Some(DatasourceId::PypiPyprojectToml),
+        datasource_id: Some(if is_poetry_pyproject {
+            DatasourceId::PypiPoetryPyprojectToml
+        } else {
+            DatasourceId::PypiPyprojectToml
+        }),
         purl,
+    }
+}
+
+fn detect_pkg_info_datasource_id(path: &Path) -> DatasourceId {
+    let path_str = path.to_string_lossy().replace('\\', "/");
+    if path_str.contains("/EGG-INFO/PKG-INFO") {
+        DatasourceId::PypiEggPkginfo
+    } else if path_str.ends_with(".egg-info/PKG-INFO") {
+        DatasourceId::PypiEditableEggPkginfo
+    } else {
+        DatasourceId::PypiSdistPkginfo
     }
 }
 
@@ -3570,26 +3590,7 @@ fn extract_from_setup_py_regex(content: &str) -> PackageData {
 }
 
 fn package_data_to_resolved(pkg: &PackageData) -> crate::models::ResolvedPackage {
-    crate::models::ResolvedPackage {
-        package_type: pkg.package_type.unwrap_or(PackageType::Pypi),
-        namespace: pkg.namespace.clone().unwrap_or_default(),
-        name: pkg.name.clone().unwrap_or_default(),
-        version: pkg.version.clone().unwrap_or_default(),
-        primary_language: pkg.primary_language.clone(),
-        download_url: pkg.download_url.clone(),
-        sha1: pkg.sha1.clone(),
-        sha256: pkg.sha256.clone(),
-        sha512: pkg.sha512.clone(),
-        md5: pkg.md5.clone(),
-        is_virtual: pkg.is_virtual,
-        extra_data: None,
-        dependencies: pkg.dependencies.clone(),
-        repository_homepage_url: pkg.repository_homepage_url.clone(),
-        repository_download_url: pkg.repository_download_url.clone(),
-        api_data_url: pkg.api_data_url.clone(),
-        datasource_id: pkg.datasource_id,
-        purl: pkg.purl.clone(),
-    }
+    crate::models::ResolvedPackage::from_package_data(pkg, PackageType::Pypi)
 }
 
 fn extract_from_pypi_json(path: &Path) -> PackageData {
@@ -4668,17 +4669,28 @@ fn infer_python_datasource_id(path: &Path) -> Option<DatasourceId> {
     let file_name = path.file_name().and_then(|name| name.to_str());
 
     match file_name {
-        Some("pyproject.toml") => Some(DatasourceId::PypiPyprojectToml),
+        Some("pyproject.toml") => {
+            if read_toml_file(path)
+                .ok()
+                .and_then(|content| content.get("tool").and_then(|v| v.as_table()).cloned())
+                .and_then(|tool| tool.get("poetry").and_then(|v| v.as_table()).cloned())
+                .is_some()
+            {
+                Some(DatasourceId::PypiPoetryPyprojectToml)
+            } else {
+                Some(DatasourceId::PypiPyprojectToml)
+            }
+        }
         Some("setup.py") => Some(DatasourceId::PypiSetupPy),
         Some("setup.cfg") => Some(DatasourceId::PypiSetupCfg),
-        Some("PKG-INFO") => Some(DatasourceId::PypiSdistPkginfo),
+        Some("PKG-INFO") => Some(detect_pkg_info_datasource_id(path)),
         Some("METADATA") => Some(DatasourceId::PypiWheelMetadata),
         Some("pypi.json") => Some(DatasourceId::PypiJson),
         Some("pip-inspect.deplock") => Some(DatasourceId::PypiInspectDeplock),
         Some("origin.json") if is_pip_cache_origin_json(path) => {
             Some(DatasourceId::PypiPipOriginJson)
         }
-        _ if is_python_sdist_archive_path(path) => Some(DatasourceId::PypiSdistPkginfo),
+        _ if is_python_sdist_archive_path(path) => Some(DatasourceId::PypiSdist),
         _ if path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl")) =>

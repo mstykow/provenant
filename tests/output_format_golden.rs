@@ -1860,10 +1860,6 @@ fn sample_cyclonedx_dependency_output() -> Output {
         is_pinned: Some(true),
         is_direct: Some(true),
         resolved_package: Some(Box::new(ResolvedPackage {
-            package_type: PackageType::Npm,
-            namespace: String::new(),
-            name: "dep".to_string(),
-            version: "2.0.0".to_string(),
             primary_language: None,
             download_url: None,
             sha1: None,
@@ -1878,6 +1874,12 @@ fn sample_cyclonedx_dependency_output() -> Output {
             api_data_url: None,
             datasource_id: None,
             purl: Some("pkg:npm/dep@2.0.0".to_string()),
+            ..ResolvedPackage::new(
+                PackageType::Npm,
+                String::new(),
+                "dep".to_string(),
+                "2.0.0".to_string(),
+            )
         })),
         extra_data: None,
         dependency_uid: "pkg:npm/root@1.0.0?uuid=00000000-0000-0000-0000-000000000001".to_string(),

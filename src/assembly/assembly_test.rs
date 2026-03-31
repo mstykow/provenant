@@ -1630,6 +1630,104 @@ mod tests {
     }
 
     #[test]
+    fn test_assemble_poetry_pyproject_with_uv_lock() {
+        let mut files = vec![
+            create_test_file_info(
+                "project/pyproject.toml",
+                DatasourceId::PypiPoetryPyprojectToml,
+                Some("pkg:pypi/uv-demo@0.1.0"),
+                Some("uv-demo"),
+                Some("0.1.0"),
+                vec![],
+            ),
+            create_test_file_info(
+                "project/uv.lock",
+                DatasourceId::PypiUvLock,
+                Some("pkg:pypi/uv-demo@0.1.0"),
+                Some("uv-demo"),
+                Some("0.1.0"),
+                vec![Dependency {
+                    purl: Some("pkg:pypi/requests@2.32.5".to_string()),
+                    extracted_requirement: Some(">=2.32.5".to_string()),
+                    scope: None,
+                    is_runtime: Some(true),
+                    is_optional: Some(false),
+                    is_pinned: Some(true),
+                    is_direct: Some(true),
+                    resolved_package: None,
+                    extra_data: None,
+                }],
+            ),
+        ];
+
+        let result = assemble(&mut files);
+
+        assert_eq!(result.packages.len(), 1);
+        let package = &result.packages[0];
+        assert_eq!(package.name.as_deref(), Some("uv-demo"));
+        assert!(
+            package
+                .datasource_ids
+                .contains(&DatasourceId::PypiPoetryPyprojectToml)
+        );
+        assert!(package.datasource_ids.contains(&DatasourceId::PypiUvLock));
+        assert_eq!(result.dependencies.len(), 1);
+    }
+
+    #[test]
+    fn test_assemble_poetry_pyproject_with_poetry_lock() {
+        let mut files = vec![
+            create_test_file_info(
+                "project/pyproject.toml",
+                DatasourceId::PypiPoetryPyprojectToml,
+                Some("pkg:pypi/poetry-demo@0.1.0"),
+                Some("poetry-demo"),
+                Some("0.1.0"),
+                vec![],
+            ),
+            create_test_file_info(
+                "project/poetry.lock",
+                DatasourceId::PypiPoetryLock,
+                Some("pkg:pypi/poetry-demo@0.1.0"),
+                Some("poetry-demo"),
+                Some("0.1.0"),
+                vec![Dependency {
+                    purl: Some("pkg:pypi/requests@2.32.5".to_string()),
+                    extracted_requirement: Some(">=2.32.5".to_string()),
+                    scope: Some("main".to_string()),
+                    is_runtime: Some(true),
+                    is_optional: Some(false),
+                    is_pinned: Some(true),
+                    is_direct: Some(true),
+                    resolved_package: None,
+                    extra_data: None,
+                }],
+            ),
+        ];
+
+        let result = assemble(&mut files);
+
+        assert_eq!(result.packages.len(), 1);
+        let package = &result.packages[0];
+        assert_eq!(package.name.as_deref(), Some("poetry-demo"));
+        assert!(
+            package
+                .datasource_ids
+                .contains(&DatasourceId::PypiPoetryPyprojectToml)
+        );
+        assert!(
+            package
+                .datasource_ids
+                .contains(&DatasourceId::PypiPoetryLock)
+        );
+        assert_eq!(result.dependencies.len(), 1);
+        assert_eq!(
+            result.dependencies[0].purl.as_deref(),
+            Some("pkg:pypi/requests@2.32.5")
+        );
+    }
+
+    #[test]
     fn test_assemble_python_pyproject_with_uv_lock_backfills_version_and_refreshes_uids() {
         let mut files = vec![
             create_test_file_info(

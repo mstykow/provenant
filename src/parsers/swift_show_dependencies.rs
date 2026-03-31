@@ -144,10 +144,6 @@ fn build_dependency(dep: &SwiftDependency, is_direct: bool) -> Option<Dependency
         is_pinned: Some(version.is_some()),
         is_direct: Some(is_direct),
         resolved_package: Some(Box::new(ResolvedPackage {
-            package_type: PACKAGE_TYPE,
-            namespace: extract_namespace(dep.url.as_deref()).unwrap_or_default(),
-            name,
-            version: version.clone().unwrap_or_default(),
             primary_language: Some("Swift".to_string()),
             download_url: None,
             sha1: None,
@@ -162,6 +158,12 @@ fn build_dependency(dep: &SwiftDependency, is_direct: bool) -> Option<Dependency
             api_data_url: None,
             datasource_id: Some(DatasourceId::SwiftPackageShowDependencies),
             purl: None,
+            ..ResolvedPackage::new(
+                PACKAGE_TYPE,
+                extract_namespace(dep.url.as_deref()).unwrap_or_default(),
+                name,
+                version.clone().unwrap_or_default(),
+            )
         })),
         extra_data: None,
     })

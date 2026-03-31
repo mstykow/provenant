@@ -3,47 +3,14 @@ mod golden_tests {
     use crate::models::PackageData;
     use crate::parsers::PackageParser;
     use crate::parsers::debian::*;
-    use serde_json::Value;
-    use std::fs;
+    use crate::parsers::golden_test_utils::compare_package_data_parser_only;
+    use std::path::Path;
     use std::path::PathBuf;
 
-    fn compare_debian_package_data(actual: &PackageData, expected_file: &PathBuf) {
-        let expected_content =
-            fs::read_to_string(expected_file).expect("expected Debian golden should exist");
-        let expected_value: Value =
-            serde_json::from_str(&expected_content).expect("expected Debian golden should parse");
-        let expected_package = expected_value
-            .as_array()
-            .and_then(|items| items.first())
-            .expect("expected Debian golden should contain one package");
-        let mut actual_value =
-            serde_json::to_value(actual).expect("actual package should serialize");
-        strip_expected_empty_array_drift(&mut actual_value, expected_package);
-
-        assert_eq!(
-            actual_value,
-            *expected_package,
-            "Debian golden mismatch\nactual:\n{}\nexpected:\n{}",
-            serde_json::to_string_pretty(&actual_value).unwrap_or_default(),
-            serde_json::to_string_pretty(expected_package).unwrap_or_default()
-        );
-    }
-
-    fn strip_expected_empty_array_drift(actual: &mut Value, expected: &Value) {
-        let Some(actual_obj) = actual.as_object_mut() else {
-            return;
-        };
-        let expected_obj = expected.as_object();
-
-        for key in ["license_detections", "dependencies"] {
-            if !expected_obj.is_some_and(|obj| obj.contains_key(key))
-                && actual_obj
-                    .get(key)
-                    .and_then(Value::as_array)
-                    .is_some_and(|arr| arr.is_empty())
-            {
-                actual_obj.remove(key);
-            }
+    fn compare_debian_package_data(actual: &PackageData, expected_file: &Path) {
+        match compare_package_data_parser_only(actual, expected_file) {
+            Ok(_) => (),
+            Err(e) => panic!("Debian golden mismatch: {}", e),
         }
     }
 

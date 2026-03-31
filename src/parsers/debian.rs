@@ -1298,7 +1298,7 @@ impl PackageParser for DebianCopyrightParser {
     fn is_match(path: &Path) -> bool {
         if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
             if filename != "copyright" {
-                return false;
+                return filename.ends_with("_copyright");
             }
             let path_str = path.to_string_lossy();
             path_str.contains("/debian/")
@@ -1310,26 +1310,44 @@ impl PackageParser for DebianCopyrightParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
+        let datasource_id = detect_debian_copyright_datasource(path);
         let content = match read_file_to_string(path) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read copyright file {:?}: {}", path, e);
-                return vec![default_package_data(DatasourceId::DebianCopyright)];
+                return vec![default_package_data(datasource_id)];
             }
         };
 
         let package_name = extract_package_name_from_path(path);
-        vec![parse_copyright_file(&content, package_name.as_deref())]
+        let mut package_data = parse_copyright_file(&content, package_name.as_deref());
+        package_data.datasource_id = Some(datasource_id);
+        vec![package_data]
     }
 }
 
 crate::register_parser!(
     "Debian machine-readable copyright file",
-    &["**/debian/copyright", "**/usr/share/doc/*/copyright"],
+    &[
+        "**/debian/copyright",
+        "**/usr/share/doc/*/copyright",
+        "**/*_copyright"
+    ],
     "deb",
     "",
     Some("https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/"),
 );
+
+fn detect_debian_copyright_datasource(path: &Path) -> DatasourceId {
+    let path_str = path.to_string_lossy();
+    if path_str.contains("/debian/") || path_str.ends_with("debian/copyright") {
+        DatasourceId::DebianCopyrightInSource
+    } else if path_str.contains("/usr/share/doc/") {
+        DatasourceId::DebianCopyrightInPackage
+    } else {
+        DatasourceId::DebianCopyrightStandalone
+    }
+}
 
 fn extract_package_name_from_path(path: &Path) -> Option<String> {
     let components: Vec<_> = path.components().collect();
@@ -3151,6 +3169,25 @@ f55e3a16959b0bb8915cb5f219521c80  usr/share/doc/bash/COMPAT.gz
         assert!(!DebianCopyrightParser::is_match(&PathBuf::from(
             "/etc/copyright"
         )));
+        assert!(DebianCopyrightParser::is_match(&PathBuf::from(
+            "/tmp/sample_copyright"
+        )));
+    }
+
+    #[test]
+    fn test_detect_debian_copyright_datasource() {
+        assert_eq!(
+            detect_debian_copyright_datasource(&PathBuf::from("debian/copyright")),
+            DatasourceId::DebianCopyrightInSource
+        );
+        assert_eq!(
+            detect_debian_copyright_datasource(&PathBuf::from("/usr/share/doc/bash/copyright")),
+            DatasourceId::DebianCopyrightInPackage
+        );
+        assert_eq!(
+            detect_debian_copyright_datasource(&PathBuf::from("stable_copyright")),
+            DatasourceId::DebianCopyrightStandalone
+        );
     }
 
     #[test]

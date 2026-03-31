@@ -399,10 +399,6 @@ fn build_resolved_package(
     let (namespace, name) = split_namespace_name(&package.name);
 
     Ok(ResolvedPackage {
-        package_type: PackageType::Npm,
-        namespace: namespace.unwrap_or_default(),
-        name: name.unwrap_or_else(|| package.name.clone()),
-        version: package.resolution.version.clone().unwrap_or_default(),
         primary_language: Some("JavaScript".to_string()),
         download_url: package.resolution.resolved.clone(),
         sha1: None,
@@ -427,6 +423,12 @@ fn build_resolved_package(
         api_data_url: None,
         datasource_id: Some(DatasourceId::BunLockb),
         purl: None,
+        ..ResolvedPackage::new(
+            PackageType::Npm,
+            namespace.unwrap_or_default(),
+            name.unwrap_or_else(|| package.name.clone()),
+            package.resolution.version.clone().unwrap_or_default(),
+        )
     })
 }
 

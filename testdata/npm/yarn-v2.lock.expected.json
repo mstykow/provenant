@@ -20,7 +20,7 @@
           "sha512": "034e57fcb5f944d5fb0ef55be1b212dd88e23d1a50aaffda874cb94e8f4bfa633a66f108f26e81a7cce287cd2b349aa88c97d2023135c8879495326db37a7feb",
           "is_virtual": true,
           "dependencies": [],
-          "datasource_id": "yarn_lock"
+          "datasource_id": "yarn_lock_v2"
         }
       },
       {
@@ -68,10 +68,10 @@
               "is_direct": false
             }
           ],
-          "datasource_id": "yarn_lock"
+          "datasource_id": "yarn_lock_v2"
         }
       }
     ],
-    "datasource_id": "yarn_lock"
+    "datasource_id": "yarn_lock_v2"
   }
 ]

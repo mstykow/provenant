@@ -135,6 +135,9 @@ pub enum DatasourceId {
     DebianControlExtractedDeb,
     DebianControlInSource,
     DebianCopyright,
+    DebianCopyrightInSource,
+    DebianCopyrightInPackage,
+    DebianCopyrightStandalone,
     DebianDeb,
     /// Matches Python reference value.
     #[serde(rename = "debian_source_metadata_tarball")]
@@ -266,9 +269,13 @@ pub enum DatasourceId {
     PixiToml,
     PypiPipOriginJson,
     PypiEgg,
+    PypiEggPkginfo,
+    PypiEditableEggPkginfo,
     PypiInspectDeplock,
     PypiJson,
     PypiPoetryLock,
+    PypiPoetryPyprojectToml,
+    PypiSdist,
     PypiPylockToml,
     PypiPyprojectToml,
     PypiSdistPkginfo,
@@ -292,12 +299,16 @@ pub enum DatasourceId {
 
     // ── Ruby/RubyGems ──
     Gemfile,
+    GemfileExtracted,
     GemfileLock,
+    GemfileLockExtracted,
     GemArchive,
     /// Matches Python reference value.
     #[serde(rename = "gem_archive_extracted")]
     GemArchiveExtracted,
     Gemspec,
+    GemspecExtracted,
+    GemGemspecInstalledSpecifications,
 
     // ── Disk Images/Installers ──
     InstallshieldInstaller,
@@ -316,6 +327,8 @@ pub enum DatasourceId {
 
     // ── Yarn ──
     YarnLock,
+    YarnLockV1,
+    YarnLockV2,
 
     // ── Git ──
     Gitmodules,
@@ -411,6 +424,9 @@ impl DatasourceId {
             Self::DebianControlExtractedDeb => "debian_control_extracted_deb",
             Self::DebianControlInSource => "debian_control_in_source",
             Self::DebianCopyright => "debian_copyright",
+            Self::DebianCopyrightInSource => "debian_copyright_in_source",
+            Self::DebianCopyrightInPackage => "debian_copyright_in_package",
+            Self::DebianCopyrightStandalone => "debian_copyright_standalone",
             Self::DebianDeb => "debian_deb",
             Self::DebianSourceMetadataTarball => "debian_source_metadata_tarball",
             Self::DebianDistrolessInstalledDb => "debian_distroless_installed_db",
@@ -530,9 +546,13 @@ impl DatasourceId {
             Self::PixiToml => "pixi_toml",
             Self::PypiPipOriginJson => "pypi_pip_origin_json",
             Self::PypiEgg => "pypi_egg",
+            Self::PypiEggPkginfo => "pypi_egg_pkginfo",
+            Self::PypiEditableEggPkginfo => "pypi_editable_egg_pkginfo",
             Self::PypiInspectDeplock => "pypi_inspect_deplock",
             Self::PypiJson => "pypi_json",
             Self::PypiPoetryLock => "pypi_poetry_lock",
+            Self::PypiPoetryPyprojectToml => "pypi_poetry_pyproject_toml",
+            Self::PypiSdist => "pypi_sdist",
             Self::PypiPylockToml => "pypi_pylock_toml",
             Self::PypiPyprojectToml => "pypi_pyproject_toml",
             Self::PypiSdistPkginfo => "pypi_sdist_pkginfo",
@@ -554,10 +574,14 @@ impl DatasourceId {
 
             // Ruby/RubyGems
             Self::Gemfile => "gemfile",
+            Self::GemfileExtracted => "gemfile_extracted",
             Self::GemfileLock => "gemfile_lock",
+            Self::GemfileLockExtracted => "gemfile_lock_extracted",
             Self::GemArchive => "gem_archive",
             Self::GemArchiveExtracted => "gem_archive_extracted",
             Self::Gemspec => "gemspec",
+            Self::GemspecExtracted => "gemspec_extracted",
+            Self::GemGemspecInstalledSpecifications => "gem_gemspec_installed_specifications",
 
             // Disk Images/Installers
             Self::InstallshieldInstaller => "installshield_installer",
@@ -576,6 +600,8 @@ impl DatasourceId {
 
             // Yarn
             Self::YarnLock => "yarn_lock",
+            Self::YarnLockV1 => "yarn_lock_v1",
+            Self::YarnLockV2 => "yarn_lock_v2",
 
             // Git
             Self::Gitmodules => "gitmodules",

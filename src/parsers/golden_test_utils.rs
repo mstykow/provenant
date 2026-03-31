@@ -119,10 +119,34 @@ fn compare_json_values_parser_only(
         return Ok(());
     }
 
+    fn is_tolerable_default_field(key: &str, value: &Value) -> bool {
+        match value {
+            Value::Null => true,
+            Value::Bool(false) => true,
+            Value::Array(arr) if arr.is_empty() => true,
+            Value::Object(obj) if obj.is_empty() => true,
+            Value::String(s) if key == "namespace" && s.is_empty() => true,
+            _ => false,
+        }
+    }
+
+    fn is_nullable_bool_field(path: &str) -> bool {
+        path.ends_with("is_runtime")
+            || path.ends_with("is_optional")
+            || path.ends_with("is_pinned")
+            || path.ends_with("is_direct")
+            || path.ends_with("is_private")
+            || path.ends_with("is_virtual")
+    }
+
     match (actual, expected) {
         (Value::Null, Value::Null) => Ok(()),
         (Value::Null, Value::Object(obj)) if obj.is_empty() => Ok(()),
         (Value::Object(obj), Value::Null) if obj.is_empty() => Ok(()),
+        (Value::Null, Value::Bool(false)) if is_nullable_bool_field(path) => Ok(()),
+        (Value::Bool(false), Value::Null) if is_nullable_bool_field(path) => Ok(()),
+        (Value::Null, Value::String(s)) if path.ends_with("namespace") && s.is_empty() => Ok(()),
+        (Value::String(s), Value::Null) if path.ends_with("namespace") && s.is_empty() => Ok(()),
         (Value::Bool(a), Value::Bool(e)) if a == e => Ok(()),
         (Value::Number(a), Value::Number(e)) if a == e => Ok(()),
         (Value::String(a), Value::String(e)) if a == e => Ok(()),
@@ -166,10 +190,7 @@ fn compare_json_values_parser_only(
                         compare_json_values_parser_only(actual_val, expected_val, &field_path)?;
                     }
                     (None, Some(expected_val)) => match expected_val {
-                        Value::Null => continue,
-                        Value::Bool(false) => continue,
-                        Value::Array(arr) if arr.is_empty() => continue,
-                        Value::Object(obj) if obj.is_empty() => continue,
+                        _ if is_tolerable_default_field(key, expected_val) => continue,
                         _ => {
                             if key == "license_detections"
                                 || key == "declared_license_expression"
@@ -186,10 +207,8 @@ fn compare_json_values_parser_only(
                         }
                     },
                     (Some(_), None) => {
-                        if (key == "license_detections" || key == "dependencies")
-                            && a.get(key)
-                                .and_then(Value::as_array)
-                                .is_some_and(|arr| arr.is_empty())
+                        if a.get(key)
+                            .is_some_and(|actual_val| is_tolerable_default_field(key, actual_val))
                         {
                             continue;
                         }

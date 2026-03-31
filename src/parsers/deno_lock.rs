@@ -126,10 +126,6 @@ fn parse_deno_lock(json: &Value) -> PackageData {
             let name = remote_name(target_url).unwrap_or_else(|| source.to_string());
             let purl = create_remote_purl(target_url);
             let resolved_package = ResolvedPackage {
-                package_type: DenoLockParser::PACKAGE_TYPE,
-                namespace: String::new(),
-                name: name.clone(),
-                version: String::new(),
                 primary_language: Some("TypeScript".to_string()),
                 download_url: Some(target_url.to_string()),
                 sha1: None,
@@ -147,6 +143,12 @@ fn parse_deno_lock(json: &Value) -> PackageData {
                 api_data_url: None,
                 datasource_id: Some(DatasourceId::DenoLock),
                 purl: purl.clone(),
+                ..ResolvedPackage::new(
+                    DenoLockParser::PACKAGE_TYPE,
+                    String::new(),
+                    name.clone(),
+                    String::new(),
+                )
             };
 
             dependencies.push(Dependency {
@@ -220,10 +222,6 @@ fn build_jsr_dependency(
         is_pinned: Some(true),
         is_direct: Some(is_direct),
         resolved_package: Some(Box::new(ResolvedPackage {
-            package_type: DenoLockParser::PACKAGE_TYPE,
-            namespace,
-            name,
-            version: version.to_string(),
             primary_language: Some("TypeScript".to_string()),
             download_url: None,
             sha1: None,
@@ -241,6 +239,12 @@ fn build_jsr_dependency(
             api_data_url: None,
             datasource_id: Some(DatasourceId::DenoLock),
             purl,
+            ..ResolvedPackage::new(
+                DenoLockParser::PACKAGE_TYPE,
+                namespace,
+                name,
+                version.to_string(),
+            )
         })),
         extra_data: None,
     })
@@ -266,10 +270,6 @@ fn build_npm_dependency(
         is_pinned: Some(true),
         is_direct: Some(is_direct),
         resolved_package: Some(Box::new(ResolvedPackage {
-            package_type: PackageType::Npm,
-            namespace: namespace.unwrap_or_default(),
-            name,
-            version: version.to_string(),
             primary_language: Some("JavaScript".to_string()),
             download_url: npm_object
                 .get("tarball")
@@ -310,6 +310,12 @@ fn build_npm_dependency(
             api_data_url: None,
             datasource_id: Some(DatasourceId::DenoLock),
             purl,
+            ..ResolvedPackage::new(
+                PackageType::Npm,
+                namespace.unwrap_or_default(),
+                name,
+                version.to_string(),
+            )
         })),
         extra_data: None,
     })

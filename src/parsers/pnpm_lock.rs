@@ -528,10 +528,6 @@ pub fn extract_dependency(
     let all_dependencies = parse_nested_dependencies(data);
 
     let resolved_package = ResolvedPackage {
-        package_type: PackageType::Npm,
-        namespace: namespace.clone().unwrap_or_default(),
-        name: name.clone(),
-        version: version.clone(),
         primary_language: Some("JavaScript".to_string()),
         download_url: None,
         sha1,
@@ -546,6 +542,12 @@ pub fn extract_dependency(
         api_data_url: None,
         datasource_id: Some(DatasourceId::PnpmLockYaml),
         purl: None,
+        ..ResolvedPackage::new(
+            PackageType::Npm,
+            namespace.clone().unwrap_or_default(),
+            name.clone(),
+            version.clone(),
+        )
     };
 
     let dependency = Dependency {

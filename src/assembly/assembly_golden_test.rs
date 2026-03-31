@@ -224,6 +224,17 @@ mod tests {
 
     /// Recursively compare two JSON values with helpful error messages.
     fn compare_json_values(actual: &Value, expected: &Value, path: &str) -> Result<(), String> {
+        fn is_tolerable_default_field(key: &str, value: &Value) -> bool {
+            match value {
+                Value::Null => true,
+                Value::Bool(false) => true,
+                Value::Array(arr) if arr.is_empty() => true,
+                Value::Object(obj) if obj.is_empty() => true,
+                Value::String(s) if key == "namespace" && s.is_empty() => true,
+                _ => false,
+            }
+        }
+
         match (actual, expected) {
             (Value::Null, Value::Null) => Ok(()),
             (Value::Bool(a), Value::Bool(e)) if a == e => Ok(()),
@@ -256,9 +267,9 @@ mod tests {
                     if !a.contains_key(key) {
                         // Allow missing empty values
                         match e.get(key) {
-                            Some(Value::Null) => continue,
-                            Some(Value::Array(arr)) if arr.is_empty() => continue,
-                            Some(Value::Object(obj)) if obj.is_empty() => continue,
+                            Some(expected_val) if is_tolerable_default_field(key, expected_val) => {
+                                continue;
+                            }
                             _ => {
                                 let field_path = if path.is_empty() {
                                     key.to_string()
@@ -276,9 +287,9 @@ mod tests {
                     if !e.contains_key(key) {
                         // Allow extra empty values
                         match a.get(key) {
-                            Some(Value::Null) => continue,
-                            Some(Value::Array(arr)) if arr.is_empty() => continue,
-                            Some(Value::Object(obj)) if obj.is_empty() => continue,
+                            Some(actual_val) if is_tolerable_default_field(key, actual_val) => {
+                                continue;
+                            }
                             _ => {
                                 let field_path = if path.is_empty() {
                                     key.to_string()

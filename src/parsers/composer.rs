@@ -412,10 +412,6 @@ fn build_lock_dependency(
     };
 
     let resolved_package = ResolvedPackage {
-        package_type: ComposerLockParser::PACKAGE_TYPE,
-        namespace: namespace.clone().unwrap_or_default(),
-        name: package_name.clone(),
-        version: version.to_string(),
         primary_language: Some("PHP".to_string()),
         download_url: dist_url,
         sha1,
@@ -430,6 +426,12 @@ fn build_lock_dependency(
         api_data_url: None,
         datasource_id: Some(DatasourceId::PhpComposerLock),
         purl: None,
+        ..ResolvedPackage::new(
+            ComposerLockParser::PACKAGE_TYPE,
+            namespace.clone().unwrap_or_default(),
+            package_name.clone(),
+            version.to_string(),
+        )
     };
 
     Some(Dependency {

@@ -1348,7 +1348,7 @@ fn test_resolve_python_pkg_info_installed_files_references() {
             sha256: None,
             programming_language: None,
             package_data: vec![PackageData {
-                datasource_id: Some(DatasourceId::PypiSdistPkginfo),
+                datasource_id: Some(DatasourceId::PypiEditableEggPkginfo),
                 purl: Some("pkg:pypi/examplepkg@1.0.0".to_string()),
                 name: Some("examplepkg".to_string()),
                 version: Some("1.0.0".to_string()),
@@ -1490,7 +1490,7 @@ fn test_resolve_python_pkg_info_installed_files_references() {
         datafile_paths: vec![
             "venv/lib/python3.11/site-packages/examplepkg.egg-info/PKG-INFO".to_string(),
         ],
-        datasource_ids: vec![DatasourceId::PypiSdistPkginfo],
+        datasource_ids: vec![DatasourceId::PypiEditableEggPkginfo],
     }];
 
     let mut dependencies = vec![];
@@ -1862,7 +1862,7 @@ fn test_python_sources_file_references_do_not_escape_project_root() {
             sha256: None,
             programming_language: None,
             package_data: vec![PackageData {
-                datasource_id: Some(DatasourceId::PypiSdistPkginfo),
+                datasource_id: Some(DatasourceId::PypiEditableEggPkginfo),
                 purl: Some("pkg:pypi/PyJPString@0.0.3".to_string()),
                 name: Some("PyJPString".to_string()),
                 version: Some("0.0.3".to_string()),
@@ -2002,7 +2002,7 @@ fn test_python_sources_file_references_do_not_escape_project_root() {
         purl: Some("pkg:pypi/PyJPString@0.0.3".to_string()),
         package_uid: "pkg:pypi/PyJPString@0.0.3?uuid=test-uuid".to_string(),
         datafile_paths: vec!["project/PyJPString.egg-info/PKG-INFO".to_string()],
-        datasource_ids: vec![DatasourceId::PypiSdistPkginfo],
+        datasource_ids: vec![DatasourceId::PypiEditableEggPkginfo],
     }];
 
     let mut dependencies = vec![];

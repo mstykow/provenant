@@ -83,7 +83,7 @@ mod tests {
         assert!(
             package
                 .datasource_ids
-                .contains(&DatasourceId::DebianCopyright)
+                .contains(&DatasourceId::DebianCopyrightInSource)
         );
         assert!(result.dependencies.iter().any(|dep| {
             dep.purl.as_deref() == Some("pkg:deb/debian/libc6")

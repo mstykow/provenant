@@ -78,15 +78,18 @@ impl PackageParser for GemfileParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
+        let datasource_id = gemfile_datasource_id(path);
         let content = match fs::read_to_string(path) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read Gemfile at {:?}: {}", path, e);
-                return vec![default_package_data_with_datasource(DatasourceId::Gemfile)];
+                return vec![default_package_data_with_datasource(datasource_id)];
             }
         };
 
-        vec![parse_gemfile(&content)]
+        let mut package_data = parse_gemfile(&content);
+        package_data.datasource_id = Some(datasource_id);
+        vec![package_data]
     }
 
     fn is_match(path: &Path) -> bool {
@@ -400,17 +403,18 @@ impl PackageParser for GemfileLockParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
+        let datasource_id = gemfile_lock_datasource_id(path);
         let content = match fs::read_to_string(path) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read Gemfile.lock at {:?}: {}", path, e);
-                return vec![default_package_data_with_datasource(
-                    DatasourceId::GemfileLock,
-                )];
+                return vec![default_package_data_with_datasource(datasource_id)];
             }
         };
 
-        vec![parse_gemfile_lock(&content)]
+        let mut package_data = parse_gemfile_lock(&content);
+        package_data.datasource_id = Some(datasource_id);
+        vec![package_data]
     }
 
     fn is_match(path: &Path) -> bool {
@@ -959,21 +963,55 @@ impl PackageParser for GemspecParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
+        let datasource_id = gemspec_datasource_id(path);
         let content = match fs::read_to_string(path) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read .gemspec at {:?}: {}", path, e);
-                return vec![default_package_data_with_datasource(DatasourceId::Gemspec)];
+                return vec![default_package_data_with_datasource(datasource_id)];
             }
         };
 
-        vec![parse_gemspec_with_context(&content, path.parent())]
+        let mut package_data = parse_gemspec_with_context(&content, path.parent());
+        package_data.datasource_id = Some(datasource_id);
+        vec![package_data]
     }
 
     fn is_match(path: &Path) -> bool {
         path.extension()
             .and_then(|ext| ext.to_str())
             .is_some_and(|ext| ext == "gemspec")
+    }
+}
+
+fn normalized_ruby_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn gemfile_datasource_id(path: &Path) -> DatasourceId {
+    if normalized_ruby_path(path).contains("/data.gz-extract/") {
+        DatasourceId::GemfileExtracted
+    } else {
+        DatasourceId::Gemfile
+    }
+}
+
+fn gemfile_lock_datasource_id(path: &Path) -> DatasourceId {
+    if normalized_ruby_path(path).contains("/data.gz-extract/") {
+        DatasourceId::GemfileLockExtracted
+    } else {
+        DatasourceId::GemfileLock
+    }
+}
+
+fn gemspec_datasource_id(path: &Path) -> DatasourceId {
+    let normalized = normalized_ruby_path(path);
+    if normalized.contains("/data.gz-extract/") {
+        DatasourceId::GemspecExtracted
+    } else if normalized.contains("/specifications/") {
+        DatasourceId::GemGemspecInstalledSpecifications
+    } else {
+        DatasourceId::Gemspec
     }
 }
 

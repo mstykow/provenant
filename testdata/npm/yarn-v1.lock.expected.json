@@ -19,7 +19,7 @@
           "download_url": "https://registry.yarnpkg.com/ansi-align/-/ansi-align-1.1.0.tgz#2f0c1658829739add5ebb15e6b0c6e3423f016ba",
           "is_virtual": true,
           "dependencies": [],
-          "datasource_id": "yarn_lock"
+          "datasource_id": "yarn_lock_v1"
         }
       },
       {
@@ -38,7 +38,7 @@
           "download_url": "https://registry.yarnpkg.com/are-we-there-yet/-/are-we-there-yet-1.1.2.tgz#80e470e95a084794fe1899262c5667c6e88de1b3",
           "is_virtual": true,
           "dependencies": [],
-          "datasource_id": "yarn_lock"
+          "datasource_id": "yarn_lock_v1"
         }
       },
       {
@@ -57,7 +57,7 @@
           "download_url": "https://registry.yarnpkg.com/arr-diff/-/arr-diff-2.0.0.tgz#8f3b827f955a8bd669697e4a4256ac3ceae356cf",
           "is_virtual": true,
           "dependencies": [],
-          "datasource_id": "yarn_lock"
+          "datasource_id": "yarn_lock_v1"
         }
       },
       {
@@ -76,7 +76,7 @@
           "download_url": "https://registry.yarnpkg.com/babel-helper-function-name/-/babel-helper-function-name-6.18.0.tgz#68ec71aeba1f3e28b2a6f0730190b754a9bf30e6",
           "is_virtual": true,
           "dependencies": [],
-          "datasource_id": "yarn_lock"
+          "datasource_id": "yarn_lock_v1"
         }
       },
       {
@@ -95,7 +95,7 @@
           "download_url": "https://registry.yarnpkg.com/rimraf/-/rimraf-2.5.4.tgz#96800093cbf1a0c86bd95b4625467535c29dfa04",
           "is_virtual": true,
           "dependencies": [],
-          "datasource_id": "yarn_lock"
+          "datasource_id": "yarn_lock_v1"
         }
       },
       {
@@ -114,7 +114,7 @@
           "download_url": "https://registry.yarnpkg.com/semver-diff/-/semver-diff-2.1.0.tgz#4bbb8437c8d37e4b0cf1a68fd726ec6d645d6d36",
           "is_virtual": true,
           "dependencies": [],
-          "datasource_id": "yarn_lock"
+          "datasource_id": "yarn_lock_v1"
         }
       },
       {
@@ -133,10 +133,10 @@
           "download_url": "https://registry.yarnpkg.com/semver/-/semver-5.3.0.tgz#9b2ce5d3de02d17c6012ad326aa6b4d0cf54f94f",
           "is_virtual": true,
           "dependencies": [],
-          "datasource_id": "yarn_lock"
+          "datasource_id": "yarn_lock_v1"
         }
       }
     ],
-    "datasource_id": "yarn_lock"
+    "datasource_id": "yarn_lock_v1"
   }
 ]

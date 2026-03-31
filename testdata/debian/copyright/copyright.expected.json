@@ -140,6 +140,6 @@
       }
     ],
     "extracted_license_statement": "LGPL-2.1",
-    "datasource_id": "debian_copyright"
+    "datasource_id": "debian_copyright_in_source"
   }
 ]

@@ -262,10 +262,6 @@ fn build_resolved_package(
     let (download_url, sha256, sha512, md5) = extract_artifact_metadata(package_table);
 
     ResolvedPackage {
-        package_type: PylockTomlParser::PACKAGE_TYPE,
-        namespace: String::new(),
-        name,
-        version,
         primary_language: Some("Python".to_string()),
         download_url,
         sha1: None,
@@ -284,6 +280,7 @@ fn build_resolved_package(
         api_data_url,
         datasource_id: Some(DatasourceId::PypiPylockToml),
         purl,
+        ..ResolvedPackage::new(PylockTomlParser::PACKAGE_TYPE, String::new(), name, version)
     }
 }
 

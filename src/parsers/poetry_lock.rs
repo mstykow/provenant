@@ -223,10 +223,6 @@ fn build_resolved_package(
     let sha256 = extract_sha256_from_files(package_table);
 
     ResolvedPackage {
-        package_type: PoetryLockParser::PACKAGE_TYPE,
-        namespace: String::new(),
-        name: name.to_string(),
-        version: version.to_string(),
         primary_language: Some("Python".to_string()),
         download_url: None,
         sha1: None,
@@ -241,6 +237,12 @@ fn build_resolved_package(
         api_data_url,
         datasource_id: Some(DatasourceId::PypiPoetryLock),
         purl,
+        ..ResolvedPackage::new(
+            PoetryLockParser::PACKAGE_TYPE,
+            String::new(),
+            name.to_string(),
+            version.to_string(),
+        )
     }
 }
 

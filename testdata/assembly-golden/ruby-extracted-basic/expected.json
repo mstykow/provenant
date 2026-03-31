@@ -2,8 +2,11 @@
   "packages": [
     {
       "type": "gem",
+      "namespace": null,
       "name": "example-gem",
       "version": "1.2.3",
+      "qualifiers": {},
+      "subpath": null,
       "primary_language": "Ruby",
       "description": "A longer description of the example gem for testing purposes",
       "release_date": "2024-01-15",
@@ -21,10 +24,19 @@
           "email": "jane@example.com"
         }
       ],
+      "keywords": [],
       "homepage_url": "https://example.com/example-gem",
       "download_url": "https://rubygems.org/downloads/example-gem-1.2.3.gem",
+      "size": null,
+      "sha1": null,
+      "md5": null,
+      "sha256": null,
+      "sha512": null,
+      "bug_tracking_url": null,
       "code_view_url": "https://github.com/example/example-gem",
       "vcs_url": "https://github.com/example/example-gem",
+      "copyright": null,
+      "holder": null,
       "declared_license_expression": "mit",
       "declared_license_expression_spdx": "MIT",
       "license_detections": [
@@ -71,14 +83,22 @@
           "identifier": "mit-baa8883e-2a3e-91b8-cdd5-5b082d60e708"
         }
       ],
+      "other_license_expression": null,
+      "other_license_expression_spdx": null,
+      "other_license_detections": [],
       "extracted_license_statement": "MIT",
+      "notice_text": null,
+      "source_packages": [],
+      "is_private": false,
+      "is_virtual": false,
+      "extra_data": {},
       "repository_homepage_url": "https://rubygems.org/gems/example-gem/versions/1.2.3",
       "repository_download_url": "https://rubygems.org/downloads/example-gem-1.2.3.gem",
       "api_data_url": "https://rubygems.org/api/v2/rubygems/example-gem/versions/1.2.3.json",
       "purl": "pkg:gem/example-gem@1.2.3",
       "package_uid": "pkg:gem/example-gem@1.2.3?uuid=fixed-uid-done-for-testing-5642512d1758",
       "datafile_paths": ["data.gz-extract/example.gemspec", "metadata.gz-extract"],
-      "datasource_ids": ["gem_archive_extracted", "gemspec"]
+      "datasource_ids": ["gem_archive_extracted", "gemspec_extracted"]
     }
   ],
   "dependencies": [
@@ -88,11 +108,15 @@
       "scope": "runtime",
       "is_runtime": true,
       "is_optional": false,
+      "is_pinned": null,
       "is_direct": true,
+      "resolved_package": null,
+      "extra_data": {},
       "dependency_uid": "pkg:gem/nokogiri?uuid=fixed-uid-done-for-testing-5642512d1758",
       "for_package_uid": "pkg:gem/example-gem@1.2.3?uuid=fixed-uid-done-for-testing-5642512d1758",
       "datafile_path": "metadata.gz-extract",
-      "datasource_id": "gem_archive_extracted"
+      "datasource_id": "gem_archive_extracted",
+      "namespace": null
     },
     {
       "purl": "pkg:gem/rails",
@@ -100,11 +124,15 @@
       "scope": "runtime",
       "is_runtime": true,
       "is_optional": false,
+      "is_pinned": null,
       "is_direct": true,
+      "resolved_package": null,
+      "extra_data": {},
       "dependency_uid": "pkg:gem/rails?uuid=fixed-uid-done-for-testing-5642512d1758",
       "for_package_uid": "pkg:gem/example-gem@1.2.3?uuid=fixed-uid-done-for-testing-5642512d1758",
       "datafile_path": "metadata.gz-extract",
-      "datasource_id": "gem_archive_extracted"
+      "datasource_id": "gem_archive_extracted",
+      "namespace": null
     },
     {
       "purl": "pkg:gem/rspec",
@@ -112,22 +140,31 @@
       "scope": "development",
       "is_runtime": false,
       "is_optional": true,
+      "is_pinned": null,
       "is_direct": true,
+      "resolved_package": null,
+      "extra_data": {},
       "dependency_uid": "pkg:gem/rspec?uuid=fixed-uid-done-for-testing-5642512d1758",
       "for_package_uid": "pkg:gem/example-gem@1.2.3?uuid=fixed-uid-done-for-testing-5642512d1758",
       "datafile_path": "metadata.gz-extract",
-      "datasource_id": "gem_archive_extracted"
+      "datasource_id": "gem_archive_extracted",
+      "namespace": null
     },
     {
       "purl": "pkg:gem/rubocop",
+      "extracted_requirement": null,
       "scope": "development",
       "is_runtime": false,
       "is_optional": true,
+      "is_pinned": null,
       "is_direct": true,
+      "resolved_package": null,
+      "extra_data": {},
       "dependency_uid": "pkg:gem/rubocop?uuid=fixed-uid-done-for-testing-5642512d1758",
       "for_package_uid": "pkg:gem/example-gem@1.2.3?uuid=fixed-uid-done-for-testing-5642512d1758",
       "datafile_path": "data.gz-extract/example.gemspec",
-      "datasource_id": "gemspec"
+      "datasource_id": "gemspec_extracted",
+      "namespace": null
     }
   ],
   "files_with_packages": [

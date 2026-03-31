@@ -120,14 +120,6 @@ fn build_dependency_from_lock_entry(
 
     let purl = build_hex_purl(&package_name, Some(&version), Some(&repo));
     let resolved_package = ResolvedPackage {
-        package_type: PackageType::Hex,
-        namespace: if repo == "hexpm" {
-            String::new()
-        } else {
-            repo.clone()
-        },
-        name: package_name.clone(),
-        version: version.clone(),
         primary_language: Some("Elixir".to_string()),
         download_url: None,
         sha1: None,
@@ -155,6 +147,16 @@ fn build_dependency_from_lock_entry(
         api_data_url: Some(build_hex_api_url(&package_name, &repo)),
         datasource_id: Some(DatasourceId::HexMixLock),
         purl: build_hex_purl(&package_name, Some(&version), Some(&repo)),
+        ..ResolvedPackage::new(
+            PackageType::Hex,
+            if repo == "hexpm" {
+                String::new()
+            } else {
+                repo.clone()
+            },
+            package_name.clone(),
+            version.clone(),
+        )
     };
 
     Ok(Some(Dependency {

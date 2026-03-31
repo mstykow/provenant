@@ -34,7 +34,7 @@ mod tests {
             &files,
             "/example.gemspec",
             &package.package_uid,
-            DatasourceId::Gemspec,
+            DatasourceId::GemspecExtracted,
         );
     }
 

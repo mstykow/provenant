@@ -19,10 +19,10 @@
           "sha512": "test",
           "is_virtual": true,
           "dependencies": [],
-          "datasource_id": "yarn_lock"
+          "datasource_id": "yarn_lock_v2"
         }
       }
     ],
-    "datasource_id": "yarn_lock"
+    "datasource_id": "yarn_lock_v2"
   }
 ]

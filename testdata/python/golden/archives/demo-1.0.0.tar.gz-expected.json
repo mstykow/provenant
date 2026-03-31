@@ -1,13 +1,37 @@
 [
   {
     "type": "pypi",
+    "namespace": null,
     "name": "demo",
     "version": "1.0.0",
+    "qualifiers": {},
+    "subpath": null,
     "primary_language": "Python",
     "description": "Egg metadata",
+    "release_date": null,
     "parties": [],
+    "keywords": [],
+    "homepage_url": null,
+    "download_url": null,
     "size": 313,
+    "sha1": null,
+    "md5": null,
     "sha256": "3bec04c69dab395304b5b4afa049e92e8349c4e4c4457d0a2f9415c666bd6585",
+    "sha512": null,
+    "bug_tracking_url": null,
+    "code_view_url": null,
+    "vcs_url": null,
+    "copyright": null,
+    "holder": null,
+    "declared_license_expression": null,
+    "declared_license_expression_spdx": null,
+    "license_detections": [],
+    "other_license_expression": null,
+    "other_license_expression_spdx": null,
+    "other_license_detections": [],
+    "extracted_license_statement": null,
+    "notice_text": null,
+    "source_packages": [],
     "file_references": [
       {
         "path": "README.md"
@@ -24,13 +48,18 @@
         "is_runtime": true,
         "is_optional": false,
         "is_pinned": false,
-        "is_direct": true
+        "is_direct": true,
+        "resolved_package": null,
+        "extra_data": {}
       }
     ],
+    "is_private": false,
+    "is_virtual": false,
+    "extra_data": {},
     "repository_homepage_url": "https://pypi.org/project/demo",
     "repository_download_url": "https://pypi.org/packages/source/d/demo/demo-1.0.0.tar.gz",
     "api_data_url": "https://pypi.org/pypi/demo/1.0.0/json",
-    "datasource_id": "pypi_sdist_pkginfo",
+    "datasource_id": "pypi_sdist",
     "purl": "pkg:pypi/demo@1.0.0"
   }
 ]

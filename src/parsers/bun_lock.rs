@@ -262,10 +262,6 @@ fn parse_package_entry(
 
     let (namespace, name) = split_namespace_name(&package_name);
     let resolved_package = ResolvedPackage {
-        package_type: BunLockParser::PACKAGE_TYPE,
-        namespace: namespace.unwrap_or_default(),
-        name: name.unwrap_or_else(|| package_name.clone()),
-        version: package_version.clone().unwrap_or_default(),
         primary_language: Some("JavaScript".to_string()),
         download_url: resolved_download_url,
         sha1,
@@ -280,6 +276,12 @@ fn parse_package_entry(
         api_data_url: None,
         datasource_id: Some(DatasourceId::BunLock),
         purl: None,
+        ..ResolvedPackage::new(
+            BunLockParser::PACKAGE_TYPE,
+            namespace.unwrap_or_default(),
+            name.unwrap_or_else(|| package_name.clone()),
+            package_version.clone().unwrap_or_default(),
+        )
     };
 
     Some(Dependency {

@@ -412,10 +412,6 @@ fn build_resolved_package(
     dependencies: Vec<Dependency>,
 ) -> ResolvedPackage {
     ResolvedPackage {
-        package_type: PubspecLockParser::PACKAGE_TYPE,
-        namespace: String::new(),
-        name: name.to_string(),
-        version: version.clone().unwrap_or_default(),
         primary_language: Some("dart".to_string()),
         download_url: None,
         sha1: None,
@@ -430,6 +426,12 @@ fn build_resolved_package(
         api_data_url: None,
         datasource_id: None,
         purl: None,
+        ..ResolvedPackage::new(
+            PubspecLockParser::PACKAGE_TYPE,
+            String::new(),
+            name.to_string(),
+            version.clone().unwrap_or_default(),
+        )
     }
 }
 

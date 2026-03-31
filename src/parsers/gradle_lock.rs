@@ -184,10 +184,6 @@ fn parse_dependency_line(line: &str) -> Option<Dependency> {
 
     // Create resolved_package
     let resolved_package = ResolvedPackage {
-        package_type: PackageType::Maven,
-        namespace: group,
-        name: artifact,
-        version,
         primary_language: None,
         download_url: None,
         sha1: None,
@@ -202,6 +198,7 @@ fn parse_dependency_line(line: &str) -> Option<Dependency> {
         api_data_url: None,
         datasource_id: Some(DatasourceId::GradleLockfile),
         purl: purl.clone(),
+        ..ResolvedPackage::new(PackageType::Maven, group, artifact, version)
     };
 
     Some(Dependency {

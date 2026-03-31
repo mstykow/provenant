@@ -271,10 +271,6 @@ fn build_pod_dependency(
     }
 
     let resolved_package = ResolvedPackage {
-        package_type: PodfileLockParser::PACKAGE_TYPE,
-        namespace: namespace.clone().unwrap_or_default(),
-        name: name.clone(),
-        version: version.clone().unwrap_or_default(),
         primary_language: Some(PRIMARY_LANGUAGE.to_string()),
         download_url: None,
         sha1: checksum,
@@ -293,6 +289,12 @@ fn build_pod_dependency(
         api_data_url: None,
         datasource_id: Some(DatasourceId::CocoapodsPodfileLock),
         purl: None,
+        ..ResolvedPackage::new(
+            PodfileLockParser::PACKAGE_TYPE,
+            namespace.clone().unwrap_or_default(),
+            name.clone(),
+            version.clone().unwrap_or_default(),
+        )
     };
 
     let purl = create_cocoapods_purl(namespace.as_deref(), &name, version.as_deref());

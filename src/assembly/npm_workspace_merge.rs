@@ -489,6 +489,8 @@ fn remove_root_level_dependencies(dependencies: &mut Vec<TopLevelDependency>, ro
                 | DatasourceId::BunLockb
                 | DatasourceId::NpmPackageLockJson
                 | DatasourceId::YarnLock
+                | DatasourceId::YarnLockV1
+                | DatasourceId::YarnLockV2
                 | DatasourceId::PnpmLockYaml
         );
 
@@ -603,44 +605,48 @@ fn hoist_root_dependencies(
             continue;
         };
 
-        let datasource_id = match file_name {
-            "bun.lock" => Some(DatasourceId::BunLock),
-            "bun.lockb" => Some(DatasourceId::BunLockb),
-            ".package-lock.json" => Some(DatasourceId::NpmPackageLockJson),
-            "package-lock.json" => Some(DatasourceId::NpmPackageLockJson),
-            ".npm-shrinkwrap.json" => Some(DatasourceId::NpmPackageLockJson),
-            "yarn.lock" => Some(DatasourceId::YarnLock),
-            "pnpm-lock.yaml" => Some(DatasourceId::PnpmLockYaml),
-            "shrinkwrap.yaml" => Some(DatasourceId::PnpmLockYaml),
-            _ => None,
+        let matches_datasource = |datasource_id: DatasourceId| match file_name {
+            "bun.lock" => datasource_id == DatasourceId::BunLock,
+            "bun.lockb" => datasource_id == DatasourceId::BunLockb,
+            ".package-lock.json" | "package-lock.json" | ".npm-shrinkwrap.json" => {
+                datasource_id == DatasourceId::NpmPackageLockJson
+            }
+            "yarn.lock" => matches!(
+                datasource_id,
+                DatasourceId::YarnLock | DatasourceId::YarnLockV1 | DatasourceId::YarnLockV2
+            ),
+            "pnpm-lock.yaml" | "shrinkwrap.yaml" => datasource_id == DatasourceId::PnpmLockYaml,
+            _ => false,
         };
 
-        if let Some(dsid) = datasource_id {
-            for pkg_data in &file.package_data {
-                if pkg_data.datasource_id != Some(dsid) {
-                    continue;
-                }
+        for pkg_data in &file.package_data {
+            let Some(dsid) = pkg_data.datasource_id else {
+                continue;
+            };
 
-                for dep in &pkg_data.dependencies {
-                    if dep.purl.is_some() {
-                        let mut top_dep = TopLevelDependency::from_dependency(
-                            dep,
-                            file.path.clone(),
-                            dsid,
-                            for_package_uid.map(|s| s.to_string()),
-                        );
+            if !matches_datasource(dsid) {
+                continue;
+            }
 
-                        // Resolve workspace: version
-                        if let Some(req) = &top_dep.extracted_requirement
-                            && req.starts_with("workspace:")
-                            && let Some(resolved) =
-                                resolve_workspace_requirement(req, &top_dep.purl, member_versions)
-                        {
-                            top_dep.extracted_requirement = Some(resolved);
-                        }
+            for dep in &pkg_data.dependencies {
+                if dep.purl.is_some() {
+                    let mut top_dep = TopLevelDependency::from_dependency(
+                        dep,
+                        file.path.clone(),
+                        dsid,
+                        for_package_uid.map(|s| s.to_string()),
+                    );
 
-                        dependencies.push(top_dep);
+                    // Resolve workspace: version
+                    if let Some(req) = &top_dep.extracted_requirement
+                        && req.starts_with("workspace:")
+                        && let Some(resolved) =
+                            resolve_workspace_requirement(req, &top_dep.purl, member_versions)
+                    {
+                        top_dep.extracted_requirement = Some(resolved);
                     }
+
+                    dependencies.push(top_dep);
                 }
             }
         }

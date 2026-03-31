@@ -2110,6 +2110,10 @@ platform: ruby
         let package_data = GemfileParser::extract_first_package(&gemfile_path);
 
         assert_eq!(package_data.package_type, Some(PackageType::Gem));
+        assert_eq!(
+            package_data.datasource_id,
+            Some(DatasourceId::GemfileExtracted)
+        );
         assert!(!package_data.dependencies.is_empty());
 
         let rake_dep = package_data
@@ -2127,6 +2131,10 @@ platform: ruby
         let package_data = GemfileLockParser::extract_first_package(&lockfile_path);
 
         assert_eq!(package_data.package_type, Some(PackageType::Gem));
+        assert_eq!(
+            package_data.datasource_id,
+            Some(DatasourceId::GemfileLockExtracted)
+        );
         assert!(!package_data.dependencies.is_empty());
     }
 
@@ -2138,6 +2146,10 @@ platform: ruby
         let package_data = GemspecParser::extract_first_package(&gemspec_path);
 
         assert_eq!(package_data.package_type, Some(PackageType::Gem));
+        assert_eq!(
+            package_data.datasource_id,
+            Some(DatasourceId::GemspecExtracted)
+        );
         assert_eq!(package_data.name, Some("example-gem".to_string()));
     }
 
@@ -2149,6 +2161,10 @@ platform: ruby
         let package_data = GemspecParser::extract_first_package(&gemspec_path);
 
         assert_eq!(package_data.package_type, Some(PackageType::Gem));
+        assert_eq!(
+            package_data.datasource_id,
+            Some(DatasourceId::GemGemspecInstalledSpecifications)
+        );
         assert_eq!(package_data.name, Some("example-gem".to_string()));
     }
 

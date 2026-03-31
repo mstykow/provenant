@@ -64,6 +64,8 @@ const CONDA_META_PATH_SEGMENT: &str = "conda-meta/";
 const PYTHON_METADATA_DATASOURCE_IDS: &[DatasourceId] = &[
     DatasourceId::PypiWheelMetadata,
     DatasourceId::PypiSdistPkginfo,
+    DatasourceId::PypiEggPkginfo,
+    DatasourceId::PypiEditableEggPkginfo,
 ];
 const PYTHON_SITE_PACKAGES_SEGMENTS: &[&str] = &["site-packages/", "dist-packages/"];
 const DEBIAN_INSTALLED_SUPPLEMENTAL_DATASOURCE_IDS: &[DatasourceId] = &[
