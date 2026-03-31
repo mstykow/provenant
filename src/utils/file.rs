@@ -1139,80 +1139,51 @@ fn extract_pdf_text(path: &Path, bytes: &[u8]) -> String {
         return String::new();
     }
 
-    let extracted = catch_unwind(AssertUnwindSafe(|| {
-        pdf_extract::extract_text_from_mem_by_pages(bytes)
-    }));
-    if let Ok(Ok(pages)) = extracted {
-        let Some(text) = pages.into_iter().next() else {
-            return String::new();
-        };
-        let normalized = text.replace(['\r', '\u{0c}'], "\n");
-        if !normalized.trim().is_empty() {
-            return normalized;
-        }
-    }
-
-    let extracted = catch_unwind(AssertUnwindSafe(|| pdf_extract::extract_text(path)));
-    if let Ok(Ok(text)) = extracted {
-        let normalized = text.replace(['\r', '\u{0c}'], "\n");
-        if !normalized.trim().is_empty() {
-            return normalized;
-        }
-    }
-
     let extracted = catch_unwind(AssertUnwindSafe(
         || -> Result<String, Box<dyn std::error::Error>> {
             let mut document = pdf_oxide::document::PdfDocument::open(path)?;
-            let page_count = document.page_count()?;
-            let mut pages = Vec::new();
-            for page_idx in 0..page_count {
-                let text = document.extract_text(page_idx)?;
-                if !text.trim().is_empty() {
-                    pages.push(text);
-                }
-            }
-            Ok(pages.join("\n"))
+            extract_pdf_text_from_document(&mut document)
         },
     ));
-    if let Ok(Ok(text)) = extracted {
-        let normalized = text.replace(['\r', '\u{0c}'], "\n");
-        if !normalized.trim().is_empty() {
-            return normalized;
-        }
+    if let Ok(Ok(text)) = extracted
+        && let Some(normalized) = normalize_pdf_text(text)
+    {
+        return normalized;
     }
 
     let extracted = catch_unwind(AssertUnwindSafe(
         || -> Result<String, Box<dyn std::error::Error>> {
             let mut document = pdf_oxide::document::PdfDocument::from_bytes(bytes.to_vec())?;
-            let page_count = document.page_count()?;
-            let mut pages = Vec::new();
-            for page_idx in 0..page_count {
-                let text = document.extract_text(page_idx)?;
-                if !text.trim().is_empty() {
-                    pages.push(text);
-                }
-            }
-            Ok(pages.join("\n"))
+            extract_pdf_text_from_document(&mut document)
         },
     ));
-    if let Ok(Ok(text)) = extracted {
-        let normalized = text.replace(['\r', '\u{0c}'], "\n");
-        if !normalized.trim().is_empty() {
-            return normalized;
-        }
-    }
-
-    let extracted = catch_unwind(AssertUnwindSafe(|| {
-        pdf_extract::extract_text_from_mem(bytes)
-    }));
-    if let Ok(Ok(text)) = extracted {
-        let normalized = text.replace(['\r', '\u{0c}'], "\n");
-        if !normalized.trim().is_empty() {
-            return normalized;
-        }
+    if let Ok(Ok(text)) = extracted
+        && let Some(normalized) = normalize_pdf_text(text)
+    {
+        return normalized;
     }
 
     String::new()
+}
+
+fn extract_pdf_text_from_document(
+    document: &mut pdf_oxide::document::PdfDocument,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let page_count = document.page_count()?;
+    let mut pages = Vec::new();
+    for page_idx in 0..page_count {
+        let text = document.extract_text(page_idx)?;
+        if !text.trim().is_empty() {
+            pages.push(text);
+        }
+    }
+
+    Ok(pages.join("\n"))
+}
+
+fn normalize_pdf_text(text: String) -> Option<String> {
+    let normalized = text.replace(['\r', '\u{0c}'], "\n");
+    (!normalized.trim().is_empty()).then_some(normalized)
 }
 
 fn is_zip_archive(bytes: &[u8]) -> bool {
