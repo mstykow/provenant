@@ -64,7 +64,7 @@ These topics are implemented. Some remain as completed historical plans, while o
 ### Infrastructure (`infrastructure/`)
 
 - **[CLI_PLAN.md](infrastructure/CLI_PLAN.md)** - Completed command-line interface parity rollout record
-  - Status: 🟢 Complete — the current ScanCode-facing CLI surface and explicit `Won't do` scope decisions are implemented and recorded in [CLI_PLAN.md](infrastructure/CLI_PLAN.md)
+  - Status: 🟢 Complete — the current ScanCode-facing CLI surface and explicit `Won't do` scope decisions are implemented and recorded in [CLI_PLAN.md](infrastructure/CLI_PLAN.md); any newly confirmed narrow `--info` / file-info parity follow-up stays documented there as targeted maintenance rather than a reopened plan
 
 - **[PROGRESS_TRACKING_PLAN.md](infrastructure/PROGRESS_TRACKING_PLAN.md)** - Enhanced progress reporting
   - Status: 🟢 Implemented — progress manager, mode handling, summary/reporting, and integration tests are tracked in the plan document
