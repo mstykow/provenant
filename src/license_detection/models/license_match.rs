@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
-use crate::license_detection::models::RuleKind;
 use crate::license_detection::models::position_span::PositionSpan;
+use crate::license_detection::models::RuleKind;
 use crate::license_detection::position_set::PositionSet;
 
 fn default_rule_length() -> usize {
@@ -437,11 +437,17 @@ impl LicenseMatch {
     }
 
     pub fn qstart(&self) -> usize {
-        let (min, _) = self.qspan.bounds();
-        if min == 0 && self.qspan.is_empty() {
-            self.start_token
+        let (min, _) = self.effective_span().bounds();
+        min
+    }
+
+    pub fn effective_span(&self) -> PositionSpan {
+        if !self.qspan.is_empty() {
+            self.qspan.clone()
+        } else if self.start_token < self.end_token {
+            PositionSpan::range(self.start_token, self.end_token)
         } else {
-            min
+            PositionSpan::empty()
         }
     }
 
@@ -461,32 +467,23 @@ impl LicenseMatch {
     }
 
     pub(crate) fn len(&self) -> usize {
-        let qspan_len = self.qspan.len();
-        if qspan_len == 0 && self.start_token < self.end_token {
-            self.end_token - self.start_token
-        } else {
-            qspan_len
-        }
+        self.effective_span().len()
     }
 
     fn qregion_len(&self) -> usize {
-        let (min, max) = self.qspan.bounds();
-        if min == max && min == 0 {
-            self.end_token.saturating_sub(self.start_token)
-        } else {
-            max.saturating_sub(min)
-        }
+        let (min, max) = self.effective_span().bounds();
+        max.saturating_sub(min)
     }
 
     pub fn qmagnitude(&self, query: &crate::license_detection::query::Query) -> usize {
+        let span = self.effective_span();
         let qregion_len = self.qregion_len();
-        if self.qspan.is_empty() {
+        if span.is_empty() {
             return qregion_len;
         }
-        let (_, end_exclusive) = self.qspan.bounds();
+        let (_, end_exclusive) = span.bounds();
         let max_pos = end_exclusive.saturating_sub(1);
-        let unknowns_in_match: usize = self
-            .qspan
+        let unknowns_in_match: usize = span
             .iter()
             .filter(|&pos| pos != max_pos)
             .filter_map(|pos| query.unknowns_by_pos.get(&Some(pos as i32)))

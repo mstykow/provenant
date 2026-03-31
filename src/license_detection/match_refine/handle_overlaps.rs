@@ -346,13 +346,14 @@ pub fn filter_overlapping_matches(
 }
 
 fn match_to_qspan(m: &LicenseMatch) -> PositionSpan {
-    if !m.qspan.is_empty() {
-        return m.qspan.clone();
+    let effective = m.effective_span();
+    if !effective.is_empty() {
+        return effective;
     }
     if m.start_token == 0 && m.end_token == 0 {
         return PositionSpan::range(m.start_line, m.end_line + 1);
     }
-    PositionSpan::range(m.start_token, m.end_token)
+    effective
 }
 
 /// Restore non-overlapping discarded matches.
