@@ -867,15 +867,9 @@ fn should_skip_binary_string_extraction(
     detected_format: FileFormat,
 ) -> bool {
     matches!(lower_extension(path).as_deref(), Some("pdf"))
-        || matches!(
-            detected_format.kind(),
-            FileFormatKind::Archive
-                | FileFormatKind::Compressed
-                | FileFormatKind::Package
-                | FileFormatKind::Image
-                | FileFormatKind::Audio
-                | FileFormatKind::Video
-        )
+        || supported_image_metadata_format(lower_extension(path).as_deref(), detected_format)
+            .is_some()
+        || media_mime_from_content(bytes).is_some()
         || is_zip_archive(bytes)
         || looks_like_gzip(bytes)
         || looks_like_bzip2(bytes)
@@ -1344,6 +1338,31 @@ mod tests {
         assert_eq!(whl_kind, ExtractedTextKind::None);
         assert!(crate_text.is_empty());
         assert_eq!(crate_kind, ExtractedTextKind::None);
+    }
+
+    #[test]
+    fn test_extract_text_for_detection_keeps_binary_strings_for_lib_fixtures() {
+        let path =
+            Path::new("testdata/copyright-golden/copyrights/copyright_php_lib-php_embed_lib.lib");
+        let bytes = std::fs::read(path).expect("failed to read lib fixture");
+
+        let (text, kind) = extract_text_for_detection(path, &bytes);
+
+        assert_ne!(kind, ExtractedTextKind::None);
+        assert!(text.contains("Copyright nexB and others (c) 2012"));
+    }
+
+    #[test]
+    fn test_extract_text_for_detection_decodes_svg_fixture_text() {
+        let path = Path::new(
+            "testdata/license-golden/datadriven/external/fossology-tests/Public-domain/biohazard.svg",
+        );
+        let bytes = std::fs::read(path).expect("failed to read svg fixture");
+
+        let (text, kind) = extract_text_for_detection(path, &bytes);
+
+        assert_eq!(kind, ExtractedTextKind::Decoded);
+        assert!(text.contains("creativecommons.org/licenses/publicdomain"));
     }
 
     #[test]
