@@ -1,9 +1,10 @@
 #[cfg(test)]
 mod golden_tests {
+    use std::path::PathBuf;
+    use std::process::Command;
+
     use crate::parsers::PackageParser;
     use crate::parsers::golden_test_utils::compare_package_data_parser_only;
-
-    #[cfg(unix)]
     use crate::parsers::rpm_db::{
         RpmBdbDatabaseParser, RpmNdbDatabaseParser, RpmSqliteDatabaseParser,
     };
@@ -12,7 +13,10 @@ mod golden_tests {
     use crate::parsers::rpm_parser::*;
     use crate::parsers::rpm_specfile::RpmSpecfileParser;
     use crate::parsers::rpm_yumdb::RpmYumdbParser;
-    use std::path::PathBuf;
+
+    fn rpm_command_available() -> bool {
+        Command::new("rpm").arg("--version").output().is_ok()
+    }
 
     #[test]
     fn test_golden_rpm_archive() {
@@ -49,9 +53,12 @@ mod golden_tests {
         }
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_golden_rpm_sqlite_db() {
+        if !rpm_command_available() {
+            return;
+        }
+
         let test_file = PathBuf::from("testdata/rpm/rpmdb.sqlite");
         let expected_file = PathBuf::from("testdata/rpm/rpmdb.sqlite.expected.json");
 
@@ -63,9 +70,12 @@ mod golden_tests {
         }
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_golden_rpm_bdb_default() {
+        if !rpm_command_available() {
+            return;
+        }
+
         let test_file = PathBuf::from("testdata/rpm/var/lib/rpm/Packages");
         let expected_file = PathBuf::from("testdata/rpm/var/lib/rpm/Packages.expected.json");
 
@@ -77,9 +87,12 @@ mod golden_tests {
         }
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_golden_rpm_ndb_default() {
+        if !rpm_command_available() {
+            return;
+        }
+
         let test_file = PathBuf::from("testdata/rpm/usr/lib/sysimage/rpm/Packages.db");
         let expected_file =
             PathBuf::from("testdata/rpm/usr/lib/sysimage/rpm/Packages.db.expected.json");

@@ -1,13 +1,22 @@
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
     use std::fs;
     use std::path::Path;
+    use std::process::Command;
 
     use super::super::scan_test_utils::scan_and_assemble;
     use crate::models::{DatasourceId, PackageType};
 
+    fn rpm_command_available() -> bool {
+        Command::new("rpm").arg("--version").output().is_ok()
+    }
+
     #[test]
     fn test_rpm_sqlite_scan_assigns_referenced_files_from_rootfs_layout() {
+        if !rpm_command_available() {
+            return;
+        }
+
         let temp_dir = tempfile::TempDir::new().expect("create temp dir");
         let rpmdb_dir = temp_dir.path().join("usr/lib/sysimage/rpm");
         let licenses_dir = temp_dir.path().join("usr/share/licenses/libgcc");
@@ -53,6 +62,10 @@ mod tests {
 
     #[test]
     fn test_rpm_yumdb_scan_assembles_virtual_package_and_preserves_metadata() {
+        if !rpm_command_available() {
+            return;
+        }
+
         let (files, result) = scan_and_assemble(Path::new("testdata/rpm/var/lib/yum/yumdb"));
 
         let package = result
