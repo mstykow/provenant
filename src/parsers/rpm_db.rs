@@ -246,9 +246,16 @@ fn build_file_references_from_paths(paths: &[Option<String>]) -> Vec<FileReferen
 }
 
 fn query_rpm_database(rpmdb_dir: &Path) -> Result<Vec<RpmQueryPackage>, String> {
+    let rpmdb_dir = rpmdb_dir.canonicalize().map_err(|e| {
+        format!(
+            "Failed to resolve RPM database directory {:?} to an absolute path: {}",
+            rpmdb_dir, e
+        )
+    })?;
+
     let output = Command::new("rpm")
         .args(["--dbpath"])
-        .arg(rpmdb_dir)
+        .arg(&rpmdb_dir)
         .args(["--query", "--all", "--queryformat", RPM_QUERY_FORMAT])
         .output()
         .map_err(|e| format!("Failed to execute rpm for {:?}: {}", rpmdb_dir, e))?;
