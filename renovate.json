@@ -112,13 +112,6 @@
       "labels": ["dependencies", "major-update"]
     },
     {
-      "description": "Pin rusqlite to 0.37.x until rpmdb publishes version with 0.38.x support",
-      "matchManagers": ["cargo"],
-      "matchPackageNames": ["rusqlite"],
-      "allowedVersions": "0.37.x",
-      "enabled": true
-    },
-    {
       "description": "Group Node.js updates together (.nvmrc, Dockerfiles) - LTS only",
       "matchDatasources": ["node-version", "docker"],
       "matchPackageNames": ["node"],
