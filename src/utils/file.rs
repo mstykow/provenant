@@ -411,6 +411,19 @@ fn extract_pdf_text(path: &Path, bytes: &[u8]) -> String {
         return String::new();
     }
 
+    let extracted = catch_unwind(AssertUnwindSafe(|| {
+        pdf_extract::extract_text_from_mem_by_pages(bytes)
+    }));
+    if let Ok(Ok(pages)) = extracted {
+        let Some(text) = pages.into_iter().next() else {
+            return String::new();
+        };
+        let normalized = text.replace(['\r', '\u{0c}'], "\n");
+        if !normalized.trim().is_empty() {
+            return normalized;
+        }
+    }
+
     let extracted = catch_unwind(AssertUnwindSafe(|| pdf_extract::extract_text(path)));
     if let Ok(Ok(text)) = extracted {
         let normalized = text.replace(['\r', '\u{0c}'], "\n");
@@ -471,24 +484,7 @@ fn extract_pdf_text(path: &Path, bytes: &[u8]) -> String {
         }
     }
 
-    let extracted = catch_unwind(AssertUnwindSafe(|| {
-        pdf_extract::extract_text_from_mem_by_pages(bytes)
-    }));
-    match extracted {
-        Ok(Ok(pages)) => {
-            let normalized = pages
-                .into_iter()
-                .map(|page| page.replace(['\r', '\u{0c}'], "\n"))
-                .collect::<Vec<_>>()
-                .join("\n");
-            if normalized.trim().is_empty() {
-                String::new()
-            } else {
-                normalized
-            }
-        }
-        Ok(Err(_)) | Err(_) => String::new(),
-    }
+    String::new()
 }
 
 fn is_zip_archive(bytes: &[u8]) -> bool {
