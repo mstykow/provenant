@@ -465,9 +465,6 @@ pub fn combine_expressions_and(expressions: &[&str], unique: bool) -> Result<Str
 ///
 /// This function parses each expression string, combines them with `OR`, and
 /// optionally deduplicates license keys.
-// Kept for future parity work where production code needs to combine
-// expressions with OR, especially beyond the current license-detection path.
-// See docs/license-detection/GAPS.md#expression-key-set-features.
 #[allow(dead_code)]
 pub fn combine_expressions_or(expressions: &[&str], unique: bool) -> Result<String, ParseError> {
     combine_expressions_with(expressions, unique, LicenseExpression::or)

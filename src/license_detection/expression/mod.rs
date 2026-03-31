@@ -79,8 +79,6 @@ pub enum LicenseExpression {
 
 impl LicenseExpression {
     /// Extract all license keys from the expression.
-    // Kept for future parity work around reference-following and validation.
-    // See docs/license-detection/GAPS.md#expression-key-set-features.
     #[allow(dead_code)]
     pub fn license_keys(&self) -> Vec<String> {
         let mut keys = Vec::new();
@@ -90,8 +88,6 @@ impl LicenseExpression {
         keys
     }
 
-    // Kept for future parity work around reference-following and validation.
-    // See docs/license-detection/GAPS.md#expression-key-set-features.
     #[allow(dead_code)]
     fn collect_keys(&self, keys: &mut Vec<String>) {
         match self {

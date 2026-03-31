@@ -323,10 +323,6 @@ pub fn filter_detections_by_score(
 /// location. Detections with the same expression but different identifiers
 /// represent the same license at DIFFERENT locations and should be kept separate.
 ///
-/// NOTE: This function is currently unused. Python aggregates detections into
-/// unique detections with per-file region metadata, but Rust does not implement
-/// that feature yet. See: `docs/license-detection/PLAN-019-file-region-and-unique-detection.md`.
-///
 /// Based on Python get_detections_by_id behavior in detection.py.
 #[cfg(test)]
 pub fn remove_duplicate_detections(detections: Vec<LicenseDetection>) -> Vec<LicenseDetection> {

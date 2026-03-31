@@ -114,9 +114,6 @@ fn python_token_tuple_repr(tokens: &[String]) -> String {
 
 /// Compute a unique identifier for a detection.
 ///
-/// NOTE: This function is currently unused. It will be used by `get_unique_detections`
-/// when implementing UniqueDetection aggregation.
-/// See: docs/license-detection/PLAN-019-unique-detection.md
 #[cfg(test)]
 pub fn compute_detection_identifier(detection: &LicenseDetection) -> String {
     let expression = detection

@@ -172,4 +172,3 @@ Before implementing this improvement:
 ## Related Files
 
 - Investigation test: `src/license_detection/cddl_investigation_test.rs`
-- Plan document (original): `docs/license-detection/PLAN-056-cddl-rule-selection-investigation.md`

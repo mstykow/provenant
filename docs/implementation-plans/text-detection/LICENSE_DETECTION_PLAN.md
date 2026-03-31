@@ -26,13 +26,8 @@ implemented engine internals.
 ## Final Follow-Up Status
 
 The focused follow-up items that were temporarily tracked outside this document
-have now been closed as well:
-
-- `docs/license-detection/PLAN-019-file-region-and-unique-detection.md`
-- `docs/license-detection/PLAN-020-precompute-rule-spdx-expressions.md`
-- `docs/license-detection/GAPS.md`
-
-These now serve as implementation records rather than active gap trackers.
+have now been implemented and folded back into the evergreen architecture and
+completed-plan docs.
 
 ## Scope
 
@@ -182,11 +177,8 @@ documents.
 - [OUTPUT_FORMATS_PLAN.md](../output/OUTPUT_FORMATS_PLAN.md)
 - [PARITY_SCORECARD.md](../output/PARITY_SCORECARD.md)
 - [SCAN_RESULT_SHAPING_PLAN.md](../post-processing/SCAN_RESULT_SHAPING_PLAN.md)
-- [GAPS.md](../../license-detection/GAPS.md)
 
 ## Notes
 
-- `GAPS.md` currently records that there are no open license-detection parity
-  gaps.
 - Upstream documentation around some license flags has drifted over time;
   fixture-backed and code-backed behavior should remain the primary parity target.

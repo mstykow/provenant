@@ -454,9 +454,8 @@ reference-following now consumes that metadata internally, but some downstream
 package/reference consumers are still not fully represented in the current
 serialized surfaces.
 
-The current public-output structure is described here,
-and the focused file-region design history remains in
-[`docs/license-detection/PLAN-019-file-region-and-unique-detection.md`](license-detection/PLAN-019-file-region-and-unique-detection.md).
+The current public-output structure and file-region-aware aggregation behavior
+are described here.
 
 ### Internal Detection Structure
 
