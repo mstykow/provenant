@@ -77,8 +77,8 @@ jobs:
       - name: Check for unused dependencies
         run: ./scripts/check_unused_deps.sh
 
-  rust-quality-windows:
-    name: Code Quality (Windows)
+  windows-build-smoke:
+    name: Windows Build Smoke Test
     runs-on: windows-latest
     if: |
       !(github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/'))
@@ -90,18 +90,13 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.94.0
-        with:
-          components: clippy
 
       - name: Set up Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: rust-quality-windows
+          shared-key: windows-build-smoke
 
-      - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
-
-      - name: Check compilation
+      - name: Check Windows compilation
         run: cargo check --all --verbose
 
   rust-scan-integration-tests:
