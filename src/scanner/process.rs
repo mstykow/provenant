@@ -18,6 +18,7 @@ use crate::copyright::{
 };
 use crate::finder::{self, DetectionConfig};
 use crate::license_detection::models::LicenseMatch as InternalLicenseMatch;
+use crate::license_detection::PositionSet;
 use crate::license_detection::query::Query;
 use crate::models::{
     Author, Copyright, DatasourceId, FileInfo, FileInfoBuilder, FileType, Holder, LicenseDetection,
@@ -978,15 +979,15 @@ fn matched_text_diagnostics_from_match(
     query: &Query<'_>,
     license_match: &InternalLicenseMatch,
 ) -> String {
-    let matched_positions: std::collections::HashSet<usize> = license_match.qspan.iter().collect();
-    let Some(start_pos) = matched_positions.iter().min().copied() else {
+    let matched_positions: PositionSet = license_match.qspan.iter().collect();
+    let Some(start_pos) = matched_positions.iter().min() else {
         return crate::license_detection::query::matched_text_from_text(
             &query.text,
             license_match.start_line,
             license_match.end_line,
         );
     };
-    let Some(end_pos) = matched_positions.iter().max().copied() else {
+    let Some(end_pos) = matched_positions.iter().max() else {
         return crate::license_detection::query::matched_text_from_text(
             &query.text,
             license_match.start_line,
@@ -1147,7 +1148,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: RuleKind::Text,
             is_from_license: true,
-            hilen: 3,
             rule_start_token: 0,
             qspan: PositionSpan::empty(),
             ispan: PositionSpan::empty(),

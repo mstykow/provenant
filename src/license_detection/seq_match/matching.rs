@@ -283,10 +283,8 @@ pub fn seq_match_with_candidates(
                         continue;
                     }
 
-                    let qspan_positions: Vec<usize> = (qpos..qpos + mlen)
-                        .map(|pos| pos + query_run.start)
-                        .collect();
-                    let ispan_positions: Vec<usize> = (ipos..ipos + mlen).collect();
+                    let qspan = PositionSpan::range(qpos + query_run.start, qpos + mlen + query_run.start);
+                    let ispan = PositionSpan::range(ipos, ipos + mlen);
                     let hispan_positions: Vec<usize> = (ipos..ipos + mlen)
                         .filter(|&p| {
                             rule_tokens
@@ -294,7 +292,6 @@ pub fn seq_match_with_candidates(
                                 .is_some_and(|t| t.as_usize() < len_legalese)
                         })
                         .collect();
-                    let hispan_count = hispan_positions.len();
 
                     let qend = qpos + mlen - 1;
                     let abs_qpos = qpos + query_run.start;
@@ -331,10 +328,9 @@ pub fn seq_match_with_candidates(
                         referenced_filenames: candidate.rule.referenced_filenames.clone(),
                         rule_kind: candidate.rule.kind(),
                         is_from_license: candidate.rule.is_from_license,
-                        hilen: hispan_count,
                         rule_start_token: ipos,
-                        qspan: PositionSpan::from_positions(qspan_positions),
-                        ispan: PositionSpan::from_positions(ispan_positions),
+                        qspan,
+                        ispan,
                         hispan: PositionSpan::from_positions(hispan_positions),
                         candidate_resemblance: candidate.score_vec_full.resemblance,
                         candidate_containment: candidate.score_vec_full.containment,

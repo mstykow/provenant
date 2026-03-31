@@ -215,7 +215,6 @@ mod tests {
             )
             .unwrap(),
             is_from_license: false,
-            hilen: matched_length / 2,
             rule_start_token: 0,
             qspan: PositionSpan::from_positions((0..matched_length).collect()),
             ispan: PositionSpan::empty(),

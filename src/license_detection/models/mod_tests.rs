@@ -109,7 +109,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: RuleKind::None,
             is_from_license: false,
-            hilen: 50,
             rule_start_token: 0,
             qspan: PositionSpan::range(0, 100),
             ispan: PositionSpan::range(0, 100),
@@ -527,7 +526,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
-            hilen: 0,
             rule_start_token: 0,
             qspan: PositionSpan::empty(),
             ispan: PositionSpan::empty(),
@@ -654,7 +652,7 @@ mod tests {
         );
         assert_eq!(original.rule_kind, deserialized.rule_kind);
         assert_eq!(original.is_from_license, deserialized.is_from_license);
-        assert_eq!(original.hilen, deserialized.hilen);
+        assert_eq!(original.hilen(), deserialized.hilen());
         assert_eq!(original.rule_start_token, deserialized.rule_start_token);
     }
 
@@ -707,7 +705,6 @@ mod tests {
             referenced_filenames: Some(vec!["LICENSE".to_string(), "COPYING".to_string()]),
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
-            hilen: 50,
             rule_start_token: 0,
             qspan: PositionSpan::empty(),
             ispan: PositionSpan::empty(),
@@ -746,7 +743,7 @@ mod tests {
 
     #[test]
     fn test_qdensity_contiguous() {
-        use std::collections::{HashMap, HashSet};
+        use std::collections::HashMap;
         let index = create_test_index();
         let match_result = create_license_match();
         let query = crate::license_detection::query::Query {
@@ -755,7 +752,7 @@ mod tests {
             line_by_pos: vec![],
             unknowns_by_pos: HashMap::new(),
             stopwords_by_pos: HashMap::new(),
-            shorts_and_digits_pos: HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: PositionSet::new(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -768,7 +765,7 @@ mod tests {
 
     #[test]
     fn test_qdensity_sparse() {
-        use std::collections::{HashMap, HashSet};
+        use std::collections::HashMap;
         let index = create_test_index();
         let mut match_result = create_license_match();
         match_result.qspan = PositionSpan::from_positions(vec![0, 10]);
@@ -778,7 +775,7 @@ mod tests {
             line_by_pos: vec![],
             unknowns_by_pos: HashMap::new(),
             stopwords_by_pos: HashMap::new(),
-            shorts_and_digits_pos: HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: PositionSet::new(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -792,7 +789,7 @@ mod tests {
 
     #[test]
     fn test_qdensity_zero() {
-        use std::collections::{HashMap, HashSet};
+        use std::collections::HashMap;
         let index = create_test_index();
         let mut match_result = create_license_match();
         match_result.start_token = 0;
@@ -804,7 +801,7 @@ mod tests {
             line_by_pos: vec![],
             unknowns_by_pos: HashMap::new(),
             stopwords_by_pos: HashMap::new(),
-            shorts_and_digits_pos: HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: PositionSet::new(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -817,7 +814,7 @@ mod tests {
 
     #[test]
     fn test_qdensity_with_unknowns() {
-        use std::collections::{HashMap, HashSet};
+        use std::collections::HashMap;
         let index = create_test_index();
         let mut match_result = create_license_match();
         match_result.start_token = 0;
@@ -832,7 +829,7 @@ mod tests {
             line_by_pos: vec![],
             unknowns_by_pos,
             stopwords_by_pos: HashMap::new(),
-            shorts_and_digits_pos: HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: PositionSet::new(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -846,7 +843,7 @@ mod tests {
 
     #[test]
     fn test_qmagnitude_non_contiguous() {
-        use std::collections::{HashMap, HashSet};
+        use std::collections::HashMap;
         let index = create_test_index();
         let mut match_result = create_license_match();
         match_result.qspan = PositionSpan::from_positions(vec![0, 5, 10]);
@@ -859,7 +856,7 @@ mod tests {
             line_by_pos: vec![],
             unknowns_by_pos,
             stopwords_by_pos: HashMap::new(),
-            shorts_and_digits_pos: HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: PositionSet::new(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -873,7 +870,7 @@ mod tests {
 
     #[test]
     fn test_qmagnitude_excludes_end_position() {
-        use std::collections::{HashMap, HashSet};
+        use std::collections::HashMap;
         let index = create_test_index();
         let mut match_result = create_license_match();
         match_result.qspan = PositionSpan::from_positions(vec![0, 5, 10]);
@@ -885,7 +882,7 @@ mod tests {
             line_by_pos: vec![],
             unknowns_by_pos,
             stopwords_by_pos: HashMap::new(),
-            shorts_and_digits_pos: HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: PositionSet::new(),
             low_matchables: PositionSet::new(),
             is_binary: false,

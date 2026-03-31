@@ -32,13 +32,11 @@ fn combine_matches(a: &LicenseMatch, b: &LicenseMatch) -> LicenseMatch {
     hispan_set.extend_from_span(&b.hispan);
     let mut hispan_vec: Vec<usize> = hispan_set.iter().collect();
     hispan_vec.sort_unstable();
-    let hilen = hispan_vec.len();
 
     merged.start_token = *qspan_vec.first().unwrap_or(&a.start_token);
     merged.end_token = qspan_vec.last().map(|&x| x + 1).unwrap_or(a.end_token);
     merged.rule_start_token = *ispan_vec.first().unwrap_or(&a.rule_start_token);
     merged.matched_length = qspan_vec.len();
-    merged.hilen = hilen;
     merged.hispan = PositionSpan::from_positions(hispan_vec);
     merged.start_line = a.start_line.min(b.start_line);
     merged.end_line = a.end_line.max(b.end_line);
@@ -74,7 +72,7 @@ pub fn merge_overlapping_matches(matches: &[LicenseMatch]) -> Vec<LicenseMatch> 
         a.rule_identifier
             .cmp(&b.rule_identifier)
             .then_with(|| a.qstart().cmp(&b.qstart()))
-            .then_with(|| b.hilen.cmp(&a.hilen))
+            .then_with(|| b.hilen().cmp(&a.hilen()))
             .then_with(|| b.matched_length.cmp(&a.matched_length))
             .then_with(|| a.matcher_order().cmp(&b.matcher_order()))
     });
@@ -354,7 +352,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
-            hilen: 50,
             rule_start_token: 0,
             qspan: PositionSpan::range(start_line, end_line + 1),
             ispan: PositionSpan::range(0, matched_len),
@@ -392,7 +389,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
-            hilen: matched_length / 2,
             rule_start_token: 0,
             qspan: PositionSpan::range(start_token, end_token),
             ispan: PositionSpan::empty(),

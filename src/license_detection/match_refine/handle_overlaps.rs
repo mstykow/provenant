@@ -51,7 +51,7 @@ pub fn filter_contained_matches(
     matches.sort_by(|a, b| {
         a.qstart()
             .cmp(&b.qstart())
-            .then_with(|| b.hilen.cmp(&a.hilen))
+            .then_with(|| b.hilen().cmp(&a.hilen()))
             .then_with(|| b.len().cmp(&a.len()))
             .then_with(|| a.matcher_order().cmp(&b.matcher_order()))
     });
@@ -136,7 +136,7 @@ pub fn filter_overlapping_matches(
     matches.sort_by(|a, b| {
         a.qstart()
             .cmp(&b.qstart())
-            .then_with(|| b.hilen.cmp(&a.hilen))
+            .then_with(|| b.hilen().cmp(&a.hilen()))
             .then_with(|| b.len().cmp(&a.len()))
             .then_with(|| a.matcher_order().cmp(&b.matcher_order()))
     });
@@ -440,7 +440,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
-            hilen: 50,
             rule_start_token: 0,
             qspan: PositionSpan::empty(),
             ispan: PositionSpan::empty(),
@@ -478,7 +477,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
-            hilen: matched_length / 2,
             rule_start_token: 0,
             qspan: PositionSpan::range(start_token, end_token),
             ispan: PositionSpan::range(0, matched_length),
@@ -1124,7 +1122,7 @@ mod tests {
         m1.start_token = 5;
         m1.end_token = 77;
         m1.matched_length = 48;
-        m1.hilen = 14;
+        m1.hispan = PositionSpan::from_positions((0..14).collect());
         m1.matcher = crate::license_detection::models::MatcherKind::Seq;
         m1.qspan = PositionSpan::from_positions((5..77).collect());
 
@@ -1132,7 +1130,7 @@ mod tests {
         m2.start_token = 5;
         m2.end_token = 77;
         m2.matched_length = 48;
-        m2.hilen = 14;
+        m2.hispan = PositionSpan::from_positions((0..14).collect());
         m2.matcher = crate::license_detection::models::MatcherKind::Seq;
         m2.qspan = PositionSpan::from_positions((5..77).collect());
 

@@ -10,7 +10,7 @@ use crate::license_detection::tokenize::tokenize_as_ids;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::cell::{OnceCell, RefCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 static QUERY_PATTERN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"[^_\W]+\+?[^_\W]*").expect("valid query regex"));
@@ -81,7 +81,7 @@ pub struct Query<'a> {
     /// These tokens have special handling in matching.
     ///
     /// Corresponds to Python: `self.shorts_and_digits_pos = set()` (line 249)
-    pub shorts_and_digits_pos: HashSet<usize>,
+    pub shorts_and_digits_pos: PositionSet,
 
     /// High-value matchable token positions (legalese tokens)
     ///
@@ -143,7 +143,7 @@ pub fn matched_text_from_text(text: &str, start_line: usize, end_line: usize) ->
 pub fn matched_text_diagnostics_from_text(
     text: &str,
     query: &Query<'_>,
-    matched_positions: &HashSet<usize>,
+    matched_positions: &PositionSet,
     start_pos: usize,
     end_pos: usize,
     start_line: usize,
@@ -241,7 +241,7 @@ fn tokenize_matched_text(text: &str, query: &Query<'_>) -> Vec<MatchedTextToken>
 
 fn collect_reportable_tokens(
     tokens: Vec<MatchedTextToken>,
-    matched_positions: &HashSet<usize>,
+    matched_positions: &PositionSet,
     start_pos: usize,
     end_pos: usize,
     start_line: usize,
@@ -266,7 +266,7 @@ fn collect_reportable_tokens(
 
         if token
             .pos
-            .is_some_and(|pos| matched_positions.contains(&pos))
+            .is_some_and(|pos| matched_positions.contains(pos))
         {
             token.is_matched = true;
             is_included = true;
@@ -480,7 +480,7 @@ impl<'a> Query<'a> {
         let mut line_by_pos = Vec::new();
         let mut unknowns_by_pos: HashMap<Option<i32>, usize> = HashMap::new();
         let mut stopwords_by_pos: HashMap<Option<i32>, usize> = HashMap::new();
-        let mut shorts_and_digits_pos = HashSet::new();
+        let mut shorts_and_digits_pos = PositionSet::new();
         let mut spdx_lines: Vec<(String, usize, usize)> = Vec::new();
 
         let mut known_pos = -1i32;

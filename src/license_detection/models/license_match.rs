@@ -148,12 +148,6 @@ pub struct LicenseMatch {
     /// Rules from LICENSE files have relevance=100 and should take priority over decomposed expressions.
     pub is_from_license: bool,
 
-    /// Count of matched high-value legalese tokens (token IDs < len_legalese).
-    ///
-    /// Corresponds to Python's `len(self.hispan)` - the number of matched positions
-    /// where the token ID is a high-value legalese token.
-    pub hilen: usize,
-
     /// Rule-side start position (where in the rule text the match starts).
     ///
     /// This is Python's "istart" - the position in the rule, not the query.
@@ -266,6 +260,7 @@ struct DeserializableLicenseMatch {
     #[serde(default)]
     is_from_license: bool,
     #[serde(default)]
+    #[allow(dead_code)]
     hilen: usize,
     #[serde(default)]
     rule_start_token: usize,
@@ -305,7 +300,7 @@ impl Serialize for LicenseMatch {
             is_license_reference: self.is_license_reference(),
             is_license_tag: self.is_license_tag(),
             is_from_license: self.is_from_license,
-            hilen: self.hilen,
+            hilen: self.hilen(),
             rule_start_token: self.rule_start_token,
             candidate_resemblance: self.candidate_resemblance,
             candidate_containment: self.candidate_containment,
@@ -350,7 +345,6 @@ impl<'de> Deserialize<'de> for LicenseMatch {
             referenced_filenames: value.referenced_filenames,
             rule_kind,
             is_from_license: value.is_from_license,
-            hilen: value.hilen,
             rule_start_token: value.rule_start_token,
             qspan: PositionSpan::empty(),
             ispan: PositionSpan::empty(),
@@ -384,7 +378,6 @@ impl Default for LicenseMatch {
             referenced_filenames: None,
             rule_kind: RuleKind::None,
             is_from_license: false,
-            hilen: 0,
             rule_start_token: 0,
             qspan: PositionSpan::empty(),
             ispan: PositionSpan::empty(),
@@ -433,7 +426,7 @@ impl LicenseMatch {
     }
 
     pub fn hilen(&self) -> usize {
-        self.hilen
+        self.hispan.len()
     }
 
     pub fn qstart(&self) -> usize {

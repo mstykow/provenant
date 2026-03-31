@@ -372,7 +372,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
-            hilen: 50,
             rule_start_token: 0,
             qspan: PositionSpan::empty(),
             ispan: PositionSpan::empty(),

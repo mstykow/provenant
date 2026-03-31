@@ -231,7 +231,7 @@ fn compute_hispan_from_qspan(
 fn create_unknown_match_from_qspan(
     query: &Query,
     qspan: &[(usize, usize)],
-    hispan: usize,
+    _hispan: usize,
 ) -> Option<LicenseMatch> {
     if qspan.is_empty() {
         return None;
@@ -280,7 +280,6 @@ fn create_unknown_match_from_qspan(
         referenced_filenames: None,
         rule_kind: crate::license_detection::models::RuleKind::None,
         is_from_license: false,
-        hilen: hispan,
         rule_start_token: 0,
         qspan: PositionSpan::from_positions(qspan_positions),
         ispan: PositionSpan::empty(),
@@ -304,7 +303,7 @@ fn build_unknown_rule_text(
         return String::new();
     };
 
-    let matched_positions: std::collections::HashSet<usize> =
+    let matched_positions: PositionSet =
         qspan_positions.iter().copied().collect();
     let tokens = tokenize_matched_unknown_text(&query.text, query);
     let reportable_tokens = collect_reportable_unknown_tokens(
@@ -404,7 +403,7 @@ fn tokenize_matched_unknown_text(text: &str, query: &Query) -> Vec<MatchedTextTo
 
 fn collect_reportable_unknown_tokens(
     tokens: Vec<MatchedTextToken>,
-    matched_positions: &std::collections::HashSet<usize>,
+    matched_positions: &PositionSet,
     start_pos: usize,
     end_pos: usize,
     start_line: usize,
@@ -429,7 +428,7 @@ fn collect_reportable_unknown_tokens(
 
         if token
             .pos
-            .is_some_and(|pos| token.is_known && matched_positions.contains(&pos))
+            .is_some_and(|pos| token.is_known && matched_positions.contains(pos))
         {
             token.is_matched = true;
             is_included = true;
@@ -814,7 +813,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
-            hilen: 1,
             rule_start_token: 0,
             qspan: PositionSpan::from_positions(vec![0, 1, 2, 7, 8, 9]),
             ispan: PositionSpan::empty(),
@@ -864,7 +862,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
-            hilen: 1,
             rule_start_token: 0,
             qspan: PositionSpan::empty(),
             ispan: PositionSpan::empty(),
@@ -915,7 +912,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
-            hilen: 1,
             rule_start_token: 0,
             qspan: PositionSpan::from_positions(vec![0, 1, 2, 3, 11, 12, 13, 14]),
             ispan: PositionSpan::empty(),
@@ -1000,7 +996,6 @@ mod tests {
             referenced_filenames: None,
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
-            hilen: 2,
             rule_start_token: 0,
             qspan: PositionSpan::empty(),
             ispan: PositionSpan::empty(),

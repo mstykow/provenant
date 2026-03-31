@@ -5,8 +5,8 @@
 
 use sha1::{Digest, Sha1};
 
-use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::{TokenId, TokenKind};
+use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::{LicenseMatch, MatcherKind};
 use crate::license_detection::query::QueryRun;
@@ -100,7 +100,6 @@ pub fn hash_match(index: &LicenseIndex, query_run: &QueryRun) -> Vec<LicenseMatc
             referenced_filenames: rule.referenced_filenames.clone(),
             rule_kind: rule.kind(),
             is_from_license: rule.is_from_license,
-            hilen: hispan_positions.len(),
             rule_start_token: 0,
             qspan,
             ispan,

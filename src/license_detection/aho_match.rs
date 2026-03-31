@@ -130,14 +130,6 @@ pub fn aho_match_with_extra_matchables(
                 100.0
             };
 
-            let hispan_count = (0..matched_length)
-                .filter(|&p| {
-                    rule_tids
-                        .get(p)
-                        .is_some_and(|tid| index.dictionary.token_kind(*tid) == TokenKind::Legalese)
-                })
-                .count();
-
             let start_line = query_run.line_for_pos(qstart).unwrap_or(1);
 
             let end_line = if qend > qstart {
@@ -185,7 +177,6 @@ pub fn aho_match_with_extra_matchables(
                 referenced_filenames: rule.referenced_filenames.clone(),
                 rule_kind: rule.kind(),
                 is_from_license: rule.is_from_license,
-                hilen: hispan_count,
                 rule_start_token: 0,
                 qspan,
                 ispan,
@@ -328,7 +319,7 @@ mod tests {
             line_by_pos: vec![1, 1],
             unknowns_by_pos: std::collections::HashMap::new(),
             stopwords_by_pos: std::collections::HashMap::new(),
-            shorts_and_digits_pos: std::collections::HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: (0..2).collect(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -370,7 +361,7 @@ mod tests {
             line_by_pos: vec![1, 1, 1],
             unknowns_by_pos: std::collections::HashMap::new(),
             stopwords_by_pos: std::collections::HashMap::new(),
-            shorts_and_digits_pos: std::collections::HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: (0..3).collect(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -417,7 +408,7 @@ mod tests {
             line_by_pos: vec![1, 1, 2, 2],
             unknowns_by_pos: std::collections::HashMap::new(),
             stopwords_by_pos: std::collections::HashMap::new(),
-            shorts_and_digits_pos: std::collections::HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: (0..4).collect(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -459,7 +450,7 @@ mod tests {
             line_by_pos: vec![1, 1, 1],
             unknowns_by_pos: std::collections::HashMap::new(),
             stopwords_by_pos: std::collections::HashMap::new(),
-            shorts_and_digits_pos: std::collections::HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: PositionSet::new(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -500,7 +491,7 @@ mod tests {
             line_by_pos: vec![1, 1, 1],
             unknowns_by_pos: std::collections::HashMap::new(),
             stopwords_by_pos: std::collections::HashMap::new(),
-            shorts_and_digits_pos: std::collections::HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: [0usize, 2].into_iter().collect(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -557,7 +548,7 @@ mod tests {
             line_by_pos: vec![1, 1, 1],
             unknowns_by_pos: std::collections::HashMap::new(),
             stopwords_by_pos: std::collections::HashMap::new(),
-            shorts_and_digits_pos: std::collections::HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: [2usize].into_iter().collect(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -601,7 +592,7 @@ mod tests {
             line_by_pos: vec![5, 5],
             unknowns_by_pos: std::collections::HashMap::new(),
             stopwords_by_pos: std::collections::HashMap::new(),
-            shorts_and_digits_pos: std::collections::HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: (0..2).collect(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -684,7 +675,7 @@ mod tests {
             line_by_pos: vec![1, 1, 1],
             unknowns_by_pos: std::collections::HashMap::new(),
             stopwords_by_pos: std::collections::HashMap::new(),
-            shorts_and_digits_pos: std::collections::HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: (0..3).collect(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -722,7 +713,7 @@ mod tests {
             line_by_pos: vec![1],
             unknowns_by_pos: std::collections::HashMap::new(),
             stopwords_by_pos: std::collections::HashMap::new(),
-            shorts_and_digits_pos: std::collections::HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: PositionSet::new(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -766,7 +757,7 @@ mod tests {
             line_by_pos,
             unknowns_by_pos: std::collections::HashMap::new(),
             stopwords_by_pos: std::collections::HashMap::new(),
-            shorts_and_digits_pos: std::collections::HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: (0..1000).collect(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -811,7 +802,7 @@ mod tests {
             line_by_pos: vec![1, 1, 1, 1, 1],
             unknowns_by_pos: std::collections::HashMap::new(),
             stopwords_by_pos: std::collections::HashMap::new(),
-            shorts_and_digits_pos: std::collections::HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: (0..5).collect(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -866,7 +857,7 @@ mod tests {
             line_by_pos: vec![1, 1],
             unknowns_by_pos: std::collections::HashMap::new(),
             stopwords_by_pos: std::collections::HashMap::new(),
-            shorts_and_digits_pos: std::collections::HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: (0..2).collect(),
             low_matchables: PositionSet::new(),
             is_binary: false,
@@ -913,7 +904,7 @@ mod tests {
             line_by_pos: vec![1, 1, 1, 1, 1],
             unknowns_by_pos: std::collections::HashMap::new(),
             stopwords_by_pos: std::collections::HashMap::new(),
-            shorts_and_digits_pos: std::collections::HashSet::new(),
+            shorts_and_digits_pos: PositionSet::new(),
             high_matchables: (0..5).collect(),
             low_matchables: PositionSet::new(),
             is_binary: false,
