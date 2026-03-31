@@ -392,10 +392,13 @@ mod tests {
 
         assert_eq!(scanned.programming_language.as_deref(), Some("TypeScript"));
         assert_eq!(scanned.mime_type.as_deref(), Some("text/plain"));
-        assert_eq!(scanned.file_type_label.as_deref(), Some("script"));
+        assert_eq!(
+            scanned.file_type_label.as_deref(),
+            Some("UTF-8 Unicode text")
+        );
         assert_eq!(scanned.is_text, Some(true));
         assert_eq!(scanned.is_media, Some(false));
-        assert_eq!(scanned.is_script, Some(true));
+        assert_eq!(scanned.is_script, Some(false));
         assert_eq!(scanned.is_source, Some(true));
     }
 
@@ -419,11 +422,128 @@ mod tests {
         let scanned = scan_single_file("main.ts", "// comment-only TypeScript fixture\n", &options);
 
         assert_eq!(scanned.mime_type.as_deref(), Some("text/plain"));
-        assert_eq!(scanned.file_type_label.as_deref(), Some("script"));
+        assert_eq!(
+            scanned.file_type_label.as_deref(),
+            Some("UTF-8 Unicode text")
+        );
         assert_eq!(scanned.is_text, Some(true));
         assert_eq!(scanned.is_media, Some(false));
-        assert_eq!(scanned.is_script, Some(true));
+        assert_eq!(scanned.is_script, Some(false));
         assert_eq!(scanned.is_source, Some(true));
+    }
+
+    #[test]
+    fn scanner_treats_empty_files_like_scancode_info_surface() {
+        let options = TextDetectionOptions {
+            collect_info: true,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: false,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+        let scanned = scan_single_file("test.txt", "", &options);
+
+        assert_eq!(scanned.mime_type.as_deref(), Some("inode/x-empty"));
+        assert_eq!(scanned.file_type_label.as_deref(), Some("empty"));
+        assert_eq!(scanned.programming_language, None);
+        assert_eq!(scanned.is_binary, Some(false));
+        assert_eq!(scanned.is_text, Some(true));
+        assert_eq!(scanned.is_archive, Some(false));
+        assert_eq!(scanned.is_media, Some(false));
+        assert_eq!(scanned.is_source, Some(false));
+        assert_eq!(scanned.is_script, Some(false));
+    }
+
+    #[test]
+    fn scanner_treats_package_json_as_text_not_source() {
+        let options = TextDetectionOptions {
+            collect_info: true,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: false,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+        let scanned = scan_single_file("package.json", r#"{"name":"demo"}"#, &options);
+
+        assert_eq!(scanned.mime_type.as_deref(), Some("application/json"));
+        assert_eq!(scanned.file_type_label.as_deref(), Some("JSON text data"));
+        assert_eq!(scanned.programming_language, None);
+        assert_eq!(scanned.is_text, Some(true));
+        assert_eq!(scanned.is_source, Some(false));
+        assert_eq!(scanned.is_script, Some(false));
+    }
+
+    #[test]
+    fn scanner_treats_dockerfile_as_source() {
+        let options = TextDetectionOptions {
+            collect_info: true,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: false,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+        let scanned = scan_single_file("Dockerfile", "FROM scratch\n", &options);
+
+        assert_eq!(scanned.programming_language.as_deref(), Some("Dockerfile"));
+        assert_eq!(
+            scanned.file_type_label.as_deref(),
+            Some("UTF-8 Unicode text")
+        );
+        assert_eq!(scanned.is_source, Some(true));
+        assert_eq!(scanned.is_script, Some(false));
+    }
+
+    #[test]
+    fn scanner_treats_makefile_as_text_not_source() {
+        let options = TextDetectionOptions {
+            collect_info: true,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: false,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+        let scanned = scan_single_file("Makefile", "all:\n\techo hi\n", &options);
+
+        assert_eq!(scanned.programming_language, None);
+        assert_eq!(
+            scanned.file_type_label.as_deref(),
+            Some("UTF-8 Unicode text")
+        );
+        assert_eq!(scanned.is_text, Some(true));
+        assert_eq!(scanned.is_source, Some(false));
+        assert_eq!(scanned.is_script, Some(false));
     }
 
     #[test]
