@@ -227,6 +227,17 @@ fn validate_scan_option_compatibility_allows_multiple_paths_without_from_json() 
 }
 
 #[test]
+fn validate_scan_option_compatibility_rejects_mark_source_without_info() {
+    let mut cli =
+        crate::cli::Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "sample-dir"])
+            .unwrap();
+    cli.mark_source = true;
+
+    let error = validate_scan_option_compatibility(&cli).unwrap_err();
+    assert!(error.to_string().contains("--mark-source requires --info"));
+}
+
+#[test]
 fn from_json_skips_final_native_projection_block() {
     let mut loaded = JsonScanInput {
         files: vec![json_file(

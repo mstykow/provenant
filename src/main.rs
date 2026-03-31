@@ -248,7 +248,7 @@ fn run() -> Result<()> {
         apply_only_findings_filter(&mut scan_result.files);
     }
 
-    if cli.mark_source {
+    if cli.info && cli.mark_source {
         apply_mark_source(&mut scan_result.files);
     }
 
@@ -446,6 +446,10 @@ fn validate_scan_option_compatibility(cli: &Cli) -> Result<()> {
         return Err(anyhow!(
             "--tallies-by-facet requires at least one --facet <facet>=<pattern> definition"
         ));
+    }
+
+    if cli.mark_source && !cli.info {
+        return Err(anyhow!("--mark-source requires --info"));
     }
 
     Ok(())
