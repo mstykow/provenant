@@ -31,46 +31,36 @@ use super::PackageParser;
 use super::rpm_parser::infer_rpm_namespace;
 
 const PACKAGE_TYPE: PackageType = PackageType::Rpm;
-const RPM_QUERY_FORMAT: &str = concat!(
-    "{",
-    "\"name\":%{NAME:json},",
-    "\"epoch\":%{EPOCH:json},",
-    "\"version\":%{VERSION:json},",
-    "\"release\":%{RELEASE:json},",
-    "\"vendor\":%{VENDOR:json},",
-    "\"arch\":%{ARCH:json},",
-    "\"size\":%{SIZE},",
-    "\"license\":%{LICENSE:json},",
-    "\"source_rpm\":%{SOURCERPM:json},",
-    "\"requires\":%{REQUIRENAME:json},",
-    "\"file_names\":%{FILENAMES:json},",
-    "\"dir_indexes\":%{DIRINDEXES:json},",
-    "\"base_names\":%{BASENAMES:json},",
-    "\"dir_names\":%{DIRNAMES:json}",
-    "}\\n"
-);
 
 #[derive(Debug, Deserialize)]
 struct RpmQueryPackage {
+    #[serde(rename = "Name")]
     name: Option<String>,
+    #[serde(rename = "Epoch")]
     epoch: Option<String>,
+    #[serde(rename = "Version")]
     version: Option<String>,
+    #[serde(rename = "Release")]
     release: Option<String>,
+    #[serde(rename = "Vendor")]
     vendor: Option<String>,
+    #[serde(rename = "Arch")]
     arch: Option<String>,
+    #[serde(rename = "Size")]
     size: Option<u64>,
+    #[serde(rename = "License")]
     license: Option<String>,
-    #[serde(rename = "source_rpm")]
+    #[serde(rename = "Sourcerpm")]
     source_rpm: Option<String>,
-    #[serde(default)]
+    #[serde(default, rename = "Requirename")]
     requires: Vec<String>,
-    #[serde(default, rename = "file_names")]
+    #[serde(default, rename = "Filenames")]
     file_names: Vec<Option<String>>,
-    #[serde(default, rename = "dir_indexes")]
+    #[serde(default, rename = "Dirindexes")]
     dir_indexes: Vec<i32>,
-    #[serde(default, rename = "base_names")]
+    #[serde(default, rename = "Basenames")]
     base_names: Vec<Option<String>>,
-    #[serde(default, rename = "dir_names")]
+    #[serde(default, rename = "Dirnames")]
     dir_names: Vec<String>,
 }
 
@@ -248,7 +238,7 @@ fn query_rpm_database(rpmdb_dir: &Path) -> Result<Vec<RpmQueryPackage>, String> 
     let output = Command::new("rpm")
         .args(["--dbpath"])
         .arg(rpmdb_dir)
-        .args(["--query", "--all", "--queryformat", RPM_QUERY_FORMAT])
+        .args(["--query", "--all", "--json"])
         .output()
         .map_err(|e| format!("Failed to execute rpm for {:?}: {}", rpmdb_dir, e))?;
 
@@ -269,14 +259,14 @@ fn query_rpm_database(rpmdb_dir: &Path) -> Result<Vec<RpmQueryPackage>, String> 
     let stdout = String::from_utf8(output.stdout)
         .map_err(|e| format!("rpm output for {:?} was not valid UTF-8: {}", rpmdb_dir, e))?;
 
-    stdout
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| {
-            serde_json::from_str::<RpmQueryPackage>(line)
-                .map_err(|e| format!("Failed to parse rpm JSON record: {} ({line})", e))
-        })
-        .collect()
+    parse_rpm_query_output(&stdout)
+}
+
+fn parse_rpm_query_output(stdout: &str) -> Result<Vec<RpmQueryPackage>, String> {
+    serde_json::Deserializer::from_str(stdout)
+        .into_iter::<RpmQueryPackage>()
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Failed to parse rpm JSON output: {}", e))
 }
 
 fn build_package_data(pkg: RpmQueryPackage, datasource_id: DatasourceId) -> PackageData {
@@ -595,6 +585,44 @@ mod tests {
             package.file_references[1].path,
             "/usr/share/licenses/libgcc/COPYING.RUNTIME"
         );
+    }
+
+    #[test]
+    fn test_parse_rpm_query_output_parses_multiple_json_objects() {
+        let stdout = r#"
+        {
+            "Name": "libgcc",
+            "Version": "13.1.1",
+            "Release": "2.fc38",
+            "Vendor": "Fedora Project",
+            "Arch": "x86_64",
+            "Size": 235748,
+            "License": "GPLv3+",
+            "Sourcerpm": "gcc-13.1.1-2.fc38.src.rpm",
+            "Requirename": ["rpmlib(PayloadIsZstd)", "glibc"],
+            "Filenames": ["/usr/share/licenses/libgcc/COPYING"],
+            "Dirindexes": [0],
+            "Basenames": ["COPYING"],
+            "Dirnames": ["/usr/share/licenses/libgcc/"]
+        }
+        {
+            "Name": "coreutils",
+            "Version": "9.1",
+            "Release": "12.fc38",
+            "Vendor": "Fedora Project",
+            "Arch": "x86_64",
+            "Requirename": ["glibc"],
+            "Filenames": ["/usr/bin/cat"]
+        }
+        "#;
+
+        let packages = parse_rpm_query_output(stdout).expect("rpm JSON stream should parse");
+
+        assert_eq!(packages.len(), 2);
+        assert_eq!(packages[0].name.as_deref(), Some("libgcc"));
+        assert_eq!(packages[0].file_names.len(), 1);
+        assert_eq!(packages[1].name.as_deref(), Some("coreutils"));
+        assert_eq!(packages[1].requires, vec!["glibc".to_string()]);
     }
 }
 
