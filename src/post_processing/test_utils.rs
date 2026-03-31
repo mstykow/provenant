@@ -667,6 +667,42 @@ pub(crate) fn project_classify_fields(value: &Value) -> Value {
 }
 
 #[cfg(feature = "golden-tests")]
+pub(crate) fn project_file_info_fields(value: &Value) -> Value {
+    let bool_or_false =
+        |file: &Value, key: &str| file.get(key).cloned().unwrap_or(Value::Bool(false));
+
+    let files = value
+        .get("files")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    json!({
+        "files": files
+            .into_iter()
+            .map(|file| {
+                json!({
+                    "path": file.get("path").cloned().unwrap_or(Value::Null),
+                    "type": file.get("type").cloned().unwrap_or(Value::Null),
+                    "name": file.get("name").cloned().unwrap_or(Value::Null),
+                    "base_name": file.get("base_name").cloned().unwrap_or(Value::Null),
+                    "extension": file.get("extension").cloned().unwrap_or(Value::Null),
+                    "mime_type": file.get("mime_type").cloned().unwrap_or(Value::Null),
+                    "file_type": file.get("file_type").cloned().unwrap_or(Value::Null),
+                    "programming_language": file.get("programming_language").cloned().unwrap_or(Value::Null),
+                    "is_binary": bool_or_false(&file, "is_binary"),
+                    "is_text": bool_or_false(&file, "is_text"),
+                    "is_archive": bool_or_false(&file, "is_archive"),
+                    "is_media": bool_or_false(&file, "is_media"),
+                    "is_source": bool_or_false(&file, "is_source"),
+                    "is_script": bool_or_false(&file, "is_script"),
+                })
+            })
+            .collect::<Vec<_>>()
+    })
+}
+
+#[cfg(feature = "golden-tests")]
 pub(crate) fn project_tally_fields(value: &Value) -> Value {
     let files = value
         .get("files")
@@ -1249,6 +1285,84 @@ pub(crate) fn assert_classify_fixture_matches_expected(
     if let Err(error) = compare_scan_json_values(&actual_normalized, &expected_normalized, "") {
         panic!(
             "Classify fixture mismatch for {} vs {}: {}\nactual={}\nexpected={}",
+            fixture_dir,
+            expected_file,
+            error,
+            serde_json::to_string_pretty(&actual_normalized).unwrap_or_default(),
+            serde_json::to_string_pretty(&expected_normalized).unwrap_or_default()
+        );
+    }
+}
+
+#[cfg(feature = "golden-tests")]
+pub(crate) fn assert_file_info_fixture_matches_expected(
+    fixture_dir: &str,
+    expected_file: &str,
+    normalize_against_parent: bool,
+) {
+    let fixture_root = Path::new(fixture_dir);
+    let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
+    let collected = collect_paths(fixture_root, 0, &fixture_exclude_patterns(fixture_root));
+    let scan_result = process_collected(
+        &collected,
+        progress,
+        Some(test_license_engine()),
+        LicenseScanOptions::default(),
+        &TextDetectionOptions {
+            collect_info: true,
+            detect_packages: true,
+            detect_application_packages: true,
+            detect_system_packages: true,
+            detect_packages_in_compiled: false,
+            ..TextDetectionOptions::default()
+        },
+    );
+
+    let mut files = scan_result.files;
+    let normalize_root = if normalize_against_parent {
+        fixture_root.parent().expect("fixture should have parent")
+    } else {
+        fixture_root.parent().unwrap_or(fixture_root)
+    };
+    normalize_paths_for_test(
+        &mut files,
+        normalize_root
+            .to_str()
+            .expect("fixture path should be UTF-8"),
+    );
+
+    if normalize_against_parent {
+        let dir_name = fixture_root
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("fixture dir should have utf-8 file name");
+        if !files.iter().any(|file| file.path == dir_name) {
+            files.push(dir(dir_name));
+        }
+    } else if let Some(dir_name) = fixture_root.file_name().and_then(|name| name.to_str())
+        && !files.iter().any(|file| file.path == dir_name)
+    {
+        files.push(dir(dir_name));
+    }
+
+    let assembly_result = assembly::assemble(&mut files);
+    classify_key_files(&mut files, &assembly_result.packages);
+
+    let actual = project_file_info_fields(&json!({ "files": files }));
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(expected_file).expect("expected file-info fixture should be readable"),
+    )
+    .expect("expected file-info fixture should parse");
+    let expected = project_file_info_fields(&expected);
+
+    let mut actual_normalized = actual;
+    let mut expected_normalized = expected;
+    normalize_scan_json(&mut actual_normalized, None);
+    normalize_scan_json(&mut expected_normalized, None);
+
+    if let Err(error) = compare_scan_json_values(&actual_normalized, &expected_normalized, "") {
+        panic!(
+            "File-info fixture mismatch for {} vs {}: {}\nactual={}\nexpected={}",
             fixture_dir,
             expected_file,
             error,
