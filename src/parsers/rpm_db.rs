@@ -44,6 +44,8 @@ struct RpmQueryPackage {
     release: Option<String>,
     #[serde(rename = "Vendor")]
     vendor: Option<String>,
+    #[serde(rename = "Distribution")]
+    distribution: Option<String>,
     #[serde(rename = "Arch")]
     arch: Option<String>,
     #[serde(rename = "Size")]
@@ -279,7 +281,8 @@ fn build_package_data(pkg: RpmQueryPackage, datasource_id: DatasourceId) -> Pack
         release.as_deref().unwrap_or_default(),
     );
 
-    let vendor = normalize_optional_string(pkg.vendor);
+    let vendor = normalize_optional_string(pkg.vendor)
+        .or_else(|| normalize_optional_string(pkg.distribution));
     let namespace = infer_rpm_namespace(None, vendor.as_deref(), release.as_deref(), None);
 
     let architecture = normalize_optional_string(pkg.arch);
@@ -560,6 +563,7 @@ mod tests {
                 version: Some("13.1.1".to_string()),
                 release: Some("2.fc38".to_string()),
                 vendor: Some("Fedora Project".to_string()),
+                distribution: None,
                 arch: Some("x86_64".to_string()),
                 size: Some(235748),
                 license: Some("GPLv3+".to_string()),
@@ -585,6 +589,32 @@ mod tests {
             package.file_references[1].path,
             "/usr/share/licenses/libgcc/COPYING.RUNTIME"
         );
+    }
+
+    #[test]
+    fn test_build_package_data_uses_distribution_for_namespace() {
+        let package = build_package_data(
+            RpmQueryPackage {
+                name: Some("libgcc".to_string()),
+                epoch: None,
+                version: Some("13.1.1".to_string()),
+                release: Some("2.fc38".to_string()),
+                vendor: None,
+                distribution: Some("Fedora Project".to_string()),
+                arch: Some("x86_64".to_string()),
+                size: Some(235748),
+                license: Some("GPLv3+".to_string()),
+                source_rpm: Some("gcc-13.1.1-2.fc38.src.rpm".to_string()),
+                requires: Vec::new(),
+                file_names: vec![Some("/usr/share/licenses/libgcc/COPYING".to_string())],
+                dir_indexes: Vec::new(),
+                base_names: Vec::new(),
+                dir_names: Vec::new(),
+            },
+            DatasourceId::RpmInstalledDatabaseSqlite,
+        );
+
+        assert_eq!(package.namespace.as_deref(), Some("fedora"));
     }
 
     #[test]
