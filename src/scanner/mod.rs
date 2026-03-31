@@ -372,6 +372,65 @@ mod tests {
     }
 
     #[test]
+    fn scanner_treats_latin1_python_sources_as_textual_scripts() {
+        let options = TextDetectionOptions {
+            collect_info: true,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: false,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+        let latin1_python = b"# coding: latin-1\nprint(\"caf\xe9\")\n# comment padding\n";
+        let scanned = scan_file_at_relative_path("script.py", latin1_python, &options);
+
+        assert_eq!(scanned.programming_language.as_deref(), Some("Python"));
+        assert_eq!(
+            scanned.file_type_label.as_deref(),
+            Some("python script, text executable")
+        );
+        assert_eq!(scanned.is_binary, Some(false));
+        assert_eq!(scanned.is_text, Some(true));
+        assert_eq!(scanned.is_script, Some(true));
+        assert_eq!(scanned.is_source, Some(true));
+    }
+
+    #[test]
+    fn scanner_skips_findings_for_zip_like_archives() {
+        let options = TextDetectionOptions {
+            collect_info: true,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: true,
+            detect_generated: false,
+            detect_emails: true,
+            detect_urls: true,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+        let archive_like = b"PK\x03\x04\x14\x00\x00\x00\x08\x00MIT License\ncontact@example.com\nhttps://example.com\n";
+        let scanned = scan_file_at_relative_path("demo.whl", archive_like, &options);
+
+        assert_eq!(scanned.mime_type.as_deref(), Some("application/zip"));
+        assert_eq!(scanned.is_archive, Some(true));
+        assert!(scanned.license_detections.is_empty());
+        assert!(scanned.copyrights.is_empty());
+        assert!(scanned.emails.is_empty());
+        assert!(scanned.urls.is_empty());
+    }
+
+    #[test]
     fn scanner_treats_typescript_sources_as_text_not_video_media() {
         let options = TextDetectionOptions {
             collect_info: true,
@@ -487,6 +546,103 @@ mod tests {
         assert_eq!(scanned.is_text, Some(true));
         assert_eq!(scanned.is_source, Some(false));
         assert_eq!(scanned.is_script, Some(false));
+    }
+
+    #[test]
+    fn scanner_classifies_gradle_and_nix_manifests_as_source() {
+        let options = TextDetectionOptions {
+            collect_info: true,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: false,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+
+        let gradle = scan_single_file("build.gradle", "plugins { id 'java' }\n", &options);
+        let nix = scan_single_file("flake.nix", "{ inputs, ... }: {}\n", &options);
+
+        assert_eq!(gradle.programming_language.as_deref(), Some("Groovy"));
+        assert_eq!(gradle.mime_type.as_deref(), Some("text/plain"));
+        assert_eq!(gradle.is_source, Some(true));
+        assert_eq!(gradle.is_script, Some(false));
+
+        assert_eq!(nix.programming_language.as_deref(), Some("Nix"));
+        assert_eq!(nix.mime_type.as_deref(), Some("text/plain"));
+        assert_eq!(nix.is_source, Some(true));
+        assert_eq!(nix.is_script, Some(false));
+    }
+
+    #[test]
+    fn scanner_treats_gitmodules_as_text_not_source() {
+        let options = TextDetectionOptions {
+            collect_info: true,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: false,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+        let scanned = scan_file_at_relative_path(
+            ".gitmodules",
+            b"[submodule \"demo\"]\n\tpath = vendor/demo\n",
+            &options,
+        );
+
+        assert_eq!(scanned.programming_language, None);
+        assert_eq!(
+            scanned.file_type_label.as_deref(),
+            Some("Git configuration text")
+        );
+        assert_eq!(scanned.is_text, Some(true));
+        assert_eq!(scanned.is_source, Some(false));
+        assert_eq!(scanned.is_script, Some(false));
+    }
+
+    #[test]
+    fn scanner_treats_javascript_shebang_files_as_scripts() {
+        let options = TextDetectionOptions {
+            collect_info: true,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: false,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+            scan_cache_dir: None,
+        };
+        let scanned = scan_file_at_relative_path(
+            "bin/run",
+            b"#!/usr/bin/env node\nconsole.log('hello');\n",
+            &options,
+        );
+
+        assert_eq!(scanned.programming_language.as_deref(), Some("JavaScript"));
+        assert_eq!(
+            scanned.file_type_label.as_deref(),
+            Some("javascript script, UTF-8 Unicode text executable")
+        );
+        assert_eq!(scanned.is_script, Some(true));
+        assert_eq!(scanned.is_source, Some(true));
     }
 
     #[test]

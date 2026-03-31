@@ -7,10 +7,11 @@ mod tests {
     use super::super::materialize_generated_flags;
     use super::super::test_utils::{
         FixtureOutputOptions, assert_classify_fixture_matches_expected,
-        assert_facet_fixture_matches_expected, assert_package_fixture_matches_expected,
-        assert_reference_follow_fixture_matches_expected, assert_summary_fixture_matches_expected,
-        assert_tally_fixture_matches_expected, compare_scan_json_values, fixture_exclude_patterns,
-        normalize_paths_for_test, normalize_scan_json,
+        assert_facet_fixture_matches_expected, assert_file_info_fixture_matches_expected,
+        assert_package_fixture_matches_expected, assert_reference_follow_fixture_matches_expected,
+        assert_summary_fixture_matches_expected, assert_tally_fixture_matches_expected,
+        compare_scan_json_values, fixture_exclude_patterns, normalize_paths_for_test,
+        normalize_scan_json,
     };
     use crate::progress::{ProgressMode, ScanProgress};
     use crate::scanner::{
@@ -131,6 +132,24 @@ mod tests {
         assert_classify_fixture_matches_expected(
             "testdata/summarycode-golden/score/jar",
             "testdata/summarycode-golden/classify/with_package_data.expected.json",
+            false,
+        );
+    }
+
+    #[test]
+    fn test_golden_file_info_cli_fixture_matches_expected_output() {
+        assert_file_info_fixture_matches_expected(
+            "testdata/summarycode-golden/classify/cli",
+            "testdata/summarycode-golden/classify/cli.expected.json",
+            true,
+        );
+    }
+
+    #[test]
+    fn test_golden_file_info_with_package_data_fixture_matches_expected_output() {
+        assert_file_info_fixture_matches_expected(
+            "testdata/summarycode-golden/score/jar",
+            "testdata/summarycode-golden/classify/with_package_data.file_info.expected.json",
             false,
         );
     }

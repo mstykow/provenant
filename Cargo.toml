@@ -70,6 +70,7 @@ base64 = "0.22.1"
 chrono = "0.4.44"
 clap = { workspace = true }
 content_inspector = "0.2.4"
+file-format = { version = "0.29.0", features = ["reader", "reader-txt", "reader-xml", "reader-zip"] }
 zstd = { workspace = true }
 derive_builder = "0.20.2"
 glob = "0.3.3"
@@ -110,6 +111,7 @@ blake3 = "1.8.3"
 once_cell = "1.21.4"
 deunicode = "1.6.2"
 tera = { version = "1.20.1", default-features = false }
+tokei = { version = "14.0.0", default-features = false }
 env_logger = "0.11.10"
 ar = "0.9"           # Unix ar archive format (for .deb)
 rpm = { version = "0.19.0", default-features = false, features = ["gzip-compression", "xz-compression", "zstd-compression", "bzip2-compression"] }

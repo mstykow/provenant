@@ -86,20 +86,22 @@ legacy, and intentionally out-of-scope surfaces.
 
 Confirmed remaining gaps:
 
-- `mime_type` is still mostly local content/signature plus `mime_guess`
-  heuristics rather than libmagic-backed content typing, even though the
-  obvious false-video and empty-file cases are now handled correctly.
-- `file_type` is now descriptive instead of a coarse category label, but it is
-  still a local approximation rather than the raw libmagic strings ScanCode
-  exposes.
+- `mime_type` now uses a broader pure-Rust `file-format` reader set plus
+  targeted overrides and `mime_guess` fallback, but it still does not match the
+  breadth or exact strings of libmagic-backed content typing.
+- `file_type` now benefits from the same expanded pure-Rust detector set and
+  more specific text/configuration labels, but it remains a local approximation
+  rather than the raw libmagic descriptions ScanCode exposes.
 - `programming_language`, `is_source`, `is_script`, `is_binary`, and
-  `is_text` now follow stricter local semantics, but they still reflect
-  Provenant-owned heuristics rather than typecode/Pygments/libmagic behavior,
-  including a small residual risk of content-snippet false positives on some
-  extensionless UTF-8 text files.
-- Archive/media classification now covers more package/archive formats and
-  extensionless source-like basenames, but it still lacks typecode's broader
-  extractability- and libmagic-driven distinctions.
+  `is_text` now cover more real manifest/source filenames and extensions (for
+  example Gradle, Nix, Bazel/Starlark, PowerShell, and JavaScript shebang
+  scripts), but they still reflect Provenant-owned heuristics rather than
+  typecode/Pygments/libmagic behavior, especially for ambiguous extensionless
+  text files.
+- Archive/media classification and text-extraction suppression now cover more
+  package/archive/media containers directly from detected format information,
+  but they still lack typecode's broader extractability-driven distinctions and
+  libmagic's long-tail format coverage.
 
 ### Scan & Detection Controls
 
