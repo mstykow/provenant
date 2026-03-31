@@ -49,6 +49,8 @@ struct RpmQueryPackage {
     distribution: Option<String>,
     #[serde(rename = "Arch")]
     arch: Option<String>,
+    #[serde(rename = "Platform")]
+    platform: Option<String>,
     #[serde(rename = "Size")]
     size: Option<u64>,
     #[serde(rename = "License")]
@@ -292,7 +294,8 @@ fn build_package_data(pkg: RpmQueryPackage, datasource_id: DatasourceId) -> Pack
                 .and_then(|source_rpm| infer_rpm_namespace_from_filename(Path::new(source_rpm)))
         });
 
-    let architecture = normalize_optional_string(pkg.arch);
+    let architecture = normalize_optional_string(pkg.arch)
+        .or_else(|| infer_platform_architecture(pkg.platform.as_deref()));
     let dependencies = pkg
         .requires
         .into_iter()
@@ -428,6 +431,19 @@ fn parse_epoch(value: Option<String>) -> i32 {
     normalize_optional_string(value)
         .and_then(|value| value.parse::<i32>().ok())
         .unwrap_or(0)
+}
+
+fn infer_platform_architecture(platform: Option<&str>) -> Option<String> {
+    let platform = platform?.trim();
+    if platform.is_empty() {
+        return None;
+    }
+
+    platform
+        .split_once('-')
+        .map(|(arch, _)| arch)
+        .filter(|arch| !arch.is_empty())
+        .map(|arch| arch.to_string())
 }
 
 #[cfg(test)]
@@ -570,6 +586,7 @@ mod tests {
                 vendor: Some("Fedora Project".to_string()),
                 distribution: None,
                 arch: Some("x86_64".to_string()),
+                platform: None,
                 size: Some(235748),
                 license: Some("GPLv3+".to_string()),
                 source_rpm: Some("gcc-13.1.1-2.fc38.src.rpm".to_string()),
@@ -607,6 +624,7 @@ mod tests {
                 vendor: None,
                 distribution: Some("Fedora Project".to_string()),
                 arch: Some("x86_64".to_string()),
+                platform: None,
                 size: Some(235748),
                 license: Some("GPLv3+".to_string()),
                 source_rpm: Some("gcc-13.1.1-2.fc38.src.rpm".to_string()),
@@ -633,6 +651,7 @@ mod tests {
                 vendor: None,
                 distribution: None,
                 arch: Some("x86_64".to_string()),
+                platform: None,
                 size: Some(235748),
                 license: Some("GPLv3+".to_string()),
                 source_rpm: Some("gcc-13.1.1-2.fc38.src.rpm".to_string()),
@@ -646,6 +665,36 @@ mod tests {
         );
 
         assert_eq!(package.namespace.as_deref(), Some("fedora"));
+    }
+
+    #[test]
+    fn test_build_package_data_uses_platform_for_architecture() {
+        let package = build_package_data(
+            RpmQueryPackage {
+                name: Some("libgcc".to_string()),
+                epoch: None,
+                version: Some("13.1.1".to_string()),
+                release: None,
+                vendor: None,
+                distribution: None,
+                arch: None,
+                platform: Some("x86_64-redhat-linux".to_string()),
+                size: Some(235748),
+                license: Some("GPLv3+".to_string()),
+                source_rpm: Some("gcc-13.1.1-2.fc38.src.rpm".to_string()),
+                requires: Vec::new(),
+                file_names: vec![Some("/usr/share/licenses/libgcc/COPYING".to_string())],
+                dir_indexes: Vec::new(),
+                base_names: Vec::new(),
+                dir_names: Vec::new(),
+            },
+            DatasourceId::RpmInstalledDatabaseSqlite,
+        );
+
+        assert_eq!(
+            package.qualifiers.as_ref().and_then(|q| q.get("arch")),
+            Some(&"x86_64".to_string())
+        );
     }
 
     #[test]
