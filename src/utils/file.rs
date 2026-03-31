@@ -5,9 +5,11 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 
 use chrono::{TimeZone, Utc};
+use content_inspector::{ContentType, inspect};
 use flate2::read::ZlibDecoder;
 use glob::Pattern;
 use image::{ImageDecoder, ImageFormat, ImageReader};
+use mime_guess::from_path;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader as XmlReader;
 
@@ -139,6 +141,130 @@ pub fn extract_text_for_detection(path: &Path, bytes: &[u8]) -> (String, Extract
     } else {
         (text, ExtractedTextKind::BinaryStrings)
     }
+}
+
+pub fn detect_mime_type(path: &Path, bytes: &[u8], programming_language: Option<&str>) -> String {
+    let mime_type = from_path(path)
+        .first_or_octet_stream()
+        .essence_str()
+        .to_string();
+
+    normalize_mime_type(path, bytes, programming_language, &mime_type)
+}
+
+fn is_utf8_text(content_type: ContentType) -> bool {
+    matches!(content_type, ContentType::UTF_8 | ContentType::UTF_8_BOM)
+}
+
+fn normalize_mime_type(
+    path: &Path,
+    bytes: &[u8],
+    programming_language: Option<&str>,
+    mime_type: &str,
+) -> String {
+    if should_prefer_text_mime(path, bytes, programming_language, mime_type) {
+        return "text/plain".to_string();
+    }
+
+    mime_type.to_string()
+}
+
+fn should_prefer_text_mime(
+    path: &Path,
+    bytes: &[u8],
+    programming_language: Option<&str>,
+    mime_type: &str,
+) -> bool {
+    is_utf8_text(inspect(bytes))
+        && is_textual_source_candidate(path, programming_language)
+        && (mime_type.starts_with("video/") || mime_type == "application/octet-stream")
+}
+
+fn is_textual_source_candidate(path: &Path, programming_language: Option<&str>) -> bool {
+    if matches!(programming_language, Some(language) if is_source_like_language(language)) {
+        return true;
+    }
+
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| {
+            matches!(
+                ext.to_ascii_lowercase().as_str(),
+                "rs" | "py"
+                    | "js"
+                    | "jsx"
+                    | "ts"
+                    | "tsx"
+                    | "c"
+                    | "cpp"
+                    | "cc"
+                    | "cxx"
+                    | "h"
+                    | "hpp"
+                    | "s"
+                    | "java"
+                    | "go"
+                    | "rb"
+                    | "php"
+                    | "pl"
+                    | "swift"
+                    | "sh"
+                    | "bash"
+                    | "zsh"
+                    | "fish"
+                    | "kt"
+                    | "kts"
+                    | "dart"
+                    | "scala"
+                    | "cs"
+                    | "fs"
+                    | "r"
+                    | "lua"
+                    | "jl"
+                    | "ex"
+                    | "exs"
+                    | "clj"
+                    | "hs"
+                    | "erl"
+                    | "tex"
+            )
+        })
+}
+
+fn is_source_like_language(language: &str) -> bool {
+    matches!(
+        language,
+        "Rust"
+            | "Python"
+            | "JavaScript"
+            | "TypeScript"
+            | "JavaScript/TypeScript"
+            | "C"
+            | "C++"
+            | "GAS"
+            | "Java"
+            | "Go"
+            | "Ruby"
+            | "PHP"
+            | "Perl"
+            | "Swift"
+            | "Shell"
+            | "Kotlin"
+            | "Dart"
+            | "Scala"
+            | "C#"
+            | "F#"
+            | "R"
+            | "Lua"
+            | "Julia"
+            | "Elixir"
+            | "Clojure"
+            | "Haskell"
+            | "Erlang"
+            | "TeX"
+            | "Dockerfile"
+            | "Makefile"
+    )
 }
 
 fn supported_image_metadata_format(ext: Option<&str>) -> Option<ImageFormat> {
@@ -559,7 +685,7 @@ pub fn extract_printable_strings(bytes: &[u8]) -> String {
 mod tests {
     use std::path::Path;
 
-    use super::{ExtractedTextKind, extract_text_for_detection};
+    use super::{ExtractedTextKind, extract_text_for_detection, normalize_mime_type};
 
     #[test]
     fn test_extract_text_for_detection_skips_jar_archives() {
@@ -583,5 +709,57 @@ mod tests {
 
         assert_eq!(kind, ExtractedTextKind::Pdf);
         assert!(text.contains("Redistribution and use in source and binary forms"));
+    }
+
+    #[test]
+    fn test_normalize_mime_type_prefers_text_for_textual_video_guess() {
+        assert_eq!(
+            normalize_mime_type(
+                Path::new("main.ts"),
+                b"export const answer = 42;\n",
+                Some("TypeScript"),
+                "video/mp2t",
+            ),
+            "text/plain"
+        );
+    }
+
+    #[test]
+    fn test_normalize_mime_type_prefers_text_for_octet_stream_source_guess() {
+        assert_eq!(
+            normalize_mime_type(
+                Path::new("main.js"),
+                b"console.log('hello');\n",
+                Some("JavaScript"),
+                "application/octet-stream",
+            ),
+            "text/plain"
+        );
+    }
+
+    #[test]
+    fn test_normalize_mime_type_preserves_binary_video_guess() {
+        assert_eq!(
+            normalize_mime_type(
+                Path::new("main.ts"),
+                &[0, 159, 146, 150, 0, 1, 2, 3],
+                Some("TypeScript"),
+                "video/mp2t",
+            ),
+            "video/mp2t"
+        );
+    }
+
+    #[test]
+    fn test_normalize_mime_type_preserves_short_binary_octet_stream_guess() {
+        assert_eq!(
+            normalize_mime_type(
+                Path::new("main.ts"),
+                &[0, 159, 146, 150],
+                Some("TypeScript"),
+                "application/octet-stream",
+            ),
+            "application/octet-stream"
+        );
     }
 }

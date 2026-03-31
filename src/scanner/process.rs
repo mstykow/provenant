@@ -6,7 +6,6 @@ use crate::utils::hash::{calculate_md5, calculate_sha1, calculate_sha1_git, calc
 use crate::utils::language::detect_language;
 use crate::utils::text::{is_source, remove_verbatim_escape_sequences};
 use anyhow::Error;
-use mime_guess::from_path;
 use rayon::prelude::*;
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -28,7 +27,9 @@ use crate::models::{
 use crate::progress::ScanProgress;
 use crate::scanner::collect::CollectedPaths;
 use crate::scanner::{LicenseScanOptions, ProcessResult, TextDetectionOptions};
-use crate::utils::file::{ExtractedTextKind, extract_text_for_detection, get_creation_date};
+use crate::utils::file::{
+    ExtractedTextKind, detect_mime_type, extract_text_for_detection, get_creation_date,
+};
 use crate::utils::generated::generated_code_hints_from_bytes;
 use tempfile::TempDir;
 
@@ -365,7 +366,7 @@ fn extract_information_from_content(
     let programming_language = detect_language(path, &buffer);
 
     if text_options.collect_info {
-        let mime_type = detect_mime_type(path, &buffer);
+        let mime_type = detect_mime_type(path, &buffer, Some(programming_language.as_str()));
         let (file_type_label, is_binary, is_text, is_archive, is_media, is_script) =
             detect_info_flags(
                 path,
@@ -632,27 +633,6 @@ fn detect_info_flags(
         is_media,
         is_script,
     )
-}
-
-fn detect_mime_type(path: &Path, buffer: &[u8]) -> String {
-    let mime_type = from_path(path)
-        .first_or_octet_stream()
-        .essence_str()
-        .to_string();
-
-    if should_normalize_typescript_mime(path, buffer, &mime_type) {
-        return "text/plain".to_string();
-    }
-
-    mime_type
-}
-
-fn should_normalize_typescript_mime(path: &Path, buffer: &[u8], mime_type: &str) -> bool {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
-        && !matches!(inspect(buffer), ContentType::BINARY)
-        && mime_type.starts_with("video/")
 }
 
 fn is_system_datasource(datasource_id: &DatasourceId) -> bool {
