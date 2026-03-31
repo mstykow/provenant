@@ -5,9 +5,9 @@ fn is_utf8_text(content_type: ContentType) -> bool {
     content_type == ContentType::UTF_8 || content_type == ContentType::UTF_8_BOM
 }
 
-pub fn detect_language(path: &Path, content: &[u8]) -> String {
+pub fn detect_language(path: &Path, content: &[u8]) -> Option<String> {
     if content.len() > 32 && !is_utf8_text(inspect(content)) {
-        return "Binary".to_string();
+        return None;
     }
 
     // Check for shebang in script files
@@ -19,60 +19,60 @@ pub fn detect_language(path: &Path, content: &[u8]) -> String {
         let shebang = String::from_utf8_lossy(&content[0..shebang_end]);
 
         if shebang.contains("python") {
-            return "Python".to_string();
+            return Some("Python".to_string());
         } else if shebang.contains("node") {
-            return "JavaScript".to_string();
+            return Some("JavaScript".to_string());
         } else if shebang.contains("ruby") {
-            return "Ruby".to_string();
+            return Some("Ruby".to_string());
         } else if shebang.contains("perl") {
-            return "Perl".to_string();
+            return Some("Perl".to_string());
         } else if shebang.contains("php") {
-            return "PHP".to_string();
+            return Some("PHP".to_string());
         } else if shebang.contains("bash") || shebang.contains("sh") {
-            return "Shell".to_string();
+            return Some("Shell".to_string());
         }
     }
 
     // Check file extension
     if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
         match extension.to_lowercase().as_str() {
-            "rs" => return "Rust".to_string(),
-            "py" => return "Python".to_string(),
-            "js" => return "JavaScript".to_string(),
-            "ts" => return "TypeScript".to_string(),
-            "html" | "htm" => return "HTML".to_string(),
-            "css" => return "CSS".to_string(),
-            "c" => return "C".to_string(),
-            "cpp" | "cc" | "cxx" => return "C++".to_string(),
-            "h" => return "C".to_string(),
-            "hpp" => return "C++".to_string(),
-            "s" => return "GAS".to_string(),
-            "java" => return "Java".to_string(),
-            "go" => return "Go".to_string(),
-            "rb" => return "Ruby".to_string(),
-            "php" => return "PHP".to_string(),
-            "pl" => return "Perl".to_string(),
-            "swift" => return "Swift".to_string(),
-            "md" | "markdown" => return "Markdown".to_string(),
-            "json" => return "JSON".to_string(),
-            "xml" => return "XML".to_string(),
-            "yml" | "yaml" => return "YAML".to_string(),
-            "sql" => return "SQL".to_string(),
-            "sh" | "bash" => return "Shell".to_string(),
-            "kt" | "kts" => return "Kotlin".to_string(),
-            "dart" => return "Dart".to_string(),
-            "scala" => return "Scala".to_string(),
-            "cs" => return "C#".to_string(),
-            "fs" => return "F#".to_string(),
-            "r" => return "R".to_string(),
-            "lua" => return "Lua".to_string(),
-            "jl" => return "Julia".to_string(),
-            "ex" | "exs" => return "Elixir".to_string(),
-            "clj" => return "Clojure".to_string(),
-            "hs" => return "Haskell".to_string(),
-            "erl" => return "Erlang".to_string(),
-            "sc" => return "SuperCollider".to_string(),
-            "tex" => return "TeX".to_string(),
+            "rs" => return Some("Rust".to_string()),
+            "py" => return Some("Python".to_string()),
+            "js" => return Some("JavaScript".to_string()),
+            "ts" | "tsx" => return Some("TypeScript".to_string()),
+            "jsx" => return Some("JavaScript".to_string()),
+            "html" | "htm" => return Some("HTML".to_string()),
+            "css" => return Some("CSS".to_string()),
+            "c" => return Some("C".to_string()),
+            "cpp" | "cc" | "cxx" => return Some("C++".to_string()),
+            "h" => return Some("C".to_string()),
+            "hpp" => return Some("C++".to_string()),
+            "s" => return Some("GAS".to_string()),
+            "java" => return Some("Java".to_string()),
+            "go" => return Some("Go".to_string()),
+            "rb" => return Some("Ruby".to_string()),
+            "php" => return Some("PHP".to_string()),
+            "pl" => return Some("Perl".to_string()),
+            "swift" => return Some("Swift".to_string()),
+            "json" => return Some("JSON".to_string()),
+            "xml" => return Some("XML".to_string()),
+            "yml" | "yaml" => return Some("YAML".to_string()),
+            "sql" => return Some("SQL".to_string()),
+            "sh" | "bash" | "zsh" | "fish" => return Some("Shell".to_string()),
+            "kt" | "kts" => return Some("Kotlin".to_string()),
+            "dart" => return Some("Dart".to_string()),
+            "scala" => return Some("Scala".to_string()),
+            "cs" => return Some("C#".to_string()),
+            "fs" => return Some("F#".to_string()),
+            "r" => return Some("R".to_string()),
+            "lua" => return Some("Lua".to_string()),
+            "jl" => return Some("Julia".to_string()),
+            "ex" | "exs" => return Some("Elixir".to_string()),
+            "clj" => return Some("Clojure".to_string()),
+            "hs" => return Some("Haskell".to_string()),
+            "erl" => return Some("Erlang".to_string()),
+            "sc" => return Some("SuperCollider".to_string()),
+            "tex" => return Some("TeX".to_string()),
             _ => {}
         }
     }
@@ -88,35 +88,33 @@ pub fn detect_language(path: &Path, content: &[u8]) -> String {
         file_name.as_str(),
         "dockerfile" | "containerfile" | "containerfile.core"
     ) {
-        return "Dockerfile".to_string();
+        return Some("Dockerfile".to_string());
     } else if file_name == "makefile" {
-        return "Makefile".to_string();
+        return Some("Makefile".to_string());
     } else if file_name == "gemfile" || file_name == "rakefile" {
-        return "Ruby".to_string();
+        return Some("Ruby".to_string());
     }
 
     if is_utf8_text(inspect(content)) {
         let text_sample = String::from_utf8_lossy(&content[..std::cmp::min(content.len(), 1000)]);
 
         if text_sample.contains("<?php") {
-            return "PHP".to_string();
+            return Some("PHP".to_string());
         } else if text_sample.contains("<html") || text_sample.contains("<!DOCTYPE html") {
-            return "HTML".to_string();
+            return Some("HTML".to_string());
         } else if text_sample.contains("import React") || text_sample.contains("import {") {
-            return "JavaScript/TypeScript".to_string();
+            return Some("JavaScript/TypeScript".to_string());
         } else if text_sample.contains("def ") && text_sample.contains(":") {
-            return "Python".to_string();
+            return Some("Python".to_string());
         } else if text_sample.contains("package ")
             && text_sample.contains("import ")
             && text_sample.contains("{")
         {
-            return "Go".to_string();
+            return Some("Go".to_string());
         }
-
-        return "Text".to_string();
     }
 
-    "Unknown".to_string()
+    None
 }
 
 #[cfg(test)]
@@ -128,21 +126,39 @@ mod tests {
     fn detect_language_supports_containerfile_names() {
         assert_eq!(
             detect_language(Path::new("Containerfile"), b"FROM scratch\n"),
-            "Dockerfile"
+            Some("Dockerfile".to_string())
         );
         assert_eq!(
             detect_language(Path::new("containerfile.core"), b"FROM scratch\n"),
-            "Dockerfile"
+            Some("Dockerfile".to_string())
         );
     }
 
     #[test]
     fn detect_language_maps_c_headers_to_c() {
-        assert_eq!(detect_language(Path::new("zlib.h"), b"/* header */\n"), "C");
+        assert_eq!(
+            detect_language(Path::new("zlib.h"), b"/* header */\n"),
+            Some("C".to_string())
+        );
     }
 
     #[test]
     fn detect_language_maps_uppercase_s_to_gas() {
-        assert_eq!(detect_language(Path::new("gvmat64.S"), b"; asm\n"), "GAS");
+        assert_eq!(
+            detect_language(Path::new("gvmat64.S"), b"; asm\n"),
+            Some("GAS".to_string())
+        );
+    }
+
+    #[test]
+    fn detect_language_omits_generic_text_fallbacks() {
+        assert_eq!(
+            detect_language(Path::new("README.txt"), b"plain text\n"),
+            None
+        );
+        assert_eq!(
+            detect_language(Path::new("data.bin"), &[0, 159, 146, 150]),
+            None
+        );
     }
 }
