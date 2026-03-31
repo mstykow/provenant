@@ -3,8 +3,6 @@
 //! This module contains functions for merging overlapping and adjacent matches,
 //! updating match scores, and filtering license references.
 
-use std::collections::HashSet;
-
 use crate::license_detection::models::LicenseMatch;
 use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::query::Query;
@@ -20,21 +18,26 @@ fn combine_matches(a: &LicenseMatch, b: &LicenseMatch) -> LicenseMatch {
 
     let mut merged = a.clone();
 
-    let mut qspan: HashSet<usize> = a.qspan.iter().collect();
-    qspan.extend(b.qspan.iter());
-    let mut qspan_vec: Vec<usize> = qspan.into_iter().collect();
-    qspan_vec.sort();
+    let mut qspan_set = a.qspan.to_position_set();
+    for pos in b.qspan.iter() {
+        qspan_set.insert(pos);
+    }
+    let mut qspan_vec: Vec<usize> = qspan_set.iter().collect();
+    qspan_vec.sort_unstable();
 
-    let mut ispan: HashSet<usize> = a.ispan.iter().collect();
-    ispan.extend(b.ispan.iter());
-    let mut ispan_vec: Vec<usize> = ispan.into_iter().collect();
-    ispan_vec.sort();
+    let mut ispan_set = a.ispan.to_position_set();
+    for pos in b.ispan.iter() {
+        ispan_set.insert(pos);
+    }
+    let mut ispan_vec: Vec<usize> = ispan_set.iter().collect();
+    ispan_vec.sort_unstable();
 
-    let a_hispan: HashSet<usize> = a.hispan.iter().collect();
-    let b_hispan: HashSet<usize> = b.hispan.iter().collect();
-    let combined_hispan: HashSet<usize> = a_hispan.union(&b_hispan).copied().collect();
-    let mut hispan_vec: Vec<usize> = combined_hispan.into_iter().collect();
-    hispan_vec.sort();
+    let mut hispan_set = a.hispan.to_position_set();
+    for pos in b.hispan.iter() {
+        hispan_set.insert(pos);
+    }
+    let mut hispan_vec: Vec<usize> = hispan_set.iter().collect();
+    hispan_vec.sort_unstable();
     let hilen = hispan_vec.len();
 
     merged.start_token = *qspan_vec.first().unwrap_or(&a.start_token);
