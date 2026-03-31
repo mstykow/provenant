@@ -305,60 +305,159 @@ mod tests {
         assert!(!span.is_contiguous());
     }
 
+    // ============================================================
+    // Comprehensive equality tests: all 2x2 combinations
+    // ============================================================
+
+    // ---- Range vs Range ----
+
     #[test]
-    fn test_eq_range_range() {
-        let a = PositionSpan::range(0, 3);
+    fn test_eq_range_range_both_empty() {
+        let a = PositionSpan::range(0, 0);
+        let b = PositionSpan::range(0, 0);
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_eq_range_range_one_empty() {
+        let a = PositionSpan::range(0, 0);
         let b = PositionSpan::range(0, 3);
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn test_eq_range_range_equal() {
+        let a = PositionSpan::range(2, 5);
+        let b = PositionSpan::range(2, 5);
         assert_eq!(a, b);
     }
 
     #[test]
-    fn test_eq_range_range_different() {
+    fn test_eq_range_range_disjoint() {
         let a = PositionSpan::range(0, 3);
-        let b = PositionSpan::range(0, 4);
+        let b = PositionSpan::range(5, 8);
         assert_ne!(a, b);
     }
 
     #[test]
-    fn test_eq_discrete_discrete() {
-        let a = PositionSpan::from_positions(vec![0, 1, 2]);
-        let b = PositionSpan::from_positions(vec![0, 1, 2]);
+    fn test_eq_range_range_overlapping() {
+        let a = PositionSpan::range(0, 5);
+        let b = PositionSpan::range(3, 8);
+        assert_ne!(a, b);
+    }
+
+    // ---- Discrete vs Discrete ----
+
+    #[test]
+    fn test_eq_discrete_discrete_both_empty() {
+        let a = PositionSpan::Discrete(vec![]);
+        let b = PositionSpan::Discrete(vec![]);
         assert_eq!(a, b);
     }
 
     #[test]
-    fn test_eq_discrete_discrete_different() {
-        let a = PositionSpan::from_positions(vec![0, 1, 2]);
-        let b = PositionSpan::from_positions(vec![0, 1, 3]);
+    fn test_eq_discrete_discrete_one_empty() {
+        let a = PositionSpan::Discrete(vec![]);
+        let b = PositionSpan::Discrete(vec![0, 1, 2]);
         assert_ne!(a, b);
     }
 
     #[test]
-    fn test_eq_range_discrete_same() {
-        let range = PositionSpan::range(0, 3);
-        let discrete = PositionSpan::Discrete(vec![0, 1, 2]);
+    fn test_eq_discrete_discrete_equal() {
+        let a = PositionSpan::Discrete(vec![0, 1, 2]);
+        let b = PositionSpan::Discrete(vec![0, 1, 2]);
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_eq_discrete_discrete_disjoint() {
+        let a = PositionSpan::Discrete(vec![0, 1, 2]);
+        let b = PositionSpan::Discrete(vec![5, 6, 7]);
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn test_eq_discrete_discrete_overlapping() {
+        let a = PositionSpan::Discrete(vec![0, 1, 2, 3]);
+        let b = PositionSpan::Discrete(vec![2, 3, 4, 5]);
+        assert_ne!(a, b);
+    }
+
+    // ---- Range vs Discrete ----
+
+    #[test]
+    fn test_eq_range_discrete_both_empty() {
+        let range = PositionSpan::range(0, 0);
+        let discrete = PositionSpan::Discrete(vec![]);
         assert_eq!(range, discrete);
         assert_eq!(discrete, range);
     }
 
     #[test]
-    fn test_eq_range_discrete_different_len() {
-        let range = PositionSpan::range(0, 3);
-        let discrete = PositionSpan::Discrete(vec![0, 1]);
+    fn test_eq_range_discrete_range_empty() {
+        let range = PositionSpan::range(0, 0);
+        let discrete = PositionSpan::Discrete(vec![0, 1, 2]);
         assert_ne!(range, discrete);
+        assert_ne!(discrete, range);
     }
 
     #[test]
-    fn test_eq_range_discrete_out_of_bounds() {
+    fn test_eq_range_discrete_discrete_empty() {
         let range = PositionSpan::range(0, 3);
-        let discrete = PositionSpan::Discrete(vec![0, 1, 5]);
+        let discrete = PositionSpan::Discrete(vec![]);
         assert_ne!(range, discrete);
+        assert_ne!(discrete, range);
     }
 
     #[test]
-    fn test_eq_empty() {
-        let a = PositionSpan::empty();
-        let b = PositionSpan::empty();
+    fn test_eq_range_discrete_equal() {
+        let range = PositionSpan::range(2, 5);
+        let discrete = PositionSpan::Discrete(vec![2, 3, 4]);
+        assert_eq!(range, discrete);
+        assert_eq!(discrete, range);
+    }
+
+    #[test]
+    fn test_eq_range_discrete_disjoint() {
+        let range = PositionSpan::range(0, 3);
+        let discrete = PositionSpan::Discrete(vec![5, 6, 7]);
+        assert_ne!(range, discrete);
+        assert_ne!(discrete, range);
+    }
+
+    #[test]
+    fn test_eq_range_discrete_overlapping_partial() {
+        let range = PositionSpan::range(0, 5);
+        let discrete = PositionSpan::Discrete(vec![2, 3, 4, 5, 6]);
+        assert_ne!(range, discrete);
+        assert_ne!(discrete, range);
+    }
+
+    #[test]
+    fn test_eq_range_discrete_subset() {
+        // Discrete is subset of range
+        let range = PositionSpan::range(0, 10);
+        let discrete = PositionSpan::Discrete(vec![2, 3, 4]);
+        assert_ne!(range, discrete);
+        assert_ne!(discrete, range);
+    }
+
+    #[test]
+    fn test_eq_range_discrete_superset() {
+        // Discrete extends beyond range
+        let range = PositionSpan::range(5, 10);
+        let discrete = PositionSpan::Discrete(vec![3, 4, 5, 6, 7]);
+        assert_ne!(range, discrete);
+        assert_ne!(discrete, range);
+    }
+
+    // ---- Mixed empty tests ----
+
+    #[test]
+    fn test_eq_empty_different_representation() {
+        let a = PositionSpan::range(0, 0);
+        let b = PositionSpan::Discrete(vec![]);
         assert_eq!(a, b);
+        assert_eq!(b, a);
     }
 }
