@@ -15,9 +15,7 @@
 
 use regex::Regex;
 
-use crate::license_detection::expression::{
-    LicenseExpression, expression_to_string, parse_expression,
-};
+use crate::license_detection::expression::{LicenseExpression, parse_expression};
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::models::{LicenseMatch, MatcherKind};
 use crate::license_detection::query::Query;
@@ -571,7 +569,49 @@ fn render_recovered_scancode_expression(
 ) -> String {
     match render_mode {
         RecoveryRenderMode::Canonical => render_canonical_boolean_expression(expr),
-        RecoveryRenderMode::PreserveMalformedGrouping => expression_to_string(expr),
+        RecoveryRenderMode::PreserveMalformedGrouping => {
+            render_expression_preserving_malformed_grouping(expr)
+        }
+    }
+}
+
+fn render_expression_preserving_malformed_grouping(expr: &LicenseExpression) -> String {
+    match expr {
+        LicenseExpression::License(key) => key.clone(),
+        LicenseExpression::LicenseRef(key) => key.clone(),
+        LicenseExpression::And { left, right } => {
+            let left_str = render_preserved_operand(left);
+            let right_str = render_preserved_operand(right);
+            format!("{} AND {}", left_str, right_str)
+        }
+        LicenseExpression::Or { left, right } => {
+            let left_str = render_preserved_operand(left);
+            let right_str = render_preserved_operand(right);
+            format!("{} OR {}", left_str, right_str)
+        }
+        LicenseExpression::With { left, right } => format!(
+            "{} WITH {}",
+            render_expression_preserving_malformed_grouping(left),
+            render_expression_preserving_malformed_grouping(right)
+        ),
+    }
+}
+
+fn render_preserved_operand(expr: &LicenseExpression) -> String {
+    match expr {
+        LicenseExpression::License(key) => key.clone(),
+        LicenseExpression::LicenseRef(key) => key.clone(),
+        LicenseExpression::And { .. } | LicenseExpression::Or { .. } => {
+            format!(
+                "({})",
+                render_expression_preserving_malformed_grouping(expr)
+            )
+        }
+        LicenseExpression::With { left, right } => format!(
+            "{} WITH {}",
+            render_expression_preserving_malformed_grouping(left),
+            render_expression_preserving_malformed_grouping(right)
+        ),
     }
 }
 
