@@ -1,6 +1,6 @@
 # CLI Implementation Plan
 
-> **Status**: 🟢 Complete — the ScanCode-facing CLI surface tracked in this rollout is implemented. Post-rollout parity audits still uncovered isolated gaps; those fixes now land as maintenance follow-up rather than reopening the rollout.
+> **Status**: 🟢 Complete — the ScanCode-facing CLI surface tracked in this rollout is implemented; remaining narrow `--info` / file-info parity gaps are tracked below.
 > **Priority**: P1 - High (user-facing drop-in replacement parity)
 > **Dependencies**: Some flags depend on underlying features (license detection, post-scan processing, caching)
 
@@ -10,8 +10,6 @@ CLI parameter parity with Python ScanCode. Rust uses `clap`; Python uses
 `click` + plugin-provided options.
 
 This plan records the completed rollout toward a **drop-in replacement CLI surface**.
-Post-rollout parity audits remain part of ongoing maintenance and may tighten
-already-completed behaviors when real-world usage exposes mismatches.
 
 It records the implemented compatibility coverage and the final classification
 of upstream flags, including explicit `Won't do` decisions for deprecated,
@@ -61,34 +59,30 @@ legacy, and intentionally out-of-scope surfaces.
 
 ### Output Formats & Result Shaping
 
-| Flag                                  | What it does                                           | Status | Notes                                                                                                                                                                                                                                                                                  |
-| ------------------------------------- | ------------------------------------------------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--json <FILE>`                       | Writes compact JSON output                             | `Done` | Core output format.                                                                                                                                                                                                                                                                    |
-| `--json-pp <FILE>`                    | Writes pretty-printed JSON output                      | `Done` | Core output format.                                                                                                                                                                                                                                                                    |
-| `--json-lines <FILE>`                 | Writes JSON Lines output                               | `Done` | Core output format.                                                                                                                                                                                                                                                                    |
-| `--yaml <FILE>`                       | Writes YAML output                                     | `Done` | Core output format.                                                                                                                                                                                                                                                                    |
-| `--csv <FILE>`                        | Writes CSV output                                      | `Done` | Upstream-deprecated but still supported.                                                                                                                                                                                                                                               |
-| `--html <FILE>`                       | Writes HTML report output                              | `Done` | Core output format.                                                                                                                                                                                                                                                                    |
-| `--html-app <FILE>`                   | Writes the deprecated HTML app output                  | `Done` | Supported and hidden, matching the upstream source-level treatment of this deprecated flag.                                                                                                                                                                                            |
-| `--spdx-tv <FILE>`                    | Writes SPDX tag/value output                           | `Done` | Core output format.                                                                                                                                                                                                                                                                    |
-| `--spdx-rdf <FILE>`                   | Writes SPDX RDF/XML output                             | `Done` | Core output format.                                                                                                                                                                                                                                                                    |
-| `--cyclonedx <FILE>`                  | Writes CycloneDX JSON output                           | `Done` | Core output format.                                                                                                                                                                                                                                                                    |
-| `--cyclonedx-xml <FILE>`              | Writes CycloneDX XML output                            | `Done` | Core output format.                                                                                                                                                                                                                                                                    |
-| `--custom-output <FILE>`              | Writes output using a custom template                  | `Done` | Requires `--custom-template`.                                                                                                                                                                                                                                                          |
-| `--custom-template <FILE>`            | Supplies the template for `--custom-output`            | `Done` | Requires `--custom-output`.                                                                                                                                                                                                                                                            |
-| `--debian <FILE>`                     | Writes Debian copyright output                         | `Done` | Requires `--copyright`, `--license`, and `--license-text`; emits a DEP-5-style machine-readable Debian copyright document.                                                                                                                                                             |
-| `--mark-source`                       | Marks source-heavy files and directories               | `Done` | Now requires `--info` and consumes precomputed file `is_source` state for directory marking.                                                                                                                                                                                           |
-| `--only-findings`                     | Filters output down to files with findings             | `Done` | Implemented in scan-result shaping.                                                                                                                                                                                                                                                    |
-| `--filter-clues`                      | Removes redundant clue output                          | `Done` | Implemented in scan-result shaping with exact dedupe, rule-based ignorable clue suppression, and clue-aware downstream license tallies/summary handling.                                                                                                                               |
-| `-i, --info`                          | Gates file-info output and related info-only workflows | `Done` | Native scans now gate the ScanCode-style info surface, including checksums, `sha1_git`, MIME/file-type classification hints, and `is_source` / file-kind booleans. Confirmed remaining file-info parity follow-up stays tracked below as targeted maintenance, not a reopened rollout. |
-| `--ignore-author <pattern>`           | Filters author findings by pattern                     | `Done` | Implemented as a whole-resource shaping filter.                                                                                                                                                                                                                                        |
-| `--ignore-copyright-holder <pattern>` | Filters copyright-holder findings by pattern           | `Done` | Implemented as a whole-resource shaping filter.                                                                                                                                                                                                                                        |
+| Flag                                  | What it does                                           | Status | Notes                                                                                                                                                              |
+| ------------------------------------- | ------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--json <FILE>`                       | Writes compact JSON output                             | `Done` | Core output format.                                                                                                                                                |
+| `--json-pp <FILE>`                    | Writes pretty-printed JSON output                      | `Done` | Core output format.                                                                                                                                                |
+| `--json-lines <FILE>`                 | Writes JSON Lines output                               | `Done` | Core output format.                                                                                                                                                |
+| `--yaml <FILE>`                       | Writes YAML output                                     | `Done` | Core output format.                                                                                                                                                |
+| `--csv <FILE>`                        | Writes CSV output                                      | `Done` | Upstream-deprecated but still supported.                                                                                                                           |
+| `--html <FILE>`                       | Writes HTML report output                              | `Done` | Core output format.                                                                                                                                                |
+| `--html-app <FILE>`                   | Writes the deprecated HTML app output                  | `Done` | Supported and hidden, matching the upstream source-level treatment of this deprecated flag.                                                                        |
+| `--spdx-tv <FILE>`                    | Writes SPDX tag/value output                           | `Done` | Core output format.                                                                                                                                                |
+| `--spdx-rdf <FILE>`                   | Writes SPDX RDF/XML output                             | `Done` | Core output format.                                                                                                                                                |
+| `--cyclonedx <FILE>`                  | Writes CycloneDX JSON output                           | `Done` | Core output format.                                                                                                                                                |
+| `--cyclonedx-xml <FILE>`              | Writes CycloneDX XML output                            | `Done` | Core output format.                                                                                                                                                |
+| `--custom-output <FILE>`              | Writes output using a custom template                  | `Done` | Requires `--custom-template`.                                                                                                                                      |
+| `--custom-template <FILE>`            | Supplies the template for `--custom-output`            | `Done` | Requires `--custom-output`.                                                                                                                                        |
+| `--debian <FILE>`                     | Writes Debian copyright output                         | `Done` | Requires `--copyright`, `--license`, and `--license-text`; emits a DEP-5-style machine-readable Debian copyright document.                                         |
+| `--mark-source`                       | Marks source-heavy files and directories               | `Done` | Now requires `--info` and consumes precomputed file `is_source` state for directory marking.                                                                       |
+| `--only-findings`                     | Filters output down to files with findings             | `Done` | Implemented in scan-result shaping.                                                                                                                                |
+| `--filter-clues`                      | Removes redundant clue output                          | `Done` | Implemented in scan-result shaping with exact dedupe, rule-based ignorable clue suppression, and clue-aware downstream license tallies/summary handling.           |
+| `-i, --info`                          | Gates file-info output and related info-only workflows | `Done` | Native scans now gate the ScanCode-style info surface, including checksums, `sha1_git`, MIME/file-type classification hints, and `is_source` / file-kind booleans. |
+| `--ignore-author <pattern>`           | Filters author findings by pattern                     | `Done` | Implemented as a whole-resource shaping filter.                                                                                                                    |
+| `--ignore-copyright-holder <pattern>` | Filters copyright-holder findings by pattern           | `Done` | Implemented as a whole-resource shaping filter.                                                                                                                    |
 
-### Targeted maintenance follow-up: `--info` / file-info parity
-
-The CLI rollout remains complete, but parity audits can still uncover narrow
-`--info` mismatches. Track confirmed file-info follow-up here rather than
-reopening adjacent completed plans.
+### Residual `--info` / file-info parity gaps
 
 Confirmed remaining gaps:
 
@@ -106,11 +100,6 @@ Confirmed remaining gaps:
 - Archive/media classification now covers more package/archive formats and
   extensionless source-like basenames, but it still lacks typecode's broader
   extractability- and libmagic-driven distinctions.
-
-Scope note:
-
-- This section tracks only narrow `--info` / file-info parity follow-up.
-- It does not reopen the broader CLI rollout or adjacent completed plans.
 
 ### Scan & Detection Controls
 
