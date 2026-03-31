@@ -1,10 +1,7 @@
-use content_inspector::{ContentType, inspect};
-
 use crate::license_detection::LicenseDetectionEngine;
 use crate::parsers::{try_parse_compiled_bytes, try_parse_file};
 use crate::utils::hash::{calculate_md5, calculate_sha1, calculate_sha1_git, calculate_sha256};
-use crate::utils::language::detect_language;
-use crate::utils::text::{is_source, remove_verbatim_escape_sequences};
+use crate::utils::text::remove_verbatim_escape_sequences;
 use anyhow::Error;
 use rayon::prelude::*;
 use std::fs::{self, File};
@@ -28,7 +25,7 @@ use crate::progress::ScanProgress;
 use crate::scanner::collect::CollectedPaths;
 use crate::scanner::{LicenseScanOptions, ProcessResult, TextDetectionOptions};
 use crate::utils::file::{
-    ExtractedTextKind, detect_mime_type, extract_text_for_detection, get_creation_date,
+    ExtractedTextKind, classify_file_info, extract_text_for_detection, get_creation_date,
 };
 use crate::utils::generated::generated_code_hints_from_bytes;
 use tempfile::TempDir;
@@ -254,6 +251,7 @@ fn process_file(
     let started = Instant::now();
 
     let mut generated_flag = None;
+    let mut is_source_file = false;
     let mut cache_key_sha256 = None;
     match extract_information_from_content(
         &mut file_info_builder,
@@ -263,9 +261,10 @@ fn process_file(
         license_options,
         text_options,
     ) {
-        Ok((is_generated, sha256)) => {
+        Ok((is_generated, sha256, is_source)) => {
             generated_flag = is_generated;
             cache_key_sha256 = Some(sha256);
+            is_source_file = is_source;
         }
         Err(e) => scan_errors.push(e.to_string()),
     };
@@ -303,7 +302,7 @@ fn process_file(
         .expect("FileInformationBuild not completely initialized");
 
     if text_options.collect_info {
-        file_info.is_source = Some(is_source(path));
+        file_info.is_source = Some(is_source_file);
     }
 
     if file_info.programming_language.as_deref() == Some("Go")
@@ -347,7 +346,7 @@ fn extract_information_from_content(
     license_engine: Option<Arc<LicenseDetectionEngine>>,
     license_options: LicenseScanOptions,
     text_options: &TextDetectionOptions,
-) -> Result<(Option<bool>, String), Error> {
+) -> Result<(Option<bool>, String, bool), Error> {
     let started = Instant::now();
     let buffer = fs::read(path)?;
     let license_enabled = license_engine.is_some();
@@ -363,38 +362,30 @@ fn extract_information_from_content(
     let is_generated = text_options
         .detect_generated
         .then(|| !generated_code_hints_from_bytes(&buffer).is_empty());
-    let programming_language = detect_language(path, &buffer);
+    let classification = classify_file_info(path, &buffer);
 
     if text_options.collect_info {
-        let mime_type = detect_mime_type(path, &buffer, Some(programming_language.as_str()));
-        let (file_type_label, is_binary, is_text, is_archive, is_media, is_script) =
-            detect_info_flags(
-                path,
-                &buffer,
-                &mime_type,
-                Some(programming_language.as_str()),
-            );
-
         file_info_builder
             .sha1(Some(calculate_sha1(&buffer)))
             .md5(Some(calculate_md5(&buffer)))
             .sha256(Some(sha256.clone()))
-            .programming_language(Some(programming_language.clone()))
-            .mime_type(Some(mime_type))
-            .file_type_label(Some(file_type_label))
+            .programming_language(classification.programming_language.clone())
+            .mime_type(Some(classification.mime_type.clone()))
+            .file_type_label(Some(classification.file_type.clone()))
             .sha1_git(Some(calculate_sha1_git(&buffer)))
-            .is_binary(Some(is_binary))
-            .is_text(Some(is_text))
-            .is_archive(Some(is_archive))
-            .is_media(Some(is_media))
-            .is_script(Some(is_script))
+            .is_binary(Some(classification.is_binary))
+            .is_text(Some(classification.is_text))
+            .is_archive(Some(classification.is_archive))
+            .is_media(Some(classification.is_media))
+            .is_source(Some(classification.is_source))
+            .is_script(Some(classification.is_script))
             .files_count(Some(0))
             .dirs_count(Some(0))
             .size_count(Some(0));
     }
 
     if should_skip_text_detection(path, &buffer) {
-        return Ok((is_generated, sha256));
+        return Ok((is_generated, sha256, classification.is_source));
     }
 
     if let Some(scan_results_dir) = text_options.scan_cache_dir.as_deref() {
@@ -414,7 +405,7 @@ fn extract_information_from_content(
                     .emails(findings.emails)
                     .urls(findings.urls)
                     .programming_language(findings.programming_language);
-                return Ok((is_generated, sha256));
+                return Ok((is_generated, sha256, classification.is_source));
             }
             Ok(None) => {}
             Err(err) => {
@@ -478,7 +469,7 @@ fn extract_information_from_content(
     }
 
     if text_content.is_empty() {
-        return Ok((is_generated, sha256));
+        return Ok((is_generated, sha256, classification.is_source));
     }
 
     if text_options.detect_copyrights {
@@ -507,7 +498,7 @@ fn extract_information_from_content(
         } else {
             text_content
         }
-    } else if is_source(path) {
+    } else if classification.is_source {
         remove_verbatim_escape_sequences(&text_content)
     } else {
         text_content
@@ -523,7 +514,7 @@ fn extract_information_from_content(
         from_binary_strings,
     )?;
 
-    Ok((is_generated, sha256))
+    Ok((is_generated, sha256, classification.is_source))
 }
 
 fn is_timeout_exceeded(started: Instant, timeout_seconds: f64) -> bool {
@@ -556,82 +547,6 @@ fn scan_cache_fingerprint(
         license_options.include_diagnostics,
         license_options.unknown_licenses,
         license_options.min_score,
-    )
-}
-
-fn detect_info_flags(
-    path: &Path,
-    buffer: &[u8],
-    mime_type: &str,
-    programming_language: Option<&str>,
-) -> (String, bool, bool, bool, bool, bool) {
-    let is_binary = matches!(inspect(buffer), ContentType::BINARY);
-    let is_text = !is_binary;
-    let is_media = mime_type.starts_with("image/")
-        || mime_type.starts_with("audio/")
-        || mime_type.starts_with("video/");
-    let lower_extension = path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| ext.to_ascii_lowercase());
-    let is_archive = matches!(
-        lower_extension.as_deref(),
-        Some(
-            "zip"
-                | "jar"
-                | "war"
-                | "ear"
-                | "tar"
-                | "gz"
-                | "tgz"
-                | "bz2"
-                | "xz"
-                | "7z"
-                | "rar"
-                | "apk"
-                | "deb"
-                | "rpm"
-                | "whl"
-                | "crate"
-        )
-    ) || mime_type.contains("zip")
-        || mime_type.contains("compressed")
-        || mime_type.contains("tar")
-        || mime_type.contains("x-rpm")
-        || mime_type.contains("debian");
-    let is_script = buffer.starts_with(b"#!")
-        || matches!(
-            lower_extension.as_deref(),
-            Some("sh" | "bash" | "zsh" | "fish" | "py" | "rb" | "pl" | "php" | "js" | "ts")
-        )
-        || matches!(
-            programming_language,
-            Some("Python" | "Ruby" | "PHP" | "JavaScript" | "TypeScript" | "Shell")
-        );
-
-    let file_type_label = if is_archive {
-        "archive".to_string()
-    } else if is_media {
-        "media".to_string()
-    } else if is_binary {
-        "binary".to_string()
-    } else if is_script {
-        "script".to_string()
-    } else if programming_language.is_some() {
-        "source".to_string()
-    } else if mime_type.starts_with("text/") {
-        "text".to_string()
-    } else {
-        mime_type.to_string()
-    };
-
-    (
-        file_type_label,
-        is_binary,
-        is_text,
-        is_archive,
-        is_media,
-        is_script,
     )
 }
 
