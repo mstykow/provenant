@@ -193,7 +193,7 @@ impl PackageParser for RpmParser {
     }
 }
 
-fn infer_rpm_namespace_from_filename(path: &Path) -> Option<String> {
+pub(crate) fn infer_rpm_namespace_from_filename(path: &Path) -> Option<String> {
     let filename = path.file_name()?.to_str()?.to_ascii_lowercase();
 
     if filename.contains(".fc") {
