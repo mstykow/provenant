@@ -13,6 +13,8 @@ use mime_guess::from_path;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader as XmlReader;
 
+use crate::utils::language::detect_language;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExtractedTextKind {
     None,
@@ -22,8 +24,29 @@ pub enum ExtractedTextKind {
     ImageMetadata,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileInfoClassification {
+    pub mime_type: String,
+    pub file_type: String,
+    pub programming_language: Option<String>,
+    pub is_binary: bool,
+    pub is_text: bool,
+    pub is_archive: bool,
+    pub is_media: bool,
+    pub is_source: bool,
+    pub is_script: bool,
+}
+
 const MAX_IMAGE_METADATA_VALUES: usize = 64;
 const MAX_IMAGE_METADATA_TEXT_BYTES: usize = 32 * 1024;
+const PLAIN_TEXT_EXTENSIONS: &[&str] = &["rst", "rest", "md", "txt", "log", "json", "xml"];
+const BINARY_EXTENSIONS: &[&str] = &[
+    "pyc", "pyo", "pgm", "pbm", "ppm", "mp3", "mp4", "mpeg", "mpg", "emf",
+];
+const ARCHIVE_EXTENSIONS: &[&str] = &[
+    "zip", "jar", "war", "ear", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar", "apk", "deb", "rpm",
+    "whl", "crate", "egg", "gem", "nupkg", "sqs", "squashfs",
+];
 
 /// Get the last modified date of a file as a `YYYY-MM-DD` string.
 pub fn get_creation_date(metadata: &fs::Metadata) -> Option<String> {
@@ -143,7 +166,78 @@ pub fn extract_text_for_detection(path: &Path, bytes: &[u8]) -> (String, Extract
     }
 }
 
+pub fn classify_file_info(path: &Path, bytes: &[u8]) -> FileInfoClassification {
+    let detected_language = detect_language(path, bytes);
+    let is_binary = detect_is_binary(path, bytes);
+    let is_text = !is_binary;
+    let mime_type = detect_mime_type(path, bytes, detected_language.as_deref());
+    let is_archive = detect_is_archive(path, bytes, &mime_type, is_text);
+    let is_media = detect_is_media(path, bytes, &mime_type);
+    let is_script = detect_is_script(path, bytes, detected_language.as_deref(), is_text);
+    let is_source = detect_is_source(path, detected_language.as_deref(), is_text, is_script);
+    let programming_language = is_source.then(|| detected_language.clone()).flatten();
+    let file_type = detect_file_type(
+        path,
+        bytes,
+        &mime_type,
+        programming_language.as_deref(),
+        is_binary,
+        is_text,
+        is_archive,
+        is_media,
+        is_script,
+    );
+
+    FileInfoClassification {
+        mime_type,
+        file_type,
+        programming_language,
+        is_binary,
+        is_text,
+        is_archive,
+        is_media,
+        is_source,
+        is_script,
+    }
+}
+
 pub fn detect_mime_type(path: &Path, bytes: &[u8], programming_language: Option<&str>) -> String {
+    if bytes.is_empty() {
+        return "inode/x-empty".to_string();
+    }
+
+    if looks_like_pdf(bytes) {
+        return "application/pdf".to_string();
+    }
+
+    if let Some(mime_type) = media_mime_from_content(bytes) {
+        return mime_type.to_string();
+    }
+
+    if is_zip_archive(bytes) {
+        return detect_zip_like_mime(path);
+    }
+
+    if looks_like_gzip(bytes) {
+        return "application/gzip".to_string();
+    }
+
+    if looks_like_bzip2(bytes) {
+        return "application/x-bzip2".to_string();
+    }
+
+    if looks_like_xz(bytes) {
+        return "application/x-xz".to_string();
+    }
+
+    if looks_like_deb(bytes, path) {
+        return "application/vnd.debian.binary-package".to_string();
+    }
+
+    if looks_like_rpm(bytes, path) {
+        return "application/x-rpm".to_string();
+    }
+
     let mime_type = from_path(path)
         .first_or_octet_stream()
         .essence_str()
@@ -178,6 +272,140 @@ fn should_prefer_text_mime(
     is_utf8_text(inspect(bytes))
         && is_textual_source_candidate(path, programming_language)
         && (mime_type.starts_with("video/") || mime_type == "application/octet-stream")
+}
+
+fn detect_is_binary(path: &Path, bytes: &[u8]) -> bool {
+    lower_extension(path)
+        .as_deref()
+        .is_some_and(|ext| BINARY_EXTENSIONS.contains(&ext))
+        || (!bytes.is_empty() && matches!(inspect(bytes), ContentType::BINARY))
+}
+
+fn detect_is_archive(path: &Path, bytes: &[u8], mime_type: &str, is_text: bool) -> bool {
+    if is_text {
+        return false;
+    }
+
+    lower_extension(path)
+        .as_deref()
+        .is_some_and(|ext| ARCHIVE_EXTENSIONS.contains(&ext))
+        || is_zip_archive(bytes)
+        || looks_like_gzip(bytes)
+        || looks_like_bzip2(bytes)
+        || looks_like_xz(bytes)
+        || looks_like_deb(bytes, path)
+        || looks_like_rpm(bytes, path)
+        || looks_like_squashfs(bytes, path)
+        || mime_type.contains("zip")
+        || mime_type.contains("compressed")
+        || mime_type.contains("tar")
+        || mime_type.contains("x-rpm")
+        || mime_type.contains("debian")
+}
+
+fn detect_is_media(path: &Path, bytes: &[u8], mime_type: &str) -> bool {
+    media_mime_from_content(bytes).is_some()
+        || mime_type.starts_with("image/")
+        || mime_type.starts_with("audio/")
+        || mime_type.starts_with("video/")
+        || (mime_type == "application/octet-stream"
+            && lower_extension(path).as_deref() == Some("tga")
+            && !matches!(inspect(bytes), ContentType::BINARY))
+}
+
+fn detect_is_script(
+    path: &Path,
+    bytes: &[u8],
+    programming_language: Option<&str>,
+    is_text: bool,
+) -> bool {
+    if !is_text || is_makefile(path) {
+        return false;
+    }
+
+    bytes.starts_with(b"#!")
+        || lower_extension(path)
+            .as_deref()
+            .is_some_and(|ext| matches!(ext, "sh" | "bash" | "zsh" | "fish"))
+        || matches!(
+            programming_language,
+            Some("Shell" | "Python" | "Ruby" | "Perl" | "PHP")
+        )
+}
+
+fn detect_is_source(
+    path: &Path,
+    programming_language: Option<&str>,
+    is_text: bool,
+    is_script: bool,
+) -> bool {
+    if !is_text || is_plain_text(path) || is_makefile(path) || is_source_map(path) {
+        return false;
+    }
+
+    if is_c_like_source(path) || is_java_like_source(path) {
+        return true;
+    }
+
+    programming_language.is_some() || is_script
+}
+
+#[allow(clippy::too_many_arguments)]
+fn detect_file_type(
+    path: &Path,
+    bytes: &[u8],
+    mime_type: &str,
+    programming_language: Option<&str>,
+    is_binary: bool,
+    is_text: bool,
+    is_archive: bool,
+    is_media: bool,
+    is_script: bool,
+) -> String {
+    if bytes.is_empty() {
+        return "empty".to_string();
+    }
+
+    if looks_like_pdf(bytes) {
+        return "PDF document".to_string();
+    }
+
+    if let Some(file_type) = media_file_type_from_content(bytes) {
+        return file_type.to_string();
+    }
+
+    if is_archive {
+        return archive_file_type(path, bytes);
+    }
+
+    if is_script {
+        return script_file_type(programming_language, bytes);
+    }
+
+    if is_text {
+        if lower_extension(path).as_deref() == Some("json") {
+            return "JSON text data".to_string();
+        }
+        if lower_extension(path).as_deref() == Some("xml") {
+            return "XML text data".to_string();
+        }
+        if matches!(lower_extension(path).as_deref(), Some("yaml" | "yml")) {
+            return "YAML text data".to_string();
+        }
+        if matches!(lower_extension(path).as_deref(), Some("md" | "markdown")) {
+            return text_file_type(bytes);
+        }
+        if programming_language.is_some() && !is_media {
+            return text_file_type(bytes);
+        }
+        return text_file_type(bytes);
+    }
+
+    if is_binary && mime_type == "application/octet-stream" {
+        return "data".to_string();
+    }
+
+    mime_type.to_string()
 }
 
 fn is_textual_source_candidate(path: &Path, programming_language: Option<&str>) -> bool {
@@ -265,6 +493,182 @@ fn is_source_like_language(language: &str) -> bool {
             | "Dockerfile"
             | "Makefile"
     )
+}
+
+fn extension(path: &Path) -> Option<&str> {
+    path.extension().and_then(|ext| ext.to_str())
+}
+
+fn lower_extension(path: &Path) -> Option<String> {
+    extension(path).map(|ext| ext.to_ascii_lowercase())
+}
+
+fn lower_file_name(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
+fn is_plain_text(path: &Path) -> bool {
+    lower_extension(path)
+        .as_deref()
+        .is_some_and(|ext| PLAIN_TEXT_EXTENSIONS.contains(&ext))
+}
+
+fn is_makefile(path: &Path) -> bool {
+    matches!(lower_file_name(path).as_str(), "makefile" | "makefile.inc")
+}
+
+fn is_source_map(path: &Path) -> bool {
+    let path_lower = path.to_string_lossy().to_ascii_lowercase();
+    path_lower.ends_with(".js.map") || path_lower.ends_with(".css.map")
+}
+
+fn is_c_like_source(path: &Path) -> bool {
+    lower_extension(path).as_deref().is_some_and(|ext| {
+        matches!(
+            ext,
+            "c" | "cc"
+                | "cp"
+                | "cpp"
+                | "cxx"
+                | "c++"
+                | "h"
+                | "hh"
+                | "hpp"
+                | "hxx"
+                | "h++"
+                | "i"
+                | "ii"
+                | "m"
+                | "s"
+                | "asm"
+        )
+    })
+}
+
+fn is_java_like_source(path: &Path) -> bool {
+    lower_extension(path)
+        .as_deref()
+        .is_some_and(|ext| matches!(ext, "java" | "aj" | "jad" | "ajt"))
+}
+
+fn detect_zip_like_mime(path: &Path) -> String {
+    match extension(path).map(|ext| ext.to_ascii_lowercase()) {
+        Some(ext) if ext == "apk" => "application/vnd.android.package-archive".to_string(),
+        Some(ext) if matches!(ext.as_str(), "jar" | "war" | "ear") => {
+            "application/java-archive".to_string()
+        }
+        _ => "application/zip".to_string(),
+    }
+}
+
+fn media_mime_from_content(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("image/png")
+    } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        Some("image/jpeg")
+    } else if bytes.starts_with(b"II\x2a\x00") || bytes.starts_with(b"MM\x00\x2a") {
+        Some("image/tiff")
+    } else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        Some("image/webp")
+    } else {
+        None
+    }
+}
+
+fn media_file_type_from_content(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("PNG image data")
+    } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        Some("JPEG image data")
+    } else if bytes.starts_with(b"II\x2a\x00") || bytes.starts_with(b"MM\x00\x2a") {
+        Some("TIFF image data")
+    } else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        Some("WebP image data")
+    } else {
+        None
+    }
+}
+
+fn looks_like_pdf(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"%PDF-")
+}
+
+fn looks_like_gzip(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[0x1f, 0x8b])
+}
+
+fn looks_like_bzip2(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"BZh")
+}
+
+fn looks_like_xz(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[0xfd, b'7', b'z', b'X', b'Z', 0x00])
+}
+
+fn looks_like_deb(bytes: &[u8], path: &Path) -> bool {
+    lower_extension(path).as_deref() == Some("deb") && bytes.starts_with(b"!<arch>\n")
+}
+
+fn looks_like_rpm(bytes: &[u8], path: &Path) -> bool {
+    lower_extension(path).as_deref() == Some("rpm") && bytes.starts_with(&[0xed, 0xab, 0xee, 0xdb])
+}
+
+fn looks_like_squashfs(bytes: &[u8], path: &Path) -> bool {
+    lower_extension(path)
+        .as_deref()
+        .is_some_and(|ext| matches!(ext, "sqs" | "squashfs"))
+        && (bytes.starts_with(&[0x68, 0x73, 0x71, 0x73])
+            || bytes.starts_with(&[0x73, 0x71, 0x73, 0x68]))
+}
+
+fn archive_file_type(path: &Path, bytes: &[u8]) -> String {
+    if looks_like_deb(bytes, path) {
+        "debian binary package (format 2.0)".to_string()
+    } else if looks_like_rpm(bytes, path) {
+        "RPM package".to_string()
+    } else if looks_like_squashfs(bytes, path) {
+        "Squashfs filesystem".to_string()
+    } else if looks_like_gzip(bytes) {
+        "gzip compressed data".to_string()
+    } else if looks_like_bzip2(bytes) {
+        "bzip2 compressed data".to_string()
+    } else if looks_like_xz(bytes) {
+        "XZ compressed data".to_string()
+    } else if is_zip_archive(bytes) {
+        "Zip archive data".to_string()
+    } else if lower_extension(path).as_deref() == Some("gem") {
+        "POSIX tar archive".to_string()
+    } else {
+        "archive data".to_string()
+    }
+}
+
+fn script_file_type(programming_language: Option<&str>, bytes: &[u8]) -> String {
+    let suffix = if bytes.contains(&b'\n') {
+        "UTF-8 Unicode text executable"
+    } else {
+        "UTF-8 Unicode text, with no line terminators"
+    };
+
+    match programming_language {
+        Some("Python") => format!("python script, {suffix}"),
+        Some("Ruby") => format!("ruby script, {suffix}"),
+        Some("Perl") => format!("perl script, {suffix}"),
+        Some("PHP") => format!("php script, {suffix}"),
+        Some("Shell") => format!("shell script, {suffix}"),
+        _ => format!("script, {suffix}"),
+    }
+}
+
+fn text_file_type(bytes: &[u8]) -> String {
+    if bytes.contains(&b'\n') {
+        "UTF-8 Unicode text".to_string()
+    } else {
+        "UTF-8 Unicode text, with no line terminators".to_string()
+    }
 }
 
 fn supported_image_metadata_format(ext: Option<&str>) -> Option<ImageFormat> {
@@ -685,7 +1089,9 @@ pub fn extract_printable_strings(bytes: &[u8]) -> String {
 mod tests {
     use std::path::Path;
 
-    use super::{ExtractedTextKind, extract_text_for_detection, normalize_mime_type};
+    use super::{
+        ExtractedTextKind, classify_file_info, extract_text_for_detection, normalize_mime_type,
+    };
 
     #[test]
     fn test_extract_text_for_detection_skips_jar_archives() {
@@ -761,5 +1167,67 @@ mod tests {
             ),
             "application/octet-stream"
         );
+    }
+
+    #[test]
+    fn test_classify_file_info_marks_empty_files_as_text_not_source() {
+        let classification = classify_file_info(Path::new("test.txt"), b"");
+
+        assert_eq!(classification.mime_type, "inode/x-empty");
+        assert_eq!(classification.file_type, "empty");
+        assert!(!classification.is_binary);
+        assert!(classification.is_text);
+        assert!(!classification.is_source);
+        assert_eq!(classification.programming_language, None);
+    }
+
+    #[test]
+    fn test_classify_file_info_keeps_json_out_of_programming_language() {
+        let classification = classify_file_info(Path::new("package.json"), br#"{"name":"demo"}"#);
+
+        assert_eq!(classification.mime_type, "application/json");
+        assert_eq!(classification.file_type, "JSON text data");
+        assert!(classification.is_text);
+        assert!(!classification.is_source);
+        assert_eq!(classification.programming_language, None);
+    }
+
+    #[test]
+    fn test_classify_file_info_treats_dockerfile_as_source() {
+        let classification = classify_file_info(Path::new("Dockerfile"), b"FROM scratch\n");
+
+        assert_eq!(
+            classification.programming_language.as_deref(),
+            Some("Dockerfile")
+        );
+        assert!(classification.is_source);
+        assert!(!classification.is_script);
+        assert_eq!(classification.file_type, "UTF-8 Unicode text");
+    }
+
+    #[test]
+    fn test_classify_file_info_treats_makefile_as_text_not_source() {
+        let classification = classify_file_info(Path::new("Makefile"), b"all:\n\techo hi\n");
+
+        assert_eq!(classification.programming_language, None);
+        assert!(classification.is_text);
+        assert!(!classification.is_source);
+        assert!(!classification.is_script);
+        assert_eq!(classification.file_type, "UTF-8 Unicode text");
+    }
+
+    #[test]
+    fn test_classify_file_info_marks_supported_package_archives() {
+        let zip_bytes = b"PK\x03\x04\x14\x00\x00\x00";
+
+        let egg = classify_file_info(Path::new("demo.egg"), zip_bytes);
+        let nupkg = classify_file_info(Path::new("demo.nupkg"), zip_bytes);
+
+        assert!(egg.is_archive);
+        assert_eq!(egg.mime_type, "application/zip");
+        assert_eq!(egg.file_type, "Zip archive data");
+        assert!(nupkg.is_archive);
+        assert_eq!(nupkg.mime_type, "application/zip");
+        assert_eq!(nupkg.file_type, "Zip archive data");
     }
 }
