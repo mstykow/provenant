@@ -1141,6 +1141,18 @@ fn extract_pdf_text(path: &Path, bytes: &[u8]) -> String {
 
     let extracted = catch_unwind(AssertUnwindSafe(
         || -> Result<String, Box<dyn std::error::Error>> {
+            let mut document = pdf_oxide::document::PdfDocument::from_bytes(bytes.to_vec())?;
+            extract_first_pdf_page_text(&mut document)
+        },
+    ));
+    if let Ok(Ok(text)) = extracted
+        && let Some(normalized) = normalize_pdf_text(text)
+    {
+        return normalized;
+    }
+
+    let extracted = catch_unwind(AssertUnwindSafe(
+        || -> Result<String, Box<dyn std::error::Error>> {
             let mut document = pdf_oxide::document::PdfDocument::open(path)?;
             extract_pdf_text_from_document(&mut document)
         },
@@ -1166,24 +1178,120 @@ fn extract_pdf_text(path: &Path, bytes: &[u8]) -> String {
     String::new()
 }
 
+fn extract_first_pdf_page_text(
+    document: &mut pdf_oxide::document::PdfDocument,
+) -> Result<String, Box<dyn std::error::Error>> {
+    if document.page_count()? == 0 {
+        return Ok(String::new());
+    }
+
+    let extracted_text = document.extract_text(0)?;
+    let markdown_text =
+        document.to_markdown(0, &pdf_oxide::converters::ConversionOptions::default())?;
+    let pipeline_text =
+        document.to_plain_text(0, &pdf_oxide::converters::ConversionOptions::default())?;
+
+    Ok(merge_pdf_first_page_text(
+        &extracted_text,
+        &markdown_text,
+        &pipeline_text,
+    ))
+}
+
 fn extract_pdf_text_from_document(
     document: &mut pdf_oxide::document::PdfDocument,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let page_count = document.page_count()?;
-    let mut pages = Vec::new();
-    for page_idx in 0..page_count {
-        let text = document.extract_text(page_idx)?;
-        if !text.trim().is_empty() {
-            pages.push(text);
-        }
-    }
-
-    Ok(pages.join("\n"))
+    Ok(document.to_plain_text_all(&pdf_oxide::converters::ConversionOptions::default())?)
 }
 
 fn normalize_pdf_text(text: String) -> Option<String> {
     let normalized = text.replace(['\r', '\u{0c}'], "\n");
     (!normalized.trim().is_empty()).then_some(normalized)
+}
+
+fn merge_pdf_first_page_text(
+    extracted_text: &str,
+    markdown_text: &str,
+    pipeline_text: &str,
+) -> String {
+    let pipeline = pipeline_text.trim();
+    if pipeline.is_empty() {
+        return extracted_text.to_string();
+    }
+
+    let prefix = pdf_first_page_heading_prefix(extracted_text, markdown_text);
+    let Some(prefix) = prefix else {
+        return pipeline_text.to_string();
+    };
+
+    if pipeline.contains(&prefix) {
+        pipeline_text.to_string()
+    } else {
+        format!("{prefix}\n\n{pipeline}")
+    }
+}
+
+fn pdf_first_page_heading_prefix(extracted_text: &str, markdown_text: &str) -> Option<String> {
+    let mut lines = Vec::new();
+
+    for line in pdf_extracted_heading_lines(extracted_text) {
+        push_unique_line(&mut lines, line);
+    }
+
+    for line in pdf_markdown_heading_lines(markdown_text) {
+        push_unique_line(&mut lines, line);
+    }
+
+    (!lines.is_empty()).then(|| lines.join("\n"))
+}
+
+fn pdf_extracted_heading_lines(text: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        if !lines.is_empty() && looks_like_numbered_section_heading(line) {
+            break;
+        }
+
+        lines.push(line.to_string());
+
+        if lines.len() >= 4 {
+            break;
+        }
+    }
+
+    lines
+}
+
+fn pdf_markdown_heading_lines(text: &str) -> Vec<String> {
+    text.lines()
+        .map(str::trim)
+        .filter_map(|line| line.strip_prefix('#').map(str::trim_start))
+        .map(|line| line.trim_matches('#').trim())
+        .filter(|line| !line.is_empty())
+        .filter(|line| !looks_like_numbered_section_heading(line))
+        .take(4)
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn push_unique_line(lines: &mut Vec<String>, line: String) {
+    if !lines.iter().any(|existing| existing == &line) {
+        lines.push(line);
+    }
+}
+
+fn looks_like_numbered_section_heading(line: &str) -> bool {
+    let mut chars = line.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+
+    if !first.is_ascii_digit() {
+        return false;
+    }
+
+    matches!(chars.next(), Some('.'))
 }
 
 fn is_zip_archive(bytes: &[u8]) -> bool {
@@ -1284,6 +1392,19 @@ mod tests {
 
         assert_eq!(kind, ExtractedTextKind::Pdf);
         assert!(text.contains("Redistribution and use in source and binary forms"));
+    }
+
+    #[test]
+    fn test_extract_text_for_detection_prefers_first_pdf_page_before_full_document() {
+        let path =
+            Path::new("testdata/license-golden/datadriven/lic4/should_detect_something_5.pdf");
+        let bytes = std::fs::read(path).expect("failed to read pdf fixture");
+
+        let (text, kind) = extract_text_for_detection(path, &bytes);
+
+        assert_eq!(kind, ExtractedTextKind::Pdf);
+        assert!(text.contains("SUN INDUSTRY STANDARDS SOURCE LICENSE"));
+        assert!(!text.contains("DISCLAIMER OF WARRANTY"));
     }
 
     #[test]
