@@ -536,18 +536,15 @@ impl LicenseMatch {
         if self.qspan.is_empty() && other.qspan.is_empty() {
             return self.start_line <= other.start_line && self.end_line >= other.end_line;
         }
-        let self_set = self.qspan.to_position_set();
-        for pos in other.qspan.iter() {
-            if !self_set.contains(pos) {
-                return false;
-            }
-        }
-        true
+        other.qspan.iter().all(|pos| self.qspan.contains(pos))
     }
 
     pub fn qoverlap(&self, other: &LicenseMatch) -> usize {
-        let self_set = self.qspan.to_position_set();
-        other.qspan.iter().filter(|&p| self_set.contains(p)).count()
+        other
+            .qspan
+            .iter()
+            .filter(|&p| self.qspan.contains(p))
+            .count()
     }
 
     pub fn qspan_overlap(&self, other: &LicenseMatch) -> usize {
@@ -580,16 +577,7 @@ impl LicenseMatch {
     }
 
     pub fn qspan_eq(&self, other: &LicenseMatch) -> bool {
-        if self.qspan.len() != other.qspan.len() {
-            return false;
-        }
-        let self_set = self.qspan.to_position_set();
-        for pos in other.qspan.iter() {
-            if !self_set.contains(pos) {
-                return false;
-            }
-        }
-        true
+        self.qspan == other.qspan
     }
 
     pub fn qdistance_to(&self, other: &LicenseMatch) -> usize {
