@@ -29,6 +29,7 @@ use crate::models::{Dependency, FileReference};
 
 use super::PackageParser;
 use super::rpm_parser::infer_rpm_namespace;
+use super::rpm_parser::infer_rpm_namespace_from_filename;
 
 const PACKAGE_TYPE: PackageType = PackageType::Rpm;
 
@@ -283,7 +284,13 @@ fn build_package_data(pkg: RpmQueryPackage, datasource_id: DatasourceId) -> Pack
 
     let vendor = normalize_optional_string(pkg.vendor)
         .or_else(|| normalize_optional_string(pkg.distribution));
-    let namespace = infer_rpm_namespace(None, vendor.as_deref(), release.as_deref(), None);
+    let source_rpm = normalize_optional_string(pkg.source_rpm);
+    let namespace =
+        infer_rpm_namespace(None, vendor.as_deref(), release.as_deref(), None).or_else(|| {
+            source_rpm
+                .as_deref()
+                .and_then(|source_rpm| infer_rpm_namespace_from_filename(Path::new(source_rpm)))
+        });
 
     let architecture = normalize_optional_string(pkg.arch);
     let dependencies = pkg
@@ -292,9 +299,7 @@ fn build_package_data(pkg: RpmQueryPackage, datasource_id: DatasourceId) -> Pack
         .filter_map(|require| build_dependency(&require))
         .collect();
     let extracted_license_statement = normalize_optional_string(pkg.license);
-    let source_packages = normalize_optional_string(pkg.source_rpm)
-        .into_iter()
-        .collect();
+    let source_packages = source_rpm.clone().into_iter().collect();
     let file_references = {
         let from_dir_components =
             build_file_references(&pkg.base_names, &pkg.dir_indexes, &pkg.dir_names);
@@ -601,6 +606,32 @@ mod tests {
                 release: Some("2.fc38".to_string()),
                 vendor: None,
                 distribution: Some("Fedora Project".to_string()),
+                arch: Some("x86_64".to_string()),
+                size: Some(235748),
+                license: Some("GPLv3+".to_string()),
+                source_rpm: Some("gcc-13.1.1-2.fc38.src.rpm".to_string()),
+                requires: Vec::new(),
+                file_names: vec![Some("/usr/share/licenses/libgcc/COPYING".to_string())],
+                dir_indexes: Vec::new(),
+                base_names: Vec::new(),
+                dir_names: Vec::new(),
+            },
+            DatasourceId::RpmInstalledDatabaseSqlite,
+        );
+
+        assert_eq!(package.namespace.as_deref(), Some("fedora"));
+    }
+
+    #[test]
+    fn test_build_package_data_uses_source_rpm_for_namespace() {
+        let package = build_package_data(
+            RpmQueryPackage {
+                name: Some("libgcc".to_string()),
+                epoch: None,
+                version: Some("13.1.1".to_string()),
+                release: None,
+                vendor: None,
+                distribution: None,
                 arch: Some("x86_64".to_string()),
                 size: Some(235748),
                 license: Some("GPLv3+".to_string()),
