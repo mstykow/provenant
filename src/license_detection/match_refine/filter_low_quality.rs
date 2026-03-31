@@ -182,7 +182,7 @@ pub(crate) fn filter_matches_missing_required_phrases(
         }
 
         let ispan = m.ispan.to_vec();
-        let ispan_set: HashSet<usize> = ispan.iter().copied().collect();
+        let ispan_set = m.ispan.to_position_set();
         let qspan = m.qspan.to_vec();
 
         if is_continuous {
@@ -237,7 +237,7 @@ pub(crate) fn filter_matches_missing_required_phrases(
 
         let all_contained = ikey_spans
             .iter()
-            .all(|span| (span.start..span.end).all(|pos| ispan_set.contains(&pos)));
+            .all(|span| (span.start..span.end).all(|pos| ispan_set.contains(pos)));
 
         if !all_contained {
             discarded.push(m.clone());
