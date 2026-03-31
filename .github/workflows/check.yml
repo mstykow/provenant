@@ -59,6 +59,9 @@ jobs:
       - name: Check xtask lockfile sync and supported formats
         run: cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin generate-supported-formats -- --check
 
+      - name: Check packaged crate size
+        run: ./scripts/check_crate_size.sh
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 

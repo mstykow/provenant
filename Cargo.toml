@@ -13,6 +13,12 @@ authors = ["Maxim Stykow", "Adrian Braemer"]
 # Include only files needed to build from source
 include = [
     "src/**/*",
+    "!src/**/*_test.rs",
+    "!src/**/test.rs",
+    "!src/**/tests.rs",
+    "!src/**/*_tests.rs",
+    "!src/**/*test_utils.rs",
+    "!src/**/test_fixtures.rs",
     "/resources/license_detection/license_index.zst",
     "/Cargo.toml",
     "/Cargo.lock",
