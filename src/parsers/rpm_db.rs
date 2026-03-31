@@ -22,7 +22,6 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::parser_warn as warn;
-use serde::Deserialize;
 
 use crate::models::{DatasourceId, PackageData, PackageType};
 use crate::models::{Dependency, FileReference};
@@ -32,40 +31,47 @@ use super::rpm_parser::infer_rpm_namespace;
 use super::rpm_parser::infer_rpm_namespace_from_filename;
 
 const PACKAGE_TYPE: PackageType = PackageType::Rpm;
+const RPM_QUERY_FORMAT: &str = concat!(
+    "__PKG__\n",
+    "name:%{NAME}\n",
+    "epoch:%{EPOCH}\n",
+    "version:%{VERSION}\n",
+    "release:%{RELEASE}\n",
+    "vendor:%{VENDOR}\n",
+    "distribution:%{DISTRIBUTION}\n",
+    "arch:%{ARCH}\n",
+    "platform:%{PLATFORM}\n",
+    "license:%{LICENSE}\n",
+    "source_rpm:%{SOURCERPM}\n",
+    "size:%{SIZE}\n",
+    "__REQUIRES__\n",
+    "[%{REQUIRENAME}\n]",
+    "__FILES__\n",
+    "[%{FILENAMES}\n]",
+    "__END__\n"
+);
+const PKG_MARKER: &str = "__PKG__";
+const REQUIRES_MARKER: &str = "__REQUIRES__";
+const FILES_MARKER: &str = "__FILES__";
+const END_MARKER: &str = "__END__";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 struct RpmQueryPackage {
-    #[serde(rename = "Name")]
     name: Option<String>,
-    #[serde(rename = "Epoch")]
     epoch: Option<String>,
-    #[serde(rename = "Version")]
     version: Option<String>,
-    #[serde(rename = "Release")]
     release: Option<String>,
-    #[serde(rename = "Vendor")]
     vendor: Option<String>,
-    #[serde(rename = "Distribution")]
     distribution: Option<String>,
-    #[serde(rename = "Arch")]
     arch: Option<String>,
-    #[serde(rename = "Platform")]
     platform: Option<String>,
-    #[serde(rename = "Size")]
     size: Option<u64>,
-    #[serde(rename = "License")]
     license: Option<String>,
-    #[serde(rename = "Sourcerpm")]
     source_rpm: Option<String>,
-    #[serde(default, rename = "Requirename")]
     requires: Vec<String>,
-    #[serde(default, rename = "Filenames")]
     file_names: Vec<Option<String>>,
-    #[serde(default, rename = "Dirindexes")]
     dir_indexes: Vec<i32>,
-    #[serde(default, rename = "Basenames")]
     base_names: Vec<Option<String>>,
-    #[serde(default, rename = "Dirnames")]
     dir_names: Vec<String>,
 }
 
@@ -243,7 +249,7 @@ fn query_rpm_database(rpmdb_dir: &Path) -> Result<Vec<RpmQueryPackage>, String> 
     let output = Command::new("rpm")
         .args(["--dbpath"])
         .arg(rpmdb_dir)
-        .args(["--query", "--all", "--json"])
+        .args(["--query", "--all", "--queryformat", RPM_QUERY_FORMAT])
         .output()
         .map_err(|e| format!("Failed to execute rpm for {:?}: {}", rpmdb_dir, e))?;
 
@@ -268,10 +274,89 @@ fn query_rpm_database(rpmdb_dir: &Path) -> Result<Vec<RpmQueryPackage>, String> 
 }
 
 fn parse_rpm_query_output(stdout: &str) -> Result<Vec<RpmQueryPackage>, String> {
-    serde_json::Deserializer::from_str(stdout)
-        .into_iter::<RpmQueryPackage>()
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to parse rpm JSON output: {}", e))
+    let mut packages = Vec::new();
+
+    for block in stdout
+        .split(PKG_MARKER)
+        .filter(|block| !block.trim().is_empty())
+    {
+        let mut package = RpmQueryPackage {
+            name: None,
+            epoch: None,
+            version: None,
+            release: None,
+            vendor: None,
+            distribution: None,
+            arch: None,
+            platform: None,
+            size: None,
+            license: None,
+            source_rpm: None,
+            requires: Vec::new(),
+            file_names: Vec::new(),
+            dir_indexes: Vec::new(),
+            base_names: Vec::new(),
+            dir_names: Vec::new(),
+        };
+
+        enum Section {
+            Scalars,
+            Requires,
+            Files,
+        }
+
+        let mut section = Section::Scalars;
+
+        for line in block.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            if line == REQUIRES_MARKER {
+                section = Section::Requires;
+                continue;
+            }
+            if line == FILES_MARKER {
+                section = Section::Files;
+                continue;
+            }
+            if line == END_MARKER {
+                break;
+            }
+
+            match section {
+                Section::Scalars => {
+                    let Some((key, value)) = line.split_once(':') else {
+                        return Err(format!(
+                            "Failed to parse rpm queryformat scalar line: {line}"
+                        ));
+                    };
+
+                    match key {
+                        "name" => package.name = Some(value.to_string()),
+                        "epoch" => package.epoch = Some(value.to_string()),
+                        "version" => package.version = Some(value.to_string()),
+                        "release" => package.release = Some(value.to_string()),
+                        "vendor" => package.vendor = Some(value.to_string()),
+                        "distribution" => package.distribution = Some(value.to_string()),
+                        "arch" => package.arch = Some(value.to_string()),
+                        "platform" => package.platform = Some(value.to_string()),
+                        "license" => package.license = Some(value.to_string()),
+                        "source_rpm" => package.source_rpm = Some(value.to_string()),
+                        "size" => package.size = value.parse::<u64>().ok(),
+                        _ => {}
+                    }
+                }
+                Section::Requires => package.requires.push(line.to_string()),
+                Section::Files => package.file_names.push(Some(line.to_string())),
+            }
+        }
+
+        packages.push(package);
+    }
+
+    Ok(packages)
 }
 
 fn build_package_data(pkg: RpmQueryPackage, datasource_id: DatasourceId) -> PackageData {
@@ -698,39 +783,51 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_rpm_query_output_parses_multiple_json_objects() {
+    fn test_parse_rpm_query_output_parses_queryformat_blocks() {
         let stdout = r#"
-        {
-            "Name": "libgcc",
-            "Version": "13.1.1",
-            "Release": "2.fc38",
-            "Vendor": "Fedora Project",
-            "Arch": "x86_64",
-            "Size": 235748,
-            "License": "GPLv3+",
-            "Sourcerpm": "gcc-13.1.1-2.fc38.src.rpm",
-            "Requirename": ["rpmlib(PayloadIsZstd)", "glibc"],
-            "Filenames": ["/usr/share/licenses/libgcc/COPYING"],
-            "Dirindexes": [0],
-            "Basenames": ["COPYING"],
-            "Dirnames": ["/usr/share/licenses/libgcc/"]
-        }
-        {
-            "Name": "coreutils",
-            "Version": "9.1",
-            "Release": "12.fc38",
-            "Vendor": "Fedora Project",
-            "Arch": "x86_64",
-            "Requirename": ["glibc"],
-            "Filenames": ["/usr/bin/cat"]
-        }
+__PKG__
+name:libgcc
+epoch:(none)
+version:13.1.1
+release:2.fc38
+vendor:Fedora Project
+distribution:Fedora Project
+arch:x86_64
+platform:x86_64-redhat-linux
+license:GPLv3+
+source_rpm:gcc-13.1.1-2.fc38.src.rpm
+size:235748
+__REQUIRES__
+rpmlib(PayloadIsZstd)
+glibc
+__FILES__
+/usr/share/licenses/libgcc/COPYING
+__END__
+__PKG__
+name:coreutils
+epoch:(none)
+version:9.1
+release:12.fc38
+vendor:Fedora Project
+distribution:Fedora Project
+arch:x86_64
+platform:x86_64-redhat-linux-gnu
+license:GPLv3+
+source_rpm:coreutils-9.1-12.fc38.src.rpm
+size:5828674
+__REQUIRES__
+glibc
+__FILES__
+/usr/bin/cat
+__END__
         "#;
 
-        let packages = parse_rpm_query_output(stdout).expect("rpm JSON stream should parse");
+        let packages = parse_rpm_query_output(stdout).expect("rpm queryformat output should parse");
 
         assert_eq!(packages.len(), 2);
         assert_eq!(packages[0].name.as_deref(), Some("libgcc"));
         assert_eq!(packages[0].file_names.len(), 1);
+        assert_eq!(packages[0].requires.len(), 2);
         assert_eq!(packages[1].name.as_deref(), Some("coreutils"));
         assert_eq!(packages[1].requires, vec!["glibc".to_string()]);
     }
