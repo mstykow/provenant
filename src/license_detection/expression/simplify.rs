@@ -374,20 +374,18 @@ pub fn licensing_contains(container: &str, contained: &str) -> bool {
 /// operator precedence (WITH > AND > OR). This matches the Python
 /// license-expression library behavior.
 /// Convert a license expression to its string representation.
+#[derive(Clone, Copy)]
+enum BooleanOperator {
+    And,
+    Or,
+}
+
 pub fn expression_to_string(expr: &LicenseExpression) -> String {
     match expr {
         LicenseExpression::License(key) => key.clone(),
         LicenseExpression::LicenseRef(key) => key.clone(),
-        LicenseExpression::And { left, right } => {
-            let left_str = expression_to_string_maybe_parens(left, true);
-            let right_str = expression_to_string_maybe_parens(right, true);
-            format!("{} AND {}", left_str, right_str)
-        }
-        LicenseExpression::Or { left, right } => {
-            let left_str = expression_to_string_maybe_parens(left, true);
-            let right_str = expression_to_string_maybe_parens(right, true);
-            format!("{} OR {}", left_str, right_str)
-        }
+        LicenseExpression::And { .. } => render_flat_boolean_chain(expr, BooleanOperator::And),
+        LicenseExpression::Or { .. } => render_flat_boolean_chain(expr, BooleanOperator::Or),
         LicenseExpression::With { left, right } => {
             let left_str = expression_to_string(left);
             let right_str = expression_to_string(right);
@@ -396,18 +394,49 @@ pub fn expression_to_string(expr: &LicenseExpression) -> String {
     }
 }
 
-fn expression_to_string_maybe_parens(expr: &LicenseExpression, parent_is_and_or: bool) -> String {
+fn render_flat_boolean_chain(expr: &LicenseExpression, operator: BooleanOperator) -> String {
+    let mut parts = Vec::new();
+    collect_boolean_chain(expr, operator, &mut parts);
+
+    let separator = match operator {
+        BooleanOperator::And => " AND ",
+        BooleanOperator::Or => " OR ",
+    };
+
+    parts
+        .into_iter()
+        .map(|part| render_boolean_operand(part, operator))
+        .collect::<Vec<_>>()
+        .join(separator)
+}
+
+fn collect_boolean_chain<'a>(
+    expr: &'a LicenseExpression,
+    operator: BooleanOperator,
+    parts: &mut Vec<&'a LicenseExpression>,
+) {
+    match (operator, expr) {
+        (BooleanOperator::And, LicenseExpression::And { left, right })
+        | (BooleanOperator::Or, LicenseExpression::Or { left, right }) => {
+            collect_boolean_chain(left, operator, parts);
+            collect_boolean_chain(right, operator, parts);
+        }
+        _ => parts.push(expr),
+    }
+}
+
+fn render_boolean_operand(expr: &LicenseExpression, parent_operator: BooleanOperator) -> String {
     match expr {
         LicenseExpression::License(key) => key.clone(),
         LicenseExpression::LicenseRef(key) => key.clone(),
-        LicenseExpression::And { .. } | LicenseExpression::Or { .. } => {
-            let result = expression_to_string(expr);
-            if parent_is_and_or {
-                format!("({})", result)
-            } else {
-                result
-            }
-        }
+        LicenseExpression::And { .. } => match parent_operator {
+            BooleanOperator::And => expression_to_string(expr),
+            BooleanOperator::Or => format!("({})", expression_to_string(expr)),
+        },
+        LicenseExpression::Or { .. } => match parent_operator {
+            BooleanOperator::Or => expression_to_string(expr),
+            BooleanOperator::And => format!("({})", expression_to_string(expr)),
+        },
         LicenseExpression::With { left, right } => {
             let left_str = expression_to_string(left);
             let right_str = expression_to_string(right);
@@ -718,10 +747,7 @@ mod tests {
     }
 
     #[test]
-    fn test_expression_to_string_nested_or_preserves_grouping() {
-        // Manually constructed nested OR: (mit OR apache-2.0) OR gpl-2.0
-        // When nested OR is constructed manually, it renders with parens
-        // This matches Python license-expression behavior
+    fn test_expression_to_string_nested_or_flattens_same_operator_grouping() {
         let or_expr = LicenseExpression::Or {
             left: Box::new(LicenseExpression::Or {
                 left: Box::new(LicenseExpression::License("mit".to_string())),
@@ -731,15 +757,12 @@ mod tests {
         };
         assert_eq!(
             expression_to_string(&or_expr),
-            "(mit OR apache-2.0) OR gpl-2.0"
+            "mit OR apache-2.0 OR gpl-2.0"
         );
     }
 
     #[test]
-    fn test_expression_to_string_nested_and_preserves_grouping() {
-        // Manually constructed nested AND: (mit AND apache-2.0) AND gpl-2.0
-        // When nested AND is constructed manually, it renders with parens
-        // This matches Python license-expression behavior
+    fn test_expression_to_string_nested_and_flattens_same_operator_grouping() {
         let and_expr = LicenseExpression::And {
             left: Box::new(LicenseExpression::And {
                 left: Box::new(LicenseExpression::License("mit".to_string())),
@@ -749,7 +772,7 @@ mod tests {
         };
         assert_eq!(
             expression_to_string(&and_expr),
-            "(mit AND apache-2.0) AND gpl-2.0"
+            "mit AND apache-2.0 AND gpl-2.0"
         );
     }
 
@@ -796,10 +819,7 @@ mod tests {
     #[test]
     fn test_combine_expressions_multiple_and() {
         let result = combine_expressions_and(&["mit", "apache-2.0", "gpl-2.0-plus"], true).unwrap();
-        assert!(result.contains("mit"));
-        assert!(result.contains("apache-2.0"));
-        assert!(result.contains("gpl-2.0-plus"));
-        assert_eq!(result.matches("AND").count(), 2);
+        assert_eq!(result, "mit AND apache-2.0 AND gpl-2.0-plus");
     }
 
     #[test]
@@ -816,8 +836,7 @@ mod tests {
     fn test_combine_expressions_with_duplicates_not_unique() {
         let result = combine_expressions_or(&["mit", "mit", "apache-2.0"], false).unwrap();
         let expr = super::super::parse::parse_expression(&result).unwrap();
-        // combine_expressions creates nested structure, so we get parens
-        assert_eq!(result, "(mit OR mit) OR apache-2.0");
+        assert_eq!(result, "mit OR mit OR apache-2.0");
         let keys = expr.license_keys();
         assert_eq!(keys.len(), 2);
     }
@@ -918,13 +937,32 @@ mod tests {
     fn test_expression_to_string_with_no_outer_parens_in_complex_and() {
         // WITH has higher precedence than AND
         // Parsed as: (bsd-new AND mit) AND (gpl-3.0-plus WITH autoconf-simple-exception)
-        // When rendered with our nested structure, we get parens on the left
         let input = "bsd-new AND mit AND gpl-3.0-plus WITH autoconf-simple-exception";
         let expr = super::super::parse::parse_expression(input).unwrap();
-        // Our parser creates nested AND structure, so we get parens
         assert_eq!(
             expression_to_string(&expr),
-            "(bsd-new AND mit) AND gpl-3.0-plus WITH autoconf-simple-exception"
+            "bsd-new AND mit AND gpl-3.0-plus WITH autoconf-simple-exception"
+        );
+    }
+
+    #[test]
+    fn test_combine_expressions_and_flattens_reported_redundant_parentheses() {
+        let result = combine_expressions_and(
+            &[
+                "Apache-2.0",
+                "BSD-3-Clause",
+                "GPL-2.0-only",
+                "LicenseRef-scancode-oracle-openjdk-exception-2.0",
+                "APSL-1.0",
+                "APSL-2.0",
+            ],
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(
+            result,
+            "apache-2.0 AND bsd-3-clause AND gpl-2.0-only AND licenseref-scancode-oracle-openjdk-exception-2.0 AND apsl-1.0 AND apsl-2.0"
         );
     }
 }

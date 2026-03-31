@@ -1119,6 +1119,48 @@ mod tests {
     }
 
     #[test]
+    fn test_determine_license_expression_flattens_same_operator_chain() {
+        let expressions = [
+            "apache-2.0",
+            "bsd-3-clause",
+            "gpl-2.0-only",
+            "licenseref-scancode-oracle-openjdk-exception-2.0",
+            "apsl-1.0",
+            "apsl-2.0",
+        ];
+
+        let matches = expressions
+            .iter()
+            .enumerate()
+            .map(|(index, expression)| {
+                let mut license_match = create_test_match_full(
+                    expression,
+                    "1-hash",
+                    index + 1,
+                    index + 1,
+                    100.0,
+                    100,
+                    100,
+                    100.0,
+                    100,
+                    expression,
+                );
+                license_match.license_expression = (*expression).to_string();
+                license_match
+            })
+            .collect::<Vec<_>>();
+
+        let result = determine_license_expression(&matches);
+
+        assert_eq!(
+            result.as_deref(),
+            Ok(
+                "apache-2.0 AND bsd-3-clause AND gpl-2.0-only AND licenseref-scancode-oracle-openjdk-exception-2.0 AND apsl-1.0 AND apsl-2.0"
+            )
+        );
+    }
+
+    #[test]
     fn test_determine_license_expression_simplifies_absorbed_compound() {
         let m1 = create_test_match_full(
             "mit",
