@@ -43,6 +43,7 @@ const RPM_QUERY_FORMAT: &str = concat!(
     "\"license\":%{LICENSE:json},",
     "\"source_rpm\":%{SOURCERPM:json},",
     "\"requires\":%{REQUIRENAME:json},",
+    "\"file_names\":%{FILENAMES:json},",
     "\"dir_indexes\":%{DIRINDEXES:json},",
     "\"base_names\":%{BASENAMES:json},",
     "\"dir_names\":%{DIRNAMES:json}",
@@ -63,6 +64,8 @@ struct RpmQueryPackage {
     source_rpm: Option<String>,
     #[serde(default)]
     requires: Vec<String>,
+    #[serde(default, rename = "file_names")]
+    file_names: Vec<Option<String>>,
     #[serde(default, rename = "dir_indexes")]
     dir_indexes: Vec<i32>,
     #[serde(default, rename = "base_names")]
@@ -219,6 +222,28 @@ fn build_file_references(
         .collect()
 }
 
+fn build_file_references_from_paths(paths: &[Option<String>]) -> Vec<FileReference> {
+    paths
+        .iter()
+        .filter_map(|path| {
+            let path = path.as_deref()?.trim();
+            if path.is_empty() || path == "/" {
+                return None;
+            }
+
+            Some(FileReference {
+                path: path.to_string(),
+                size: None,
+                sha1: None,
+                md5: None,
+                sha256: None,
+                sha512: None,
+                extra_data: None,
+            })
+        })
+        .collect()
+}
+
 fn query_rpm_database(rpmdb_dir: &Path) -> Result<Vec<RpmQueryPackage>, String> {
     let output = Command::new("rpm")
         .args(["--dbpath"])
@@ -277,6 +302,15 @@ fn build_package_data(pkg: RpmQueryPackage, datasource_id: DatasourceId) -> Pack
     let source_packages = normalize_optional_string(pkg.source_rpm)
         .into_iter()
         .collect();
+    let file_references = {
+        let from_dir_components =
+            build_file_references(&pkg.base_names, &pkg.dir_indexes, &pkg.dir_names);
+        if from_dir_components.is_empty() {
+            build_file_references_from_paths(&pkg.file_names)
+        } else {
+            from_dir_components
+        }
+    };
     let purl = build_package_purl(
         name.as_deref(),
         namespace.as_deref(),
@@ -322,7 +356,7 @@ fn build_package_data(pkg: RpmQueryPackage, datasource_id: DatasourceId) -> Pack
         extracted_license_statement,
         notice_text: None,
         source_packages,
-        file_references: build_file_references(&pkg.base_names, &pkg.dir_indexes, &pkg.dir_names),
+        file_references,
         is_private: false,
         is_virtual: false,
         extra_data: None,
@@ -525,6 +559,42 @@ mod tests {
         assert_eq!(file_refs.len(), 2);
         assert_eq!(file_refs[0].path, "/usr/bin/valid");
         assert_eq!(file_refs[1].path, "/usr/bin/");
+    }
+
+    #[test]
+    fn test_build_package_data_falls_back_to_file_names() {
+        let package = build_package_data(
+            RpmQueryPackage {
+                name: Some("libgcc".to_string()),
+                epoch: None,
+                version: Some("13.1.1".to_string()),
+                release: Some("2.fc38".to_string()),
+                vendor: Some("Fedora Project".to_string()),
+                arch: Some("x86_64".to_string()),
+                size: Some(235748),
+                license: Some("GPLv3+".to_string()),
+                source_rpm: Some("gcc-13.1.1-2.fc38.src.rpm".to_string()),
+                requires: Vec::new(),
+                file_names: vec![
+                    Some("/usr/share/licenses/libgcc/COPYING".to_string()),
+                    Some("/usr/share/licenses/libgcc/COPYING.RUNTIME".to_string()),
+                ],
+                dir_indexes: Vec::new(),
+                base_names: Vec::new(),
+                dir_names: Vec::new(),
+            },
+            DatasourceId::RpmInstalledDatabaseSqlite,
+        );
+
+        assert_eq!(package.file_references.len(), 2);
+        assert_eq!(
+            package.file_references[0].path,
+            "/usr/share/licenses/libgcc/COPYING"
+        );
+        assert_eq!(
+            package.file_references[1].path,
+            "/usr/share/licenses/libgcc/COPYING.RUNTIME"
+        );
     }
 }
 
