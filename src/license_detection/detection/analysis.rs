@@ -381,26 +381,23 @@ fn is_correct_detection_non_unknown(matches: &[LicenseMatch]) -> bool {
 
 /// Compute detection score from matches.
 ///
-/// Score is computed as a weighted average of match scores, where weights
-/// are based on match coverage and rule relevance.
-///
 /// Based on Python: compute_detection_score() at detection.py:1585-1608
 pub fn compute_detection_score(matches: &[LicenseMatch]) -> f32 {
     if matches.is_empty() {
         return 0.0;
     }
 
-    let total_weight: f32 = matches.iter().map(|m| m.match_coverage).sum();
-    if total_weight == 0.0 {
+    let total_length: f32 = matches.iter().map(|m| m.matched_length as f32).sum();
+    if total_length == 0.0 {
         return 0.0;
     }
 
     let weighted_score: f32 = matches
         .iter()
-        .map(|m| m.score * m.match_coverage * m.rule_relevance as f32 / 100.0)
+        .map(|m| m.score * (m.matched_length as f32 / total_length))
         .sum();
 
-    (weighted_score / total_weight).min(100.0)
+    ((weighted_score * 100.0).round() / 100.0).min(100.0)
 }
 
 /// Determine license expression from matches.
@@ -1073,6 +1070,68 @@ mod tests {
         let matches = vec![m];
         let score = compute_detection_score(&matches);
         assert_eq!(score, 100.0);
+    }
+
+    #[test]
+    fn test_compute_detection_score_weights_by_match_length_only() {
+        let m1 = create_test_match_full(
+            "mit",
+            "1-hash",
+            1,
+            100,
+            50.0,
+            100,
+            100,
+            100.0,
+            50,
+            "mit.LICENSE",
+        );
+        let m2 = create_test_match_full(
+            "apache-2.0",
+            "1-hash",
+            101,
+            200,
+            100.0,
+            100,
+            100,
+            100.0,
+            100,
+            "apache.LICENSE",
+        );
+
+        let score = compute_detection_score(&[m1, m2]);
+        assert_eq!(score, 75.0);
+    }
+
+    #[test]
+    fn test_compute_detection_score_rounds_to_two_decimals() {
+        let m1 = create_test_match_full(
+            "mit",
+            "1-hash",
+            1,
+            100,
+            80.0,
+            100,
+            100,
+            20.0,
+            100,
+            "mit.LICENSE",
+        );
+        let m2 = create_test_match_full(
+            "apache-2.0",
+            "1-hash",
+            101,
+            110,
+            100.0,
+            10,
+            100,
+            100.0,
+            100,
+            "apache.LICENSE",
+        );
+
+        let score = compute_detection_score(&[m1, m2]);
+        assert_eq!(score, 81.82);
     }
 
     #[test]

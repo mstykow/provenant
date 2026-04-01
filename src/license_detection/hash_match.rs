@@ -91,7 +91,7 @@ pub fn hash_match(index: &LicenseIndex, query_run: &QueryRun) -> Vec<LicenseMatc
             start_token: query_run.start,
             end_token: query_run.end.map_or(query_run.start, |e| e + 1),
             matcher: MATCH_HASH,
-            score: 1.0,
+            score: 100.0,
             matched_length,
             rule_length,
             match_coverage,

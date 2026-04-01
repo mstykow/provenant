@@ -172,7 +172,7 @@ fn test_hash_match_with_match() {
 
     assert_eq!(matches.len(), 1, "Should return exactly one match");
     assert_eq!(matches[0].matcher, MATCH_HASH);
-    assert_eq!(matches[0].score, 1.0);
+    assert_eq!(matches[0].score, 100.0);
     assert_eq!(matches[0].match_coverage, 100.0);
 }
 
@@ -304,6 +304,6 @@ fn test_hash_match_returns_correct_license_expression() {
     assert_eq!(matches.len(), 1);
     assert_eq!(matches[0].license_expression, "mit");
     assert_eq!(matches[0].matcher, MATCH_HASH);
-    assert_eq!(matches[0].score, 1.0);
+    assert_eq!(matches[0].score, 100.0);
     assert_eq!(matches[0].match_coverage, 100.0);
 }

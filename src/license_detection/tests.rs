@@ -982,6 +982,43 @@ copies of the Software."#;
 }
 
 #[test]
+fn test_detect_with_kind_hash_early_return_preserves_percent_score() {
+    let engine = get_engine();
+
+    let mit_text = r#"Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE."#;
+
+    let detections = engine
+        .detect_with_kind_with_score(mit_text, false, false, 100.0)
+        .expect("Detection should succeed");
+
+    assert!(
+        !detections.is_empty(),
+        "Exact MIT text should survive a 100 score threshold"
+    );
+    assert!(detections.iter().any(|d| {
+        d.matches.iter().any(|m| {
+            m.matcher == crate::license_detection::hash_match::MATCH_HASH && m.score == 100.0
+        })
+    }));
+}
+
+#[test]
 fn test_seq_partial_license() {
     let engine = get_engine();
 

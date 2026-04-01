@@ -263,10 +263,10 @@ fn compute_match_score(m: &LicenseMatch, query: &Query) -> f32 {
     let rule_coverage = m.icoverage();
 
     if query_coverage < 1.0 && rule_coverage < 1.0 {
-        return (rule_coverage * relevance * 100.0).round();
+        return ((rule_coverage * relevance * 100.0) * 100.0).round() / 100.0;
     }
 
-    (query_coverage * rule_coverage * relevance * 100.0).round()
+    ((query_coverage * rule_coverage * relevance * 100.0) * 100.0).round() / 100.0
 }
 
 /// Filter license reference matches when a license text match exists for the same expression
@@ -598,6 +598,18 @@ mod tests {
         let mut matches: Vec<LicenseMatch> = vec![];
         update_match_scores(&mut matches, &query);
         assert_eq!(matches.len(), 0);
+    }
+
+    #[test]
+    fn test_update_match_scores_keeps_two_decimal_precision() {
+        let index = LicenseIndex::with_legalese_count(10);
+        let query = Query::from_extracted_text("test text", &index, false).unwrap();
+        let mut matches = vec![create_test_match("#1", 1, 2, 0.0, 0.0, 100)];
+        matches[0].rule_length = 3;
+
+        update_match_scores(&mut matches, &query);
+
+        assert!((matches[0].score - 66.67).abs() < 0.001);
     }
 
     #[test]

@@ -138,13 +138,14 @@ pub(super) fn compute_detection_coverage(matches: &[LicenseMatch]) -> f32 {
     }
 
     if matches.len() == 1 {
-        return matches[0].match_coverage.min(100.0);
+        return ((matches[0].match_coverage * 100.0).round() / 100.0).min(100.0);
     }
 
     let total_length: f32 = matches.iter().map(|m| m.matched_length as f32).sum();
 
     if total_length < 0.01 {
-        return matches.iter().map(|m| m.match_coverage).sum::<f32>() / matches.len() as f32;
+        let average = matches.iter().map(|m| m.match_coverage).sum::<f32>() / matches.len() as f32;
+        return ((average * 100.0).round() / 100.0).min(100.0);
     }
 
     let weighted_coverage: f32 = matches
@@ -155,7 +156,7 @@ pub(super) fn compute_detection_coverage(matches: &[LicenseMatch]) -> f32 {
         })
         .sum();
 
-    weighted_coverage.min(100.0)
+    ((weighted_coverage * 100.0).round() / 100.0).min(100.0)
 }
 
 #[cfg(test)]
@@ -271,6 +272,19 @@ mod tests {
         let matches = vec![m];
         let coverage = compute_detection_coverage(&matches);
         assert_eq!(coverage, 100.0);
+    }
+
+    #[test]
+    fn test_compute_detection_coverage_rounds_to_two_decimals() {
+        let mut m1 = create_test_match();
+        m1.matched_length = 100;
+        m1.match_coverage = 80.0;
+        let mut m2 = create_test_match();
+        m2.matched_length = 10;
+        m2.match_coverage = 100.0;
+
+        let coverage = compute_detection_coverage(&[m1, m2]);
+        assert_eq!(coverage, 81.82);
     }
 
     #[test]
