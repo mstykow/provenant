@@ -4,8 +4,8 @@ use serde::Serialize;
 use std::fmt;
 use std::str::FromStr;
 
-use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::RuleKind;
+use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::position_set::PositionSet;
 
 /// Internal matcher kind used to create a license match.
@@ -331,7 +331,7 @@ impl LicenseMatch {
         }
     }
 
-    fn effective_ispan(&self) -> PositionSpan {
+    pub(crate) fn effective_ispan(&self) -> PositionSpan {
         if !self.ispan.is_empty() {
             self.ispan.clone()
         } else if self.matched_length > 0 {
@@ -342,6 +342,14 @@ impl LicenseMatch {
         } else {
             PositionSpan::empty()
         }
+    }
+
+    pub(crate) fn qspan_set(&self) -> PositionSet {
+        self.effective_span().to_position_set()
+    }
+
+    pub(crate) fn ispan_set(&self) -> PositionSet {
+        self.effective_ispan().to_position_set()
     }
 
     pub fn is_small(

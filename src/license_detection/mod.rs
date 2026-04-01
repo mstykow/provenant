@@ -134,7 +134,7 @@ fn is_redundant_same_expression_seq_container(
         return false;
     }
 
-    let container_qspan_set: PositionSet = container.qspan.to_position_set();
+    let container_qspan_set = container.qspan_set();
 
     let mut contained: Vec<&LicenseMatch> = candidate_contained_matches
         .iter()
@@ -159,7 +159,8 @@ fn is_redundant_same_expression_seq_container(
 
     let mut child_union = PositionSet::new();
     for m in &contained {
-        child_union.extend_from_span(&m.qspan);
+        let span = m.effective_span();
+        child_union.extend_from_span(&span);
     }
 
     let container_only_positions = container_qspan_set.difference(&child_union);
@@ -247,7 +248,7 @@ fn is_redundant_low_coverage_composite_seq_wrapper(
         return false;
     }
 
-    let container_qspan_set: PositionSet = container.qspan.to_position_set();
+    let container_qspan_set = container.qspan_set();
 
     let children: Vec<&LicenseMatch> = candidate_contained_matches
         .iter()
@@ -273,7 +274,8 @@ fn is_redundant_low_coverage_composite_seq_wrapper(
 
     let mut child_union = PositionSet::new();
     for m in &children {
-        child_union.extend_from_span(&m.qspan);
+        let span = m.effective_span();
+        child_union.extend_from_span(&span);
     }
 
     let container_only_positions = container_qspan_set.difference(&child_union);

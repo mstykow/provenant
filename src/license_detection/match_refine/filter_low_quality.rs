@@ -180,11 +180,13 @@ pub(crate) fn filter_matches_missing_required_phrases(
             continue;
         }
 
-        let ispan_set = m.ispan.to_position_set();
-        let qspan = m.qspan.to_vec();
+        let ispan = m.effective_ispan();
+        let qspan_span = m.effective_span();
+        let ispan_set = ispan.to_position_set();
+        let qspan = qspan_span.to_vec();
 
         if is_continuous {
-            if !m.ispan.is_empty() {
+            if !ispan.is_empty() {
                 if let Some(_qkey_end) = qspan.last() {
                     let contains_unknown = qspan
                         .iter()
@@ -197,12 +199,12 @@ pub(crate) fn filter_matches_missing_required_phrases(
                     }
                 }
 
-                let qkey_span_set = m.qspan.to_position_set();
+                let qkey_span_set = qspan_span.to_position_set();
                 let qkey_span_end = qspan.last().copied();
 
                 let has_same_stopwords = {
                     let mut ok = true;
-                    for (&qpos, ipos) in qspan.iter().zip(m.ispan.iter()) {
+                    for (&qpos, ipos) in qspan.iter().zip(ispan.iter()) {
                         if !qkey_span_set.contains(qpos) || Some(qpos) == qkey_span_end {
                             continue;
                         }
@@ -245,7 +247,7 @@ pub(crate) fn filter_matches_missing_required_phrases(
         for ikey_span in ikey_spans {
             let qkey_span: Vec<usize> = qspan
                 .iter()
-                .zip(m.ispan.iter())
+                .zip(ispan.iter())
                 .filter_map(|(&qpos, ipos)| {
                     if ikey_span.contains(&ipos) {
                         Some(qpos)
@@ -284,7 +286,7 @@ pub(crate) fn filter_matches_missing_required_phrases(
 
             let has_same_stopwords = {
                 let mut ok = true;
-                for (&qpos, ipos) in qspan.iter().zip(m.ispan.iter()) {
+                for (&qpos, ipos) in qspan.iter().zip(ispan.iter()) {
                     if !qkey_span_set.contains(qpos) || Some(qpos) == qkey_span_end {
                         continue;
                     }

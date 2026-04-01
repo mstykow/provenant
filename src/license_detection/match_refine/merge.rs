@@ -17,11 +17,13 @@ fn combine_matches(a: &LicenseMatch, b: &LicenseMatch) -> LicenseMatch {
 
     let mut merged = a.clone();
 
-    let mut qspan_set = a.qspan.to_position_set();
-    qspan_set.extend_from_span(&b.qspan);
+    let mut qspan_set = a.qspan_set();
+    let b_qspan = b.effective_span();
+    qspan_set.extend_from_span(&b_qspan);
 
-    let mut ispan_set = a.ispan.to_position_set();
-    ispan_set.extend_from_span(&b.ispan);
+    let mut ispan_set = a.ispan_set();
+    let b_ispan = b.effective_ispan();
+    ispan_set.extend_from_span(&b_ispan);
 
     let mut hispan_set = a.hispan.to_position_set();
     hispan_set.extend_from_span(&b.hispan);
@@ -125,12 +127,14 @@ pub fn merge_overlapping_matches(matches: &[LicenseMatch]) -> Vec<LicenseMatch> 
                     break;
                 }
 
-                if current.qspan == next.qspan && current.ispan == next.ispan {
+                if current.qspan_set() == next.qspan_set()
+                    && current.ispan_set() == next.ispan_set()
+                {
                     rule_matches.remove(j);
                     continue;
                 }
 
-                if current.ispan == next.ispan && current.qoverlap(next) > 0 {
+                if current.ispan_set() == next.ispan_set() && current.qoverlap(next) > 0 {
                     let current_mag = current.qspan_magnitude();
                     let next_mag = next.qspan_magnitude();
                     if current_mag <= next_mag {
@@ -155,7 +159,7 @@ pub fn merge_overlapping_matches(matches: &[LicenseMatch]) -> Vec<LicenseMatch> 
 
                 if current.surround(next) {
                     let combined = combine_matches(current, next);
-                    if combined.qspan.len() == combined.ispan.len() {
+                    if combined.effective_span().len() == combined.effective_ispan().len() {
                         rule_matches[i] = combined;
                         rule_matches.remove(j);
                         continue;
@@ -163,7 +167,7 @@ pub fn merge_overlapping_matches(matches: &[LicenseMatch]) -> Vec<LicenseMatch> 
                 }
                 if next.surround(current) {
                     let combined = combine_matches(current, next);
-                    if combined.qspan.len() == combined.ispan.len() {
+                    if combined.effective_span().len() == combined.effective_ispan().len() {
                         rule_matches[j] = combined;
                         rule_matches.remove(i);
                         i = i.saturating_sub(1);
@@ -403,6 +407,21 @@ mod tests {
         }
     }
 
+    fn create_test_match_with_implicit_spans(
+        rule_identifier: &str,
+        start_token: usize,
+        end_token: usize,
+        rule_start_token: usize,
+        matched_length: usize,
+    ) -> LicenseMatch {
+        let mut m =
+            create_test_match_with_tokens(rule_identifier, start_token, end_token, matched_length);
+        m.rule_start_token = rule_start_token;
+        m.qspan = PositionSpan::empty();
+        m.ispan = PositionSpan::empty();
+        m
+    }
+
     #[test]
     fn test_parse_rule_id_valid_hashes() {
         assert_eq!(parse_rule_id("#0"), Some(0));
@@ -471,6 +490,21 @@ mod tests {
         assert_eq!(merged[0].start_line, 1);
         assert_eq!(merged[0].end_line, 20);
         assert_eq!(merged[0].score, 0.9);
+    }
+
+    #[test]
+    fn test_merge_adjacent_matches_uses_implicit_token_span_fallback() {
+        let mut m1 = create_test_match_with_implicit_spans("#1", 10, 20, 100, 10);
+        m1.rule_length = 100;
+        let mut m2 = create_test_match_with_implicit_spans("#1", 20, 30, 110, 10);
+        m2.rule_length = 100;
+
+        let merged = merge_overlapping_matches(&[m1, m2]);
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].qspan_bounds(), (10, 30));
+        assert_eq!(merged[0].ispan_bounds(), (100, 120));
+        assert_eq!(merged[0].matched_length, 20);
     }
 
     #[test]

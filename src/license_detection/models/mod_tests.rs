@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::license_detection::index::dictionary::tid;
     use crate::license_detection::index::LicenseIndex;
+    use crate::license_detection::index::dictionary::tid;
     use crate::license_detection::models::position_span::PositionSpan;
     use crate::license_detection::models::{License, LicenseMatch, MatcherKind, Rule, RuleKind};
     use crate::license_detection::position_set::PositionSet;
