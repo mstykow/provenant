@@ -4,6 +4,8 @@
 **Authors**: Provenant team
 **Supersedes**: None
 
+> **Current contract owner**: [`../DOCUMENTATION_INDEX.md`](../DOCUMENTATION_INDEX.md), [`../HOW_TO_ADD_A_PARSER.md`](../HOW_TO_ADD_A_PARSER.md), and the `xtask` generator own the live documentation workflow. This ADR records the decision to keep a generated support matrix instead of maintaining that coverage manually.
+
 ## Context
 
 With 40+ package ecosystems and 136+ file formats to document, maintaining accurate parser documentation is a significant challenge:
@@ -56,11 +58,11 @@ The Python ScanCode Toolkit solves this using a custom script (`regen_package_do
 
 #### 1. Auto-Generated Format Table
 
-**Source**: Parser code metadata (trait implementations, file patterns)
+**Source**: Registered parser metadata (descriptions, path patterns, package types, languages, docs URLs)
 
 **Output**: `docs/SUPPORTED_FORMATS.md`
 
-**Generation**: Pre-commit hook extracts metadata and generates Markdown table
+**Generation**: The `xtask` generator renders the Markdown table, and CI/pre-commit hooks verify that the checked-in file stays in sync
 
 **Example**:
 
@@ -70,24 +72,7 @@ The Python ScanCode Toolkit solves this using a custom script (`regen_package_do
 | Cargo.toml   | cargo        | `**/Cargo.toml`   | ✅ Complete |
 | pom.xml      | maven        | `**/pom.xml`      | ✅ Complete |
 
-**Implementation** (conceptual):
-
-```rust
-// In parser code
-impl PackageParser for NpmParser {
-    const PACKAGE_TYPE: &'static str = "npm";
-
-    fn is_match(path: &Path) -> bool {
-        matches!(
-            path.file_name().and_then(|n| n.to_str()),
-            Some("package.json" | "package-lock.json" | "npm-shrinkwrap.json")
-        )
-    }
-}
-
-// Generation script extracts this metadata
-// and generates SUPPORTED_FORMATS.md
-```
+**Implementation** (conceptual): parser metadata is declared close to the parser registration surface, and the generator renders `SUPPORTED_FORMATS.md` from that registered metadata rather than from hand-maintained Markdown.
 
 **Benefits**:
 
@@ -104,49 +89,7 @@ impl PackageParser for NpmParser {
 
 **Target Audience**: Rust developers using Provenant as a library
 
-**Example**:
-
-````rust
-//! Parser for npm package manifests.
-//!
-//! Extracts package metadata, dependencies, and license information from
-//! npm manifest files (`package.json`, `package-lock.json`, `npm-shrinkwrap.json`).
-//!
-//! # Supported Formats
-//! - `package.json` - Package manifest with metadata and dependencies
-//! - `package-lock.json` - Lockfile with exact resolved versions (v1, v2, v3)
-//! - `npm-shrinkwrap.json` - Alternative lockfile format
-//! - `yarn.lock` - Yarn lockfile format
-//! - `pnpm-lock.yaml` - pnpm lockfile format
-//!
-//! # Key Features
-//! - Detects version pinning with `is_pinned` flag
-//! - Extracts dependency scopes (dependencies, devDependencies, etc.)
-//! - Generates proper PURLs for all dependency types
-//! - Handles npm workspaces and monorepos
-//!
-//! # Implementation Notes
-//! - Uses `serde_json` for zero-copy parsing
-//! - Preserves string interpolation in version constraints
-//! - Follows npm lockfile v1/v2/v3 specifications
-//!
-//! # Examples
-//! ```
-//! use provenant::parsers::NpmParser;
-//! use std::path::Path;
-//!
-//! let data = NpmParser::extract_package_data(Path::new("package.json"));
-//! println!("Package: {} v{}", data.name.unwrap(), data.version.unwrap());
-//! ```
-
-/// Extracts package metadata from npm manifest files.
-///
-/// Returns `PackageData` with all available fields populated.
-/// Returns a default structure if parsing fails (logs warning).
-pub fn extract_package_data(path: &Path) -> PackageData {
-    // Implementation
-}
-````
+**Example shape**: Rust doc comments should explain supported inputs, important behavior, and one small doctest-sized usage example when the public API benefits from it.
 
 **Benefits**:
 
@@ -169,8 +112,7 @@ pub fn extract_package_data(path: &Path) -> PackageData {
 ```text
 docs/
 ├── ARCHITECTURE.md           # System design
-├── PARSER_GUIDE.md          # How to add parsers
-├── TESTING.md               # Testing strategy
+├── HOW_TO_ADD_A_PARSER.md   # How to add parsers
 ├── TESTING_STRATEGY.md      # Testing philosophy and guidelines
 ├── adr/                     # Architectural decisions
 │   ├── 0001-trait-based-parsers.md
@@ -191,47 +133,20 @@ docs/
 
 #### Pre-Commit Hook
 
-```bash
-#!/bin/bash
-# Installed by Lefthook; hook behavior is configured in lefthook.yml.
-lefthook run pre-commit
-
-# The docs regeneration command triggered for parser-file changes is:
-# cargo run --quiet --manifest-path xtask/Cargo.toml --bin generate-supported-formats
-# Lefthook stages generated changes automatically when stage_fixed: true is set.
-```
+Lefthook owns the pre-commit behavior. When parser metadata changes, the hook runs the supported-formats generator and stages the regenerated file automatically.
 
 #### Documentation Generator (Conceptual)
 
-```rust
-// tools/gen_parser_docs.rs
-
-fn main() {
-    let mut table = MarkdownTable::new();
-    table.header(&["Format", "Package Type", "File Patterns", "Status"]);
-
-    // Iterate all parsers (using inventory or similar)
-    for parser in provenant::parsers::all() {
-        table.row(&[
-            parser.format_name(),
-            parser.package_type(),
-            parser.file_patterns().join(", "),
-            parser.status(),
-        ]);
-    }
-
-    println!("{}", table.render());
-}
-```
+The generator iterates the registered parser metadata, renders a normalized Markdown table, and writes the result to `docs/SUPPORTED_FORMATS.md`.
 
 ## Consequences
 
 ### Benefits
 
-1. **Documentation Can't Go Stale**
-   - Auto-generated from code ensures accuracy
-   - Pre-commit hook enforces updates
-   - Impossible to add parser without documenting it
+1. **Documentation Drift Is Harder To Miss**
+   - Generated from registered metadata instead of hand-maintained tables
+   - Pre-commit hooks and CI enforce updates
+   - Parser metadata changes are easy to catch in review
 
 2. **Consistency**
    - Same format for all parsers
@@ -274,17 +189,7 @@ fn main() {
 
 ### 1. Fully Manual Documentation
 
-**Approach**: Write and maintain all documentation by hand.
-
-```markdown
-# Supported Formats
-
-## npm
-
-- package.json (✅ Complete)
-- package-lock.json (✅ Complete)
-- ...
-```
+**Approach**: write and maintain all format coverage documentation by hand.
 
 **Rejected because**:
 
@@ -295,17 +200,7 @@ fn main() {
 
 ### 2. Python-Style Registration System
 
-**Approach**: Use runtime metadata registration (like Python's class attributes).
-
-```rust
-pub struct NpmParser {
-    metadata: ParserMetadata {
-        description: "npm package.json parser",
-        path_patterns: vec!["**/package.json"],
-        // ...
-    }
-}
-```
+**Approach**: use runtime metadata registration similar to Python class attributes.
 
 **Rejected because**:
 
@@ -316,16 +211,7 @@ pub struct NpmParser {
 
 ### 3. Macro-Based Registration
 
-**Approach**: Use proc macros to automatically register parsers.
-
-```rust
-#[register_parser(
-    package_type = "npm",
-    patterns = ["**/package.json"],
-    description = "npm package manifest"
-)]
-pub struct NpmParser;
-```
+**Approach**: use proc macros to register parsers automatically.
 
 **Partial acceptance**: This could work, but adds complexity.
 
@@ -359,7 +245,7 @@ pub struct NpmParser;
 
 - **Auto-generation**: Pre-commit hook
 - **Format**: Markdown
-- **Metadata source**: Trait implementations
+- **Metadata source**: Registered parser metadata consumed by the `xtask` generator
 - **Additional**: cargo doc for API reference
 
 ## Related ADRs

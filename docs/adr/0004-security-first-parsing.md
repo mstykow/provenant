@@ -4,6 +4,8 @@
 **Authors**: Provenant team
 **Supersedes**: None
 
+> **Current contract owner**: [`../ARCHITECTURE.md`](../ARCHITECTURE.md) and [`../HOW_TO_ADD_A_PARSER.md`](../HOW_TO_ADD_A_PARSER.md) describe the live parser safety rules. This ADR records the security-first decision and threat model.
+
 ## Context
 
 Package parsers must handle untrusted input from arbitrary sources:
@@ -56,35 +58,7 @@ All parsers enforce explicit limits:
 | **Iteration Count** | 100,000 items   | Break early with warning | Prevent infinite loops    |
 | **String Length**   | 10 MB per field | Truncate with warning    | Prevent memory attacks    |
 
-```rust
-const MAX_FILE_SIZE: usize = 100 * 1024 * 1024; // 100 MB
-const MAX_RECURSION_DEPTH: usize = 50;
-const MAX_ITERATIONS: usize = 100_000;
-
-fn extract_package_data(path: &Path) -> PackageData {
-    // 1. Check file size
-    let metadata = fs::metadata(path)?;
-    if metadata.len() > MAX_FILE_SIZE {
-        warn!("File too large: {} bytes", metadata.len());
-        return default_package_data();
-    }
-
-    // 2. Limit iterations
-    for (i, dep) in dependencies.iter().enumerate() {
-        if i >= MAX_ITERATIONS {
-            warn!("Exceeded max iterations, stopping");
-            break;
-        }
-        // Process dependency
-    }
-
-    // 3. Limit recursion (tracked in parser state)
-    if recursion_depth > MAX_RECURSION_DEPTH {
-        warn!("Exceeded max recursion depth");
-        return default_value;
-    }
-}
-```
+In practice this means parsers perform size checks before loading or recursing, bound collection/iteration work, and degrade safely with warnings or partial results instead of panicking.
 
 #### 3. **Archive Safety** (Archives Only)
 
@@ -97,40 +71,7 @@ For parsers that extract archives (.deb, .rpm, .apk, .gem, .whl):
 | **Path Traversal**       | Validate extracted paths don't escape temp dir | Block `../` patterns |
 | **Decompression Limits** | Stop decompression after size threshold        | 1 GB limit           |
 
-```rust
-fn extract_archive(path: &Path) -> Result<TempDir> {
-    let archive = Archive::open(path)?;
-
-    // Check compression ratio
-    let compressed_size = fs::metadata(path)?.len();
-    let uncompressed_size = archive.total_uncompressed_size()?;
-    let ratio = uncompressed_size / compressed_size;
-
-    if ratio > MAX_COMPRESSION_RATIO {
-        return Err("Suspicious compression ratio (possible zip bomb)");
-    }
-
-    // Check total uncompressed size
-    if uncompressed_size > MAX_UNCOMPRESSED_SIZE {
-        return Err("Archive too large when uncompressed");
-    }
-
-    // Extract with path validation
-    for entry in archive.entries()? {
-        let path = entry.path()?;
-
-        // Prevent path traversal
-        if path.components().any(|c| c == Component::ParentDir) {
-            warn!("Skipping entry with parent dir: {:?}", path);
-            continue;
-        }
-
-        entry.unpack(temp_dir.path().join(path))?;
-    }
-
-    Ok(temp_dir)
-}
-```
+Archive-aware parsers validate uncompressed size, compression ratio, and extracted paths before any unpacking work, and they reject or skip suspicious entries rather than trusting archive contents.
 
 #### 4. **Input Validation** (MANDATORY)
 
@@ -144,59 +85,13 @@ All parsers validate input before processing:
 | **Required Fields**    | Check `name`, `version` presence  | Populate with `None`, continue         |
 | **URL Format**         | Basic validation (not exhaustive) | Accept as-is, don't parse aggressively |
 
-```rust
-fn extract_package_data(path: &Path) -> PackageData {
-    // 1. Validate file exists
-    let content = match fs::read_to_string(path) {
-        Ok(c) => c,
-        Err(e) => {
-            warn!("Failed to read {:?}: {}", path, e);
-            return default_package_data();
-        }
-    };
-
-    // 2. Validate JSON
-    let manifest: Value = match serde_json::from_str(&content) {
-        Ok(v) => v,
-        Err(e) => {
-            warn!("Invalid JSON in {:?}: {}", path, e);
-            return default_package_data();
-        }
-    };
-
-    // 3. Extract fields with fallbacks (no unwrap)
-    let name = manifest["name"].as_str().map(String::from);
-    let version = manifest["version"].as_str().map(String::from);
-
-    PackageData {
-        name,
-        version,
-        // ... other fields
-    }
-}
-```
+Input validation follows the same pattern across parsers: fail closed on unreadable or malformed inputs, avoid panics, and preserve as much safe metadata as possible when partial parsing is still meaningful.
 
 #### 5. **Circular Dependency Detection** (Dependency Resolution Only)
 
 For parsers that resolve transitive dependencies:
 
-```rust
-fn resolve_dependencies(
-    package: &str,
-    visited: &mut HashSet<String>,
-) -> Vec<Dependency> {
-    // Detect cycles
-    if visited.contains(package) {
-        warn!("Circular dependency detected: {}", package);
-        return vec![];
-    }
-
-    visited.insert(package.to_string());
-
-    // Resolve dependencies
-    // ...
-}
-```
+Any parser that resolves nested or transitive relationships must track visited state and break cycles explicitly rather than assuming the input graph is acyclic.
 
 ## Consequences
 
@@ -248,19 +143,7 @@ fn resolve_dependencies(
 
 ### 1. Sandboxed Execution
 
-**Approach**: Execute user code in isolated sandbox (Docker, seccomp, namespace isolation).
-
-```rust
-fn extract_from_setup_py(path: &Path) -> PackageData {
-    let output = Command::new("docker")
-        .args(&["run", "--rm", "--network=none", "python:3.11"])
-        .arg("python")
-        .arg(path)
-        .output()?;
-
-    parse_output(output.stdout)
-}
-```
+**Approach**: execute user code inside an isolated sandbox (Docker, seccomp, namespaces, or similar).
 
 **Rejected because**:
 
@@ -272,14 +155,7 @@ fn extract_from_setup_py(path: &Path) -> PackageData {
 
 ### 2. Static Analysis Only (No Parsing)
 
-**Approach**: Use regex/heuristics instead of proper parsing.
-
-```rust
-fn extract_name(content: &str) -> Option<String> {
-    let re = Regex::new(r#"name\s*=\s*"([^"]+)""#)?;
-    re.captures(content)?.get(1).map(|m| m.as_str().to_string())
-}
-```
+**Approach**: use regex/heuristics instead of structured parsing.
 
 **Rejected because**:
 
@@ -290,15 +166,7 @@ fn extract_name(content: &str) -> Option<String> {
 
 ### 3. Trust User Input (No Limits)
 
-**Approach**: Parse without validation or limits (like Python reference).
-
-```rust
-fn extract_package_data(path: &Path) -> PackageData {
-    let content = fs::read_to_string(path).unwrap(); // ❌
-    let manifest: Value = serde_json::from_str(&content).unwrap(); // ❌
-    // No size checks, no iteration limits
-}
-```
+**Approach**: parse without validation or resource limits.
 
 **Rejected because**:
 
@@ -309,14 +177,7 @@ fn extract_package_data(path: &Path) -> PackageData {
 
 ### 4. Per-Ecosystem Security Policies
 
-**Approach**: Different security levels per ecosystem.
-
-```rust
-match ecosystem {
-    "npm" => parse_safely(),     // High security
-    "gradle" => parse_unsafely(), // Low security (execute Groovy)
-}
-```
+**Approach**: apply different security levels to different ecosystems.
 
 **Rejected because**:
 

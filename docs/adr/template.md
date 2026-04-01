@@ -3,6 +3,7 @@
 **Status**: Proposed  
 **Authors**: Provenant team
 **Supersedes**: None
+**Current Contract Owner**: Link to the evergreen doc or code path that owns the live contract
 
 ## Context
 

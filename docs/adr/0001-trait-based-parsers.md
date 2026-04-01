@@ -4,6 +4,8 @@
 **Authors**: Provenant team
 **Supersedes**: None
 
+> **Current contract owner**: [`../HOW_TO_ADD_A_PARSER.md`](../HOW_TO_ADD_A_PARSER.md) and [`../ARCHITECTURE.md`](../ARCHITECTURE.md) describe the live parser interface and data model. This ADR records the architectural decision to use a trait-based parser system.
+
 ## Context
 
 Provenant needs a unified, type-safe way to handle multiple package ecosystems and file formats while maintaining:
@@ -17,79 +19,19 @@ The Python reference implementation uses runtime class inspection and dynamic di
 
 ## Decision
 
-We use a **trait-based parser system** where all parsers implement the `PackageParser` trait:
+We use a **trait-based parser system** where every parser exposes the same compile-time contract:
 
-```rust
-pub trait PackageParser {
-    /// The package ecosystem identifier (e.g., "npm", "cargo", "maven")
-    const PACKAGE_TYPE: &'static str;
-
-    /// Determines if this parser can handle the given file
-    fn is_match(path: &Path) -> bool;
-
-    /// Extracts package metadata from the file
-    fn extract_package_data(path: &Path) -> PackageData;
-}
-```
+- a package-type identity
+- a path-matching predicate
+- an extraction entry point that returns normalized package data
 
 ### Implementation Pattern
 
-Each parser is a zero-sized type (struct with no fields) that implements this trait:
-
-```rust
-pub struct NpmParser;
-
-impl PackageParser for NpmParser {
-    const PACKAGE_TYPE: &'static str = "npm";
-
-    fn is_match(path: &Path) -> bool {
-        matches!(
-            path.file_name().and_then(|n| n.to_str()),
-            Some("package.json" | "package-lock.json" | "npm-shrinkwrap.json")
-        )
-    }
-
-    fn extract_package_data(path: &Path) -> PackageData {
-        // Implementation
-    }
-}
-```
+Each parser is typically a zero-sized type with compile-time registration. The exact trait signature and helper APIs are intentionally owned by the code and contributor guide rather than repeated in this ADR.
 
 ### Unified Data Model
 
-All parsers return the same `PackageData` struct, which normalizes differences across ecosystems:
-
-```rust
-pub struct PackageData {
-    // Package identity
-    pub package_type: Option<String>,
-    pub name: Option<String>,
-    pub version: Option<String>,
-    pub namespace: Option<String>,
-
-    // Metadata
-    pub description: Option<String>,
-    pub homepage_url: Option<String>,
-    pub parties: Vec<Party>,
-
-    // Dependencies
-    pub dependencies: Vec<Dependency>,
-
-    // Licenses (extraction only - detection is separate)
-    pub extracted_license_statement: Option<String>,
-
-    // Checksums
-    pub sha256: Option<String>,
-    pub sha1: Option<String>,
-
-    // URLs
-    pub repository_homepage_url: Option<String>,
-    pub repository_download_url: Option<String>,
-
-    // Additional data
-    pub extra_data: serde_json::Value,
-}
-```
+All parsers return the same normalized `PackageData` shape. The important decision recorded here is not the exact field list, but that identity, metadata, dependency, license, provenance, and ecosystem-specific extra data all flow through one shared package model instead of per-ecosystem result types.
 
 ## Consequences
 
@@ -141,13 +83,7 @@ pub struct PackageData {
 
 ### 1. Enum-Based Dispatch
 
-```rust
-enum Parser {
-    Npm(NpmParser),
-    Cargo(CargoParser),
-    // ...
-}
-```
+**Approach**: one central enum with a variant for every parser.
 
 **Rejected because**:
 
@@ -157,12 +93,7 @@ enum Parser {
 
 ### 2. Dynamic Dispatch with `Box<dyn Parser>`
 
-```rust
-trait Parser {
-    fn is_match(&self, path: &Path) -> bool;
-    fn extract(&self, path: &Path) -> PackageData;
-}
-```
+**Approach**: store parsers behind trait objects and dispatch at runtime.
 
 **Rejected because**:
 
@@ -173,11 +104,7 @@ trait Parser {
 
 ### 3. Function Pointer Registry
 
-```rust
-type ParserFn = fn(&Path) -> PackageData;
-
-fn register_parser(name: &str, parser: ParserFn) { ... }
-```
+**Approach**: register parser entry points as function pointers in a central registry.
 
 **Rejected because**:
 
@@ -188,18 +115,7 @@ fn register_parser(name: &str, parser: ParserFn) { ... }
 
 ## Python Reference Comparison
 
-**Python Approach** (from `reference/scancode-toolkit/`):
-
-```python
-class DatafileHandler:
-    datasource_id = 'npm_package_json'
-    path_patterns = ('*/package.json',)
-    default_package_type = 'npm'
-
-    @classmethod
-    def parse(cls, location):
-        # Implementation
-```
+**Python Approach** (from `reference/scancode-toolkit/`): runtime class metadata plus dynamic inspection/registration.
 
 **Key Differences**:
 
