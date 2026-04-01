@@ -19,7 +19,7 @@ use sha1::{Digest, Sha1};
 use crate::license_detection::expression::{LicenseExpression, parse_expression};
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::models::position_span::PositionSpan;
-use crate::license_detection::models::{LicenseMatch, MatcherKind};
+use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind};
 use crate::license_detection::query::Query;
 
 pub const MATCH_SPDX_ID: MatcherKind = MatcherKind::SpdxId;
@@ -344,6 +344,8 @@ pub fn spdx_lid_match(index: &LicenseIndex, query: &Query) -> Vec<LicenseMatch> 
             let referenced_filenames = None;
             let score = 100.0;
 
+            let qspan = PositionSpan::range(*start_token, *end_token);
+
             let license_match = LicenseMatch {
                 license_expression,
                 license_expression_spdx: Some(spdx_expression.clone()),
@@ -366,9 +368,7 @@ pub fn spdx_lid_match(index: &LicenseIndex, query: &Query) -> Vec<LicenseMatch> 
                 rule_kind: crate::license_detection::models::RuleKind::Tag,
                 is_from_license: false,
                 rule_start_token: 0,
-                qspan: PositionSpan::empty(),
-                ispan: PositionSpan::empty(),
-                hispan: PositionSpan::empty(),
+                coordinates: MatchCoordinates::query_region(qspan),
                 candidate_resemblance: 0.0,
                 candidate_containment: 0.0,
             };

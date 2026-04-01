@@ -3,7 +3,8 @@
 //! This module contains functions for merging overlapping and adjacent matches,
 //! updating match scores, and filtering license references.
 
-use crate::license_detection::models::LicenseMatch;
+use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind};
+use crate::license_detection::position_set::PositionSet;
 use crate::license_detection::query::Query;
 
 const MAX_DIST: usize = 50;
@@ -16,17 +17,29 @@ fn combine_matches(a: &LicenseMatch, b: &LicenseMatch) -> LicenseMatch {
     );
 
     let mut merged = a.clone();
+    let has_rule_alignment = a.has_rule_alignment() && b.has_rule_alignment();
 
     let mut qspan_set = a.qspan_set();
-    let b_qspan = b.effective_span();
+    let b_qspan = b.query_span().clone();
     qspan_set.extend_from_span(&b_qspan);
 
-    let mut ispan_set = a.ispan_set();
-    let b_ispan = b.effective_ispan();
-    ispan_set.extend_from_span(&b_ispan);
+    let (ispan_set, hispan_set) = if has_rule_alignment {
+        let mut ispan_set = a.ispan_set();
+        let b_ispan = b.effective_ispan();
+        ispan_set.extend_from_span(&b_ispan);
 
-    let mut hispan_set = a.hispan.to_position_set();
-    hispan_set.extend_from_span(&b.hispan);
+        let mut hispan_set = a
+            .coordinates
+            .hispan()
+            .map_or_else(PositionSet::new, |h| h.to_position_set());
+        if let Some(b_hispan) = b.coordinates.hispan() {
+            hispan_set.extend_from_span(b_hispan);
+        }
+
+        (Some(ispan_set), Some(hispan_set))
+    } else {
+        (None, None)
+    };
 
     merged.start_token = if qspan_set.is_empty() {
         a.start_token
@@ -38,18 +51,28 @@ fn combine_matches(a: &LicenseMatch, b: &LicenseMatch) -> LicenseMatch {
     } else {
         qspan_set.max_pos() + 1
     };
-    merged.rule_start_token = if ispan_set.is_empty() {
-        a.rule_start_token
-    } else {
-        ispan_set.min_pos()
-    };
+    merged.rule_start_token = ispan_set.as_ref().map_or(a.rule_start_token, |ispan_set| {
+        if ispan_set.is_empty() {
+            a.rule_start_token
+        } else {
+            ispan_set.min_pos()
+        }
+    });
     merged.matched_length = qspan_set.len();
-    merged.hispan = hispan_set.to_position_span();
     merged.start_line = a.start_line.min(b.start_line);
     merged.end_line = a.end_line.max(b.end_line);
     merged.score = a.score.max(b.score);
-    merged.qspan = qspan_set.to_position_span();
-    merged.ispan = ispan_set.to_position_span();
+
+    let qspan = qspan_set.to_position_span();
+    merged.coordinates = if let (Some(ispan_set), Some(hispan_set)) = (ispan_set, hispan_set) {
+        MatchCoordinates::rule_aligned(
+            qspan,
+            ispan_set.to_position_span(),
+            hispan_set.to_position_span(),
+        )
+    } else {
+        MatchCoordinates::query_region(qspan)
+    };
 
     if merged.rule_length > 0 {
         merged.match_coverage = LicenseMatch::round_metric(
@@ -120,21 +143,42 @@ pub fn merge_overlapping_matches(matches: &[LicenseMatch]) -> Vec<LicenseMatch> 
             while j < rule_matches.len() {
                 let current = &rule_matches[i];
                 let next = &rule_matches[j];
+                let same_coordinate_kind =
+                    current.has_rule_alignment() == next.has_rule_alignment();
+                let both_rule_aligned = current.has_rule_alignment() && next.has_rule_alignment();
 
-                if current.qdistance_to(next) > max_rule_side_dist
-                    || current.idistance_to(next) > max_rule_side_dist
+                if !same_coordinate_kind {
+                    j += 1;
+                    continue;
+                }
+
+                if !both_rule_aligned
+                    && current.matcher == MatcherKind::SpdxId
+                    && next.matcher == MatcherKind::SpdxId
                 {
+                    j += 1;
+                    continue;
+                }
+
+                if current.qdistance_to(next) > max_rule_side_dist {
+                    break;
+                }
+
+                if both_rule_aligned && current.idistance_to(next) > max_rule_side_dist {
                     break;
                 }
 
                 if current.qspan_set() == next.qspan_set()
-                    && current.ispan_set() == next.ispan_set()
+                    && (!both_rule_aligned || current.ispan_set() == next.ispan_set())
                 {
                     rule_matches.remove(j);
                     continue;
                 }
 
-                if current.ispan_set() == next.ispan_set() && current.qoverlap(next) > 0 {
+                if both_rule_aligned
+                    && current.ispan_set() == next.ispan_set()
+                    && current.qoverlap(next) > 0
+                {
                     let current_mag = current.qspan_magnitude();
                     let next_mag = next.qspan_magnitude();
                     if current_mag <= next_mag {
@@ -159,7 +203,9 @@ pub fn merge_overlapping_matches(matches: &[LicenseMatch]) -> Vec<LicenseMatch> 
 
                 if current.surround(next) {
                     let combined = combine_matches(current, next);
-                    if combined.effective_span().len() == combined.effective_ispan().len() {
+                    if !both_rule_aligned
+                        || combined.query_span().len() == combined.effective_ispan().len()
+                    {
                         rule_matches[i] = combined;
                         rule_matches.remove(j);
                         continue;
@@ -167,7 +213,9 @@ pub fn merge_overlapping_matches(matches: &[LicenseMatch]) -> Vec<LicenseMatch> 
                 }
                 if next.surround(current) {
                     let combined = combine_matches(current, next);
-                    if combined.effective_span().len() == combined.effective_ispan().len() {
+                    if !both_rule_aligned
+                        || combined.query_span().len() == combined.effective_ispan().len()
+                    {
                         rule_matches[j] = combined;
                         rule_matches.remove(i);
                         i = i.saturating_sub(1);
@@ -181,23 +229,25 @@ pub fn merge_overlapping_matches(matches: &[LicenseMatch]) -> Vec<LicenseMatch> 
                     continue;
                 }
 
-                let (cur_qstart, cur_qend) = current.qspan_bounds();
-                let (next_qstart, next_qend) = next.qspan_bounds();
-                let (cur_istart, cur_iend) = current.ispan_bounds();
-                let (next_istart, next_iend) = next.ispan_bounds();
+                if both_rule_aligned {
+                    let (cur_qstart, cur_qend) = current.qspan_bounds();
+                    let (next_qstart, next_qend) = next.qspan_bounds();
+                    let (cur_istart, cur_iend) = current.ispan_bounds();
+                    let (next_istart, next_iend) = next.ispan_bounds();
 
-                if cur_qstart <= next_qstart
-                    && cur_qend <= next_qend
-                    && cur_istart <= next_istart
-                    && cur_iend <= next_iend
-                {
-                    let qoverlap = current.qoverlap(next);
-                    if qoverlap > 0 {
-                        let ioverlap = current.ispan_overlap(next);
-                        if qoverlap == ioverlap {
-                            rule_matches[i] = combine_matches(current, next);
-                            rule_matches.remove(j);
-                            continue;
+                    if cur_qstart <= next_qstart
+                        && cur_qend <= next_qend
+                        && cur_istart <= next_istart
+                        && cur_iend <= next_iend
+                    {
+                        let qoverlap = current.qoverlap(next);
+                        if qoverlap > 0 {
+                            let ioverlap = current.ispan_overlap(next);
+                            if qoverlap == ioverlap {
+                                rule_matches[i] = combine_matches(current, next);
+                                rule_matches.remove(j);
+                                continue;
+                            }
                         }
                     }
                 }
@@ -318,7 +368,7 @@ pub(super) fn filter_license_references_with_text_match(
 mod tests {
     use super::*;
     use crate::license_detection::index::LicenseIndex;
-    use crate::license_detection::models::position_span::PositionSpan;
+    use crate::license_detection::models::PositionSpan;
 
     fn parse_rule_id(rule_identifier: &str) -> Option<usize> {
         let trimmed = rule_identifier.trim();
@@ -340,6 +390,9 @@ mod tests {
         let matched_len = end_line - start_line + 1;
         let rule_len = matched_len;
         let rid = parse_rule_id(rule_identifier).unwrap_or(0);
+        let qspan = PositionSpan::range(start_line, end_line + 1);
+        let ispan = PositionSpan::range(0, matched_len);
+        let hispan = PositionSpan::range(0, matched_len / 2);
         LicenseMatch {
             rid,
             license_expression: "mit".to_string(),
@@ -362,15 +415,53 @@ mod tests {
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
             rule_start_token: 0,
-            qspan: PositionSpan::range(start_line, end_line + 1),
-            ispan: PositionSpan::range(0, matched_len),
-            hispan: PositionSpan::range(0, matched_len / 2),
+            coordinates: MatchCoordinates::rule_aligned(qspan, ispan, hispan),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }
     }
 
     fn create_test_match_with_tokens(
+        rule_identifier: &str,
+        start_token: usize,
+        end_token: usize,
+        matched_length: usize,
+    ) -> LicenseMatch {
+        let rid = parse_rule_id(rule_identifier).unwrap_or(0);
+        let qspan = PositionSpan::range(start_token, end_token);
+        LicenseMatch {
+            rid,
+            license_expression: "mit".to_string(),
+            license_expression_spdx: Some("MIT".to_string()),
+            from_file: None,
+            start_line: start_token,
+            end_line: end_token.saturating_sub(1),
+            start_token,
+            end_token,
+            matcher: crate::license_detection::models::MatcherKind::Aho,
+            score: 1.0,
+            matched_length,
+            rule_length: matched_length,
+            match_coverage: 100.0,
+            rule_relevance: 100,
+            rule_identifier: rule_identifier.to_string(),
+            rule_url: "https://example.com".to_string(),
+            matched_text: None,
+            referenced_filenames: None,
+            rule_kind: crate::license_detection::models::RuleKind::None,
+            is_from_license: false,
+            rule_start_token: 0,
+            coordinates: MatchCoordinates::rule_aligned(
+                qspan,
+                PositionSpan::empty(),
+                PositionSpan::empty(),
+            ),
+            candidate_resemblance: 0.0,
+            candidate_containment: 0.0,
+        }
+    }
+
+    fn create_test_query_region_match(
         rule_identifier: &str,
         start_token: usize,
         end_token: usize,
@@ -399,27 +490,13 @@ mod tests {
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
             rule_start_token: 0,
-            qspan: PositionSpan::range(start_token, end_token),
-            ispan: PositionSpan::empty(),
-            hispan: PositionSpan::empty(),
+            coordinates: MatchCoordinates::query_region(PositionSpan::range(
+                start_token,
+                end_token,
+            )),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }
-    }
-
-    fn create_test_match_with_implicit_spans(
-        rule_identifier: &str,
-        start_token: usize,
-        end_token: usize,
-        rule_start_token: usize,
-        matched_length: usize,
-    ) -> LicenseMatch {
-        let mut m =
-            create_test_match_with_tokens(rule_identifier, start_token, end_token, matched_length);
-        m.rule_start_token = rule_start_token;
-        m.qspan = PositionSpan::empty();
-        m.ispan = PositionSpan::empty();
-        m
     }
 
     #[test]
@@ -453,11 +530,19 @@ mod tests {
         let mut m1 = create_test_match("#1", 1, 10, 0.9, 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
-        m1.ispan = PositionSpan::range(0, 10);
+        m1.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(1, 11),
+            PositionSpan::range(0, 10),
+            PositionSpan::empty(),
+        );
         let mut m2 = create_test_match("#1", 5, 15, 0.85, 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 4;
-        m2.ispan = PositionSpan::range(4, 15);
+        m2.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(5, 16),
+            PositionSpan::range(4, 15),
+            PositionSpan::empty(),
+        );
 
         let matches = vec![m1, m2];
 
@@ -475,11 +560,19 @@ mod tests {
         let mut m1 = create_test_match("#1", 1, 10, 0.9, 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
-        m1.ispan = PositionSpan::range(0, 10);
+        m1.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(1, 11),
+            PositionSpan::range(0, 10),
+            PositionSpan::empty(),
+        );
         let mut m2 = create_test_match("#1", 10, 20, 0.85, 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 9;
-        m2.ispan = PositionSpan::range(9, 20);
+        m2.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(10, 21),
+            PositionSpan::range(9, 20),
+            PositionSpan::empty(),
+        );
 
         let matches = vec![m1, m2];
 
@@ -493,18 +586,35 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_adjacent_matches_uses_implicit_token_span_fallback() {
-        let mut m1 = create_test_match_with_implicit_spans("#1", 10, 20, 100, 10);
+    fn test_merge_adjacent_unknown_matches_preserve_query_region_coordinates() {
+        let mut m1 = create_test_query_region_match("#1", 10, 20, 10);
         m1.rule_length = 100;
-        let mut m2 = create_test_match_with_implicit_spans("#1", 20, 30, 110, 10);
+        m1.matcher = crate::license_detection::models::MatcherKind::Unknown;
+        let mut m2 = create_test_query_region_match("#1", 20, 30, 10);
         m2.rule_length = 100;
+        m2.matcher = crate::license_detection::models::MatcherKind::Unknown;
 
         let merged = merge_overlapping_matches(&[m1, m2]);
 
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].qspan_bounds(), (10, 30));
-        assert_eq!(merged[0].ispan_bounds(), (100, 120));
         assert_eq!(merged[0].matched_length, 20);
+        assert!(!merged[0].has_rule_alignment());
+    }
+
+    #[test]
+    fn test_do_not_merge_adjacent_spdx_query_region_matches() {
+        let mut m1 = create_test_query_region_match("#1", 10, 20, 10);
+        m1.rule_length = 100;
+        m1.matcher = crate::license_detection::models::MatcherKind::SpdxId;
+        let mut m2 = create_test_query_region_match("#1", 20, 30, 10);
+        m2.rule_length = 100;
+        m2.matcher = crate::license_detection::models::MatcherKind::SpdxId;
+
+        let merged = merge_overlapping_matches(&[m1, m2]);
+
+        assert_eq!(merged.len(), 2);
+        assert!(merged.iter().all(|m| !m.has_rule_alignment()));
     }
 
     #[test]
@@ -536,15 +646,27 @@ mod tests {
         let mut m1 = create_test_match("#1", 1, 5, 0.8, 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
-        m1.ispan = PositionSpan::range(0, 5);
+        m1.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(1, 6),
+            PositionSpan::range(0, 5),
+            PositionSpan::empty(),
+        );
         let mut m2 = create_test_match("#1", 5, 10, 0.9, 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 4;
-        m2.ispan = PositionSpan::range(4, 10);
+        m2.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(5, 11),
+            PositionSpan::range(4, 10),
+            PositionSpan::empty(),
+        );
         let mut m3 = create_test_match("#1", 10, 15, 0.85, 100.0, 100);
         m3.rule_length = 100;
         m3.rule_start_token = 9;
-        m3.ispan = PositionSpan::range(9, 15);
+        m3.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(10, 16),
+            PositionSpan::range(9, 15),
+            PositionSpan::empty(),
+        );
 
         let matches = vec![m1, m2, m3];
 
@@ -638,11 +760,19 @@ mod tests {
         let mut m1 = create_test_match("#1", 1, 15, 0.9, 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
-        m1.ispan = PositionSpan::range(0, 15);
+        m1.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(1, 16),
+            PositionSpan::range(0, 15),
+            PositionSpan::empty(),
+        );
         let mut m2 = create_test_match("#1", 10, 25, 0.85, 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 9;
-        m2.ispan = PositionSpan::range(9, 25);
+        m2.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(10, 26),
+            PositionSpan::range(9, 25),
+            PositionSpan::empty(),
+        );
 
         let matches = vec![m1, m2];
 
@@ -657,10 +787,18 @@ mod tests {
     fn test_merge_matches_with_gap_larger_than_one() {
         let mut m1 = create_test_match("#1", 1, 10, 0.9, 100.0, 100);
         m1.rule_length = 10;
-        m1.ispan = PositionSpan::range(0, 10);
+        m1.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(1, 11),
+            PositionSpan::range(0, 10),
+            PositionSpan::empty(),
+        );
         let mut m2 = create_test_match("#1", 20, 30, 0.85, 100.0, 100);
         m2.rule_length = 11;
-        m2.ispan = PositionSpan::range(19, 30);
+        m2.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(20, 31),
+            PositionSpan::range(19, 30),
+            PositionSpan::empty(),
+        );
 
         let matches = vec![m1, m2];
 
@@ -678,15 +816,27 @@ mod tests {
         let mut m1 = create_test_match("#1", 1, 10, 0.7, 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
-        m1.ispan = PositionSpan::range(0, 10);
+        m1.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(1, 11),
+            PositionSpan::range(0, 10),
+            PositionSpan::empty(),
+        );
         let mut m2 = create_test_match("#1", 5, 15, 0.95, 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 4;
-        m2.ispan = PositionSpan::range(4, 15);
+        m2.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(5, 16),
+            PositionSpan::range(4, 15),
+            PositionSpan::empty(),
+        );
         let mut m3 = create_test_match("#1", 12, 20, 0.8, 100.0, 100);
         m3.rule_length = 100;
         m3.rule_start_token = 11;
-        m3.ispan = PositionSpan::range(11, 20);
+        m3.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(12, 21),
+            PositionSpan::range(11, 20),
+            PositionSpan::empty(),
+        );
 
         let matches = vec![m1, m2, m3];
 
@@ -701,13 +851,22 @@ mod tests {
         let mut m = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
         m.start_token = 5;
         m.end_token = 15;
+        m.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(5, 15),
+            PositionSpan::empty(),
+            PositionSpan::empty(),
+        );
         assert_eq!(m.qspan_magnitude(), 10);
     }
 
     #[test]
     fn test_qspan_magnitude_non_contiguous() {
         let mut m = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
-        m.qspan = PositionSpan::from_positions(vec![4, 8]);
+        m.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::from_positions(vec![4, 8]),
+            PositionSpan::empty(),
+            PositionSpan::empty(),
+        );
         assert_eq!(m.qspan_magnitude(), 5);
     }
 
@@ -716,7 +875,7 @@ mod tests {
         let mut m = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
         m.start_token = 5;
         m.end_token = 5;
-        m.qspan = PositionSpan::empty();
+        m.coordinates = MatchCoordinates::query_region(PositionSpan::empty());
         assert_eq!(m.qspan_magnitude(), 0);
     }
 
@@ -725,12 +884,20 @@ mod tests {
         let mut dense = create_test_match_with_tokens("#1", 1, 11, 100);
         dense.rule_start_token = 0;
         dense.matched_length = 100;
-        dense.qspan = PositionSpan::range(1, 11);
+        dense.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(1, 11),
+            PositionSpan::empty(),
+            PositionSpan::empty(),
+        );
 
         let mut sparse = create_test_match_with_tokens("#1", 1, 11, 100);
         sparse.rule_start_token = 0;
         sparse.matched_length = 100;
-        sparse.qspan = PositionSpan::from_positions(vec![1, 5, 10, 20, 50]);
+        sparse.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::from_positions(vec![1, 5, 10, 20, 50]),
+            PositionSpan::empty(),
+            PositionSpan::empty(),
+        );
 
         let merged = merge_overlapping_matches(&[dense.clone(), sparse.clone()]);
 
@@ -743,12 +910,20 @@ mod tests {
         let mut dense = create_test_match_with_tokens("#1", 1, 11, 100);
         dense.rule_start_token = 0;
         dense.matched_length = 100;
-        dense.qspan = PositionSpan::range(1, 11);
+        dense.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(1, 11),
+            PositionSpan::empty(),
+            PositionSpan::empty(),
+        );
 
         let mut sparse = create_test_match_with_tokens("#1", 1, 11, 100);
         sparse.rule_start_token = 0;
         sparse.matched_length = 100;
-        sparse.qspan = PositionSpan::from_positions(vec![1, 5, 10, 20, 50]);
+        sparse.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::from_positions(vec![1, 5, 10, 20, 50]),
+            PositionSpan::empty(),
+            PositionSpan::empty(),
+        );
 
         let merged = merge_overlapping_matches(&[sparse.clone(), dense.clone()]);
 

@@ -163,7 +163,7 @@ pub(super) fn compute_detection_coverage(matches: &[LicenseMatch]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::license_detection::models::{LicenseMatch, PositionSpan};
+    use crate::license_detection::models::{LicenseMatch, MatchCoordinates, PositionSpan};
 
     fn create_test_match() -> LicenseMatch {
         LicenseMatch {
@@ -173,8 +173,8 @@ mod tests {
             from_file: Some("test.txt".to_string()),
             start_line: 1,
             end_line: 10,
-            start_token: 0,
-            end_token: 0,
+            start_token: 1,
+            end_token: 11,
             matcher: crate::license_detection::models::MatcherKind::Hash,
             score: 95.0,
             matched_length: 100,
@@ -188,9 +188,7 @@ mod tests {
             is_from_license: false,
             rule_length: 100,
             rule_start_token: 0,
-            qspan: PositionSpan::empty(),
-            ispan: PositionSpan::empty(),
-            hispan: PositionSpan::empty(),
+            coordinates: MatchCoordinates::query_region(PositionSpan::range(1, 11)),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }

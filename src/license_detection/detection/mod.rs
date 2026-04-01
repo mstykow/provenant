@@ -503,7 +503,7 @@ fn license_keys_from_expression(expression: &str) -> Vec<String> {
 mod tests {
     use super::identifier::compute_detection_identifier;
     use super::*;
-    use crate::license_detection::models::{License, LicenseMatch, PositionSpan};
+    use crate::license_detection::models::{License, LicenseMatch, MatchCoordinates, PositionSpan};
     use crate::license_detection::spdx_mapping::build_spdx_mapping;
 
     fn create_test_match(
@@ -519,8 +519,8 @@ mod tests {
             from_file: Some("test.txt".to_string()),
             start_line,
             end_line,
-            start_token: 0,
-            end_token: 0,
+            start_token: start_line,
+            end_token: end_line + 1,
             matcher: matcher.parse().expect("invalid test matcher"),
             score: 95.0,
             matched_length: 100,
@@ -534,9 +534,10 @@ mod tests {
             is_from_license: false,
             rule_length: 100,
             rule_start_token: 0,
-            qspan: PositionSpan::empty(),
-            ispan: PositionSpan::empty(),
-            hispan: PositionSpan::empty(),
+            coordinates: MatchCoordinates::query_region(PositionSpan::range(
+                start_line,
+                end_line + 1,
+            )),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }

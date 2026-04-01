@@ -8,7 +8,7 @@ use sha1::{Digest, Sha1};
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::{TokenId, TokenKind};
 use crate::license_detection::models::position_span::PositionSpan;
-use crate::license_detection::models::{LicenseMatch, MatcherKind};
+use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind};
 use crate::license_detection::query::QueryRun;
 
 pub const MATCH_HASH: MatcherKind = MatcherKind::Hash;
@@ -59,10 +59,6 @@ pub fn hash_match(index: &LicenseIndex, query_run: &QueryRun) -> Vec<LicenseMatc
 
         let rule_length = rule.tokens.len();
 
-        let end = query_run.end.unwrap_or(query_run.start);
-        let qspan = PositionSpan::range(query_run.start, end + 1);
-        let ispan = PositionSpan::range(0, rule_length);
-
         let matched_length = query_run.tokens().len();
         let match_coverage = 100.0;
 
@@ -72,6 +68,14 @@ pub fn hash_match(index: &LicenseIndex, query_run: &QueryRun) -> Vec<LicenseMatc
         } else {
             start_line
         };
+
+        let end = query_run.end.unwrap_or(query_run.start);
+        let qspan = PositionSpan::range(query_run.start, end + 1);
+        let ispan = PositionSpan::range(0, rule_length);
+        let hispan = PositionSpan::from_positions(
+            (0..rule_length)
+                .filter(|&p| index.dictionary.token_kind(itokens[p]) == TokenKind::Legalese),
+        );
 
         let license_match = LicenseMatch {
             license_expression: rule.license_expression.clone(),
@@ -98,12 +102,7 @@ pub fn hash_match(index: &LicenseIndex, query_run: &QueryRun) -> Vec<LicenseMatc
             rule_kind: rule.kind(),
             is_from_license: rule.is_from_license,
             rule_start_token: 0,
-            qspan,
-            ispan,
-            hispan: PositionSpan::from_positions(
-                (0..rule_length)
-                    .filter(|&p| index.dictionary.token_kind(itokens[p]) == TokenKind::Legalese),
-            ),
+            coordinates: MatchCoordinates::rule_aligned(qspan, ispan, hispan),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         };

@@ -117,7 +117,7 @@ fn truncate_detection_text(clean_text: &str) -> &str {
 }
 
 fn query_span_for_match(m: &LicenseMatch) -> Option<models::PositionSpan> {
-    (m.end_token > m.start_token).then(|| models::PositionSpan::new(m.start_token, m.end_token))
+    (!m.query_span().is_empty()).then(|| m.query_span().clone())
 }
 
 fn has_full_match_coverage(m: &LicenseMatch) -> bool {
@@ -159,8 +159,7 @@ fn is_redundant_same_expression_seq_container(
 
     let mut child_union = PositionSet::new();
     for m in &contained {
-        let span = m.effective_span();
-        child_union.extend_from_span(&span);
+        child_union.extend_from_span(m.query_span());
     }
 
     let container_only_positions = container_qspan_set.difference(&child_union);
@@ -274,8 +273,7 @@ fn is_redundant_low_coverage_composite_seq_wrapper(
 
     let mut child_union = PositionSet::new();
     for m in &children {
-        let span = m.effective_span();
-        child_union.extend_from_span(&span);
+        child_union.extend_from_span(m.query_span());
     }
 
     let container_only_positions = container_qspan_set.difference(&child_union);
@@ -385,8 +383,8 @@ fn collect_whole_query_exact_followup_matches(
                 seq_match_with_candidates(index, whole_run, &near_dupe_candidates);
 
             for m in &near_dupe_matches {
-                if m.end_token > m.start_token {
-                    let span = models::PositionSpan::new(m.start_token, m.end_token);
+                if !m.query_span().is_empty() {
+                    let span = m.query_span().clone();
                     query.subtract(&span);
                     matched_qspans.push(span);
                 }
@@ -544,14 +542,13 @@ impl LicenseDetectionEngine {
         // Phase 1b: SPDX-LID matching
         {
             let spdx_matches = spdx_lid_match(&self.index, &query);
-            let merged_spdx = merge_overlapping_matches(&spdx_matches);
             subtract_spdx_match_qspans(
                 &mut query,
                 &mut matched_qspans,
                 &mut aho_extra_matchables,
-                &merged_spdx,
+                &spdx_matches,
             );
-            all_matches.extend(merged_spdx);
+            all_matches.extend(spdx_matches);
         }
 
         // Phase 1c: Aho-Corasick matching
@@ -705,14 +702,13 @@ impl LicenseDetectionEngine {
         // Phase 1b: SPDX-LID matching
         {
             let spdx_matches = spdx_lid_match(&self.index, &query);
-            let merged_spdx = merge_overlapping_matches(&spdx_matches);
             subtract_spdx_match_qspans(
                 &mut query,
                 &mut matched_qspans,
                 &mut aho_extra_matchables,
-                &merged_spdx,
+                &spdx_matches,
             );
-            all_matches.extend(merged_spdx);
+            all_matches.extend(spdx_matches);
         }
 
         // Phase 1c: Aho-Corasick matching

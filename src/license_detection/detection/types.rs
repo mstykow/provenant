@@ -53,7 +53,7 @@ pub struct LicenseDetection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::license_detection::models::PositionSpan;
+    use crate::license_detection::models::{MatchCoordinates, PositionSpan};
 
     fn create_test_match(start_line: usize, end_line: usize) -> LicenseMatch {
         LicenseMatch {
@@ -63,8 +63,8 @@ mod tests {
             from_file: Some("test.txt".to_string()),
             start_line,
             end_line,
-            start_token: 0,
-            end_token: 0,
+            start_token: start_line,
+            end_token: end_line + 1,
             matcher: crate::license_detection::models::MatcherKind::Hash,
             score: 95.0,
             matched_length: 100,
@@ -78,9 +78,10 @@ mod tests {
             is_from_license: false,
             rule_length: 100,
             rule_start_token: 0,
-            qspan: PositionSpan::empty(),
-            ispan: PositionSpan::empty(),
-            hispan: PositionSpan::empty(),
+            coordinates: MatchCoordinates::query_region(PositionSpan::range(
+                start_line,
+                end_line + 1,
+            )),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }

@@ -17,7 +17,6 @@ use crate::license_detection::expression::{
     simplify_expression,
 };
 use crate::license_detection::index::LicenseIndex;
-use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::spdx_mapping::build_spdx_mapping;
 use crate::models::{
     DatasourceId, ExtraData, FacetTallies, FileInfo, FileType, Header, LicenseClarityScore,
@@ -1172,9 +1171,9 @@ fn public_match_to_internal(
         rule_kind: crate::license_detection::models::RuleKind::None,
         is_from_license: false,
         rule_start_token: 0,
-        qspan: PositionSpan::empty(),
-        ispan: PositionSpan::empty(),
-        hispan: PositionSpan::empty(),
+        coordinates: crate::license_detection::models::MatchCoordinates::query_region(
+            crate::license_detection::models::PositionSpan::empty(),
+        ),
         candidate_resemblance: 0.0,
         candidate_containment: 0.0,
     }
