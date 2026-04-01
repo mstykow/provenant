@@ -16,6 +16,7 @@ An Architectural Decision Record (ADR) is a document that captures an important 
 Each ADR follows a consistent structure:
 
 - **Status**: Proposed, Accepted, Deprecated, Superseded
+- **Current Contract Owner**: Evergreen doc or code path that now owns the live contract
 - **Context**: The problem or requirement that prompted the decision
 - **Decision**: The architectural choice made
 - **Consequences**: Trade-offs, benefits, and implications
@@ -61,6 +62,14 @@ Avoid new ADRs for:
 - **Accepted**: Decision made and being followed
 - **Deprecated**: No longer recommended but not yet replaced
 - **Superseded**: Replaced by a newer ADR (link to the replacement)
+
+Accepted ADRs are historical decision records, not the primary home for the live maintainer contract. When an accepted ADR starts to mislead contributors because examples, paths, or workflow links have drifted, it may receive a narrowly scoped maintenance update such as:
+
+- a current-contract note pointing to the evergreen owner document
+- corrected links to moved files or workflows
+- small snippet fixes that prevent obviously stale guidance
+
+Substantive decision changes should still be made with a new or superseding ADR.
 
 ## Further Reading
 

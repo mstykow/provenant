@@ -4,6 +4,8 @@
 **Authors**: Provenant team
 **Supersedes**: None
 
+> **Current contract owner**: [`../ARCHITECTURE.md`](../ARCHITECTURE.md) and [`../HOW_TO_ADD_A_PARSER.md`](../HOW_TO_ADD_A_PARSER.md) describe the live parser/detection boundary. This ADR records the separation decision itself.
+
 ## Context
 
 ScanCode Toolkit performs several distinct operations on code:
@@ -151,20 +153,6 @@ extracted_license_statement = "MIT"
 
 **Approach**: Each parser handles extraction AND detection.
 
-```rust
-impl PackageParser for NpmParser {
-    fn extract_package_data(path: &Path) -> PackageData {
-        let raw_license = parse_manifest(path).license;
-        let normalized = normalize_license(raw_license); // ❌
-        PackageData {
-            extracted_license_statement: Some(raw_license),
-            declared_license_expression: Some(normalized), // ❌
-            // ...
-        }
-    }
-}
-```
-
 **Rejected because**:
 
 - Mixes concerns (extraction + analysis)
@@ -177,11 +165,6 @@ impl PackageParser for NpmParser {
 
 **Approach**: Parsers extract, then call hook for detection.
 
-```rust
-let mut pkg = extract_package_data(path);
-pkg.apply_license_detection(); // Hook
-```
-
 **Rejected because**:
 
 - Still couples detection to parser lifecycle
@@ -191,17 +174,6 @@ pkg.apply_license_detection(); // Hook
 ### 3. Detection During Scan Orchestration
 
 **Approach**: Scanner coordinates extraction, then detection.
-
-```rust
-// Extraction phase
-let packages = scan_for_packages(dir);
-
-// Detection phase (separate)
-for pkg in &mut packages {
-    detect_licenses(pkg);
-    detect_copyrights(pkg);
-}
-```
 
 **✅ ACCEPTED**: This is our approach (matches Python).
 

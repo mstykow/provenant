@@ -4,6 +4,8 @@
 **Authors**: Provenant team
 **Supersedes**: None
 
+> **Current contract owner**: [`../TESTING_STRATEGY.md`](../TESTING_STRATEGY.md) defines the live test-layer taxonomy, golden-fixture ownership rules, and current CI commands. This ADR records the decision to use golden tests as part of the verification model.
+
 ## Context
 
 We need a reliable way to verify that Provenant produces output functionally equivalent to the Python ScanCode Toolkit reference implementation. Key challenges:
@@ -35,7 +37,7 @@ We use **golden testing** where parsers are validated against reference outputs 
 │ Python ScanCode  │      │ Provenant        │
 │                  │      │                  │
 │ scancode -p ...  │      │ NpmParser::      │
-│                  │      │ extract_package  │
+│                  │      │ extract_first_   │
 └────────┬─────────┘      └────────┬─────────┘
          │                         │
          ▼                         ▼
@@ -55,37 +57,17 @@ We use **golden testing** where parsers are validated against reference outputs 
 
 ### Implementation Pattern
 
-**1. Generate Reference Output** (one-time setup per test case):
+**1. Generate Reference Output** (historical example for one-time setup per test case):
 
-```bash
-cd reference/scancode-toolkit
-scancode -p testdata/npm/package.json --json expected/npm-package.json
-```
+Set up the reference submodule, run the corresponding ScanCode command once, and save the resulting reference fixture alongside the Rust-owned test data.
 
 **2. Create Golden Test** (in Rust):
 
-```rust
-#[test]
-fn test_golden_npm_simple() {
-    let path = Path::new("testdata/npm/package.json");
-    let result = NpmParser::extract_package_data(path);
-
-    let expected = read_expected_json("expected/npm-package.json");
-
-    // Compare semantically, ignoring field order
-    assert_package_data_eq(result, expected);
-}
-```
+Create a focused test that loads one fixture, runs the owning parser or subsystem entry point, and compares against the expected artifact or semantic projection.
 
 **3. Handle Intentional Differences**:
 
-```rust
-#[test]
-#[ignore = "Architectural difference: Rust uses single PackageData with dependencies array, Python uses packages array. See ADR 0001."]
-fn test_golden_cocoapods_podfile() {
-    // Test code here
-}
-```
+Document intentional differences directly in the test metadata or fixture ownership notes so the exception is explicit and reviewable.
 
 ### Test Organization
 
@@ -156,28 +138,9 @@ testdata/
 
 #### 1. Swift: Package Structure
 
-**Python Approach**:
+**Python Approach**: represent the manifest result as multiple package-like records.
 
-```json
-{
-  "packages": [
-    { "name": "Alamofire", "version": "5.4.0" },
-    { "name": "SwiftyJSON", "version": "5.0.0" }
-  ]
-}
-```
-
-**Rust Approach**:
-
-```json
-{
-  "name": "MyApp",
-  "dependencies": [
-    { "name": "Alamofire", "version": "5.4.0" },
-    { "name": "SwiftyJSON", "version": "5.0.0" }
-  ]
-}
-```
+**Rust Approach**: normalize the same information into one package record with dependency edges.
 
 **Rationale**: Both are valid representations. Rust uses normalized `PackageData` struct for consistency. Validated via comprehensive unit tests.
 
@@ -185,7 +148,9 @@ testdata/
 
 For Swift, parser-only goldens may still need special handling because the Rust implementation intentionally models a graph differently from older Python expectations.
 
-For CocoaPods, parser-only goldens are active again because the current Rust fixtures and expectations now pin the parser contract directly rather than relying on the older “ignored goldens” workaround.
+For CocoaPods, parser-only goldens are active again because the current Rust fixtures and expectations now pin the parser contract directly rather than relying on the older ignored-golden workaround.
+
+These examples are historical illustrations of the decision, not the authoritative current command set. For the live test-layer model, fixture ownership rules, and CI commands, follow [`../TESTING_STRATEGY.md`](../TESTING_STRATEGY.md).
 
 #### 2. Alpine: Provider Field (Beyond Parity)
 
@@ -201,17 +166,7 @@ For CocoaPods, parser-only goldens are active again because the current Rust fix
 
 ### 1. Unit Tests Only (No Golden Tests)
 
-**Approach**: Test individual parser functions without comparing to Python reference.
-
-```rust
-#[test]
-fn test_npm_parser() {
-    let result = parse_package_json("...");
-    assert_eq!(result.name, Some("lodash".to_string()));
-    assert_eq!(result.version, Some("4.17.21".to_string()));
-    // ... manual assertions for every field
-}
-```
+**Approach**: test individual parser functions without comparing to Python reference.
 
 **Rejected because**:
 
@@ -222,15 +177,7 @@ fn test_npm_parser() {
 
 ### 2. Snapshot Testing (insta crate)
 
-**Approach**: Generate snapshots of Rust output, review diffs manually.
-
-```rust
-#[test]
-fn test_npm_parser() {
-    let result = parse_package_json("...");
-    insta::assert_json_snapshot!(result);
-}
-```
+**Approach**: generate Rust snapshots and review diffs manually.
 
 **Rejected because**:
 
@@ -241,15 +188,7 @@ fn test_npm_parser() {
 
 ### 3. Property-Based Testing (proptest)
 
-**Approach**: Generate random inputs, verify properties hold.
-
-```rust
-proptest! {
-    fn test_npm_parser_doesnt_panic(input: String) {
-        let _ = parse_package_json(&input);
-    }
-}
-```
+**Approach**: generate random inputs and verify coarse-grained properties.
 
 **Partial acceptance**: We use property-based testing for security (DoS protection, invalid input handling), but NOT as primary validation strategy.
 
@@ -262,12 +201,7 @@ proptest! {
 
 ### 4. Integration Testing via CLI
 
-**Approach**: Run full Provenant CLI, compare JSON output.
-
-```bash
-cargo run -- --json-pp actual.json testdata/npm/
-diff actual.json expected.json
-```
+**Approach**: run the full CLI and compare emitted artifacts.
 
 **Partial acceptance**: We do this at CI level, but NOT as primary test strategy.
 
@@ -282,12 +216,7 @@ diff actual.json expected.json
 
 ### Feature Flag
 
-Golden tests are gated behind the `golden-tests` Cargo feature flag to keep the default `cargo test` fast:
-
-```bash
-cargo test --features golden-tests  # Include golden tests
-cargo test                          # Excludes golden tests (default)
-```
+Golden tests are gated behind the `golden-tests` Cargo feature flag to keep the default `cargo test` fast.
 
 All `*_golden_test.rs` modules are conditionally compiled with `#[cfg(all(test, feature = "golden-tests"))]`. CI always runs with `--features golden-tests`.
 
@@ -317,22 +246,7 @@ Document with `#[ignore = "reason"]` when:
 
 ### Custom Comparison Logic
 
-Handle legitimate differences:
-
-```rust
-fn assert_package_data_eq(actual: PackageData, expected: PackageData) {
-    // Ignore field order in dependencies
-    let actual_deps = sort_by_name(actual.dependencies);
-    let expected_deps = sort_by_name(expected.dependencies);
-    assert_eq!(actual_deps, expected_deps);
-
-    // Ignore null vs missing fields
-    assert_eq_optional(actual.description, expected.description);
-
-    // Normalize URLs (http vs https)
-    assert_eq_normalized_url(actual.homepage_url, expected.homepage_url);
-}
-```
+Comparison helpers should normalize legitimate differences such as ordering, null-vs-missing representation, and URL normalization before asserting equivalence.
 
 ## Quality Gates
 
@@ -354,5 +268,5 @@ Before marking a parser complete:
 
 - Python reference test data: `reference/scancode-toolkit/tests/packagedcode/data/`
 - Golden test examples: `src/parsers/*_golden_test.rs`
-- Test infrastructure: `src/parsers/test_utils.rs`
-- CI configuration: `.github/workflows/ci.yml`
+- Test infrastructure: `src/parsers/golden_test_utils.rs`
+- CI configuration: `.github/workflows/check.yml`
