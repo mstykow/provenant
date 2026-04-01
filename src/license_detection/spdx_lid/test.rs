@@ -326,6 +326,16 @@ mod tests {
         assert_eq!(matches[0].start_line, 1);
         assert_eq!(matches[0].end_line, 1);
         assert_eq!(matches[0].matcher, MATCH_SPDX_ID);
+        assert_eq!(matches[0].matched_length, 4);
+        assert_eq!(matches[0].rule_length, 4);
+        assert_eq!(matches[0].score, 100.0);
+        assert_eq!(matches[0].rule_relevance, 100);
+        assert!(
+            matches[0]
+                .rule_identifier
+                .starts_with("spdx-license-identifier-mit-")
+        );
+        assert!(matches[0].rule_url.is_empty());
     }
 
     #[test]
@@ -381,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn test_spdx_lid_match_score_from_relevance() {
+    fn test_spdx_lid_match_uses_synthetic_rule_metadata() {
         let mut index = create_test_index(
             &[("spdx", 0), ("license", 1), ("identifier", 2), ("mit", 3)],
             3,
@@ -393,7 +403,37 @@ mod tests {
         let matches = spdx_lid_match(&index, &query);
 
         assert_eq!(matches.len(), 1);
-        assert!((matches[0].score - 0.8).abs() < 0.01);
+        assert_eq!(matches[0].score, 100.0);
+        assert_eq!(matches[0].rule_relevance, 100);
+        assert!(
+            matches[0]
+                .rule_identifier
+                .starts_with("spdx-license-identifier-mit-")
+        );
+        assert!(matches[0].rule_url.is_empty());
+    }
+
+    #[test]
+    fn test_spdx_lid_match_uses_full_line_span_when_expression_tokens_are_unknown() {
+        let mut index = create_test_index(&[("spdx", 0), ("license", 1), ("identifier", 2)], 3);
+        let apache_rid = index.rules_by_rid.len();
+        index
+            .rules_by_rid
+            .push(create_mock_rule_simple("apache-2.0", 100));
+        index
+            .rid_by_spdx_key
+            .insert("apache-2.0".to_string(), apache_rid);
+
+        let text = "// SPDX-License-Identifier: Apache-2.0\nconst answer = 42;";
+        let query = Query::from_extracted_text(text, &index, false).unwrap();
+        let matches = spdx_lid_match(&index, &query);
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].start_line, 1);
+        assert_eq!(matches[0].end_line, 1);
+        assert_eq!(matches[0].matched_length, 3);
+        assert_eq!(matches[0].rule_length, 3);
+        assert_eq!(matches[0].score, 100.0);
     }
 
     #[test]
@@ -607,6 +647,56 @@ mod tests {
                 "Token positions should be valid (not hardcoded 0, 0)"
             );
         }
+    }
+
+    #[test]
+    fn test_spdx_match_respects_prefix_offset_on_same_line() {
+        let mut index = create_test_index(
+            &[
+                ("notice", 0),
+                ("spdx", 1),
+                ("license", 2),
+                ("identifier", 3),
+                ("mit", 4),
+            ],
+            1,
+        );
+        index.rules_by_rid.push(create_mock_rule_simple("mit", 100));
+        index.rid_by_spdx_key.insert("mit".to_string(), 0);
+
+        let text = "NOTICE SPDX-License-Identifier: MIT";
+        let query = Query::from_extracted_text(text, &index, false).unwrap();
+        let matches = spdx_lid_match(&index, &query);
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].start_token, 1);
+        assert_eq!(matches[0].end_token, 5);
+        assert_eq!(matches[0].matched_length, 4);
+    }
+
+    #[test]
+    fn test_spdx_match_rule_identifier_preserves_trailing_expression_spaces() {
+        let mut index = create_test_index(
+            &[("spdx", 0), ("license", 1), ("identifier", 2), ("mit", 3)],
+            1,
+        );
+        index.rules_by_rid.push(create_mock_rule_simple("mit", 100));
+        index.rid_by_spdx_key.insert("mit".to_string(), 0);
+
+        let plain =
+            Query::from_extracted_text("// SPDX-License-Identifier: MIT", &index, false).unwrap();
+        let spaced =
+            Query::from_extracted_text("// SPDX-License-Identifier: MIT  ", &index, false).unwrap();
+
+        let plain_matches = spdx_lid_match(&index, &plain);
+        let spaced_matches = spdx_lid_match(&index, &spaced);
+
+        assert_eq!(plain_matches.len(), 1);
+        assert_eq!(spaced_matches.len(), 1);
+        assert_ne!(
+            plain_matches[0].rule_identifier, spaced_matches[0].rule_identifier,
+            "Synthetic SPDX identifiers should preserve trailing expression whitespace like ScanCode"
+        );
     }
 
     #[test]
