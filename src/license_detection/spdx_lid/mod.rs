@@ -14,6 +14,7 @@
 //! This enables correct `start_token` and `end_token` values in LicenseMatches.
 
 use regex::Regex;
+use sha1::{Digest, Sha1};
 
 use crate::license_detection::expression::{LicenseExpression, parse_expression};
 use crate::license_detection::index::LicenseIndex;
@@ -160,6 +161,48 @@ pub(crate) fn normalize_spdx_key(key: &str) -> String {
     key.to_lowercase().replace("_", "-")
 }
 
+fn python_safe_name(s: &str) -> String {
+    let mut result = String::new();
+    let mut prev_underscore = false;
+
+    for c in s.chars() {
+        if c.is_alphanumeric() {
+            result.push(c);
+            prev_underscore = false;
+        } else if !prev_underscore {
+            result.push('_');
+            prev_underscore = true;
+        }
+    }
+
+    result.trim_matches('_').to_string()
+}
+
+fn python_str_repr(s: &str) -> String {
+    if s.contains('\'') && !s.contains('"') {
+        format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+    } else {
+        format!("'{}'", s.replace('\\', "\\\\").replace('\'', "\\'"))
+    }
+}
+
+fn synthetic_spdx_rule_identifier(license_expression: &str, text: &str) -> String {
+    let mut hasher = Sha1::new();
+    let content = format!(
+        "{}{}",
+        python_str_repr(license_expression),
+        python_str_repr(text)
+    );
+    hasher.update(content.as_bytes());
+    let digest = hex::encode(hasher.finalize());
+
+    format!(
+        "spdx-license-identifier-{}-{}",
+        python_safe_name(license_expression),
+        digest
+    )
+}
+
 const DEPRECATED_SPDX_EXPRESSION_SUBS: &[(&str, &str)] = &[
     ("ecos-2.0", "gpl-2.0-plus with ecos-exception-2.0"),
     (
@@ -277,45 +320,28 @@ pub fn spdx_lid_match(index: &LicenseIndex, query: &Query) -> Vec<LicenseMatch> 
         if let Some(license_expression) =
             find_matching_rule_for_expression(index, &resolved_expression)
         {
-            let matched_length = spdx_expression.len();
+            let matched_length = end_token.saturating_sub(*start_token);
             let match_coverage = 100.0;
 
             let start_line = query.line_for_pos(*start_token).unwrap_or(1);
-            let end_line = query.line_for_pos(*end_token).unwrap_or(start_line);
+            let end_line = end_token
+                .checked_sub(1)
+                .and_then(|pos| query.line_for_pos(pos))
+                .unwrap_or(start_line);
 
-            let (rid, rule_relevance, rule_identifier, rule_url, rule_length, referenced_filenames) =
-                index
-                    .rid_by_spdx_key
-                    .get(&license_expression)
-                    .map(|&rid| {
-                        let rule = &index.rules_by_rid[rid];
-                        (
-                            rid,
-                            rule.relevance,
-                            rule.identifier.clone(),
-                            rule.rule_url().unwrap_or_default(),
-                            rule.tokens.len(),
-                            rule.referenced_filenames.clone(),
-                        )
-                    })
-                    .unwrap_or_else(|| {
-                        let unknown_rid = index.unknown_spdx_rid.unwrap_or(0);
-                        if unknown_rid < index.rules_by_rid.len() {
-                            let rule = &index.rules_by_rid[unknown_rid];
-                            (
-                                unknown_rid,
-                                rule.relevance,
-                                rule.identifier.clone(),
-                                rule.rule_url().unwrap_or_default(),
-                                rule.tokens.len(),
-                                rule.referenced_filenames.clone(),
-                            )
-                        } else {
-                            (0, 100_u8, String::new(), String::new(), 0_usize, None)
-                        }
-                    });
+            let rid = index
+                .rid_by_spdx_key
+                .get(&resolved_expression)
+                .copied()
+                .or(index.unknown_spdx_rid)
+                .unwrap_or(0);
 
-            let score = rule_relevance as f32 / 100.0;
+            let rule_relevance = 100;
+            let rule_identifier = synthetic_spdx_rule_identifier(&license_expression, spdx_text);
+            let rule_url = String::new();
+            let rule_length = matched_length;
+            let referenced_filenames = None;
+            let score = 100.0;
 
             let license_match = LicenseMatch {
                 license_expression,

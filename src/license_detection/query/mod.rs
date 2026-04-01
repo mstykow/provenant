@@ -2,6 +2,7 @@
 
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::{KnownToken, QueryToken, TokenId, TokenKind};
+use crate::license_detection::spdx_lid::split_spdx_lid;
 use crate::license_detection::tokenize::STOPWORDS;
 use crate::license_detection::tokenize::tokenize_as_ids;
 use bit_set::BitSet;
@@ -566,11 +567,14 @@ impl<'a> Query<'a> {
             if let Some(offset) = spdx_start_offset
                 && let Some(line_first_known_pos) = line_first_known_pos
             {
+                let (spdx_prefix, spdx_expression) = split_spdx_lid(line);
+                let spdx_text = format!("{}{}", spdx_prefix.unwrap_or_default(), spdx_expression);
                 let spdx_start_known_pos = line_first_known_pos + offset as i32;
+
                 if spdx_start_known_pos <= line_last_known_pos {
                     let spdx_start = spdx_start_known_pos as usize;
                     let spdx_end = (line_last_known_pos + 1) as usize;
-                    spdx_lines.push((line_trimmed.to_string(), spdx_start, spdx_end));
+                    spdx_lines.push((spdx_text, spdx_start, spdx_end));
                 }
             }
 
