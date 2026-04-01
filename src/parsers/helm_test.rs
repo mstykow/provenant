@@ -294,6 +294,48 @@ home: https://example.com/legacy
     }
 
     #[test]
+    fn test_api_version_v3_chart_metadata_is_parsed() {
+        let content = r#"
+apiVersion: v3
+name: helm4-chart
+version: 1.2.0
+appVersion: 2.0.0
+type: application
+dependencies:
+  - name: common
+    version: 3.1.4
+    repository: oci://registry-1.docker.io/bitnamicharts
+        "#;
+
+        let (_temp_dir, path) = create_temp_file("Chart.yaml", content);
+        let package_data = HelmChartYamlParser::extract_first_package(&path);
+
+        assert_eq!(package_data.name.as_deref(), Some("helm4-chart"));
+        assert_eq!(package_data.version.as_deref(), Some("1.2.0"));
+        assert_eq!(
+            package_data.purl.as_deref(),
+            Some("pkg:helm/helm4-chart@1.2.0")
+        );
+        assert_eq!(package_data.dependencies.len(), 1);
+        assert_eq!(
+            package_data
+                .extra_data
+                .as_ref()
+                .and_then(|value| value.get("api_version"))
+                .and_then(|value| value.as_str()),
+            Some("v3")
+        );
+
+        let dependency = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:helm/common@3.1.4"))
+            .expect("common dependency missing");
+        assert_eq!(dependency.is_pinned, Some(true));
+        assert_eq!(dependency.is_runtime, Some(true));
+    }
+
+    #[test]
     fn test_skips_malformed_dependency_entries_without_dropping_file() {
         let content = r#"
 apiVersion: v2
