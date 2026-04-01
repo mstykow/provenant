@@ -5,10 +5,13 @@
   "description": "Documentation tooling for Provenant",
   "scripts": {
     "prepare": "lefthook install",
+    "setup": "npm install && cargo install --locked cargo-sort cargo-machete && ./setup.sh",
     "hooks:install": "lefthook install",
     "hooks:run": "lefthook run pre-commit --all-files",
     "format": "npx prettier --write \"**/*.{yml,yaml,json,md}\"",
     "format:check": "npx prettier --check \"**/*.{yml,yaml,json,md}\"",
+    "format:manifests": "./scripts/cargo_sort_manifests.sh",
+    "format:manifests:check": "./scripts/cargo_sort_manifests.sh --check",
     "lint:md": "npx markdownlint-cli2",
     "lint:md:fix": "npx markdownlint-cli2 --fix \"**/*.md\"",
     "validate:urls": "cargo run --quiet --manifest-path xtask/Cargo.toml --bin validate-urls -- --root .",

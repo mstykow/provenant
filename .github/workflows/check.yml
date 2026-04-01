@@ -65,6 +65,12 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+      - name: Install cargo-sort
+        run: cargo install --locked cargo-sort
+
+      - name: Check Cargo.toml sorting
+        run: ./scripts/cargo_sort_manifests.sh --check
+
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
@@ -76,6 +82,9 @@ jobs:
 
       - name: Run doctests
         run: cargo test --doc --release --verbose
+
+      - name: Install cargo-machete
+        run: cargo install --locked cargo-machete
 
       - name: Check for unused dependencies
         run: ./scripts/check_unused_deps.sh

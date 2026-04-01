@@ -27,6 +27,3 @@ fi
 
 echo ""
 echo "Setup complete."
-echo ""
-echo "To build: cargo build --release"
-echo ""
