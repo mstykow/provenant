@@ -39,6 +39,7 @@ pub struct FileInfoClassification {
 
 const MAX_IMAGE_METADATA_VALUES: usize = 64;
 const MAX_IMAGE_METADATA_TEXT_BYTES: usize = 32 * 1024;
+const BINARY_CONTROL_CHAR_THRESHOLD_DIVISOR: usize = 10;
 const PLAIN_TEXT_EXTENSIONS: &[&str] = &[
     "rst", "rest", "md", "txt", "log", "json", "xml", "yaml", "yml", "toml", "ini",
 ];
@@ -208,7 +209,7 @@ fn has_binary_control_chars(bytes: &[u8]) -> bool {
         .iter()
         .filter(|&&b| b < 0x09 || (b > 0x0D && b < 0x20))
         .count();
-    control_count > bytes.len() / 10
+    control_count > bytes.len() / BINARY_CONTROL_CHAR_THRESHOLD_DIVISOR
 }
 
 fn has_decodable_text(bytes: &[u8]) -> bool {
