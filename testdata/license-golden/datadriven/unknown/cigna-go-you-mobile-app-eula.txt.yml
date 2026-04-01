@@ -1,10 +1,10 @@
 license_expressions:
-  - proprietary-license
-  - proprietary-license
-  - unknown-license-reference
-  - warranty-disclaimer
-  - proprietary-license
-  - warranty-disclaimer
-  - unknown-license-reference
-  - unknown
+- proprietary-license
+- proprietary-license
+- unknown-license-reference
+- warranty-disclaimer
+- warranty-disclaimer
+- warranty-disclaimer
+- unknown-license-reference
+- unknown
 notes: this designed to use unknwown license detection

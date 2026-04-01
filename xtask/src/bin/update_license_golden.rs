@@ -1,14 +1,26 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use serde::{Deserialize, Deserializer};
+use yaml_serde::Value;
 
 use provenant::golden_maintenance::{find_files_with_extension, run_prettier};
+use provenant::license_detection::LicenseDetectionEngine;
+use provenant::utils::file::{extract_text_for_detection, ExtractedTextKind};
 
 const GOLDEN_DIR: &str = "testdata/license-golden/datadriven";
 const REFERENCE_DIR: &str = "reference/scancode-toolkit/tests/licensedcode/data/datadriven";
+
+static TEST_ENGINE: OnceLock<LicenseDetectionEngine> = OnceLock::new();
+
+fn get_engine() -> &'static LicenseDetectionEngine {
+    TEST_ENGINE.get_or_init(|| {
+        LicenseDetectionEngine::from_embedded().expect("Failed to load embedded license index")
+    })
+}
 
 fn deserialize_yes_no_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
 where
@@ -76,6 +88,15 @@ struct Args {
         help = "Suite to process (lic1, lic2, lic3, lic4, external, unknown). Default: all"
     )]
     suite: Option<String>,
+
+    #[arg(
+        long,
+        help = "Update expected values from current Rust detector output (not Python reference)"
+    )]
+    sync_actual: bool,
+
+    #[arg(long, help = "Print mismatches between Rust output and current expectations")]
+    list_mismatches: bool,
 }
 
 fn load_yaml(path: &Path) -> Result<LicenseTestYaml> {
@@ -114,6 +135,62 @@ fn compare_license_expressions(ours: &[String], theirs: &[String]) -> (Vec<Strin
     (missing, extra)
 }
 
+fn detect_license_expressions(input_path: &Path, unknown_licenses: bool) -> Result<Vec<String>> {
+    let bytes = fs::read(input_path).with_context(|| format!("read input file: {input_path:?}"))?;
+    let (text, text_kind) = extract_text_for_detection(input_path, &bytes);
+
+    if text.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let binary_derived = matches!(text_kind, ExtractedTextKind::BinaryStrings);
+    let matches = get_engine()
+        .detect_matches_with_kind(&text, unknown_licenses, binary_derived)
+        .with_context(|| format!("detect licenses in: {input_path:?}"))?;
+
+    let expressions: Vec<String> = matches
+        .iter()
+        .map(|m| m.license_expression.clone())
+        .collect();
+
+    Ok(expressions)
+}
+
+fn update_yaml_to_actual(ours_yaml: &Path, input_path: &Path, suite_name: &str, write: bool) -> Result<bool> {
+    let yaml_text = fs::read_to_string(ours_yaml)
+        .with_context(|| format!("read YAML: {ours_yaml:?}"))?;
+    let mut root: Value = yaml_serde::from_str(&yaml_text)
+        .with_context(|| format!("parse YAML: {ours_yaml:?}"))?;
+
+    let mapping = root
+        .as_mapping_mut()
+        .context("YAML root must be a mapping")?;
+
+    let unknown_licenses = suite_name == "unknown";
+    let actual = detect_license_expressions(input_path, unknown_licenses)?;
+
+    mapping.insert(
+        Value::String("license_expressions".to_string()),
+        Value::Sequence(actual.into_iter().map(Value::String).collect()),
+    );
+
+    mapping.remove(Value::String("expected_failure".to_string()));
+
+    let new_text = yaml_serde::to_string(&root)
+        .with_context(|| format!("serialize YAML: {ours_yaml:?}"))?;
+
+    if new_text == yaml_text {
+        return Ok(false);
+    }
+
+    if write {
+        fs::write(ours_yaml, &new_text)
+            .with_context(|| format!("write YAML: {ours_yaml:?}"))?;
+    }
+
+    Ok(true)
+}
+
 fn process_suite(
     suite_name: &str,
     args: &Args,
@@ -122,7 +199,7 @@ fn process_suite(
     let ours_root = repo_root.join(GOLDEN_DIR).join(suite_name);
     let ref_root = repo_root.join(REFERENCE_DIR).join(suite_name);
 
-    if !ours_root.exists() || !ref_root.exists() {
+    if !ours_root.exists() {
         return Ok((0, 0, 0, Vec::new()));
     }
 
@@ -142,6 +219,82 @@ fn process_suite(
             continue;
         }
 
+        let input_path = ours_yaml.with_extension("");
+        if !input_path.is_file() {
+            continue;
+        }
+
+        // Handle --sync-actual mode
+        if args.sync_actual {
+            if update_yaml_to_actual(&ours_yaml, &input_path, suite_name, args.write)? {
+                updated += 1;
+                if args.write {
+                    updated_files.push(ours_yaml.clone());
+                }
+            }
+            continue;
+        }
+
+        // Handle --list-mismatches mode (compare Rust output vs current expectations)
+        if args.list_mismatches {
+            let ours_content = match load_yaml(&ours_yaml) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Warning: Failed to load {}: {}", ours_yaml.display(), e);
+                    continue;
+                }
+            };
+
+            let unknown_licenses = suite_name == "unknown";
+            let actual = match detect_license_expressions(&input_path, unknown_licenses) {
+                Ok(e) => e,
+                Err(e) => {
+                    eprintln!("Warning: Failed to detect licenses for {}: {}", input_path.display(), e);
+                    continue;
+                }
+            };
+
+            if ours_content.license_expressions != actual {
+                let (missing, extra) = compare_license_expressions(
+                    &ours_content.license_expressions,
+                    &actual,
+                );
+                eprintln!(
+                    "mismatch: {} ({}/{}): expected={} actual={} missing={} extra={}",
+                    rel.display(),
+                    suite_name,
+                    ours_yaml.file_name().unwrap_or_default().to_string_lossy(),
+                    ours_content.license_expressions.len(),
+                    actual.len(),
+                    missing.len(),
+                    extra.len()
+                );
+                if args.show_diff {
+                    for m in &missing {
+                        eprintln!("  - {}", m);
+                    }
+                    for e in &extra {
+                        eprintln!("  + {}", e);
+                    }
+                }
+                skipped_mismatch += 1;
+
+                if args.write {
+                    let new_expressions = yaml_to_string(&LicenseTestYaml {
+                        license_expressions: actual,
+                        notes: ours_content.notes,
+                        expected_failure: false,
+                    })?;
+                    fs::write(&ours_yaml, &new_expressions)
+                        .with_context(|| format!("write YAML: {ours_yaml:?}"))?;
+                    updated_files.push(ours_yaml.clone());
+                    updated += 1;
+                }
+            }
+            continue;
+        }
+
+        // Default mode: sync from Python reference
         let ref_yaml = ref_root.join(rel);
         if !ref_yaml.is_file() {
             skipped_no_ref += 1;
@@ -253,7 +406,31 @@ fn main() -> Result<()> {
         run_prettier(&all_updated_files)?;
     }
 
-    if args.write {
+    if args.sync_actual {
+        if args.write {
+            eprintln!(
+                "synced {} file(s) from Rust detector output",
+                total_updated
+            );
+        } else {
+            eprintln!(
+                "would sync {} file(s) from Rust detector output (pass --write to apply)",
+                total_updated
+            );
+        }
+    } else if args.list_mismatches {
+        if args.write {
+            eprintln!(
+                "updated {} file(s) to match Rust output; {} mismatches remain",
+                total_updated, total_skipped_mismatch
+            );
+        } else {
+            eprintln!(
+                "found {} mismatches between Rust output and expectations (pass --write to update)",
+                total_skipped_mismatch
+            );
+        }
+    } else if args.write {
         eprintln!(
             "updated {} file(s); skipped_no_ref={}; skipped_mismatch={}",
             total_updated, total_skipped_no_ref, total_skipped_mismatch

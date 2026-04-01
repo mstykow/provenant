@@ -671,8 +671,9 @@ impl LicenseDetectionEngine {
 
     /// Detect licenses and return raw matches (like Python's idx.match()).
     ///
-    /// This method is only used by unit/golden tests for parity checks.
-    #[cfg(test)]
+    /// This method is used by unit/golden tests for parity checks and by
+    /// the golden maintenance tool for syncing expectations.
+    #[allow(dead_code)]
     pub fn detect_matches_with_kind(
         &self,
         text: &str,

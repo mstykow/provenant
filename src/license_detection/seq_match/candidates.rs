@@ -122,34 +122,8 @@ fn compare_candidate_rank(
         .then_with(|| rid.cmp(&other_rid))
 }
 
-fn python_round_tenths(value: f64) -> f32 {
-    let rendered = format!("{value:.20}");
-    let (whole, frac) = rendered.split_once('.').unwrap_or((rendered.as_str(), "0"));
-
-    let whole_part: i64 = whole.parse().unwrap_or(0);
-    let mut frac_chars = frac.chars();
-    let tenths = frac_chars.next().and_then(|c| c.to_digit(10)).unwrap_or(0) as i64;
-    let rest: String = frac_chars.collect();
-
-    let threshold = format!("5{}", "0".repeat(rest.len().saturating_sub(1)));
-    let should_round_up = if rest > threshold {
-        true
-    } else if rest == threshold {
-        tenths % 2 == 1
-    } else {
-        false
-    };
-
-    let mut scaled = whole_part * 10 + tenths;
-    if should_round_up {
-        scaled += 1;
-    }
-
-    scaled as f32 / 10.0
-}
-
-fn quantize_tenths(value: f32) -> i32 {
-    ((value * 10.0).round()) as i32
+fn round_tenths(value: f64) -> f32 {
+    ((value * 10.0).round_ties_even() / 10.0) as f32
 }
 
 fn build_score_vectors(
@@ -161,10 +135,10 @@ fn build_score_vectors(
     let amplified_resemblance = resemblance * resemblance;
 
     let score_vec_rounded = ScoresVector {
-        is_highly_resemblant: python_round_tenths(resemblance) >= HIGH_RESEMBLANCE_THRESHOLD,
-        containment: python_round_tenths(containment),
-        resemblance: python_round_tenths(amplified_resemblance),
-        matched_length: python_round_tenths(matched_length as f64 / 20.0),
+        is_highly_resemblant: round_tenths(resemblance) >= HIGH_RESEMBLANCE_THRESHOLD,
+        containment: round_tenths(containment),
+        resemblance: round_tenths(amplified_resemblance),
+        matched_length: round_tenths(matched_length as f64 / 20.0),
         rid,
     };
 
@@ -212,9 +186,9 @@ pub(super) fn filter_dupes(candidates: Vec<Candidate<'_>>) -> Vec<Candidate<'_>>
         let key = DupeGroupKey {
             license_expression: candidate.rule.license_expression.clone(),
             is_highly_resemblant: candidate.score_vec_rounded.is_highly_resemblant,
-            containment: quantize_tenths(candidate.score_vec_rounded.containment),
-            resemblance: quantize_tenths(candidate.score_vec_rounded.resemblance),
-            matched_length: quantize_tenths(candidate.score_vec_rounded.matched_length),
+            containment: (candidate.score_vec_rounded.containment * 10.0).round() as i32,
+            resemblance: (candidate.score_vec_rounded.resemblance * 10.0).round() as i32,
+            matched_length: (candidate.score_vec_rounded.matched_length * 10.0).round() as i32,
             rule_length: candidate.rule.tokens.len(),
         };
         groups.entry(key).or_default().push(candidate);
@@ -484,13 +458,13 @@ mod tests {
     }
 
     #[test]
-    fn test_python_round_tenths_matches_python_half_even_behavior() {
-        assert_eq!(python_round_tenths(0.05), 0.1);
-        assert_eq!(python_round_tenths(0.15), 0.1);
-        assert_eq!(python_round_tenths(0.25), 0.2);
-        assert_eq!(python_round_tenths(2.25), 2.2);
-        assert_eq!(python_round_tenths(4.35), 4.3);
-        assert_eq!(python_round_tenths(6.65), 6.7);
+    fn test_round_tenths_round_ties_even() {
+        assert_eq!(round_tenths(0.05), 0.0);
+        assert_eq!(round_tenths(0.15), 0.2);
+        assert_eq!(round_tenths(0.25), 0.2);
+        assert_eq!(round_tenths(2.25), 2.2);
+        assert_eq!(round_tenths(4.35), 4.4);
+        assert_eq!(round_tenths(6.65), 6.6);
     }
 
     #[test]
