@@ -119,7 +119,7 @@ Ruby DSL format for declaring CocoaPods dependencies.
 
 3. **Performance**:
    - Faster regex processing
-   - Efficient YAML parsing with serde_yaml
+- Efficient YAML parsing with yaml_serde
    - Zero-copy string operations where possible
 
 ### ⚠️ Known Limitations (Ruby DSL Only)

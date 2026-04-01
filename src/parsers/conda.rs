@@ -16,7 +16,7 @@
 //! - Limited meta.yaml support (note: Jinja2 templating not fully resolved)
 //!
 //! # Implementation Notes
-//! - Uses YAML parsing via `serde_yaml` crate
+//! - Uses YAML parsing via `yaml_serde`
 //! - meta.yaml: Jinja2 templates not evaluated (use rendered YAML if available)
 //! - environment.yml: Full dependency specification support
 //! - Graceful error handling with `warn!()` logs
@@ -31,7 +31,7 @@ use std::path::Path;
 
 use crate::parser_warn as warn;
 use regex::Regex;
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 
@@ -150,7 +150,7 @@ impl PackageParser for CondaMetaYamlParser {
         let processed_yaml = apply_jinja2_substitutions(&contents, &variables);
 
         // Parse YAML after Jinja2 processing
-        let yaml: Value = match serde_yaml::from_str(&processed_yaml) {
+        let yaml: Value = match yaml_serde::from_str(&processed_yaml) {
             Ok(y) => y,
             Err(e) => {
                 warn!("Failed to parse YAML in {}: {}", path.display(), e);
@@ -319,7 +319,7 @@ impl PackageParser for CondaEnvironmentYmlParser {
             }
         };
 
-        let yaml: Value = match serde_yaml::from_str(&contents) {
+        let yaml: Value = match yaml_serde::from_str(&contents) {
             Ok(y) => y,
             Err(e) => {
                 warn!("Failed to parse YAML in {}: {}", path.display(), e);

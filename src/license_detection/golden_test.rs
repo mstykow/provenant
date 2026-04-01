@@ -81,7 +81,7 @@ mod golden_tests {
             let content = fs::read_to_string(yaml_path)
                 .map_err(|e| format!("Failed to read {}: {}", yaml_path.display(), e))?;
 
-            let yaml: LicenseTestYaml = serde_yaml::from_str(&content)
+            let yaml: LicenseTestYaml = yaml_serde::from_str(&content)
                 .map_err(|e| format!("Failed to parse YAML {}: {}", yaml_path.display(), e))?;
 
             let test_file = yaml_path.with_extension("");

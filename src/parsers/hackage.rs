@@ -5,7 +5,7 @@ use std::path::Path;
 use crate::parser_warn as warn;
 use regex::Regex;
 use serde_json::Value as JsonValue;
-use serde_yaml::{Mapping, Value as YamlValue};
+use yaml_serde::{Mapping, Value as YamlValue};
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 use crate::parsers::utils::split_name_email;
@@ -77,7 +77,7 @@ impl PackageParser for HackageStackYamlParser {
             }
         };
 
-        let yaml: YamlValue = match serde_yaml::from_str(&content) {
+        let yaml: YamlValue = match yaml_serde::from_str(&content) {
             Ok(yaml) => yaml,
             Err(error) => {
                 warn!("Failed to parse stack.yaml {:?}: {}", path, error);

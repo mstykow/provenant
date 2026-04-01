@@ -179,7 +179,7 @@ mod tests {
                 }
             };
 
-            let expected: ExpectedOutput = match serde_yaml::from_str(&yaml_content) {
+            let expected: ExpectedOutput = match yaml_serde::from_str(&yaml_content) {
                 Ok(e) => e,
                 Err(e) => {
                     setup_failures.push((
@@ -368,7 +368,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -401,7 +401,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -463,7 +463,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -524,7 +524,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -570,7 +570,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -616,7 +616,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -678,7 +678,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -739,7 +739,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -801,7 +801,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -847,7 +847,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -893,7 +893,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -939,7 +939,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -984,7 +984,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -1031,7 +1031,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -1078,7 +1078,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -1124,7 +1124,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -1169,7 +1169,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -1199,7 +1199,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -1246,7 +1246,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -1293,7 +1293,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -1340,7 +1340,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -1386,7 +1386,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -1438,7 +1438,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -1501,7 +1501,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(
@@ -1563,7 +1563,7 @@ mod tests {
         assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
 
         let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
-        let expected: ExpectedOutput = serde_yaml::from_str(&yaml_content).expect("parse YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
 
         let input_path = input_path_from_yaml(&yaml_path);
         assert!(

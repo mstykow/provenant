@@ -15,7 +15,7 @@
 //! - Author/maintainer and homepage extraction
 //!
 //! # Implementation Notes
-//! - Uses YAML parsing via `serde_yaml` crate
+//! - Uses YAML parsing via `yaml_serde`
 //! - Lockfile versions are pinned (`is_pinned: Some(true)`)
 //! - Graceful error handling with `warn!()` logs
 //! - Supports both pub.dev and Git-hosted packages
@@ -26,7 +26,7 @@ use std::path::Path;
 
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
-use serde_yaml::{Mapping, Value};
+use yaml_serde::{Mapping, Value};
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
 
@@ -114,7 +114,7 @@ impl PackageParser for PubspecLockParser {
 
 fn read_yaml_file(path: &Path) -> Result<Value, String> {
     let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
-    serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))
+    yaml_serde::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))
 }
 
 fn parse_pubspec_yaml(yaml_content: &Value) -> PackageData {
@@ -680,7 +680,7 @@ fn build_extra_data(
     }
 
     if let Some(executables) = yaml_content.get(FIELD_EXECUTABLES) {
-        // Convert serde_yaml::Value to serde_json::Value
+        // Convert yaml_serde::Value to serde_json::Value
         if let Ok(json_value) = serde_json::to_value(executables) {
             extra_data.insert(FIELD_EXECUTABLES.to_string(), json_value);
         }

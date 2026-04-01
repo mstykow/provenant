@@ -103,7 +103,7 @@ resolution:
   integrity: sha512-lkqXDcvlFT5rvEjiu6+QYO+1GXrEHRo2LOtS7E4GtX5ESIZOgepqsZBVIj6Pv+a6zqsya9VCgiK1KAK4BvJDAw==
 "#;
 
-    let data: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+    let data: yaml_serde::Value = yaml_serde::from_str(yaml).unwrap();
 
     let dep = extract_dependency("regenerator-runtime@0.13.9", &data, "9.0", false);
     assert!(dep.is_some());
@@ -127,7 +127,7 @@ requiresBuild: true
 dev: false
 "#;
 
-    let data: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+    let data: yaml_serde::Value = yaml_serde::from_str(yaml).unwrap();
 
     let dep = extract_dependency("babel-cli@7.0.0", &data, "9.0", false);
     assert!(dep.is_some());
@@ -146,7 +146,7 @@ resolution:
   integrity: sha512-example
 "#;
 
-    let data: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+    let data: yaml_serde::Value = yaml_serde::from_str(yaml).unwrap();
 
     // Invalid purl_fields should return None
     let dep = extract_dependency("", &data, "9.0", false);
@@ -163,7 +163,7 @@ shrinkwrapVersion: 4
 shrinkwrapMinorVersion: 0
 "#;
 
-    let data: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+    let data: yaml_serde::Value = yaml_serde::from_str(yaml).unwrap();
     assert_eq!(detect_pnpm_version(&data), "4.0");
 }
 
@@ -171,7 +171,7 @@ shrinkwrapMinorVersion: 0
 fn test_detect_pnpm_version_default() {
     let yaml = "settings:\n  autoInstallPeers: true\n";
 
-    let data: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+    let data: yaml_serde::Value = yaml_serde::from_str(yaml).unwrap();
     assert_eq!(detect_pnpm_version(&data), "5.0");
 }
 
@@ -279,7 +279,7 @@ resolution:
 dev: true
 "#;
 
-    let data: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+    let data: yaml_serde::Value = yaml_serde::from_str(yaml).unwrap();
 
     let dep = extract_dependency("@babel/core@7.24.5", &data, "6.0", false);
     assert!(dep.is_some());
@@ -298,7 +298,7 @@ resolution:
 optional: true
 "#;
 
-    let data: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+    let data: yaml_serde::Value = yaml_serde::from_str(yaml).unwrap();
 
     let dep = extract_dependency("prettier@2.8.8", &data, "9.0", false);
     assert!(dep.is_some());
@@ -316,7 +316,7 @@ resolution:
   integrity: sha512-example
 "#;
 
-    let data: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+    let data: yaml_serde::Value = yaml_serde::from_str(yaml).unwrap();
 
     let dep = extract_dependency("express@4.18.2", &data, "9.0", false);
     assert!(dep.is_some());
@@ -334,7 +334,7 @@ resolution:
   integrity: sha512-example
 "#;
 
-    let data: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+    let data: yaml_serde::Value = yaml_serde::from_str(yaml).unwrap();
 
     let dep = extract_dependency("@types/node@20.2.1", &data, "9.0", true);
     assert!(dep.is_some());
