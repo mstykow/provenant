@@ -83,7 +83,6 @@ bit-set = "0.10.0"
 bzip2 = "0.6.1"
 chrono = "0.4.44"
 clap = { workspace = true }
-content_inspector = "0.2.4"
 csv = "1.4.0"
 daachorse = "1.0.0"
 derive_builder = "0.20.2"
