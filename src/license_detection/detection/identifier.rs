@@ -138,25 +138,26 @@ pub(super) fn compute_detection_coverage(matches: &[LicenseMatch]) -> f32 {
     }
 
     if matches.len() == 1 {
-        return ((matches[0].match_coverage * 100.0).round() / 100.0).min(100.0);
+        return matches[0].coverage();
     }
 
     let total_length: f32 = matches.iter().map(|m| m.matched_length as f32).sum();
 
     if total_length < 0.01 {
-        let average = matches.iter().map(|m| m.match_coverage).sum::<f32>() / matches.len() as f32;
-        return ((average * 100.0).round() / 100.0).min(100.0);
+        let average =
+            matches.iter().map(LicenseMatch::coverage).sum::<f32>() / matches.len() as f32;
+        return LicenseMatch::round_metric(average);
     }
 
     let weighted_coverage: f32 = matches
         .iter()
         .map(|m| {
             let weight = m.matched_length as f32 / total_length;
-            m.match_coverage * weight
+            m.coverage() * weight
         })
         .sum();
 
-    ((weighted_coverage * 100.0).round() / 100.0).min(100.0)
+    LicenseMatch::round_metric(weighted_coverage)
 }
 
 #[cfg(test)]

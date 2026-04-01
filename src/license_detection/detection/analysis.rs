@@ -33,9 +33,9 @@ pub(super) fn is_match_coverage_below_threshold(
     any_matches: bool,
 ) -> bool {
     if any_matches {
-        return matches.iter().any(|m| m.match_coverage < threshold - 0.01);
+        return matches.iter().any(|m| m.coverage() < threshold);
     }
-    !matches.iter().any(|m| m.match_coverage > threshold)
+    !matches.iter().any(|m| m.coverage() > threshold)
 }
 
 /// Check if all matches have unknown license identifiers.
@@ -52,7 +52,7 @@ pub(super) fn has_unknown_matches(matches: &[LicenseMatch]) -> bool {
 /// and has_extra_words() at detection.py:1139
 pub(super) fn has_extra_words(matches: &[LicenseMatch]) -> bool {
     matches.iter().any(|m| {
-        let score_coverage_relevance = m.match_coverage * m.rule_relevance as f32 / 100.0;
+        let score_coverage_relevance = m.coverage() * m.rule_relevance as f32 / 100.0;
         score_coverage_relevance - m.score > 0.01
     })
 }
@@ -152,8 +152,8 @@ pub(super) fn is_false_positive(matches: &[LicenseMatch]) -> bool {
 /// Based on Python: is_low_quality_matches() at detection.py:1223
 pub(super) fn is_low_quality_matches(matches: &[LicenseMatch]) -> bool {
     matches.iter().all(|m| {
-        m.match_coverage < CLUES_MATCH_COVERAGE_THR - 0.01
-            || (m.match_coverage < IMPERFECT_MATCH_COVERAGE_THR - 0.01
+        m.coverage() < CLUES_MATCH_COVERAGE_THR
+            || (m.coverage() < IMPERFECT_MATCH_COVERAGE_THR
                 && has_extra_words(std::slice::from_ref(m)))
     })
 }
@@ -167,7 +167,7 @@ pub(super) fn has_correct_license_clue_matches(matches: &[LicenseMatch]) -> bool
                 MatcherKind::Hash | MatcherKind::SpdxId | MatcherKind::Aho
             )
         })
-        && matches.iter().all(|m| m.match_coverage >= 99.99)
+        && matches.iter().all(|m| m.coverage() == 100.0)
         && matches.iter().all(LicenseMatch::is_license_clue)
 }
 
@@ -212,7 +212,7 @@ pub(super) fn has_unknown_intro_before_detection(matches: &[LicenseMatch]) -> bo
             });
 
             if has_unknown_intro {
-                let coverage_ok = m.match_coverage >= IMPERFECT_MATCH_COVERAGE_THR - 0.01;
+                let coverage_ok = m.coverage() >= IMPERFECT_MATCH_COVERAGE_THR;
                 let not_unknown = !m.rule_identifier.contains("unknown")
                     && !m.license_expression.contains("unknown");
                 if coverage_ok && not_unknown {
@@ -258,7 +258,7 @@ pub(super) fn is_license_intro(match_item: &LicenseMatch) -> bool {
     (match_item.is_license_intro()
         || match_item.is_license_clue()
         || match_item.license_expression == "free-unknown")
-        && (match_item.matcher == MatcherKind::Aho || match_item.match_coverage >= 99.99)
+        && (match_item.matcher == MatcherKind::Aho || match_item.coverage() == 100.0)
 }
 
 /// Filter out license intro matches from a list of matches.
@@ -360,7 +360,7 @@ pub(super) fn analyze_detection(matches: &[LicenseMatch], package_license: bool)
     // Check 9: Imperfect coverage
     if matches
         .iter()
-        .any(|m| m.match_coverage < IMPERFECT_MATCH_COVERAGE_THR - 0.01)
+        .any(|m| m.coverage() < IMPERFECT_MATCH_COVERAGE_THR)
     {
         return DETECTION_LOG_IMPERFECT_COVERAGE;
     }
@@ -374,7 +374,7 @@ pub(super) fn analyze_detection(matches: &[LicenseMatch], package_license: bool)
 }
 
 fn is_correct_detection_non_unknown(matches: &[LicenseMatch]) -> bool {
-    matches.iter().all(|m| m.match_coverage >= 99.99)
+    matches.iter().all(|m| m.coverage() == 100.0)
         && !has_unknown_matches(matches)
         && !has_extra_words(matches)
 }
@@ -588,6 +588,42 @@ mod tests {
             "mit.LICENSE",
         )];
         assert!(!is_match_coverage_below_threshold(&matches, 60.0, true));
+    }
+
+    #[test]
+    fn test_is_match_coverage_below_threshold_uses_rounded_coverage() {
+        let matches = vec![create_test_match_full(
+            "mit",
+            "1-hash",
+            1,
+            10,
+            80.0,
+            100,
+            100,
+            79.996,
+            100,
+            "mit.LICENSE",
+        )];
+        assert!(!is_match_coverage_below_threshold(&matches, 80.0, true));
+    }
+
+    #[test]
+    fn test_has_correct_license_clue_matches_requires_full_coverage() {
+        let mut m = create_test_match_full(
+            "mit",
+            "1-hash",
+            1,
+            10,
+            100.0,
+            100,
+            100,
+            99.99,
+            100,
+            "mit.LICENSE",
+        );
+        m.rule_kind = crate::license_detection::models::RuleKind::Clue;
+
+        assert!(!has_correct_license_clue_matches(&[m]));
     }
 
     #[test]

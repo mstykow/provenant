@@ -302,7 +302,7 @@ pub fn seq_match_with_candidates(
                     let end_line = query_run.line_for_pos(abs_qend).unwrap_or(start_line);
 
                     let rule_coverage = mlen as f32 / rule_length as f32;
-                    let match_coverage = rule_coverage * 100.0;
+                    let match_coverage = LicenseMatch::round_metric(rule_coverage * 100.0);
 
                     let score = match_coverage * candidate.rule.relevance as f32 / 100.0;
 

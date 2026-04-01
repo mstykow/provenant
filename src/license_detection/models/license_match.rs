@@ -434,6 +434,14 @@ impl Default for LicenseMatch {
 }
 
 impl LicenseMatch {
+    pub(crate) fn round_metric(value: f32) -> f32 {
+        ((value * 100.0).round() / 100.0).min(100.0)
+    }
+
+    pub fn coverage(&self) -> f32 {
+        Self::round_metric(self.match_coverage)
+    }
+
     pub fn matcher_order(&self) -> u8 {
         self.matcher.precedence()
     }
@@ -483,7 +491,7 @@ impl LicenseMatch {
         if self.matched_length < min_matched_len || self.hilen() < min_high_matched_len {
             return true;
         }
-        if rule_is_small && self.match_coverage < 80.0 {
+        if rule_is_small && self.coverage() < 80.0 {
             return true;
         }
         false

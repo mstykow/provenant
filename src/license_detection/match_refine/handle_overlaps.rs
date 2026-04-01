@@ -70,7 +70,7 @@ pub fn filter_contained_matches(
             }
 
             if current.qspan_eq(&next) {
-                if current.match_coverage >= next.match_coverage {
+                if current.coverage() >= next.coverage() {
                     discarded.push(matches.remove(j));
                     continue;
                 } else {
@@ -203,8 +203,7 @@ pub fn filter_overlapping_matches(
             // same text but gfdl-1.1 has higher coverage.
             if extra_large_next && current_len_val >= next_len_val {
                 // If lengths are equal, prefer higher coverage
-                if current_len_val == next_len_val
-                    && matches[i].match_coverage < matches[j].match_coverage
+                if current_len_val == next_len_val && matches[i].coverage() < matches[j].coverage()
                 {
                     discarded.push(matches.remove(i));
                     i = i.saturating_sub(1);
@@ -216,8 +215,7 @@ pub fn filter_overlapping_matches(
 
             if extra_large_current && current_len_val <= next_len_val {
                 // If lengths are equal, prefer higher coverage
-                if current_len_val == next_len_val
-                    && matches[i].match_coverage < matches[j].match_coverage
+                if current_len_val == next_len_val && matches[i].coverage() < matches[j].coverage()
                 {
                     discarded.push(matches.remove(j));
                     continue;

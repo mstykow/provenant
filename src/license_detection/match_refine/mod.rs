@@ -94,7 +94,7 @@ pub fn split_weak_matches(
     for m in matches {
         let is_false_positive = index.false_positive_rids.contains(&m.rid);
         let is_weak = (!is_false_positive && m.has_unknown())
-            || (m.matcher == MatcherKind::Seq && m.len() <= SMALL_RULE && m.match_coverage <= 25.0);
+            || (m.matcher == MatcherKind::Seq && m.len() <= SMALL_RULE && m.coverage() <= 25.0);
 
         if is_weak {
             weak.push(m.clone());
@@ -310,13 +310,13 @@ fn filter_binary_low_coverage_same_expression_seq_bridges(
     matches
         .iter()
         .filter(|m| {
-            if m.matcher != MatcherKind::Seq || m.match_coverage >= 90.0 {
+            if m.matcher != MatcherKind::Seq || m.coverage() >= 90.0 {
                 return true;
             }
 
             !matches.iter().any(|other| {
                 other.matcher == MatcherKind::Aho
-                    && other.match_coverage >= 100.0
+                    && other.coverage() == 100.0
                     && other.license_expression == m.license_expression
                     && other.qoverlap(m) > 0
                     && !m.qcontains(other)

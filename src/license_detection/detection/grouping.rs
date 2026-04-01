@@ -123,7 +123,7 @@ pub(super) fn is_correct_detection(matches: &[LicenseMatch]) -> bool {
         )
     });
 
-    let all_perfect_coverage = matches.iter().all(|m| m.match_coverage >= 100.0 - 0.01);
+    let all_perfect_coverage = matches.iter().all(|m| m.coverage() == 100.0);
 
     all_valid_matchers && all_perfect_coverage
 }

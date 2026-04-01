@@ -122,7 +122,7 @@ fn query_span_for_match(m: &LicenseMatch) -> Option<query::PositionSpan> {
 }
 
 fn has_full_match_coverage(m: &LicenseMatch) -> bool {
-    ((m.match_coverage * 100.0).round() / 100.0) == 100.0
+    m.coverage() == 100.0
 }
 
 fn is_redundant_same_expression_seq_container(
@@ -130,7 +130,7 @@ fn is_redundant_same_expression_seq_container(
     candidate_contained_matches: &[LicenseMatch],
 ) -> bool {
     let container_is_redundant_coverage =
-        has_full_match_coverage(container) || container.match_coverage >= 99.0;
+        has_full_match_coverage(container) || container.coverage() >= 99.0;
     if container.matcher != MatcherKind::Seq || !container_is_redundant_coverage {
         return false;
     }
@@ -254,7 +254,7 @@ fn is_redundant_low_coverage_composite_seq_wrapper(
     container: &LicenseMatch,
     candidate_contained_matches: &[LicenseMatch],
 ) -> bool {
-    if container.matcher != seq_match::MATCH_SEQ || container.match_coverage >= 30.0 {
+    if container.matcher != seq_match::MATCH_SEQ || container.coverage() >= 30.0 {
         return false;
     }
 
@@ -347,7 +347,7 @@ fn subtract_spdx_match_qspans(
         }
         query.subtract(&span);
 
-        if (m.match_coverage * 100.0).round() / 100.0 == 100.0 {
+        if has_full_match_coverage(m) {
             matched_qspans.push(span);
         }
     }
@@ -376,7 +376,7 @@ fn merge_and_prepare_aho_matches(
             .get(m.rid)
             .is_some_and(|rule| rule.is_license_text())
             && m.rule_length > 120
-            && m.match_coverage > 98.0
+            && m.coverage() > 98.0
         {
             query.subtract(&span);
             saw_long_exact_license_text_match = true;

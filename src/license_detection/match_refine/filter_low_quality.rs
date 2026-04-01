@@ -81,7 +81,7 @@ pub(crate) fn filter_below_rule_minimum_coverage(
             if let Some(rule) = index.rules_by_rid.get(rid)
                 && let Some(min_cov) = rule.minimum_coverage
             {
-                return m.match_coverage >= min_cov as f32;
+                return m.coverage() >= min_cov as f32;
             }
 
             true
@@ -986,6 +986,56 @@ mod tests {
         let filtered = filter_below_rule_minimum_coverage(&index, &matches);
 
         assert_eq!(filtered.len(), 0);
+    }
+
+    #[test]
+    fn test_filter_below_rule_minimum_coverage_keeps_rounded_boundary_match() {
+        let mut index = LicenseIndex::with_legalese_count(10);
+        index.rules_by_rid.push(Rule {
+            identifier: "test".to_string(),
+            license_expression: "mit".to_string(),
+            text: "test".to_string(),
+            tokens: vec![],
+            rule_kind: crate::license_detection::models::RuleKind::None,
+            is_false_positive: false,
+            is_required_phrase: false,
+            is_from_license: false,
+            relevance: 100,
+            minimum_coverage: Some(80),
+            has_stored_minimum_coverage: false,
+            is_continuous: true,
+            referenced_filenames: None,
+            ignorable_urls: None,
+            ignorable_emails: None,
+            ignorable_copyrights: None,
+            ignorable_holders: None,
+            ignorable_authors: None,
+            language: None,
+            notes: None,
+            length_unique: 0,
+            high_length_unique: 0,
+            high_length: 0,
+            min_matched_length: 10,
+            min_high_matched_length: 5,
+            min_matched_length_unique: 0,
+            min_high_matched_length_unique: 0,
+            is_small: false,
+            is_tiny: false,
+            starts_with_license: false,
+            ends_with_license: false,
+            is_deprecated: false,
+            spdx_license_key: None,
+            other_spdx_license_keys: vec![],
+            required_phrase_spans: vec![],
+            stopwords_by_pos: std::collections::HashMap::new(),
+        });
+
+        let mut m = create_test_match("#0", 1, 10, 0.9, 79.996, 100);
+        m.matcher = crate::license_detection::models::MatcherKind::Seq;
+
+        let filtered = filter_below_rule_minimum_coverage(&index, &[m]);
+
+        assert_eq!(filtered.len(), 1);
     }
 
     #[test]
