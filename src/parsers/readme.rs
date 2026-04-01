@@ -294,6 +294,6 @@ crate::register_parser!(
     "readme",
     "",
     Some(
-        "https://chromium.googlesource.com/chromium/src/+/HEAD/docs/contributing.md#third_party-components"
+        "https://github.com/chromium/chromium/blob/main/docs/contributing.md#third_party-components"
     ),
 );
