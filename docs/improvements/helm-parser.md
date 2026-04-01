@@ -4,6 +4,7 @@
 
 Rust now ships static Helm chart support for `Chart.yaml` and `Chart.lock` even though the Python ScanCode reference still has no production Helm parser.
 The supported surface focuses on the high-value official metadata from Helm itself: chart identity, maintainers, declared chart dependencies, and pinned lockfile dependency state.
+That static file-format coverage remains compatible with current Helm v4 chart metadata, including `apiVersion: v3` charts.
 
 ## Python Status
 
@@ -18,6 +19,7 @@ The supported surface focuses on the high-value official metadata from Helm itse
 - Rust now recognizes `Chart.yaml` and extracts chart identity from `name`, `version`, and `apiVersion`.
 - The parser also preserves `description`, `home`, `keywords`, `maintainers`, and common Helm metadata such as `appVersion`, `kubeVersion`, `type`, `icon`, `sources`, and `annotations`.
 - Root packages are emitted with Helm package identities such as `pkg:helm/nginx@22.1.1`.
+- The same static metadata path works for legacy `apiVersion: v1`, Helm 3 `apiVersion: v2`, and current Helm 4 `apiVersion: v3` charts.
 
 ### Declared dependency extraction from `Chart.yaml`
 
@@ -35,6 +37,7 @@ The supported surface focuses on the high-value official metadata from Helm itse
 
 - Rust does **not** evaluate templates, parse `values.yaml`, fetch remote chart repositories, inspect packaged chart archives, or resolve charts from OCI registries.
 - Legacy `apiVersion: v1` charts still have their core chart metadata parsed from `Chart.yaml`, but this supported surface does not implement `requirements.yaml` / `requirements.lock`.
+- Helm 4 operational changes such as OCI workflows, reproducible packaging, and multi-document values files do not change the static `Chart.yaml` / `Chart.lock` schema handled here.
 - Malformed dependency entries are skipped instead of causing the whole chart parse to fail.
 
 ## Coverage
@@ -43,6 +46,8 @@ Coverage spans chart metadata extraction, declared and locked dependency handlin
 
 ## References
 
-- [Helm chart format docs](https://helm.sh/docs/v3/topics/charts/)
+- [Helm chart format docs](https://helm.sh/docs/topics/charts/)
+- [Helm overview](https://helm.sh/docs/overview/)
+- [Helm changelog](https://helm.sh/docs/changelog/)
 - [Helm dependency update](https://helm.sh/docs/helm/helm_dependency_update/)
 - [Helm dependency build](https://helm.sh/docs/helm/helm_dependency_build/)
