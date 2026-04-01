@@ -77,9 +77,6 @@ jobs:
       - name: Check compilation
         run: cargo check --all --verbose
 
-      - name: Run library tests except scanner/assembly contract layer
-        run: "cargo test --lib --release --verbose -- --skip _scan_test::"
-
       - name: Run doctests
         run: cargo test --doc --release --verbose
 
@@ -88,6 +85,28 @@ jobs:
 
       - name: Check for unused dependencies
         run: ./scripts/check_unused_deps.sh
+
+  rust-library-tests:
+    name: Rust Library Tests
+    runs-on: ubuntu-latest
+    if: |
+      !(github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/'))
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        with:
+          submodules: recursive
+          lfs: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.94.0
+
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-library-tests-release
+
+      - name: Run library tests except scanner/assembly contract layer
+        run: "cargo test --lib --release --verbose -- --skip _scan_test::"
 
   windows-build-smoke:
     name: Windows Build Smoke Test

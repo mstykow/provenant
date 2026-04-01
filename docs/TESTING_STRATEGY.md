@@ -476,16 +476,17 @@ Quality gates run automatically on:
 - Every push to main
 - Every pull request
 
-The full test suites run in CI on pushes and pull requests. All tests must pass before merging. CI uses a minimal split so the scanner-wired tests no longer sit
-on the same critical path as the main Rust quality job, without introducing lots of tiny shards.
+The full test suites run in CI on pushes and pull requests. All tests must pass before merging. CI uses a minimal split so the heaviest Rust test layers no
+longer sit on the same critical path as the main Rust quality job, without introducing lots of tiny shards.
 Commands:
 
 - **Rust Quality**
   - `cargo fmt --all -- --check`
   - `cargo clippy --all-targets --all-features -- -D warnings`
   - `cargo check --all --verbose`
-  - `cargo test --lib --release --verbose -- --skip _scan_test::`
   - `cargo test --doc --release --verbose`
+- **Rust Library Tests**
+  - `cargo test --lib --release --verbose -- --skip _scan_test::`
 - **Rust Scan/Integration Tests**
   - `cargo test --lib --release --verbose _scan_test::`
   - `cargo test --test scanner_integration --release --verbose`
