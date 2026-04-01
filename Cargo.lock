@@ -3095,7 +3095,7 @@ dependencies = [
  "percent-encoding",
  "pest",
  "pest_derive",
- "rand 0.8.5",
+ "rand",
  "regex",
  "serde",
  "serde_json",
