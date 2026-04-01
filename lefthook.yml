@@ -2,6 +2,13 @@ glob_matcher: doublestar
 
 pre-commit:
   commands:
+    cargo-sort:
+      glob:
+        - Cargo.toml
+        - xtask/Cargo.toml
+      run: ./scripts/cargo_sort_manifests.sh {staged_files}
+      stage_fixed: true
+
     rustfmt:
       glob:
         - "src/**/*.rs"

@@ -5,24 +5,6 @@ edition = "2024"
 publish = false
 autobins = false
 
-[dependencies]
-anyhow = { workspace = true }
-clap = { workspace = true }
-inventory = { workspace = true }
-lazy_static = { workspace = true }
-rayon = { workspace = true }
-regex = { workspace = true }
-provenant = { path = "..", package = "provenant-cli" }
-rmp-serde = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-url = { workspace = true }
-zstd = { workspace = true }
-yaml_serde = "0.10.4"
-
-[dev-dependencies]
-tempfile = { workspace = true }
-
 [[bin]]
 name = "update-parser-golden"
 path = "src/bin/update_parser_golden.rs"
@@ -46,3 +28,21 @@ path = "src/bin/update_license_golden.rs"
 [[bin]]
 name = "generate-index-artifact"
 path = "src/bin/generate_index_artifact.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+inventory = { workspace = true }
+lazy_static = { workspace = true }
+provenant = { path = "..", package = "provenant-cli" }
+rayon = { workspace = true }
+regex = { workspace = true }
+rmp-serde = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+url = { workspace = true }
+yaml_serde = "0.10.4"
+zstd = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

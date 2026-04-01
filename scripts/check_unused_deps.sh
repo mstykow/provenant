@@ -2,8 +2,9 @@
 set -euo pipefail
 
 if ! command -v cargo-machete &> /dev/null; then
-    echo "Installing cargo-machete..."
-    cargo install cargo-machete
+    echo "cargo-machete is required but not installed." >&2
+    echo "Install it with: cargo install cargo-machete" >&2
+    exit 1
 fi
 
 cargo machete ./Cargo.toml
