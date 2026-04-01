@@ -20,11 +20,20 @@ use std::path::Path;
 
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
-use rustpython_parser::{Parse, ast};
+use starlark_syntax::syntax::ast;
+use starlark_syntax::syntax::module::AstModuleFields;
+use starlark_syntax::syntax::{AstModule, Dialect};
 
 use crate::models::{DatasourceId, PackageData, PackageType, Party};
 
 use super::PackageParser;
+
+type StarlarkCallArgs = ast::CallArgsP<ast::AstNoPayload>;
+
+struct StarlarkCall<'a> {
+    func: &'a ast::AstExpr,
+    args: &'a StarlarkCallArgs,
+}
 
 /// Parser for Buck BUCK files (build rules)
 pub struct BuckBuildParser;
@@ -81,14 +90,12 @@ impl PackageParser for BuckMetadataBzlParser {
 fn parse_buck_build(path: &Path) -> Result<Vec<PackageData>, String> {
     let content =
         std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
-
-    let module = ast::Suite::parse(&content, "<BUCK>")
-        .map_err(|e| format!("Failed to parse Starlark: {}", e))?;
+    let module = parse_starlark_module("<BUCK>", content)?;
 
     let mut packages = Vec::new();
 
-    for statement in &module {
-        if let Some(package_data) = extract_from_statement(statement) {
+    for statement in top_level_statements(&module) {
+        if let Some(package_data) = extract_build_package_from_statement(statement) {
             packages.push(package_data);
         }
     }
@@ -100,24 +107,12 @@ fn parse_buck_build(path: &Path) -> Result<Vec<PackageData>, String> {
 fn parse_metadata_bzl(path: &Path) -> Result<PackageData, String> {
     let content =
         std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
-
-    let module = ast::Suite::parse(&content, "<METADATA.bzl>")
-        .map_err(|e| format!("Failed to parse Starlark: {}", e))?;
+    let module = parse_starlark_module("<METADATA.bzl>", content)?;
 
     // Look for METADATA = {...} assignment
-    for statement in &module {
-        if let ast::Stmt::Assign(ast::StmtAssign { targets, value, .. }) = statement {
-            // Check if assigning to variable named "METADATA"
-            for target in targets {
-                if let ast::Expr::Name(ast::ExprName { id, .. }) = target
-                    && id.as_str() == "METADATA"
-                {
-                    // Extract dictionary contents
-                    if let ast::Expr::Dict(dict) = value.as_ref() {
-                        return Ok(extract_metadata_dict(dict));
-                    }
-                }
-            }
+    for statement in top_level_statements(&module) {
+        if let Some(dict) = extract_metadata_assignment_dict(statement) {
+            return Ok(extract_metadata_dict(dict));
         }
     }
 
@@ -129,42 +124,49 @@ fn parse_metadata_bzl(path: &Path) -> Result<PackageData, String> {
     })
 }
 
+fn parse_starlark_module(filename: &str, content: String) -> Result<AstModule, String> {
+    let dialect = Dialect {
+        enable_top_level_stmt: true,
+        ..Dialect::Standard
+    };
+    AstModule::parse(filename, content, &dialect).map_err(|error| error.to_string())
+}
+
+fn top_level_statements(module: &AstModule) -> &[ast::AstStmt] {
+    match &module.statement().node {
+        ast::StmtP::Statements(statements) => statements,
+        _ => std::slice::from_ref(module.statement()),
+    }
+}
+
+fn extract_metadata_assignment_dict(
+    statement: &ast::AstStmt,
+) -> Option<&[(ast::AstExpr, ast::AstExpr)]> {
+    let ast::StmtP::Assign(assign) = &statement.node else {
+        return None;
+    };
+    let ast::AssignTargetP::Identifier(target) = &assign.lhs.node else {
+        return None;
+    };
+    if target.node.ident != "METADATA" {
+        return None;
+    }
+    match &assign.rhs.node {
+        ast::ExprP::Dict(items) => Some(items.as_slice()),
+        _ => None,
+    }
+}
+
 /// Extract metadata from a dictionary AST node
-fn extract_metadata_dict(dict: &ast::ExprDict) -> PackageData {
+fn extract_metadata_dict(dict: &[(ast::AstExpr, ast::AstExpr)]) -> PackageData {
     let mut fields: HashMap<String, MetadataValue> = HashMap::new();
 
-    for (key, value) in dict.keys.iter().zip(dict.values.iter()) {
-        // Extract key name
-        let key_name = match key {
-            Some(ast::Expr::Constant(ast::ExprConstant { value, .. })) => {
-                if let ast::Constant::Str(s) = value {
-                    s.clone()
-                } else {
-                    continue;
-                }
-            }
-            _ => continue,
+    for (key, value) in dict {
+        let Some(key_name) = expr_as_string(key) else {
+            continue;
         };
-
-        // Extract value
-        let metadata_value = match value {
-            ast::Expr::Constant(ast::ExprConstant {
-                value: ast::Constant::Str(s),
-                ..
-            }) => MetadataValue::String(s.clone()),
-            ast::Expr::Constant(_) => continue,
-            ast::Expr::List(ast::ExprList { elts, .. }) => {
-                let mut list_values = Vec::new();
-                for elt in elts {
-                    if let ast::Expr::Constant(ast::ExprConstant { value, .. }) = elt
-                        && let ast::Constant::Str(s) = value
-                    {
-                        list_values.push(s.clone());
-                    }
-                }
-                MetadataValue::List(list_values)
-            }
-            _ => continue,
+        let Some(metadata_value) = metadata_value_from_expr(value) else {
+            continue;
         };
 
         fields.insert(key_name, metadata_value);
@@ -372,28 +374,24 @@ fn build_package_from_metadata(fields: HashMap<String, MetadataValue>) -> Packag
     pkg
 }
 
-/// Extract package data from a single AST statement (for BUCK files)
-fn extract_from_statement(statement: &ast::Stmt) -> Option<PackageData> {
-    match statement {
-        ast::Stmt::Expr(ast::StmtExpr { value, .. }) => {
-            if let ast::Expr::Call(call) = value.as_ref() {
-                return extract_from_call(call);
-            }
-        }
-        ast::Stmt::Assign(ast::StmtAssign { value, .. }) => {
-            if let ast::Expr::Call(call) = value.as_ref() {
-                return extract_from_call(call);
-            }
-        }
-        _ => {}
+fn metadata_value_from_expr(expr: &ast::AstExpr) -> Option<MetadataValue> {
+    if let Some(string) = expr_as_string(expr) {
+        return Some(MetadataValue::String(string));
     }
-    None
+
+    let items = match &expr.node {
+        ast::ExprP::List(items) | ast::ExprP::Tuple(items) => items,
+        _ => return None,
+    };
+    let values: Vec<_> = items.iter().filter_map(expr_as_string).collect();
+    (!values.is_empty()).then_some(MetadataValue::List(values))
 }
 
-/// Extract package data from a function call (for BUCK files)
-fn extract_from_call(call: &ast::ExprCall) -> Option<PackageData> {
-    let rule_name = match call.func.as_ref() {
-        ast::Expr::Name(ast::ExprName { id, .. }) => id.as_str(),
+/// Extract package data from a single AST statement (for BUCK files)
+fn extract_build_package_from_statement(statement: &ast::AstStmt) -> Option<PackageData> {
+    let call = extract_call(statement)?;
+    let rule_name = match &call.func.node {
+        ast::ExprP::Identifier(identifier) => identifier.node.ident.as_str(),
         _ => return None,
     };
 
@@ -401,38 +399,8 @@ fn extract_from_call(call: &ast::ExprCall) -> Option<PackageData> {
         return None;
     }
 
-    let mut name: Option<String> = None;
-    let mut licenses: Option<Vec<String>> = None;
-
-    for keyword in &call.keywords {
-        let arg_name = keyword.arg.as_ref()?.as_str();
-
-        match arg_name {
-            "name" => {
-                if let ast::Expr::Constant(ast::ExprConstant { value, .. }) = &keyword.value
-                    && let ast::Constant::Str(s) = value
-                {
-                    name = Some(s.clone());
-                }
-            }
-            "licenses" => {
-                if let ast::Expr::List(ast::ExprList { elts, .. }) = &keyword.value {
-                    let mut license_list = Vec::new();
-                    for elt in elts {
-                        if let ast::Expr::Constant(ast::ExprConstant { value, .. }) = elt
-                            && let ast::Constant::Str(s) = value
-                        {
-                            license_list.push(s.clone());
-                        }
-                    }
-                    if !license_list.is_empty() {
-                        licenses = Some(license_list);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
+    let name = extract_named_kwarg_string(&call, "name");
+    let licenses = extract_named_kwarg_string_list(&call, "licenses");
 
     let package_name = name?;
     let (license_statements, license_references) = licenses
@@ -457,6 +425,52 @@ fn extract_from_call(call: &ast::ExprCall) -> Option<PackageData> {
         datasource_id: Some(DatasourceId::BuckFile),
         ..Default::default()
     })
+}
+
+fn extract_call(statement: &ast::AstStmt) -> Option<StarlarkCall<'_>> {
+    match &statement.node {
+        ast::StmtP::Expression(expr) => extract_call_expr(expr),
+        ast::StmtP::Assign(assign) => extract_call_expr(&assign.rhs),
+        _ => None,
+    }
+}
+
+fn extract_call_expr(expr: &ast::AstExpr) -> Option<StarlarkCall<'_>> {
+    match &expr.node {
+        ast::ExprP::Call(func, args) => Some(StarlarkCall { func, args }),
+        _ => None,
+    }
+}
+
+fn extract_named_kwarg<'a>(call: &'a StarlarkCall<'_>, key: &str) -> Option<&'a ast::AstExpr> {
+    call.args
+        .args
+        .iter()
+        .find_map(|argument| match &argument.node {
+            ast::ArgumentP::Named(name, value) if name.node == key => Some(value),
+            _ => None,
+        })
+}
+
+fn extract_named_kwarg_string(call: &StarlarkCall<'_>, key: &str) -> Option<String> {
+    extract_named_kwarg(call, key).and_then(expr_as_string)
+}
+
+fn extract_named_kwarg_string_list(call: &StarlarkCall<'_>, key: &str) -> Option<Vec<String>> {
+    let expr = extract_named_kwarg(call, key)?;
+    let items = match &expr.node {
+        ast::ExprP::List(items) | ast::ExprP::Tuple(items) => items,
+        _ => return None,
+    };
+    let values: Vec<_> = items.iter().filter_map(expr_as_string).collect();
+    (!values.is_empty()).then_some(values)
+}
+
+fn expr_as_string(expr: &ast::AstExpr) -> Option<String> {
+    match &expr.node {
+        ast::ExprP::Literal(ast::AstLiteral::String(value)) => Some(value.node.clone()),
+        _ => None,
+    }
 }
 
 /// Check if rule name ends with "binary" or "library"

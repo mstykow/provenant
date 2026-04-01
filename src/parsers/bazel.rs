@@ -3,7 +3,7 @@
 //! Extracts package metadata from Bazel BUILD files using Starlark (Python-like) syntax.
 //!
 //! ## Features
-//! - Parses Starlark syntax using rustpython_parser
+//! - Parses Starlark syntax using starlark_syntax
 //! - Extracts build rules ending with "binary" or "library" (e.g., cc_binary, cc_library)
 //! - Extracts name and licenses fields from rule arguments
 //! - Falls back to parent directory name if no rules found
@@ -22,9 +22,18 @@ use serde_json::{Map as JsonMap, Value as JsonValue};
 use std::path::Path;
 
 use crate::parser_warn as warn;
-use rustpython_parser::{Parse, ast};
+use starlark_syntax::syntax::ast;
+use starlark_syntax::syntax::module::AstModuleFields;
+use starlark_syntax::syntax::{AstModule, Dialect};
 
 use super::PackageParser;
+
+type StarlarkCallArgs = ast::CallArgsP<ast::AstNoPayload>;
+
+struct StarlarkCall<'a> {
+    func: &'a ast::AstExpr,
+    args: &'a StarlarkCallArgs,
+}
 
 pub struct BazelBuildParser;
 
@@ -53,14 +62,12 @@ impl PackageParser for BazelBuildParser {
 fn parse_bazel_build(path: &Path) -> Result<Vec<PackageData>, String> {
     let content =
         std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
-
-    let module = ast::Suite::parse(&content, "<BUILD>")
-        .map_err(|e| format!("Failed to parse Starlark: {}", e))?;
+    let module = parse_starlark_module("<BUILD>", content)?;
 
     let mut packages = Vec::new();
 
-    for statement in &module {
-        if let Some(package_data) = extract_from_statement(statement) {
+    for statement in top_level_statements(&module) {
+        if let Some(package_data) = extract_package_from_statement(statement) {
             packages.push(package_data);
         }
     }
@@ -69,79 +76,21 @@ fn parse_bazel_build(path: &Path) -> Result<Vec<PackageData>, String> {
 }
 
 /// Extract package data from a single AST statement
-fn extract_from_statement(statement: &ast::Stmt) -> Option<PackageData> {
-    match statement {
-        // Direct function call: cc_binary(name="foo", ...)
-        ast::Stmt::Expr(ast::StmtExpr { value, .. }) => {
-            if let ast::Expr::Call(call) = value.as_ref() {
-                return extract_from_call(call);
-            }
-        }
-        // Assignment to function call: x = cc_binary(name="foo", ...)
-        ast::Stmt::Assign(ast::StmtAssign { value, .. }) => {
-            if let ast::Expr::Call(call) = value.as_ref() {
-                return extract_from_call(call);
-            }
-        }
-        _ => {}
-    }
-    None
-}
+fn extract_package_from_statement(statement: &ast::AstStmt) -> Option<PackageData> {
+    let call = extract_call(statement)?;
+    let rule_name = extract_call_name(&call)?;
 
-/// Extract package data from a function call
-fn extract_from_call(call: &ast::ExprCall) -> Option<PackageData> {
-    // Get the function name
-    let rule_name = match call.func.as_ref() {
-        ast::Expr::Name(ast::ExprName { id, .. }) => id.as_str(),
-        _ => return None,
-    };
-
-    // Check if rule name ends with "binary" or "library"
     if !check_rule_name_ending(rule_name) {
         return None;
     }
 
-    // Extract arguments
-    let mut name: Option<String> = None;
-    let mut licenses: Option<Vec<String>> = None;
-
-    for keyword in &call.keywords {
-        let arg_name = keyword.arg.as_ref()?.as_str();
-
-        match arg_name {
-            "name" => {
-                if let ast::Expr::Constant(ast::ExprConstant { value, .. }) = &keyword.value
-                    && let ast::Constant::Str(s) = value
-                {
-                    name = Some(s.clone());
-                }
-            }
-            "licenses" => {
-                if let ast::Expr::List(ast::ExprList { elts, .. }) = &keyword.value {
-                    let mut license_list = Vec::new();
-                    for elt in elts {
-                        if let ast::Expr::Constant(ast::ExprConstant { value, .. }) = elt
-                            && let ast::Constant::Str(s) = value
-                        {
-                            license_list.push(s.clone());
-                        }
-                    }
-                    if !license_list.is_empty() {
-                        licenses = Some(license_list);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    // Must have a name to create a package
-    let package_name = name?;
+    let name = extract_string_kwarg(&call, "name")?;
+    let licenses = extract_string_list_kwarg(&call, "licenses");
 
     Some(PackageData {
         package_type: Some(BazelBuildParser::PACKAGE_TYPE),
-        name: Some(package_name),
-        extracted_license_statement: licenses.map(|l| l.join(", ")),
+        name: Some(name),
+        extracted_license_statement: licenses.map(|licenses| licenses.join(", ")),
         datasource_id: Some(DatasourceId::BazelBuild),
         ..Default::default()
     })
@@ -236,47 +185,47 @@ impl PackageParser for BazelModuleParser {
 fn parse_bazel_module(path: &Path) -> Result<PackageData, String> {
     let content =
         std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
-    let module = ast::Suite::parse(&content, "<MODULE.bazel>")
-        .map_err(|e| format!("Failed to parse Starlark: {}", e))?;
+    let module = parse_starlark_module("<MODULE.bazel>", content)?;
 
     let mut package = default_bazel_module_package_data();
     let mut extra_data = JsonMap::new();
     let mut dependencies = Vec::new();
     let mut overrides = Vec::new();
 
-    for statement in &module {
+    for statement in top_level_statements(&module) {
         let Some(call) = extract_call(statement) else {
             continue;
         };
 
-        let Some(function_name) = extract_call_name(call) else {
+        let Some(function_name) = extract_call_name(&call) else {
             continue;
         };
 
         match function_name {
             "module" => {
-                package.name = extract_string_kwarg(call, "name");
-                package.version = extract_string_kwarg(call, "version");
+                package.name = extract_string_kwarg(&call, "name");
+                package.version = extract_string_kwarg(&call, "version");
                 package.purl = package
                     .name
                     .as_deref()
                     .and_then(|name| build_bazel_purl(name, package.version.as_deref()));
 
-                if let Some(repo_name) = extract_string_kwarg(call, "repo_name") {
+                if let Some(repo_name) = extract_string_kwarg(&call, "repo_name") {
                     extra_data.insert("repo_name".to_string(), JsonValue::String(repo_name));
                 }
-                if let Some(compatibility_level) = extract_int_kwarg(call, "compatibility_level") {
+                if let Some(compatibility_level) = extract_int_kwarg(&call, "compatibility_level") {
                     extra_data.insert(
                         "compatibility_level".to_string(),
                         JsonValue::Number(compatibility_level.into()),
                     );
                 }
-                if let Some(bazel_compatibility) = extract_kwarg_json(call, "bazel_compatibility") {
+                if let Some(bazel_compatibility) = extract_kwarg_json(&call, "bazel_compatibility")
+                {
                     extra_data.insert("bazel_compatibility".to_string(), bazel_compatibility);
                 }
             }
             "bazel_dep" => {
-                if let Some(dep) = extract_bazel_dependency(call) {
+                if let Some(dep) = extract_bazel_dependency(&call) {
                     dependencies.push(dep);
                 }
             }
@@ -285,7 +234,7 @@ fn parse_bazel_module(path: &Path) -> Result<PackageData, String> {
             | "local_path_override"
             | "single_version_override"
             | "multiple_version_override" => {
-                overrides.push(extract_override(function_name, call));
+                overrides.push(extract_override(function_name, &call));
             }
             _ => {}
         }
@@ -304,92 +253,80 @@ fn parse_bazel_module(path: &Path) -> Result<PackageData, String> {
     Ok(package)
 }
 
-fn extract_call(statement: &ast::Stmt) -> Option<&ast::ExprCall> {
-    match statement {
-        ast::Stmt::Expr(ast::StmtExpr { value, .. }) => {
-            if let ast::Expr::Call(call) = value.as_ref() {
-                Some(call)
-            } else {
-                None
-            }
-        }
-        ast::Stmt::Assign(ast::StmtAssign { value, .. }) => {
-            if let ast::Expr::Call(call) = value.as_ref() {
-                Some(call)
-            } else {
-                None
-            }
-        }
+fn parse_starlark_module(filename: &str, content: String) -> Result<AstModule, String> {
+    let dialect = Dialect {
+        enable_top_level_stmt: true,
+        ..Dialect::Standard
+    };
+    AstModule::parse(filename, content, &dialect).map_err(|error| error.to_string())
+}
+
+fn top_level_statements(module: &AstModule) -> &[ast::AstStmt] {
+    match &module.statement().node {
+        ast::StmtP::Statements(statements) => statements,
+        _ => std::slice::from_ref(module.statement()),
+    }
+}
+
+fn extract_call(statement: &ast::AstStmt) -> Option<StarlarkCall<'_>> {
+    match &statement.node {
+        ast::StmtP::Expression(expr) => extract_call_expr(expr),
+        ast::StmtP::Assign(assign) => extract_call_expr(&assign.rhs),
         _ => None,
     }
 }
 
-fn extract_call_name(call: &ast::ExprCall) -> Option<&str> {
-    match call.func.as_ref() {
-        ast::Expr::Name(ast::ExprName { id, .. }) => Some(id.as_str()),
+fn extract_call_expr(expr: &ast::AstExpr) -> Option<StarlarkCall<'_>> {
+    match &expr.node {
+        ast::ExprP::Call(func, args) => Some(StarlarkCall { func, args }),
         _ => None,
     }
 }
 
-fn extract_string_kwarg(call: &ast::ExprCall, key: &str) -> Option<String> {
-    call.keywords.iter().find_map(|keyword| {
-        let arg_name = keyword.arg.as_ref()?.as_str();
-        if arg_name != key {
-            return None;
-        }
-        match &keyword.value {
-            ast::Expr::Constant(ast::ExprConstant {
-                value: ast::Constant::Str(value),
-                ..
-            }) => Some(value.clone()),
+fn extract_call_name<'a>(call: &'a StarlarkCall<'_>) -> Option<&'a str> {
+    match &call.func.node {
+        ast::ExprP::Identifier(identifier) => Some(identifier.node.ident.as_str()),
+        _ => None,
+    }
+}
+
+fn extract_named_kwarg<'a>(call: &'a StarlarkCall<'_>, key: &str) -> Option<&'a ast::AstExpr> {
+    call.args
+        .args
+        .iter()
+        .find_map(|argument| match &argument.node {
+            ast::ArgumentP::Named(name, value) if name.node == key => Some(value),
             _ => None,
-        }
-    })
+        })
 }
 
-fn extract_bool_kwarg(call: &ast::ExprCall, key: &str) -> Option<bool> {
-    call.keywords.iter().find_map(|keyword| {
-        let arg_name = keyword.arg.as_ref()?.as_str();
-        if arg_name != key {
-            return None;
-        }
-        match &keyword.value {
-            ast::Expr::Constant(ast::ExprConstant {
-                value: ast::Constant::Bool(value),
-                ..
-            }) => Some(*value),
-            _ => None,
-        }
-    })
+fn extract_string_kwarg(call: &StarlarkCall<'_>, key: &str) -> Option<String> {
+    extract_named_kwarg(call, key).and_then(expr_as_string)
 }
 
-fn extract_int_kwarg(call: &ast::ExprCall, key: &str) -> Option<i64> {
-    call.keywords.iter().find_map(|keyword| {
-        let arg_name = keyword.arg.as_ref()?.as_str();
-        if arg_name != key {
-            return None;
-        }
-        match &keyword.value {
-            ast::Expr::Constant(ast::ExprConstant {
-                value: ast::Constant::Int(value),
-                ..
-            }) => value.to_string().parse::<i64>().ok(),
-            _ => None,
-        }
-    })
+fn extract_string_list_kwarg(call: &StarlarkCall<'_>, key: &str) -> Option<Vec<String>> {
+    let expr = extract_named_kwarg(call, key)?;
+    let items = match &expr.node {
+        ast::ExprP::List(items) | ast::ExprP::Tuple(items) => items,
+        _ => return None,
+    };
+    let values: Vec<_> = items.iter().filter_map(expr_as_string).collect();
+    (!values.is_empty()).then_some(values)
 }
 
-fn extract_kwarg_json(call: &ast::ExprCall, key: &str) -> Option<JsonValue> {
-    call.keywords.iter().find_map(|keyword| {
-        let arg_name = keyword.arg.as_ref()?.as_str();
-        if arg_name != key {
-            return None;
-        }
-        expr_to_json(&keyword.value)
-    })
+fn extract_bool_kwarg(call: &StarlarkCall<'_>, key: &str) -> Option<bool> {
+    extract_named_kwarg(call, key).and_then(expr_as_bool)
 }
 
-fn extract_bazel_dependency(call: &ast::ExprCall) -> Option<Dependency> {
+fn extract_int_kwarg(call: &StarlarkCall<'_>, key: &str) -> Option<i64> {
+    extract_named_kwarg(call, key).and_then(expr_as_i64)
+}
+
+fn extract_kwarg_json(call: &StarlarkCall<'_>, key: &str) -> Option<JsonValue> {
+    extract_named_kwarg(call, key).and_then(expr_to_json)
+}
+
+fn extract_bazel_dependency(call: &StarlarkCall<'_>) -> Option<Dependency> {
     let name = extract_string_kwarg(call, "name")?;
     let version = extract_string_kwarg(call, "version");
     let is_dev = extract_bool_kwarg(call, "dev_dependency").unwrap_or(false);
@@ -414,49 +351,76 @@ fn extract_bazel_dependency(call: &ast::ExprCall) -> Option<Dependency> {
     })
 }
 
-fn extract_override(kind: &str, call: &ast::ExprCall) -> JsonValue {
+fn extract_override(kind: &str, call: &StarlarkCall<'_>) -> JsonValue {
     let mut override_map = JsonMap::new();
     override_map.insert("kind".to_string(), JsonValue::String(kind.to_string()));
-    for keyword in &call.keywords {
-        if let Some(arg_name) = keyword.arg.as_ref().map(|arg| arg.to_string())
-            && let Some(value) = expr_to_json(&keyword.value)
+    for argument in &call.args.args {
+        if let ast::ArgumentP::Named(name, value) = &argument.node
+            && let Some(value) = expr_to_json(value)
         {
-            override_map.insert(arg_name, value);
+            override_map.insert(name.node.clone(), value);
         }
     }
     JsonValue::Object(override_map)
 }
 
-fn expr_to_json(expr: &ast::Expr) -> Option<JsonValue> {
-    match expr {
-        ast::Expr::Constant(ast::ExprConstant { value, .. }) => match value {
-            ast::Constant::Str(value) => Some(JsonValue::String(value.clone())),
-            ast::Constant::Bool(value) => Some(JsonValue::Bool(*value)),
-            ast::Constant::Int(value) => value
-                .to_string()
-                .parse::<i64>()
-                .ok()
-                .map(|value| JsonValue::Number(value.into()))
-                .or_else(|| Some(JsonValue::String(value.to_string()))),
-            ast::Constant::None => Some(JsonValue::Null),
+fn expr_as_string(expr: &ast::AstExpr) -> Option<String> {
+    match &expr.node {
+        ast::ExprP::Literal(ast::AstLiteral::String(value)) => Some(value.node.clone()),
+        _ => None,
+    }
+}
+
+fn expr_as_bool(expr: &ast::AstExpr) -> Option<bool> {
+    match &expr.node {
+        ast::ExprP::Identifier(identifier) => match identifier.node.ident.as_str() {
+            "True" => Some(true),
+            "False" => Some(false),
             _ => None,
         },
-        ast::Expr::List(ast::ExprList { elts, .. })
-        | ast::Expr::Tuple(ast::ExprTuple { elts, .. }) => Some(JsonValue::Array(
+        _ => None,
+    }
+}
+
+fn expr_as_i64(expr: &ast::AstExpr) -> Option<i64> {
+    match &expr.node {
+        ast::ExprP::Literal(ast::AstLiteral::Int(value)) => value.node.to_string().parse().ok(),
+        _ => None,
+    }
+}
+
+fn expr_to_json(expr: &ast::AstExpr) -> Option<JsonValue> {
+    match &expr.node {
+        ast::ExprP::Literal(ast::AstLiteral::String(value)) => {
+            Some(JsonValue::String(value.node.clone()))
+        }
+        ast::ExprP::Literal(ast::AstLiteral::Int(value)) => value
+            .node
+            .to_string()
+            .parse::<i64>()
+            .ok()
+            .map(|value| JsonValue::Number(value.into()))
+            .or_else(|| Some(JsonValue::String(value.node.to_string()))),
+        ast::ExprP::Literal(ast::AstLiteral::Float(value)) => {
+            serde_json::Number::from_f64(value.node).map(JsonValue::Number)
+        }
+        ast::ExprP::Identifier(identifier) => match identifier.node.ident.as_str() {
+            "True" => Some(JsonValue::Bool(true)),
+            "False" => Some(JsonValue::Bool(false)),
+            "None" => Some(JsonValue::Null),
+            _ => None,
+        },
+        ast::ExprP::List(elts) | ast::ExprP::Tuple(elts) => Some(JsonValue::Array(
             elts.iter().filter_map(expr_to_json).collect(),
         )),
-        ast::Expr::Dict(ast::ExprDict { keys, values, .. }) => {
+        ast::ExprP::Dict(items) => {
             let mut map = JsonMap::new();
-            for (key, value) in keys.iter().zip(values.iter()) {
-                let Some(ast::Expr::Constant(ast::ExprConstant {
-                    value: ast::Constant::Str(key),
-                    ..
-                })) = key
-                else {
+            for (key, value) in items {
+                let Some(key) = expr_as_string(key) else {
                     continue;
                 };
                 if let Some(value) = expr_to_json(value) {
-                    map.insert(key.clone(), value);
+                    map.insert(key, value);
                 }
             }
             Some(JsonValue::Object(map))

@@ -69,7 +69,6 @@ lazy_static = { workspace = true }
 liblzma = "0.4.6"
 log = "0.4.29"
 regex = { workspace = true }
-rustpython-parser = "0.4.0"
 unicode-normalization = "0.1.25"
 base64 = "0.22.1"
 chrono = "0.4.44"
@@ -124,6 +123,9 @@ daachorse = "1.0.0"
 smallvec = { version = "1.15.1", features = ["write"] }
 yaml_serde = "0.10.4"
 os_info = "3.14.0"
+starlark_syntax = "0.13.0"
+ruff_python_ast = { git = "https://github.com/astral-sh/ruff", tag = "0.15.8", version = "0.0.0" }
+ruff_python_parser = { git = "https://github.com/astral-sh/ruff", tag = "0.15.8", version = "0.0.0" }
 
 [dev-dependencies]
 

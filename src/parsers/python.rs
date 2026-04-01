@@ -42,7 +42,8 @@ use flate2::read::GzDecoder;
 use liblzma::read::XzDecoder;
 use packageurl::PackageUrl;
 use regex::Regex;
-use rustpython_parser::{Parse, ast};
+use ruff_python_ast as ast;
+use ruff_python_parser::parse_module;
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
@@ -2551,7 +2552,16 @@ impl LiteralEvaluator {
         self.nodes_visited += 1;
 
         match expr {
-            ast::Expr::Constant(ast::ExprConstant { value, .. }) => self.evaluate_constant(value),
+            ast::Expr::StringLiteral(ast::ExprStringLiteral { value, .. }) => {
+                Some(Value::String(value.to_str().to_string()))
+            }
+            ast::Expr::BooleanLiteral(ast::ExprBooleanLiteral { value, .. }) => {
+                Some(Value::Bool(*value))
+            }
+            ast::Expr::NumberLiteral(ast::ExprNumberLiteral { value, .. }) => {
+                self.evaluate_number(value)
+            }
+            ast::Expr::NoneLiteral(_) => Some(Value::None),
             ast::Expr::Name(ast::ExprName { id, .. }) => self.constants.get(id.as_str()).cloned(),
             ast::Expr::List(ast::ExprList { elts, .. }) => {
                 let mut values = Vec::new();
@@ -2567,23 +2577,22 @@ impl LiteralEvaluator {
                 }
                 Some(Value::Tuple(values))
             }
-            ast::Expr::Dict(ast::ExprDict { keys, values, .. }) => {
+            ast::Expr::Dict(ast::ExprDict { items, .. }) => {
                 let mut dict = HashMap::new();
-                for (key_expr, value_expr) in keys.iter().zip(values.iter()) {
-                    let key_expr = key_expr.as_ref()?;
+                for item in items {
+                    let key_expr = item.key.as_ref()?;
                     let key_value = self.evaluate_expr(key_expr, depth + 1)?;
                     let key = value_to_string(&key_value)?;
-                    let value = self.evaluate_expr(value_expr, depth + 1)?;
+                    let value = self.evaluate_expr(&item.value, depth + 1)?;
                     dict.insert(key, value);
                 }
                 Some(Value::Dict(dict))
             }
             ast::Expr::Call(ast::ExprCall {
-                func,
-                args,
-                keywords,
-                ..
+                func, arguments, ..
             }) => {
+                let args = arguments.args.as_ref();
+                let keywords = arguments.keywords.as_ref();
                 if keywords.is_empty()
                     && let Some(name) = dotted_name(func.as_ref(), depth + 1)
                     && matches!(name.as_str(), "OrderedDict" | "collections.OrderedDict")
@@ -2600,7 +2609,7 @@ impl LiteralEvaluator {
                 {
                     let mut dict = HashMap::new();
                     for keyword in keywords {
-                        let key = keyword.arg.as_ref().map(|name| name.as_str())?;
+                        let key = keyword.arg.as_ref().map(ast::Identifier::as_str)?;
                         let value = self.evaluate_expr(&keyword.value, depth + 1)?;
                         dict.insert(key.to_string(), value);
                     }
@@ -2613,14 +2622,11 @@ impl LiteralEvaluator {
         }
     }
 
-    fn evaluate_constant(&self, constant: &ast::Constant) -> Option<Value> {
-        match constant {
-            ast::Constant::Str(value) => Some(Value::String(value.clone())),
-            ast::Constant::Bool(value) => Some(Value::Bool(*value)),
-            ast::Constant::Int(value) => value.to_string().parse::<f64>().ok().map(Value::Number),
-            ast::Constant::Float(value) => Some(Value::Number(*value)),
-            ast::Constant::None => Some(Value::None),
-            _ => None,
+    fn evaluate_number(&self, number: &ast::Number) -> Option<Value> {
+        match number {
+            ast::Number::Int(value) => value.to_string().parse::<f64>().ok().map(Value::Number),
+            ast::Number::Float(value) => Some(Value::Number(*value)),
+            ast::Number::Complex { .. } => None,
         }
     }
 
@@ -2751,8 +2757,8 @@ struct DunderMetadata {
 }
 
 fn collect_sibling_dunder_metadata(root: &Path, content: &str) -> DunderMetadata {
-    let statements = match ast::Suite::parse(content, "<setup.py>") {
-        Ok(statements) => statements,
+    let statements = match parse_module(content) {
+        Ok(parsed) => parsed.into_suite(),
         Err(_) => return DunderMetadata::default(),
     };
 
@@ -2853,7 +2859,9 @@ fn resolve_imported_module_path(root: &Path, module: &str) -> Option<PathBuf> {
 ///
 /// These limits prevent stack overflow and infinite loops on malformed/malicious inputs.
 fn extract_from_setup_py_ast(content: &str) -> Result<Option<PackageData>, String> {
-    let statements = ast::Suite::parse(content, "<setup.py>").map_err(|e| format!("{}", e))?;
+    let statements = parse_module(content)
+        .map(|parsed| parsed.into_suite())
+        .map_err(|e| e.to_string())?;
     let aliases = collect_setup_aliases(&statements);
     let mut evaluator = LiteralEvaluator::new(HashMap::new());
     build_setup_py_constants(&statements, &mut evaluator);
@@ -2971,22 +2979,24 @@ impl<'a> SetupCallFinder<'a> {
             let found = match stmt {
                 ast::Stmt::Expr(ast::StmtExpr { value, .. }) => self.visit_expr(value.as_ref()),
                 ast::Stmt::Assign(ast::StmtAssign { value, .. }) => self.visit_expr(value.as_ref()),
-                ast::Stmt::If(ast::StmtIf { body, orelse, .. }) => self
-                    .find_in_statements(body)
-                    .or_else(|| self.find_in_statements(orelse)),
+                ast::Stmt::If(ast::StmtIf {
+                    body,
+                    elif_else_clauses,
+                    ..
+                }) => self.find_in_statements(body).or_else(|| {
+                    for clause in elif_else_clauses {
+                        if let Some(found) = self.find_in_statements(&clause.body) {
+                            return Some(found);
+                        }
+                    }
+                    None
+                }),
                 ast::Stmt::For(ast::StmtFor { body, orelse, .. })
                 | ast::Stmt::While(ast::StmtWhile { body, orelse, .. }) => self
                     .find_in_statements(body)
                     .or_else(|| self.find_in_statements(orelse)),
                 ast::Stmt::With(ast::StmtWith { body, .. }) => self.find_in_statements(body),
                 ast::Stmt::Try(ast::StmtTry {
-                    body,
-                    orelse,
-                    finalbody,
-                    handlers,
-                    ..
-                })
-                | ast::Stmt::TryStar(ast::StmtTryStar {
                     body,
                     orelse,
                     finalbody,
@@ -3088,12 +3098,12 @@ fn extract_setup_keywords(
     evaluator: &mut LiteralEvaluator,
 ) -> HashMap<String, Value> {
     let mut values = HashMap::new();
-    let ast::Expr::Call(ast::ExprCall { keywords, .. }) = call_expr else {
+    let ast::Expr::Call(ast::ExprCall { arguments, .. }) = call_expr else {
         return values;
     };
 
-    for keyword in keywords {
-        if let Some(arg) = keyword.arg.as_ref().map(|name| name.as_str()) {
+    for keyword in arguments.keywords.iter() {
+        if let Some(arg) = keyword.arg.as_ref().map(ast::Identifier::as_str) {
             if let Some(value) = evaluator.evaluate_expr(&keyword.value, 0) {
                 values.insert(arg.to_string(), value);
             }
