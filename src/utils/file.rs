@@ -1188,6 +1188,10 @@ fn extract_first_pdf_page_text(
     let extracted_text = document.extract_text(0)?;
     let markdown_text =
         document.to_markdown(0, &pdf_oxide::converters::ConversionOptions::default())?;
+    if pdf_markdown_heading_lines(&markdown_text).is_empty() {
+        return Ok(extracted_text);
+    }
+
     let pipeline_text =
         document.to_plain_text(0, &pdf_oxide::converters::ConversionOptions::default())?;
 
@@ -1210,16 +1214,16 @@ fn normalize_pdf_text(text: String) -> Option<String> {
 }
 
 fn merge_pdf_first_page_text(
-    extracted_text: &str,
+    _extracted_text: &str,
     markdown_text: &str,
     pipeline_text: &str,
 ) -> String {
     let pipeline = pipeline_text.trim();
     if pipeline.is_empty() {
-        return extracted_text.to_string();
+        return String::new();
     }
 
-    let prefix = pdf_first_page_heading_prefix(extracted_text, markdown_text);
+    let prefix = pdf_first_page_heading_prefix(markdown_text);
     let Some(prefix) = prefix else {
         return pipeline_text.to_string();
     };
@@ -1231,36 +1235,14 @@ fn merge_pdf_first_page_text(
     }
 }
 
-fn pdf_first_page_heading_prefix(extracted_text: &str, markdown_text: &str) -> Option<String> {
+fn pdf_first_page_heading_prefix(markdown_text: &str) -> Option<String> {
     let mut lines = Vec::new();
-
-    for line in pdf_extracted_heading_lines(extracted_text) {
-        push_unique_line(&mut lines, line);
-    }
 
     for line in pdf_markdown_heading_lines(markdown_text) {
         push_unique_line(&mut lines, line);
     }
 
     (!lines.is_empty()).then(|| lines.join("\n"))
-}
-
-fn pdf_extracted_heading_lines(text: &str) -> Vec<String> {
-    let mut lines = Vec::new();
-
-    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
-        if !lines.is_empty() && looks_like_numbered_section_heading(line) {
-            break;
-        }
-
-        lines.push(line.to_string());
-
-        if lines.len() >= 4 {
-            break;
-        }
-    }
-
-    lines
 }
 
 fn pdf_markdown_heading_lines(text: &str) -> Vec<String> {
