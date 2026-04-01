@@ -1,16 +1,9 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use content_inspector::{ContentType, inspect};
 use file_identify::tags_from_filename;
 
-fn is_utf8_text(content_type: ContentType) -> bool {
-    content_type == ContentType::UTF_8 || content_type == ContentType::UTF_8_BOM
-}
-
 pub fn detect_language(path: &Path, content: &[u8]) -> Option<String> {
-    let inspected = inspect(content);
-
     if let Some(language) = detect_shebang_language(content) {
         return Some(language);
     }
@@ -27,30 +20,33 @@ pub fn detect_language(path: &Path, content: &[u8]) -> Option<String> {
         return Some(language);
     }
 
-    if is_utf8_text(inspected) {
-        let text_sample = String::from_utf8_lossy(&content[..std::cmp::min(content.len(), 1000)]);
+    detect_content_hint_language(content)
+}
 
-        if text_sample.contains("<?php") {
-            return Some("PHP".to_string());
-        } else if text_sample.contains("<html") || text_sample.contains("<!DOCTYPE html") {
-            return Some("HTML".to_string());
-        } else if text_sample.contains("plugins {")
-            || (text_sample.contains("dependencies {") && text_sample.contains("repositories {"))
-        {
-            return Some("Groovy".to_string());
-        } else if text_sample.contains("import React") || text_sample.contains("import {") {
-            return Some("JavaScript/TypeScript".to_string());
-        } else if text_sample.contains("def ") && text_sample.contains(':') {
-            return Some("Python".to_string());
-        } else if text_sample.contains("package ")
-            && text_sample.contains("import ")
-            && text_sample.contains('{')
-        {
-            return Some("Go".to_string());
-        }
+fn detect_content_hint_language(content: &[u8]) -> Option<String> {
+    let sample_end = std::cmp::min(content.len(), 1000);
+    let text_sample = std::str::from_utf8(&content[..sample_end]).ok()?;
+
+    if text_sample.contains("<?php") {
+        Some("PHP".to_string())
+    } else if text_sample.contains("<html") || text_sample.contains("<!DOCTYPE html") {
+        Some("HTML".to_string())
+    } else if text_sample.contains("plugins {")
+        || (text_sample.contains("dependencies {") && text_sample.contains("repositories {"))
+    {
+        Some("Groovy".to_string())
+    } else if text_sample.contains("import React") || text_sample.contains("import {") {
+        Some("JavaScript/TypeScript".to_string())
+    } else if text_sample.contains("def ") && text_sample.contains(':') {
+        Some("Python".to_string())
+    } else if text_sample.contains("package ")
+        && text_sample.contains("import ")
+        && text_sample.contains('{')
+    {
+        Some("Go".to_string())
+    } else {
+        None
     }
-
-    None
 }
 
 fn detect_shebang_language(content: &[u8]) -> Option<String> {
@@ -403,6 +399,28 @@ mod tests {
         assert_eq!(
             detect_language(Path::new("script.py"), latin1_python),
             Some("Python".to_string())
+        );
+    }
+
+    #[test]
+    fn detect_language_uses_utf8_content_hints_for_extensionless_files() {
+        assert_eq!(
+            detect_language(
+                Path::new("index"),
+                b"<!DOCTYPE html><html><body></body></html>"
+            ),
+            Some("HTML".to_string())
+        );
+    }
+
+    #[test]
+    fn detect_language_does_not_use_content_hints_for_invalid_utf8() {
+        assert_eq!(
+            detect_language(
+                Path::new("index"),
+                &[0xff, b'<', b'h', b't', b'm', b'l', b'>']
+            ),
+            None
         );
     }
 }

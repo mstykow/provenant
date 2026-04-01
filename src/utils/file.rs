@@ -5,7 +5,6 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 
 use chrono::{TimeZone, Utc};
-use content_inspector::{ContentType, inspect};
 use file_format::{FileFormat, Kind as FileFormatKind};
 use flate2::read::ZlibDecoder;
 use glob::Pattern;
@@ -100,12 +99,7 @@ pub fn decode_bytes_to_string(bytes: &[u8]) -> String {
         Ok(s) => s,
         Err(e) => {
             let bytes = e.into_bytes();
-            // Binary heuristic: >10% control chars (0x00-0x08, 0x0E-0x1F) means binary.
-            let control_count = bytes
-                .iter()
-                .filter(|&&b| b < 0x09 || (b > 0x0D && b < 0x20))
-                .count();
-            if control_count > bytes.len() / 10 {
+            if has_binary_control_chars(&bytes) {
                 return String::new();
             }
             bytes.iter().map(|&b| b as char).collect()
@@ -205,6 +199,54 @@ fn detect_file_format(bytes: &[u8]) -> FileFormat {
     FileFormat::from_reader(Cursor::new(bytes)).unwrap_or(FileFormat::ArbitraryBinaryData)
 }
 
+fn is_utf8_text(bytes: &[u8]) -> bool {
+    std::str::from_utf8(bytes).is_ok()
+}
+
+fn has_binary_control_chars(bytes: &[u8]) -> bool {
+    let control_count = bytes
+        .iter()
+        .filter(|&&b| b < 0x09 || (b > 0x0D && b < 0x20))
+        .count();
+    control_count > bytes.len() / 10
+}
+
+fn has_decodable_text(bytes: &[u8]) -> bool {
+    bytes.is_empty() || is_utf8_text(bytes) || !has_binary_control_chars(bytes)
+}
+
+fn looks_like_textual_bytes(bytes: &[u8]) -> bool {
+    if bytes.is_empty() || is_utf8_text(bytes) {
+        return true;
+    }
+
+    let printable_count = bytes
+        .iter()
+        .filter(|&&b| matches!(b, b'\n' | b'\r' | b'\t') || (0x20..=0x7e).contains(&b))
+        .count();
+    printable_count * 2 >= bytes.len()
+}
+
+fn is_textual_media_type(media_type: &str) -> bool {
+    media_type.starts_with("text/")
+        || matches!(
+            media_type,
+            "application/json" | "application/xml" | "text/xml"
+        )
+        || media_type.ends_with("+json")
+        || media_type.ends_with("+xml")
+}
+
+fn is_textual_format(detected_format: FileFormat) -> bool {
+    matches!(detected_format, FileFormat::Empty | FileFormat::PlainText)
+        || is_textual_media_type(detected_format.media_type())
+}
+
+fn is_known_binary_format(detected_format: FileFormat) -> bool {
+    !matches!(detected_format, FileFormat::ArbitraryBinaryData)
+        && !is_textual_format(detected_format)
+}
+
 pub fn detect_mime_type(
     path: &Path,
     bytes: &[u8],
@@ -256,10 +298,6 @@ pub fn detect_mime_type(
     normalize_mime_type(path, bytes, programming_language, &mime_type)
 }
 
-fn is_utf8_text(content_type: ContentType) -> bool {
-    matches!(content_type, ContentType::UTF_8 | ContentType::UTF_8_BOM)
-}
-
 fn normalize_mime_type(
     path: &Path,
     bytes: &[u8],
@@ -279,7 +317,8 @@ fn should_prefer_text_mime(
     programming_language: Option<&str>,
     mime_type: &str,
 ) -> bool {
-    (is_utf8_text(inspect(bytes)) || !decode_bytes_to_string(bytes).is_empty())
+    has_decodable_text(bytes)
+        && looks_like_textual_bytes(bytes)
         && is_textual_source_candidate(path, programming_language)
         && (mime_type.starts_with("video/") || mime_type == "application/octet-stream")
 }
@@ -290,16 +329,25 @@ fn detect_is_binary(
     detected_format: FileFormat,
     programming_language: Option<&str>,
 ) -> bool {
-    if matches!(detected_format, FileFormat::Empty | FileFormat::PlainText) {
+    if is_textual_format(detected_format) {
         return false;
     }
 
-    lower_extension(path)
+    if lower_extension(path)
         .as_deref()
         .is_some_and(|ext| BINARY_EXTENSIONS.contains(&ext))
-        || (!bytes.is_empty()
-            && matches!(inspect(bytes), ContentType::BINARY)
-            && !should_treat_binary_bytes_as_text(path, bytes, programming_language))
+    {
+        return true;
+    }
+
+    if should_treat_binary_bytes_as_text(path, bytes, programming_language) {
+        return false;
+    }
+
+    has_binary_control_chars(bytes)
+        || is_known_binary_format(detected_format)
+        || (matches!(detected_format, FileFormat::ArbitraryBinaryData)
+            && !looks_like_textual_bytes(bytes))
 }
 
 fn should_treat_binary_bytes_as_text(
@@ -307,7 +355,8 @@ fn should_treat_binary_bytes_as_text(
     bytes: &[u8],
     programming_language: Option<&str>,
 ) -> bool {
-    !decode_bytes_to_string(bytes).is_empty()
+    has_decodable_text(bytes)
+        && looks_like_textual_bytes(bytes)
         && (bytes.starts_with(b"#!") || is_textual_source_candidate(path, programming_language))
 }
 
@@ -359,7 +408,7 @@ fn detect_is_media(
         || mime_type.starts_with("video/")
         || (mime_type == "application/octet-stream"
             && lower_extension(path).as_deref() == Some("tga")
-            && !matches!(inspect(bytes), ContentType::BINARY))
+            && !has_binary_control_chars(bytes))
 }
 
 fn detect_is_script(
@@ -869,6 +918,10 @@ fn should_skip_binary_string_extraction(
     matches!(lower_extension(path).as_deref(), Some("pdf"))
         || supported_image_metadata_format(lower_extension(path).as_deref(), detected_format)
             .is_some()
+        || (matches!(
+            detected_format.kind(),
+            FileFormatKind::Audio | FileFormatKind::Image | FileFormatKind::Video
+        ) && !is_textual_format(detected_format))
         || media_mime_from_content(bytes).is_some()
         || is_zip_archive(bytes)
         || looks_like_gzip(bytes)
@@ -1569,6 +1622,20 @@ mod tests {
     }
 
     #[test]
+    fn test_classify_file_info_marks_pdf_as_binary_document() {
+        let pdf_bytes = b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\n";
+
+        let classification = classify_file_info(Path::new("report.pdf"), pdf_bytes);
+
+        assert_eq!(classification.mime_type, "application/pdf");
+        assert_eq!(classification.file_type, "PDF document");
+        assert!(classification.is_binary);
+        assert!(!classification.is_text);
+        assert!(!classification.is_archive);
+        assert!(!classification.is_media);
+    }
+
+    #[test]
     fn test_classify_file_info_marks_binary_blobs_as_binary() {
         let classification =
             classify_file_info(Path::new("blob.bin"), &[0, 159, 146, 150, 0, 1, 2, 3, 4, 5]);
@@ -1643,6 +1710,36 @@ mod tests {
         );
         assert!(classification.is_script);
         assert_eq!(classification.file_type, "python script, text executable");
+    }
+
+    #[test]
+    fn test_classify_file_info_treats_textual_tga_as_media() {
+        let classification = classify_file_info(Path::new("texture.tga"), b"not really a tga\n");
+
+        assert!(classification.is_media);
+        assert!(classification.is_text);
+        assert!(!classification.is_binary);
+    }
+
+    #[test]
+    fn test_classify_file_info_keeps_binaryish_source_extension_out_of_text_path() {
+        let classification =
+            classify_file_info(Path::new("main.ts"), &[0x80, 0x81, 0x82, 0x83, 0x84, 0x85]);
+
+        assert!(classification.is_binary);
+        assert!(!classification.is_text);
+        assert!(!classification.is_source);
+        assert_eq!(classification.programming_language, None);
+    }
+
+    #[test]
+    fn test_extract_text_for_detection_skips_unsupported_image_formats() {
+        let gif_bytes = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;";
+
+        let (text, kind) = extract_text_for_detection(Path::new("tiny.gif"), gif_bytes);
+
+        assert!(text.is_empty());
+        assert_eq!(kind, ExtractedTextKind::None);
     }
 
     #[test]
