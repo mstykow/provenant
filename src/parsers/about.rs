@@ -15,7 +15,7 @@
 //! - Flexible field mapping (home_url/homepage_url)
 //!
 //! # Implementation Notes
-//! - Uses serde_yaml for YAML parsing
+//! - Uses yaml_serde for YAML parsing
 //! - Uses packageurl crate for purl parsing
 //! - Extension is case-sensitive and must be uppercase (.ABOUT not .about)
 //! - Type can be overridden by 'type' field or extracted from 'purl' field
@@ -24,11 +24,11 @@
 use crate::models::{DatasourceId, FileReference, PackageData, PackageType, Party};
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
-use serde_yaml::Value;
 use std::fs;
 use std::path::Path;
 use std::str::FromStr;
 use url::Url;
+use yaml_serde::Value;
 
 use super::PackageParser;
 use super::license_normalization::{
@@ -287,11 +287,11 @@ impl PackageParser for AboutFileParser {
 }
 
 /// Reads and parses a YAML file.
-fn read_and_parse_yaml(path: &Path) -> Result<serde_yaml::Mapping, String> {
+fn read_and_parse_yaml(path: &Path) -> Result<yaml_serde::Mapping, String> {
     let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
 
     let value: Value =
-        serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
+        yaml_serde::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
 
     match value {
         Value::Mapping(map) => Ok(map),
@@ -310,7 +310,7 @@ fn yaml_value_to_string(value: &Value) -> Option<String> {
 }
 
 /// Extracts owner party information from YAML.
-fn extract_owner_party(yaml: &serde_yaml::Mapping) -> Vec<Party> {
+fn extract_owner_party(yaml: &yaml_serde::Mapping) -> Vec<Party> {
     let owner = yaml
         .get(Value::String(FIELD_OWNER.to_string()))
         .map(|v| match v {
@@ -342,7 +342,7 @@ fn extract_owner_party(yaml: &serde_yaml::Mapping) -> Vec<Party> {
 }
 
 /// Extracts file references from YAML.
-fn extract_file_references(yaml: &serde_yaml::Mapping) -> Vec<FileReference> {
+fn extract_file_references(yaml: &yaml_serde::Mapping) -> Vec<FileReference> {
     let about_resource = yaml
         .get(Value::String(FIELD_ABOUT_RESOURCE.to_string()))
         .and_then(|v| v.as_str());
@@ -447,7 +447,7 @@ fn build_about_purl(
 }
 
 fn build_extra_data(
-    yaml: &serde_yaml::Mapping,
+    yaml: &yaml_serde::Mapping,
 ) -> Option<std::collections::HashMap<String, serde_json::Value>> {
     let mut extra_data = std::collections::HashMap::new();
     for key in ["license_file", "notice_file", "notes"] {

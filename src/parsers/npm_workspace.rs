@@ -18,9 +18,9 @@
 
 use crate::models::PackageData;
 use crate::models::{DatasourceId, PackageType};
-use serde_yaml::Value;
 use std::fs;
 use std::path::Path;
+use yaml_serde::Value;
 
 use super::PackageParser;
 
@@ -48,7 +48,7 @@ impl PackageParser for NpmWorkspaceParser {
             }
         };
 
-        let workspace_data: Value = match serde_yaml::from_str(&content) {
+        let workspace_data: Value = match yaml_serde::from_str(&content) {
             Ok(data) => data,
             Err(e) => {
                 crate::parser_warn!("Failed to parse npm workspace file at {:?}: {}", path, e);
@@ -145,7 +145,7 @@ packages:
   - "packages/*"
 "#;
 
-        let workspace_data: Value = serde_yaml::from_str(yaml_content).unwrap();
+        let workspace_data: Value = yaml_serde::from_str(yaml_content).unwrap();
         let result = parse_workspace_file(&workspace_data);
 
         assert_eq!(result.package_type, Some(PackageType::Npm));
@@ -169,7 +169,7 @@ packages:
   - "tools/*"
 "#;
 
-        let workspace_data: Value = serde_yaml::from_str(yaml_content).unwrap();
+        let workspace_data: Value = yaml_serde::from_str(yaml_content).unwrap();
         let result = parse_workspace_file(&workspace_data);
 
         let extra_data = result.extra_data.unwrap();
@@ -187,7 +187,7 @@ packages:
   - "*"
 "#;
 
-        let workspace_data: Value = serde_yaml::from_str(yaml_content).unwrap();
+        let workspace_data: Value = yaml_serde::from_str(yaml_content).unwrap();
         let result = parse_workspace_file(&workspace_data);
 
         let extra_data = result.extra_data.unwrap();
@@ -204,7 +204,7 @@ packages:
   - "!packages/dont-scan-me"
 "#;
 
-        let workspace_data: Value = serde_yaml::from_str(yaml_content).unwrap();
+        let workspace_data: Value = yaml_serde::from_str(yaml_content).unwrap();
         let result = parse_workspace_file(&workspace_data);
 
         let extra_data = result.extra_data.unwrap();
@@ -221,7 +221,7 @@ packages:
   - "**/components/*"
 "#;
 
-        let workspace_data: Value = serde_yaml::from_str(yaml_content).unwrap();
+        let workspace_data: Value = yaml_serde::from_str(yaml_content).unwrap();
         let result = parse_workspace_file(&workspace_data);
 
         let extra_data = result.extra_data.unwrap();
@@ -236,7 +236,7 @@ packages:
 name: my-workspace
 "#;
 
-        let workspace_data: Value = serde_yaml::from_str(yaml_content).unwrap();
+        let workspace_data: Value = yaml_serde::from_str(yaml_content).unwrap();
         let result = parse_workspace_file(&workspace_data);
 
         assert_eq!(result.package_type, Some(PackageType::Npm));
@@ -255,7 +255,7 @@ name: my-workspace
 packages: []
 "#;
 
-        let workspace_data: Value = serde_yaml::from_str(yaml_content).unwrap();
+        let workspace_data: Value = yaml_serde::from_str(yaml_content).unwrap();
         let result = parse_workspace_file(&workspace_data);
 
         assert_eq!(result.package_type, Some(PackageType::Npm));

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use serde::Deserialize;
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 use provenant::copyright::golden_utils::{canonicalize_golden_value, read_input_content};
 use provenant::golden_maintenance::{find_files_with_extension, run_prettier};
@@ -87,7 +87,7 @@ fn strip_expected_failures_from_yaml_text(yaml_text: &str, yaml_path: &Path) -> 
     }
 
     let mut root: Value =
-        serde_yaml::from_str(yaml_text).with_context(|| format!("parse YAML: {yaml_path:?}"))?;
+        yaml_serde::from_str(yaml_text).with_context(|| format!("parse YAML: {yaml_path:?}"))?;
 
     let mapping = root
         .as_mapping_mut()
@@ -101,14 +101,14 @@ fn strip_expected_failures_from_yaml_text(yaml_text: &str, yaml_path: &Path) -> 
         return Ok(yaml_text.to_string());
     }
 
-    serde_yaml::to_string(&root).with_context(|| format!("serialize YAML: {yaml_path:?}"))
+    yaml_serde::to_string(&root).with_context(|| format!("serialize YAML: {yaml_path:?}"))
 }
 
 fn update_yaml_to_actual(ours_yaml: &Path, content: &str, write: bool) -> Result<bool> {
     let yaml_text =
         fs::read_to_string(ours_yaml).with_context(|| format!("read YAML: {ours_yaml:?}"))?;
     let mut root: Value =
-        serde_yaml::from_str(&yaml_text).with_context(|| format!("parse YAML: {ours_yaml:?}"))?;
+        yaml_serde::from_str(&yaml_text).with_context(|| format!("parse YAML: {ours_yaml:?}"))?;
 
     let mapping = root
         .as_mapping_mut()
@@ -137,7 +137,7 @@ fn update_yaml_to_actual(ours_yaml: &Path, content: &str, write: bool) -> Result
             return Ok(false);
         }
 
-        let new_text = serde_yaml::to_string(&root)
+        let new_text = yaml_serde::to_string(&root)
             .with_context(|| format!("serialize YAML: {ours_yaml:?}"))?;
         if new_text == yaml_text {
             return Ok(false);
@@ -173,7 +173,7 @@ fn update_yaml_to_actual(ours_yaml: &Path, content: &str, write: bool) -> Result
     }
 
     let new_text =
-        serde_yaml::to_string(&root).with_context(|| format!("serialize YAML: {ours_yaml:?}"))?;
+        yaml_serde::to_string(&root).with_context(|| format!("serialize YAML: {ours_yaml:?}"))?;
     if new_text == yaml_text {
         return Ok(false);
     }
@@ -185,7 +185,7 @@ fn update_yaml_to_actual(ours_yaml: &Path, content: &str, write: bool) -> Result
 
 fn load_expected(path: &Path) -> Result<ExpectedOutput> {
     let yaml = fs::read_to_string(path).with_context(|| format!("read YAML: {path:?}"))?;
-    serde_yaml::from_str(&yaml).with_context(|| format!("parse YAML: {path:?}"))
+    yaml_serde::from_str(&yaml).with_context(|| format!("parse YAML: {path:?}"))
 }
 
 fn main() -> Result<()> {

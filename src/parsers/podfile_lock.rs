@@ -14,7 +14,7 @@
 //! - YAML multi-section aggregation (PODS, DEPENDENCIES, SPEC REPOS, PODFILE LOCK)
 //!
 //! # Implementation Notes
-//! - Uses YAML parsing via `serde_yaml` crate
+//! - Uses YAML parsing via `yaml_serde`
 //! - All lockfile versions are pinned (`is_pinned: Some(true)`)
 //! - Data aggregation across PODS, DEPENDENCIES, and metadata sections
 //! - Graceful error handling with `warn!()` logs
@@ -24,7 +24,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
-use serde_yaml::Value;
+use yaml_serde::Value;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
 
@@ -66,7 +66,7 @@ impl PackageParser for PodfileLockParser {
             }
         };
 
-        let data: Value = match serde_yaml::from_str(&content) {
+        let data: Value = match yaml_serde::from_str(&content) {
             Ok(d) => d,
             Err(e) => {
                 warn!("Failed to parse Podfile.lock at {:?}: {}", path, e);
@@ -410,7 +410,7 @@ fn create_cocoapods_purl(
     Some(format!("pkg:cocoapods/{}{}{}", ns_part, name, version_part))
 }
 
-fn process_external_source(mapping: &serde_yaml::Mapping) -> String {
+fn process_external_source(mapping: &yaml_serde::Mapping) -> String {
     let get_str = |key: &str| -> Option<String> {
         mapping
             .get(Value::String(key.to_string()))

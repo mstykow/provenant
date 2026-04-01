@@ -99,7 +99,7 @@ impl PackageParser for ConanDataParser {
 }
 
 pub(crate) fn parse_conandata_yml(content: &str) -> Vec<PackageData> {
-    let data: ConanDataYml = match serde_yaml::from_str(content) {
+    let data: ConanDataYml = match yaml_serde::from_str(content) {
         Ok(d) => d,
         Err(e) => {
             warn!("Failed to parse conandata.yml: {}", e);

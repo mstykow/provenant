@@ -1629,11 +1629,11 @@ fn parse_gem_metadata_yaml(
 ) -> Result<PackageData, String> {
     // Ruby YAML tagged types need to be handled:
     // --- !ruby/object:Gem::Specification
-    // We strip Ruby-specific YAML tags since serde_yaml can't handle them
+    // We strip Ruby-specific YAML tags since yaml_serde can't handle them
     let cleaned = clean_ruby_yaml_tags(content);
 
-    let yaml: serde_yaml::Value =
-        serde_yaml::from_str(&cleaned).map_err(|e| format!("Failed to parse YAML: {}", e))?;
+    let yaml: yaml_serde::Value =
+        yaml_serde::from_str(&cleaned).map_err(|e| format!("Failed to parse YAML: {}", e))?;
 
     let name = yaml_string(&yaml, "name");
     let version = yaml.get("version").and_then(|v| {
@@ -1820,7 +1820,7 @@ fn parse_gem_metadata_yaml(
     })
 }
 
-/// Strips Ruby-specific YAML tags that serde_yaml cannot handle.
+/// Strips Ruby-specific YAML tags that yaml_serde cannot handle.
 fn clean_ruby_yaml_tags(content: &str) -> String {
     let tag_re = match Regex::new(r"!ruby/\S+") {
         Ok(r) => r,
@@ -1829,14 +1829,14 @@ fn clean_ruby_yaml_tags(content: &str) -> String {
     tag_re.replace_all(content, "").to_string()
 }
 
-fn yaml_string(yaml: &serde_yaml::Value, key: &str) -> Option<String> {
+fn yaml_string(yaml: &yaml_serde::Value, key: &str) -> Option<String> {
     yaml.get(key)
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
 }
 
-fn parse_gem_yaml_dependencies(yaml: &serde_yaml::Value) -> Vec<Dependency> {
+fn parse_gem_yaml_dependencies(yaml: &yaml_serde::Value) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
 
     let deps_seq = match yaml.get("dependencies").and_then(|v| v.as_sequence()) {

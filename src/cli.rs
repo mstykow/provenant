@@ -1,7 +1,7 @@
 use clap::{ArgGroup, Parser};
-use serde_yaml::Value;
 use std::fs;
 use std::path::Path;
+use yaml_serde::Value;
 
 use crate::cache::CacheKind;
 use crate::license_detection::DEFAULT_LICENSEDB_URL_TEMPLATE;
@@ -32,7 +32,7 @@ fn parse_license_policy_arg(value: &str) -> Result<String, String> {
         return Err(format!("License policy file {:?} is empty", policy_path));
     }
 
-    let policy_value: Value = serde_yaml::from_str(&policy_text).map_err(|err| {
+    let policy_value: Value = yaml_serde::from_str(&policy_text).map_err(|err| {
         format!(
             "Failed to parse license policy file {:?}: {err}",
             policy_path

@@ -99,7 +99,7 @@ This plan is based on:
 4. **Use dedicated libraries where mature**
    - CycloneDX: `cyclonedx-bom`
    - CSV: `csv`
-   - YAML: `serde_yaml`
+   - YAML: `yaml_serde`
    - HTML/templates: `tera` (for controlled templating)
 5. **SPDX strategy**
    - Implement deterministic SPDX mapping layer in Rust for Tag-Value first.

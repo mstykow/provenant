@@ -431,10 +431,10 @@ fn test_yaml_matches_local_fixture_file_semantics() {
     let expected_yaml = fs::read_to_string("testdata/output-formats/yaml-simple-expected.yaml")
         .expect("yaml fixture should be readable");
 
-    let actual_yaml_value: serde_yaml::Value =
-        serde_yaml::from_str(&actual_yaml).expect("actual yaml should parse");
-    let expected_yaml_value: serde_yaml::Value =
-        serde_yaml::from_str(&expected_yaml).expect("fixture yaml should parse");
+    let actual_yaml_value: yaml_serde::Value =
+        yaml_serde::from_str(&actual_yaml).expect("actual yaml should parse");
+    let expected_yaml_value: yaml_serde::Value =
+        yaml_serde::from_str(&expected_yaml).expect("fixture yaml should parse");
 
     let actual = serde_json::to_value(actual_yaml_value).expect("actual yaml should convert");
     let expected =

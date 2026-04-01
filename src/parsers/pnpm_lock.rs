@@ -22,9 +22,9 @@
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
 use crate::parsers::utils::npm_purl;
-use serde_yaml::Value;
 use std::fs;
 use std::path::Path;
+use yaml_serde::Value;
 
 use super::PackageParser;
 use super::yarn_lock::extract_namespace_and_name;
@@ -53,7 +53,7 @@ impl PackageParser for PnpmLockParser {
             }
         };
 
-        let lock_data: Value = match serde_yaml::from_str(&content) {
+        let lock_data: Value = match yaml_serde::from_str(&content) {
             Ok(data) => data,
             Err(e) => {
                 crate::parser_warn!("Failed to parse pnpm lockfile at {:?}: {}", path, e);
@@ -697,21 +697,21 @@ mod tests {
     #[test]
     fn test_detect_pnpm_version_v5() {
         let yaml = "lockfileVersion: 5.4\n";
-        let data: Value = serde_yaml::from_str(yaml).unwrap();
+        let data: Value = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(detect_pnpm_version(&data), "5.4");
     }
 
     #[test]
     fn test_detect_pnpm_version_v6() {
         let yaml = "lockfileVersion: '6.0'\n";
-        let data: Value = serde_yaml::from_str(yaml).unwrap();
+        let data: Value = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(detect_pnpm_version(&data), "6.0");
     }
 
     #[test]
     fn test_detect_pnpm_version_v9() {
         let yaml = "lockfileVersion: '9.0'\n";
-        let data: Value = serde_yaml::from_str(yaml).unwrap();
+        let data: Value = yaml_serde::from_str(yaml).unwrap();
         assert_eq!(detect_pnpm_version(&data), "9.0");
     }
 

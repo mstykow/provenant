@@ -14,7 +14,7 @@
 //! - Maintainer information parsing
 //!
 //! # Implementation Notes
-//! - Uses `serde_yaml` for parsing (handles both JSON and YAML)
+//! - Uses `yaml_serde` for parsing (handles both JSON and YAML)
 //! - Implements FreeBSD-specific license logic combining
 //! - Graceful error handling with `warn!()` logs
 
@@ -86,7 +86,7 @@ struct FreebsdManifest {
 }
 
 pub(crate) fn parse_freebsd_manifest(content: &str) -> PackageData {
-    let manifest: FreebsdManifest = match serde_yaml::from_str(content) {
+    let manifest: FreebsdManifest = match yaml_serde::from_str(content) {
         Ok(m) => m,
         Err(e) => {
             warn!("Failed to parse FreeBSD manifest: {}", e);

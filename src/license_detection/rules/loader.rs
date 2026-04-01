@@ -52,7 +52,7 @@ trait ParseNumber {
     fn as_u8(&self) -> Option<u8>;
 }
 
-impl ParseNumber for serde_yaml::Number {
+impl ParseNumber for yaml_serde::Number {
     fn as_u8(&self) -> Option<u8> {
         self.as_i64()
             .and_then(|n| {
@@ -135,7 +135,7 @@ struct LicenseFrontmatter {
     is_generic: Option<bool>,
 
     #[serde(default)]
-    minimum_coverage: Option<serde_yaml::Number>,
+    minimum_coverage: Option<yaml_serde::Number>,
 
     #[serde(default)]
     standard_notice: Option<String>,
@@ -207,8 +207,8 @@ fn parse_file_content(content: &str, path: &Path) -> Result<ParsedRuleFile> {
         .trim()
         .to_string();
 
-    let frontmatter_value: serde_yaml::Value =
-        serde_yaml::from_str(&yaml_content).map_err(|e| {
+    let frontmatter_value: yaml_serde::Value =
+        yaml_serde::from_str(&yaml_content).map_err(|e| {
             anyhow!(
                 "Failed to parse frontmatter YAML in {}: {}\nContent was:\n{}",
                 path.display(),
@@ -218,7 +218,7 @@ fn parse_file_content(content: &str, path: &Path) -> Result<ParsedRuleFile> {
         })?;
 
     let has_stored_minimum_coverage = frontmatter_value.as_mapping().is_some_and(|mapping| {
-        mapping.contains_key(serde_yaml::Value::String("minimum_coverage".to_string()))
+        mapping.contains_key(yaml_serde::Value::String("minimum_coverage".to_string()))
     });
 
     Ok(ParsedRuleFile {
@@ -262,10 +262,10 @@ struct RuleFrontmatter {
     skip_for_required_phrase_generation: Option<bool>,
 
     #[serde(default)]
-    relevance: Option<serde_yaml::Number>,
+    relevance: Option<yaml_serde::Number>,
 
     #[serde(default)]
-    minimum_coverage: Option<serde_yaml::Number>,
+    minimum_coverage: Option<yaml_serde::Number>,
 
     #[serde(default, deserialize_with = "deserialize_yes_no_bool")]
     is_continuous: Option<bool>,
@@ -331,7 +331,7 @@ pub fn parse_rule_to_loaded(path: &Path) -> Result<LoadedRule> {
         ));
     }
 
-    let fm: RuleFrontmatter = serde_yaml::from_str(&parsed.yaml_content).map_err(|e| {
+    let fm: RuleFrontmatter = yaml_serde::from_str(&parsed.yaml_content).map_err(|e| {
         anyhow!(
             "Failed to parse rule frontmatter YAML in {}: {}\nContent was:\n{}",
             path.display(),
@@ -427,7 +427,7 @@ pub fn parse_license_to_loaded(path: &Path) -> Result<LoadedLicense> {
 
     let parsed = parse_license_file_content(&content, path)?;
 
-    let fm: LicenseFrontmatter = serde_yaml::from_str(&parsed.yaml_content).map_err(|e| {
+    let fm: LicenseFrontmatter = yaml_serde::from_str(&parsed.yaml_content).map_err(|e| {
         anyhow!(
             "Failed to parse license frontmatter YAML in {}: {}\nContent was:\n{}",
             path.display(),
@@ -716,13 +716,13 @@ mod tests {
 
     #[test]
     fn test_parse_number_as_u8() {
-        let num_int: serde_yaml::Number = serde_yaml::from_str("100").unwrap();
+        let num_int: yaml_serde::Number = yaml_serde::from_str("100").unwrap();
         assert_eq!(num_int.as_u8(), Some(100));
 
-        let num_out_of_range: serde_yaml::Number = serde_yaml::from_str("500").unwrap();
+        let num_out_of_range: yaml_serde::Number = yaml_serde::from_str("500").unwrap();
         assert_eq!(num_out_of_range.as_u8(), None);
 
-        let num_float: serde_yaml::Number = serde_yaml::from_str("90.5").unwrap();
+        let num_float: yaml_serde::Number = yaml_serde::from_str("90.5").unwrap();
         assert_eq!(num_float.as_u8(), Some(90));
     }
 

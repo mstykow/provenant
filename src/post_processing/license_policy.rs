@@ -45,7 +45,7 @@ fn load_license_policy(policy_path: &Path) -> Result<PolicyFileStatus> {
             policy_path
         )
     })?;
-    let policy_file: LicensePolicyFile = serde_yaml::from_str(&policy_text).map_err(|err| {
+    let policy_file: LicensePolicyFile = yaml_serde::from_str(&policy_text).map_err(|err| {
         anyhow!(
             "Failed to parse license policy file {:?}: {err}",
             policy_path
