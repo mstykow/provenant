@@ -71,10 +71,8 @@ fn parse_license_policy_arg(value: &str) -> Result<String, String> {
                 "output_json_pp",
                 "output_json_lines",
                 "output_yaml",
-                "output_csv",
                 "output_debian",
                 "output_html",
-                "output_html_app",
                 "output_spdx_tv",
                 "output_spdx_rdf",
                 "output_cyclonedx",
@@ -105,10 +103,6 @@ pub struct Cli {
     #[arg(long = "yaml", value_name = "FILE", allow_hyphen_values = true)]
     pub output_yaml: Option<String>,
 
-    /// [DEPRECATED in Python] Write scan output as CSV to FILE
-    #[arg(long = "csv", value_name = "FILE", allow_hyphen_values = true)]
-    pub output_csv: Option<String>,
-
     /// Write scan output in machine-readable Debian copyright format to FILE (requires --license, --copyright, and --license-text)
     #[arg(
         long = "debian",
@@ -121,15 +115,6 @@ pub struct Cli {
     /// Write scan output as HTML report to FILE
     #[arg(long = "html", value_name = "FILE", allow_hyphen_values = true)]
     pub output_html: Option<String>,
-
-    /// [DEPRECATED in Python] Write scan output as HTML app to FILE
-    #[arg(
-        long = "html-app",
-        value_name = "FILE",
-        hide = true,
-        allow_hyphen_values = true
-    )]
-    pub output_html_app: Option<String>,
 
     /// Write scan output as SPDX tag/value to FILE
     #[arg(long = "spdx-tv", value_name = "FILE", allow_hyphen_values = true)]
@@ -434,14 +419,6 @@ impl Cli {
             });
         }
 
-        if let Some(file) = &self.output_csv {
-            targets.push(OutputTarget {
-                format: OutputFormat::Csv,
-                file: file.clone(),
-                custom_template: None,
-            });
-        }
-
         if let Some(file) = &self.output_debian {
             targets.push(OutputTarget {
                 format: OutputFormat::Debian,
@@ -453,14 +430,6 @@ impl Cli {
         if let Some(file) = &self.output_html {
             targets.push(OutputTarget {
                 format: OutputFormat::Html,
-                file: file.clone(),
-                custom_template: None,
-            });
-        }
-
-        if let Some(file) = &self.output_html_app {
-            targets.push(OutputTarget {
-                format: OutputFormat::HtmlApp,
                 file: file.clone(),
                 custom_template: None,
             });

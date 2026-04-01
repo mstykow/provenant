@@ -3,11 +3,9 @@ use std::io::{self, Write};
 
 use crate::models::Output;
 
-mod csv;
 mod cyclonedx;
 mod debian;
 mod html;
-mod html_app;
 mod jsonl;
 mod shared;
 mod spdx;
@@ -22,11 +20,9 @@ pub enum OutputFormat {
     Json,
     JsonPretty,
     Yaml,
-    Csv,
     JsonLines,
     Debian,
     Html,
-    HtmlApp,
     CustomTemplate,
     SpdxTv,
     SpdxRdf,
@@ -75,7 +71,6 @@ impl OutputWriter for FormatWriter {
                 writer.write_all(b"\n")
             }
             OutputFormat::Yaml => write_yaml(output, writer),
-            OutputFormat::Csv => csv::write_csv(output, writer),
             OutputFormat::JsonLines => jsonl::write_json_lines(output, writer),
             OutputFormat::Debian => debian::write_debian_copyright(output, writer),
             OutputFormat::Html => html::write_html_report(output, writer),
@@ -84,10 +79,6 @@ impl OutputWriter for FormatWriter {
             OutputFormat::SpdxRdf => spdx::write_spdx_rdf_xml(output, writer, config),
             OutputFormat::CycloneDxJson => cyclonedx::write_cyclonedx_json(output, writer),
             OutputFormat::CycloneDxXml => cyclonedx::write_cyclonedx_xml(output, writer),
-            OutputFormat::HtmlApp => Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "html-app requires write_output_file() to create companion assets",
-            )),
         }
     }
 }
@@ -98,20 +89,9 @@ pub fn write_output_file(
     config: &OutputWriteConfig,
 ) -> io::Result<()> {
     if output_file == "-" {
-        if config.format == OutputFormat::HtmlApp {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "html-app output cannot be written to stdout",
-            ));
-        }
-
         let stdout = io::stdout();
         let mut handle = stdout.lock();
         return writer_for_format(config.format).write(output, &mut handle, config);
-    }
-
-    if config.format == OutputFormat::HtmlApp {
-        return html_app::write_html_app(output_file, output, config);
     }
 
     let mut file = File::create(output_file)?;
@@ -376,19 +356,6 @@ mod tests {
         let mut sorted = file_lines.clone();
         sorted.sort();
         assert_eq!(file_lines, sorted);
-    }
-
-    #[test]
-    fn test_csv_writer_outputs_headers_and_rows() {
-        let output = sample_output();
-        let mut bytes = Vec::new();
-        writer_for_format(OutputFormat::Csv)
-            .write(&output, &mut bytes, &OutputWriteConfig::default())
-            .expect("csv write should succeed");
-
-        let rendered = String::from_utf8(bytes).expect("csv should be utf-8");
-        assert!(rendered.contains("kind,path"));
-        assert!(rendered.contains("info"));
     }
 
     #[test]
@@ -1186,32 +1153,6 @@ mod tests {
         let rendered = String::from_utf8(bytes).expect("template output should be utf-8");
         assert!(rendered.contains("version=4.0.0"));
         assert!(rendered.contains("files=1"));
-    }
-
-    #[test]
-    fn test_html_app_writer_creates_assets() {
-        let output = sample_output();
-        let temp_dir = tempfile::tempdir().expect("tempdir should be created");
-        let output_path = temp_dir.path().join("report.html");
-
-        write_output_file(
-            output_path
-                .to_str()
-                .expect("output path should be valid utf-8"),
-            &output,
-            &OutputWriteConfig {
-                format: OutputFormat::HtmlApp,
-                custom_template: None,
-                scanned_path: Some("/tmp/project".to_string()),
-            },
-        )
-        .expect("html app write should succeed");
-
-        let assets_dir = temp_dir.path().join("report_files");
-        assert!(output_path.exists());
-        assert!(assets_dir.join("data.js").exists());
-        assert!(assets_dir.join("app.css").exists());
-        assert!(assets_dir.join("app.js").exists());
     }
 
     fn sample_output() -> Output {

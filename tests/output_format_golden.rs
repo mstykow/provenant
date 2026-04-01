@@ -365,53 +365,6 @@ fn test_json_lines_matches_local_fixture_file_semantics() {
 }
 
 #[test]
-fn test_csv_contract_has_python_compatible_path_normalization() {
-    let output = sample_output();
-    let mut bytes = Vec::new();
-    writer_for_format(OutputFormat::Csv)
-        .write(
-            &output,
-            &mut bytes,
-            &OutputWriteConfig {
-                format: OutputFormat::Csv,
-                custom_template: None,
-                scanned_path: Some("scan".to_string()),
-            },
-        )
-        .expect("csv output should be generated");
-
-    let rendered = String::from_utf8(bytes).expect("csv output should be utf-8");
-    assert!(rendered.contains("kind,path"));
-    assert!(rendered.contains("scan/,"));
-    assert!(rendered.contains("scan/test.txt"));
-}
-
-#[test]
-fn test_csv_matches_local_fixture_after_semantic_projection() {
-    let output = sample_csv_tree_output();
-    let mut bytes = Vec::new();
-    writer_for_format(OutputFormat::Csv)
-        .write(
-            &output,
-            &mut bytes,
-            &OutputWriteConfig {
-                format: OutputFormat::Csv,
-                custom_template: None,
-                scanned_path: Some("scan".to_string()),
-            },
-        )
-        .expect("csv output should be generated");
-
-    let actual_csv = String::from_utf8(bytes).expect("csv output should be utf-8");
-    let expected_csv = fs::read_to_string("testdata/output-formats/csv-tree-expected.csv")
-        .expect("csv fixture should be readable");
-
-    let actual_rows = project_actual_csv_rows(&actual_csv);
-    let expected_rows = parse_expected_csv_rows(&expected_csv);
-    assert_eq!(actual_rows, expected_rows);
-}
-
-#[test]
 fn test_yaml_matches_local_fixture_file_semantics() {
     let output = sample_html_simple_output();
     let mut bytes = Vec::new();
@@ -977,17 +930,6 @@ fn normalize_spdx_tv(text: &str) -> String {
         .to_string()
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct CsvParityRow {
-    path: String,
-    file_type: String,
-    scan_errors: String,
-    copyright: String,
-    start_line: String,
-    end_line: String,
-    holder: String,
-}
-
 fn jsonlines_header(entries: &[Value]) -> &Value {
     entries
         .iter()
@@ -1085,118 +1027,6 @@ fn test_value_to_string(value: Option<&Value>) -> String {
         Value::String(v) => v.clone(),
         _ => String::new(),
     }
-}
-
-fn parse_expected_csv_rows(csv_text: &str) -> Vec<CsvParityRow> {
-    let mut reader = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(csv_text.as_bytes());
-
-    let mut rows = Vec::new();
-    for record in reader.records() {
-        let record = record.expect("expected fixture csv row should parse");
-        rows.push(CsvParityRow {
-            path: record.get(0).unwrap_or_default().to_string(),
-            file_type: record.get(1).unwrap_or_default().to_string(),
-            scan_errors: record.get(2).unwrap_or_default().to_string(),
-            copyright: record.get(3).unwrap_or_default().to_string(),
-            start_line: record.get(4).unwrap_or_default().to_string(),
-            end_line: record.get(5).unwrap_or_default().to_string(),
-            holder: record.get(6).unwrap_or_default().to_string(),
-        });
-    }
-
-    rows
-}
-
-fn project_actual_csv_rows(csv_text: &str) -> Vec<CsvParityRow> {
-    let mut reader = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(csv_text.as_bytes());
-
-    let headers = reader
-        .headers()
-        .expect("actual csv headers should parse")
-        .iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-
-    let mut projected = Vec::new();
-    for record in reader.records() {
-        let record = record.expect("actual csv row should parse");
-
-        let mut row_map = BTreeMap::new();
-        for (idx, header) in headers.iter().enumerate() {
-            row_map.insert(header.as_str(), record.get(idx).unwrap_or_default());
-        }
-
-        let kind = row_map.get("kind").copied().unwrap_or_default();
-        let path = row_map.get("path").copied().unwrap_or_default().to_string();
-        if path.is_empty() {
-            continue;
-        }
-
-        match kind {
-            "info" => projected.push(CsvParityRow {
-                path,
-                file_type: row_map.get("type").copied().unwrap_or_default().to_string(),
-                scan_errors: row_map
-                    .get("scan_errors")
-                    .copied()
-                    .unwrap_or_default()
-                    .to_string(),
-                copyright: String::new(),
-                start_line: String::new(),
-                end_line: String::new(),
-                holder: String::new(),
-            }),
-            "copyright" => projected.push(CsvParityRow {
-                path,
-                file_type: String::new(),
-                scan_errors: String::new(),
-                copyright: row_map
-                    .get("copyright")
-                    .copied()
-                    .unwrap_or_default()
-                    .to_string(),
-                start_line: row_map
-                    .get("start_line")
-                    .copied()
-                    .unwrap_or_default()
-                    .to_string(),
-                end_line: row_map
-                    .get("end_line")
-                    .copied()
-                    .unwrap_or_default()
-                    .to_string(),
-                holder: String::new(),
-            }),
-            "holder" => projected.push(CsvParityRow {
-                path,
-                file_type: String::new(),
-                scan_errors: String::new(),
-                copyright: String::new(),
-                start_line: row_map
-                    .get("start_line")
-                    .copied()
-                    .unwrap_or_default()
-                    .to_string(),
-                end_line: row_map
-                    .get("end_line")
-                    .copied()
-                    .unwrap_or_default()
-                    .to_string(),
-                holder: row_map
-                    .get("holder")
-                    .copied()
-                    .unwrap_or_default()
-                    .to_string(),
-            }),
-            _ => {}
-        }
-    }
-
-    projected
 }
 
 fn xml_escape_for_assert(value: &str) -> String {
@@ -1911,59 +1741,6 @@ fn sample_cyclonedx_dependency_output() -> Output {
     };
 
     sample_output_with_sections(0, 0, vec![], vec![root_dep, fallback_dep], vec![])
-}
-
-fn sample_csv_tree_output() -> Output {
-    let mut files = vec![sample_directory_file("scan")];
-
-    for name in ["copy1.c", "copy2.c", "copy3.c"] {
-        files.push(sample_csv_tree_file(&format!("scan/{name}"), name));
-    }
-
-    files.push(sample_directory_file("scan/subdir"));
-    for name in ["copy1.c", "copy2.c", "copy3.c", "copy4.c"] {
-        files.push(sample_csv_tree_file(&format!("scan/subdir/{name}"), name));
-    }
-
-    sample_output_with_sections(7, 2, vec![], vec![], files)
-}
-
-fn sample_csv_tree_file(path: &str, name: &str) -> FileInfo {
-    let base_name = name.strip_suffix(".c").unwrap_or(name);
-    FileInfo::new(
-        name.to_string(),
-        base_name.to_string(),
-        ".c".to_string(),
-        path.to_string(),
-        FileType::File,
-        None,
-        None,
-        55,
-        None,
-        None,
-        None,
-        None,
-        None,
-        vec![],
-        None,
-        vec![],
-        vec![],
-        vec![Copyright {
-            copyright: "Copyright (c) 2000 ACME, Inc.".to_string(),
-            start_line: 1,
-            end_line: 1,
-        }],
-        vec![Holder {
-            holder: "ACME, Inc.".to_string(),
-            start_line: 1,
-            end_line: 1,
-        }],
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-    )
 }
 
 fn empty_output() -> Output {
