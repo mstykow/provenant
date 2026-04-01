@@ -2,6 +2,8 @@
 
 This scorecard tracks parity against Python ScanCode output format behavior and fixtures.
 
+Deprecated upstream CSV and HTML-app outputs are intentionally out of current Provenant scope, so they are not part of the maintained parity contract below.
+
 ## Reference Sources
 
 - Python implementation:
@@ -24,19 +26,6 @@ This scorecard tracks parity against Python ScanCode output format behavior and 
   - First entry contains `headers`
   - Subsequent entries stream one file object per line
   - Deterministic ordering in emitted sections
-
-### CSV
-
-- **Reference fixture**:
-  [`csv/tree/expected.csv`](../../../reference/scancode-toolkit/tests/formattedcode/data/csv/tree/expected.csv)
-  - `csv/flatten_scan/*.json-expected`
-- **Local fixture**:
-  [`testdata/output-formats/csv-tree-expected.csv`](../../../testdata/output-formats/csv-tree-expected.csv)
-- **Status**: 🟢 Semantically equivalent (fixture-backed)
-- **Acceptance criteria**:
-  - Path normalization (`/` stripping, directory suffix `/`)
-  - Stable grouped column ordering
-  - Deterministic row ordering
 
 ### Debian copyright
 
@@ -126,12 +115,6 @@ This scorecard tracks parity against Python ScanCode output format behavior and 
 - **Acceptance criteria**:
   - Copyright/holders/authors/emails/urls/file/package sections present
   - Deterministic structure for snapshot testing
-
-### HTML app
-
-- **Status**: 🟢 Implemented (outside Python fixture parity contract)
-- **Acceptance criteria**:
-  - Asset bundle creation and data wiring verified by unit tests
 
 ### Custom template
 

@@ -1,9 +1,9 @@
 # Progress Tracking & Reporting Implementation Plan
 
-> **Status**: 🟢 Implemented — Wired in runtime, validated with tests and quality gates
-> **Priority**: P3 - Low Priority (UX Feature)
-> **Estimated Effort**: Completed
-> **Dependencies**: None (integrates with existing scanner pipeline)
+> **Status**: 🟢 Historical rollout record — implemented and validated with tests and quality gates
+> **Current contract owner**: [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) for current runtime/progress behavior and [`../../RELEASING.md`](../../RELEASING.md) / CI for verification expectations
+> **Historical priority / effort**: P3, completed
+> **Dependencies at implementation time**: None (integrated with the existing scanner pipeline)
 
 ## Table of Contents
 
@@ -19,6 +19,8 @@
 ---
 
 ## Overview
+
+This document is retained as implementation history for the progress/reporting rollout. Phase plans and success criteria below are historical and should not be treated as the current source of truth for runtime behavior.
 
 Enhanced progress reporting during scans: multi-phase progress bars, ETA, throughput metrics, real-time status updates, verbosity control, and scan summary statistics. The system must integrate cleanly with rayon parallel processing, avoid interfering with structured JSON output, and support quiet/verbose/default modes.
 

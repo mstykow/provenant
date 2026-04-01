@@ -1,9 +1,9 @@
 # Copyright Detection Implementation Plan
 
-> **Status**: 🟢 Implemented with scanner/runtime ingestion parity complete
-> **Priority**: P1 - High Priority Core Feature
-> **Actual Effort**: Completed
-> **Dependencies**: None (independent of license detection)
+> **Status**: 🟢 Historical rollout record — implemented with scanner/runtime ingestion parity complete
+> **Current contract owner**: [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) for the current subsystem description and [`../../TESTING_STRATEGY.md`](../../TESTING_STRATEGY.md) for golden-fixture ownership and verification guidance
+> **Historical priority / effort**: P1, completed
+> **Dependencies at implementation time**: None (independent of license detection)
 
 ## Table of Contents
 
@@ -19,6 +19,8 @@
 ---
 
 ## Overview
+
+This file is retained as a completed implementation record. Remaining gaps, future enhancements, and rollout summaries below are historical notes and should not be read as the live maintainer contract.
 
 Copyright detection extracts copyright statements, holder names, author information, and year ranges from text-bearing scan inputs. This primarily means source and text files, and in Rust it additionally includes supported-image EXIF/XMP metadata as a beyond-parity clue source. It is the second most important text detection feature after license detection, and is completely independent — it can be implemented in parallel with license detection.
 
