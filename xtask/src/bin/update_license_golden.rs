@@ -80,7 +80,7 @@ struct Args {
 
 fn load_yaml(path: &Path) -> Result<LicenseTestYaml> {
     let yaml = fs::read_to_string(path).with_context(|| format!("read YAML: {path:?}"))?;
-    serde_yaml::from_str(&yaml).with_context(|| format!("parse YAML: {path:?}"))
+    yaml_serde::from_str(&yaml).with_context(|| format!("parse YAML: {path:?}"))
 }
 
 fn yaml_to_string(yaml: &LicenseTestYaml) -> Result<String> {

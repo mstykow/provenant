@@ -17,7 +17,7 @@
 //!
 //! # Implementation Notes
 //! - Uses serde_json for JSON parsing
-//! - Uses serde_yaml for YAML parsing
+//! - Uses yaml_serde for YAML parsing
 //! - Python reference has stub-only handlers with no parse() method
 //! - This is a BEYOND PARITY implementation - we extract complete metadata
 
@@ -27,7 +27,7 @@ use std::path::Path;
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
 use serde_json::Value as JsonValue;
-use serde_yaml::Value as YamlValue;
+use yaml_serde::Value as YamlValue;
 
 use crate::models::{DatasourceId, Dependency, FileReference, PackageData, PackageType, Party};
 
@@ -251,10 +251,10 @@ fn read_and_parse_json(path: &Path) -> Result<serde_json::Map<String, JsonValue>
         .ok_or_else(|| "Root JSON is not an object".to_string())
 }
 
-fn read_and_parse_yaml(path: &Path) -> Result<serde_yaml::Mapping, String> {
+fn read_and_parse_yaml(path: &Path) -> Result<yaml_serde::Mapping, String> {
     let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
     let yaml: YamlValue =
-        serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
+        yaml_serde::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
     yaml.as_mapping()
         .cloned()
         .ok_or_else(|| "Root YAML is not a mapping".to_string())
@@ -268,7 +268,7 @@ fn extract_version_from_json(json: &serde_json::Map<String, JsonValue>) -> Optio
     })
 }
 
-fn extract_version_from_yaml(yaml: &serde_yaml::Mapping) -> Option<String> {
+fn extract_version_from_yaml(yaml: &yaml_serde::Mapping) -> Option<String> {
     yaml.get(YamlValue::String(FIELD_VERSION.to_string()))
         .and_then(|v| match v {
             YamlValue::String(s) => Some(s.clone()),
@@ -295,7 +295,7 @@ fn extract_license_from_json(json: &serde_json::Map<String, JsonValue>) -> Optio
     })
 }
 
-fn extract_license_from_yaml(yaml: &serde_yaml::Mapping) -> Option<String> {
+fn extract_license_from_yaml(yaml: &yaml_serde::Mapping) -> Option<String> {
     yaml.get(YamlValue::String(FIELD_LICENSE.to_string()))
         .and_then(|v| match v {
             YamlValue::String(s) => Some(s.clone()),
@@ -421,7 +421,7 @@ fn extract_parties_from_json(json: &serde_json::Map<String, JsonValue>) -> Vec<P
         })
 }
 
-fn extract_parties_from_yaml(yaml: &serde_yaml::Mapping) -> Vec<Party> {
+fn extract_parties_from_yaml(yaml: &yaml_serde::Mapping) -> Vec<Party> {
     yaml.get(YamlValue::String(FIELD_AUTHOR.to_string()))
         .and_then(|v| v.as_sequence())
         .map_or_else(Vec::new, |authors| {
@@ -510,7 +510,7 @@ fn extract_resources_from_json(
 }
 
 fn extract_resources_from_yaml(
-    yaml: &serde_yaml::Mapping,
+    yaml: &yaml_serde::Mapping,
 ) -> (Option<String>, Option<String>, Option<String>) {
     let resources = match yaml
         .get(YamlValue::String(FIELD_RESOURCES.to_string()))
@@ -582,7 +582,7 @@ fn extract_dependencies_from_json(json: &serde_json::Map<String, JsonValue>) -> 
     dependencies
 }
 
-fn extract_dependencies_from_yaml(yaml: &serde_yaml::Mapping) -> Vec<Dependency> {
+fn extract_dependencies_from_yaml(yaml: &yaml_serde::Mapping) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
 
     // META.yml v1.4 has flat dependency structure
@@ -671,7 +671,7 @@ fn extract_dependency_group(
 }
 
 fn extract_yaml_dependency_group(
-    deps: &serde_yaml::Mapping,
+    deps: &yaml_serde::Mapping,
     scope: &str,
     is_runtime: bool,
     is_optional: bool,

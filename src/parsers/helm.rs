@@ -5,7 +5,7 @@ use std::path::Path;
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
 use serde_json::Value as JsonValue;
-use serde_yaml::{Mapping, Value};
+use yaml_serde::{Mapping, Value};
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 
@@ -58,7 +58,7 @@ impl PackageParser for HelmChartLockParser {
 fn read_yaml_file(path: &Path) -> Result<Value, String> {
     let content =
         fs::read_to_string(path).map_err(|error| format!("Failed to read file: {error}"))?;
-    serde_yaml::from_str(&content).map_err(|error| format!("Failed to parse YAML: {error}"))
+    yaml_serde::from_str(&content).map_err(|error| format!("Failed to parse YAML: {error}"))
 }
 
 fn parse_chart_yaml(yaml_content: &Value) -> PackageData {

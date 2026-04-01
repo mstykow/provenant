@@ -119,7 +119,7 @@ pub fn write_output_file(
 }
 
 fn write_yaml(output: &Output, writer: &mut dyn Write) -> io::Result<()> {
-    serde_yaml::to_writer(&mut *writer, output).map_err(shared::io_other)?;
+    yaml_serde::to_writer(&mut *writer, output).map_err(shared::io_other)?;
     writer.write_all(b"\n")
 }
 

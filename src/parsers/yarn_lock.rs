@@ -24,10 +24,10 @@ use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Resolved
 use crate::parser_warn as warn;
 use crate::parsers::utils::{npm_purl, parse_sri};
 use serde_json::Value as JsonValue;
-use serde_yaml::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
+use yaml_serde::Value;
 
 use super::PackageParser;
 
@@ -86,7 +86,7 @@ fn parse_yarn_v2(
     content: &str,
     manifest_dependencies: &HashMap<String, ManifestDependencyInfo>,
 ) -> PackageData {
-    let yaml_value: Value = match serde_yaml::from_str(content) {
+    let yaml_value: Value = match yaml_serde::from_str(content) {
         Ok(val) => val,
         Err(e) => {
             warn!("Failed to parse yarn.lock v2 YAML: {}", e);
@@ -719,7 +719,7 @@ fn split_yarn_locator(resolution: &str) -> Option<(&str, &str)> {
 }
 
 fn extract_yarn_v2_package_extra_data(
-    yaml_map: &serde_yaml::Mapping,
+    yaml_map: &yaml_serde::Mapping,
 ) -> Option<HashMap<String, JsonValue>> {
     let metadata = yaml_map.get("__metadata")?.as_mapping()?;
     let mut extra_data = HashMap::new();
@@ -734,7 +734,7 @@ fn extract_yarn_v2_package_extra_data(
 }
 
 fn extract_yarn_v2_resolved_extra_data(
-    details_map: &serde_yaml::Mapping,
+    details_map: &yaml_serde::Mapping,
     resolution: &str,
 ) -> Option<HashMap<String, JsonValue>> {
     let mut extra_data = HashMap::new();
@@ -757,7 +757,7 @@ fn yaml_value_to_json(value: &Value) -> Option<JsonValue> {
 }
 
 /// Extract string value from YAML mapping
-fn extract_yaml_string(map: &serde_yaml::Mapping, key: &str) -> Option<String> {
+fn extract_yaml_string(map: &yaml_serde::Mapping, key: &str) -> Option<String> {
     map.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
 }
 
