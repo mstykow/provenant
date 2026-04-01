@@ -124,8 +124,8 @@ smallvec = { version = "1.15.1", features = ["write"] }
 yaml_serde = "0.10.4"
 os_info = "3.14.0"
 starlark_syntax = "0.13.0"
-ruff_python_ast = { git = "https://github.com/astral-sh/ruff", tag = "0.15.8", version = "0.0.0" }
-ruff_python_parser = { git = "https://github.com/astral-sh/ruff", tag = "0.15.8", version = "0.0.0" }
+ruff_python_ast = { version = "0.15.8", package = "rustpython-ruff_python_ast" }
+ruff_python_parser = { version = "0.15.8", package = "rustpython-ruff_python_parser" }
 
 [dev-dependencies]
 
