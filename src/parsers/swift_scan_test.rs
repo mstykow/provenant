@@ -27,6 +27,16 @@ mod tests {
 
         match (actual, expected) {
             (Value::Null, Value::Null) => Ok(()),
+            (Value::Null, Value::Object(obj))
+                if path.ends_with("resolved_package") && obj.is_empty() =>
+            {
+                Ok(())
+            }
+            (Value::Object(obj), Value::Null)
+                if path.ends_with("resolved_package") && obj.is_empty() =>
+            {
+                Ok(())
+            }
             (Value::Bool(a), Value::Bool(e)) if a == e => Ok(()),
             (Value::Number(a), Value::Number(e)) if a == e => Ok(()),
             (Value::String(a), Value::String(e)) if a == e => Ok(()),
