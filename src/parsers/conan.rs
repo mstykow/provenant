@@ -26,7 +26,8 @@ use std::path::Path;
 
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
-use rustpython_parser::{Parse, ast};
+use ruff_python_ast as ast;
+use ruff_python_parser::parse_module;
 use serde_json::Value;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
@@ -58,8 +59,8 @@ impl PackageParser for ConanFilePyParser {
             }
         };
 
-        vec![match ast::Suite::parse(&contents, "<conanfile.py>") {
-            Ok(statements) => parse_conanfile_py(&statements),
+        vec![match parse_module(&contents) {
+            Ok(parsed) => parse_conanfile_py(parsed.suite()),
             Err(e) => {
                 warn!("Failed to parse Python AST in {}: {}", path.display(), e);
                 default_package_data(DatasourceId::ConanConanFilePy)
@@ -83,7 +84,7 @@ fn parse_conanfile_py(statements: &[ast::Stmt]) -> PackageData {
 
 /// Check if class inherits from ConanFile
 fn has_conanfile_base(class_def: &ast::StmtClassDef) -> bool {
-    class_def.bases.iter().any(|base| {
+    class_def.bases().iter().any(|base| {
         if let ast::Expr::Name(ast::ExprName { id, .. }) = base {
             id.as_str() == "ConanFile"
         } else {
@@ -199,13 +200,11 @@ fn get_assignment_target(targets: &[ast::Expr]) -> Option<String> {
 
 /// Extract string value from AST expression
 fn get_string_value(expr: &ast::Expr) -> Option<String> {
-    if let ast::Expr::Constant(ast::ExprConstant { value, .. }) = expr {
-        match value {
-            ast::Constant::Str(s) => Some(s.to_string()),
-            _ => None,
+    match expr {
+        ast::Expr::StringLiteral(ast::ExprStringLiteral { value, .. }) => {
+            Some(value.to_str().to_string())
         }
-    } else {
-        None
+        _ => None,
     }
 }
 
@@ -248,22 +247,29 @@ fn collect_self_method_calls(stmt: &ast::Stmt, method_name: &str, out: &mut Vec<
         ast::Stmt::Expr(ast::StmtExpr { value, .. }) => {
             if let ast::Expr::Call(call) = value.as_ref()
                 && is_self_method_call(call, method_name)
-                && let Some(arg) = call.args.first()
+                && let Some(arg) = call.arguments.args.first()
                 && let Some(req) = get_string_value(arg)
             {
                 out.push(req);
             }
         }
-        ast::Stmt::If(ast::StmtIf { body, orelse, .. }) => {
-            for nested in body.iter().chain(orelse.iter()) {
+        ast::Stmt::If(ast::StmtIf {
+            body,
+            elif_else_clauses,
+            ..
+        }) => {
+            for nested in body {
                 collect_self_method_calls(nested, method_name, out);
+            }
+            for clause in elif_else_clauses {
+                for nested in &clause.body {
+                    collect_self_method_calls(nested, method_name, out);
+                }
             }
         }
         ast::Stmt::With(ast::StmtWith { body, .. })
         | ast::Stmt::While(ast::StmtWhile { body, .. })
-        | ast::Stmt::For(ast::StmtFor { body, .. })
-        | ast::Stmt::AsyncFor(ast::StmtAsyncFor { body, .. })
-        | ast::Stmt::AsyncWith(ast::StmtAsyncWith { body, .. }) => {
+        | ast::Stmt::For(ast::StmtFor { body, .. }) => {
             for nested in body {
                 collect_self_method_calls(nested, method_name, out);
             }
