@@ -14,7 +14,7 @@ Today the repository covers high-level scanning workflows for:
 - File metadata and scan environment metadata
 - Optional copyright, holder, and author detection
 - Optional email and URL extraction
-- Multiple output formats, including ScanCode-style JSON, YAML, SPDX, CycloneDX, HTML, and custom templates
+- Multiple output formats, including ScanCode-style JSON, YAML, JSON Lines, SPDX, CycloneDX, HTML, Debian copyright, and custom templates
 
 For architecture, supported formats, testing, and contributor guidance, start with the [Documentation Index](docs/DOCUMENTATION_INDEX.md).
 
@@ -112,7 +112,6 @@ Implemented output formats include:
 - JSON, including ScanCode-compatible output
 - YAML
 - JSON Lines
-- CSV
 - Debian copyright
 - SPDX, Tag-Value and RDF/XML
 - CycloneDX, JSON and XML

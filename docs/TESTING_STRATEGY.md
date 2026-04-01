@@ -49,33 +49,13 @@ Provenant uses a **behavior-focused, multi-layered testing approach** that prior
 - When examples would help users understand the API
 - For complex function signatures requiring setup examples
 
-**Example**:
-
-````rust
-/// Extracts package metadata from a manifest file.
-///
-/// # Examples
-///
-/// ```rust
-/// use provenant::scanner::process;
-/// use provenant::progress::{ProgressMode, ScanProgress};
-/// use std::path::PathBuf;
-/// use std::sync::Arc;
-///
-/// let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
-/// let result = process(&PathBuf::from("."), 50, progress, &patterns, &strategy)?;
-/// println!("Found {} files", result.files.len());
-/// ```
-pub fn process(...) -> Result<ScanResult> {
-    // Implementation
-}
-````
+**Example shape**: keep doctests small and public-surface-oriented — for example, a minimal library example that constructs a quiet progress reporter, runs a documented entry point, and asserts a stable observable result.
 
 **Why This Matters**: Documentation examples that don't compile or fail are caught immediately. Users can trust that documented examples actually work.
 
 **Location**: Inline in source code as `///` or `//!` doc comments
 
-**Current Status**: Doctests cover the main API entry points.
+Doctests should cover the public API entry points that benefit from executable examples, but the exact set evolves with the public surface.
 
 ---
 
@@ -96,17 +76,7 @@ pub fn process(...) -> Result<ScanResult> {
 - Every edge case (empty input, malformed data, extreme values)
 - Every business rule (dependency resolution, version constraints, PURL generation)
 
-**Example**:
-
-```rust
-#[test]
-fn test_parse_dependency_with_alternatives() {
-    let deps = parse_dependency_field("libc6 | libc6-udeb", ...);
-    assert_eq!(deps.len(), 2);
-    assert!(deps[0].is_optional.unwrap());
-    assert!(deps[1].is_optional.unwrap());
-}
-```
+**Example shape**: a unit test should focus on one function or rule, one representative input, and one or two assertions that explain the contract clearly.
 
 **Why This Matters**: When this test fails, you immediately know which exact function and input combination failed.
 
@@ -116,37 +86,28 @@ fn test_parse_dependency_with_alternatives() {
 
 ### Layer 2: Golden Tests
 
-**Purpose**: Catch regressions by comparing output against reference implementation
+**Purpose**: Catch regressions by comparing fixture-backed output against stable expected results
 
 **Characteristics**:
 
-- Compare full PackageData output to expected JSON
-- Use real-world manifest files as test data
-- Validate against Python ScanCode Toolkit reference
-- Document intentional differences (see ADR 0003)
+- Includes parser, assembly, finder, license-detection, post-processing, and copyright golden suites
+- Uses real-world manifest files or detector fixtures as test data
+- May validate against Python-derived expectations, Rust-owned expectations, or both depending on the subsystem
+- Documents intentional differences and fixture-ownership rules (see ADR 0003)
 
 **When to Write**:
 
-- After parser is stable and fully implemented
-- When reference output available from Python ScanCode
-- For parsers with complex output structures
+- After a parser or subsystem contract is stable enough that fixture drift should fail loudly
+- When reference output or owned fixture expectations exist
+- For parsers or detector subsystems with rich serialized output
 
-**Example**:
+**Example shape**: a golden test typically loads one stable fixture, runs the owning parser or subsystem entry point, and compares against an expected artifact or semantic projection.
 
-```rust
-#[test]
-fn test_golden_debian_control() {
-    let result = DebianControlParser::extract_package_data("testdata/debian/control");
-    let expected = read_expected_json("testdata/debian/control.expected.json");
-    assert_package_data_eq(result, expected);
-}
-```
+**Why This Matters**: Prevents accidentally breaking stable parser or subsystem contracts, whether the expected surface is Python-derived or Rust-owned.
 
-**Why This Matters**: Prevents accidentally breaking feature parity with Python reference.
+**Location**: Parser goldens live in `src/parsers/*_golden_test.rs`, with additional subsystem goldens near their owning modules such as `src/license_detection/golden_test.rs`, `src/finder/golden_test.rs`, `src/assembly/assembly_golden_test.rs`, and `src/post_processing/golden_test.rs`.
 
-**Location**: Separate `*_golden_test.rs` files in `src/parsers/` with test data in `testdata/<ecosystem>-golden/`
-
-**Test Utilities**: Uses `test_utils::compare_package_data_parser_only()` which:
+**Parser Test Utilities**: Parser-local goldens commonly use `golden_test_utils::compare_package_data_parser_only()` which:
 
 - Skips dynamic/time-sensitive fields (identifiers, line numbers, matched_text)
 - Handles optional license detection fields gracefully
@@ -245,18 +206,7 @@ the default expectation rather than an optional extra.
 When a detector surface is intentionally scanner-gated, pair Layer 3 tests with detector-level
 goldens near the owning module so extraction drift and scanner-wiring drift are both covered.
 
-**Layer 4 Example**:
-
-```rust
-#[test]
-fn test_scanner_discovers_all_registered_parsers() {
-    let result = process("testdata/integration/multi-parser", ...);
-
-    assert!(result.files.iter().any(|f| f.package_data[0].package_type == Some("npm")));
-    assert!(result.files.iter().any(|f| f.package_data[0].package_type == Some("pypi")));
-    assert!(result.files.iter().any(|f| f.package_data[0].package_type == Some("cargo")));
-}
-```
+**Example shape**: a Layer 4 test should exercise the full scanner surface over a small integration fixture and assert user-visible behavior such as discovery, output shape, or graceful degradation.
 
 ---
 
@@ -396,15 +346,14 @@ testdata/
 
 ### All Tests
 
-```bash
-cargo test                    # Run all tests except golden tests
-cargo test --lib              # Run only library tests (faster, excludes integration)
-cargo test --doc              # Run only doctests
-cargo test --test scanner_integration  # Run one top-level system integration suite
-cargo test --features golden-tests  # Include golden tests (slower, compares against Python ScanCode)
-```
+Common local entry points are:
 
-> **Note**: Golden tests (comparing output against Python ScanCode reference) are gated behind the `golden-tests` feature flag because they are slow and require the reference submodule. They run automatically in CI but are excluded from `cargo test` by default for faster local development.
+- `cargo test` for the default suite without golden tests
+- `cargo test --doc` for doctests only
+- `cargo test --features golden-tests` when you need fixture-backed golden coverage
+- a focused `cargo test --test <suite>` or `cargo test --lib <filter>` invocation for the smallest owning suite that proves your change
+
+> **Note**: Golden tests are gated behind the `golden-tests` feature flag because they are slower and include multiple fixture-backed suites. Some still compare against Python-derived expectations, while others validate Rust-owned expectations. They run automatically in CI but are excluded from `cargo test` by default for faster local development.
 
 We do **not** feature-gate scanner/assembly contract tests or system integration tests. Those layers are
 still part of the normal test surface; CI selects them with explicit Cargo test targets/filters rather
@@ -412,31 +361,18 @@ than hiding them behind additional features.
 
 ### Specific Test Categories
 
-```bash
-cargo test npm_test           # All npm unit tests
-cargo test --lib _scan_test:: # All parser-local scanner/assembly contract tests
-cargo test golden             # All golden tests
-cargo test --test scanner_integration  # Cross-parser integration suite
-cargo test --doc              # All API documentation examples
-```
+Prefer the narrowest owning test target:
+
+- parser/unit tests via `cargo test --lib <parser_or_module_filter>`
+- parser-local scan/assembly contract tests via the owning `_scan_test` target/filter
+- golden tests via `cargo test --features golden-tests` plus the narrowest useful filter
+- top-level integration suites via `cargo test --test <suite_name>`
 
 ### Golden Fixture Maintenance Commands
 
 Use distinct commands for the two golden fixture domains:
 
-```bash
-# Parser golden snapshots (.expected.json)
-cargo run --manifest-path xtask/Cargo.toml --bin update-parser-golden -- --list
-cargo run --manifest-path xtask/Cargo.toml --bin update-parser-golden -- <ParserType> <input_file> <output_file>
-./scripts/update_parser_golden.sh <ParserType> <input_file> <output_file>
-
-# Copyright golden YAML fixtures (authors / ics / copyrights)
-# Note: "ics" here means Android Ice Cream Sandwich (Android 4.0) fixture corpus from
-# the ScanCode reference test data.
-cargo run --manifest-path xtask/Cargo.toml --bin update-copyright-golden -- copyrights --list-mismatches --show-diff
-cargo run --manifest-path xtask/Cargo.toml --bin update-copyright-golden -- copyrights --filter <pattern> --write
-./scripts/update_copyright_golden.sh copyrights --list-mismatches --show-diff
-```
+Use the dedicated `xtask` commands or wrapper scripts documented in [`scripts/README.md`](../scripts/README.md) for fixture maintenance. Keep the test strategy doc focused on when to update fixtures and which fixture family you are touching rather than mirroring the full CLI of those maintenance tools.
 
 For copyright golden fixtures, this repository's YAML files are treated as Rust-owned expectations. During updates, `update-copyright-golden` strips legacy `expected_failures` keys so Python reference sync does not reintroduce Python-only xfail metadata.
 
@@ -455,18 +391,11 @@ For canonical script purpose and full CLI argument reference, see [`scripts/READ
 
 ### Single Test
 
-```bash
-cargo test test_parse_dependency_with_alternatives
-```
+For single-test iteration, use `cargo test <exact_test_name_or_filter>` after discovering the narrowest relevant target.
 
 ### Ignored Tests
 
-Golden tests are gated behind the `golden-tests` feature flag:
-
-```bash
-cargo test --features golden-tests             # Run all tests including golden tests
-cargo test --lib --features golden-tests golden # Run only golden tests
-```
+Golden suites are gated behind the `golden-tests` feature flag, so local ignored/golden workflows should start from the smallest `cargo test --features golden-tests ...` invocation that proves the change.
 
 ### CI/CD
 
@@ -494,7 +423,7 @@ Commands:
   - `cargo test --test progress_cli_integration --release --verbose`
   - `cargo test --test output_format_golden --release --verbose`
 - **Golden Tests**
-  - `cargo test --all --verbose --features golden-tests` via the existing golden-test shard matrix
+  - targeted `cargo test ... --features golden-tests <filter>` commands via the existing golden-test shard matrix in `.github/workflows/check.yml`
 
 ---
 
@@ -506,7 +435,8 @@ Before marking a parser complete, verify:
 - [ ] **Golden tests** exist for at least one real-world file per format
 - [ ] **Layer 3 scan/assembly contract test** verifies parser data survives scanner wiring and assembly when applicable
 - [ ] **Layer 4 integration test** verifies parser is discovered and invoked correctly (if adding new ecosystem)
-- [ ] All tests pass (`cargo test`)
+- [ ] Baseline tests pass (`cargo test`)
+- [ ] Relevant golden suites pass (`cargo test --features golden-tests` or the narrower owning suite command)
 - [ ] No clippy warnings (`cargo clippy`)
 - [ ] Code formatted (`cargo fmt`)
 
@@ -536,7 +466,7 @@ Write tests that:
 - Doctests verify API documentation examples actually work
 - Unit tests verify components work correctly
 - Scanner/assembly contract tests verify parser data survives real scan wiring and assembly
-- Golden tests ensure feature parity with Python reference
+- Golden tests protect stable parser and subsystem contracts, whether their expectations are Python-derived or Rust-owned
 - System integration tests validate end-to-end and user-facing behavior
 - Fast CI/CD feedback loop (parallel execution, instant failure isolation)
 

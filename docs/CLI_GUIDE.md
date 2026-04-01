@@ -78,6 +78,7 @@ Use other outputs when you need a specific consumer or review format:
 - `--json` for compact machine-readable output
 - `--json-pp` for human inspection and debugging
 - `--json-lines` for streaming-oriented pipelines
+- `--yaml` for a human-readable structured format outside JSON
 - `--html` for a browsable report
 - `--spdx-tv`, `--spdx-rdf`, `--cyclonedx`, `--cyclonedx-xml` for downstream compliance or SBOM workflows
 - `--debian` for a machine-readable Debian copyright file
@@ -145,6 +146,8 @@ Add diagnostics only when you are actively investigating why something matched:
 provenant --json-pp licenses.json --license --license-text --license-text-diagnostics --license-diagnostics /path/to/project
 ```
 
+Add `--license-references` when you want top-level unique license and rule reference blocks, and add `--unknown-licenses` when you want unmatched license-like text surfaced for review.
+
 ### 3. "I want file metadata such as checksums and type hints"
 
 ```sh
@@ -210,7 +213,9 @@ This is useful when:
 - you want a faster specialized scan
 - you plan to run a deeper license scan separately
 
-Important: `--package-only` is a special mode, not a synonym for `--package`. It intentionally skips license/copyright work, skips the normal top-level package assembly path, and does not create the usual top-level `packages` and `dependencies` view you get from `--package`.
+Important: `--package-only` is a special mode, not a synonym for `--package`. It enables both application-manifest and installed-package detection, intentionally skips license/copyright work, skips the normal top-level package assembly path, and does not create the usual top-level `packages` and `dependencies` view you get from `--package`.
+
+If you explicitly ask for non-license detections such as `--email`, `--url`, or `--generated`, those still behave normally in `--package-only` mode.
 
 If you want assembled top-level packages and dependencies, use `--package` instead.
 
@@ -374,7 +379,43 @@ Important details:
 - `--cache-clear` clears the selected cache root before the run.
 - cache support is for native scans, not `--from-json` reshaping.
 
-### 17. "I need to scan more than one input path"
+### 17. "I want policy-aware license review"
+
+```sh
+provenant --json-pp policy.json --license --license-references --filter-clues --license-policy policy.yml /path/to/project
+```
+
+Use this when you want a review-oriented license scan rather than raw low-level findings.
+
+Why it is useful:
+
+- `--license-references` adds top-level license and rule reference blocks.
+- `--filter-clues` removes redundant clue output that is usually noisy in broad review workflows.
+- `--license-policy policy.yml` evaluates file findings against a YAML policy after the scan.
+- `--ignore-author PATTERN` and `--ignore-copyright-holder PATTERN` let you suppress entire resources when those findings match review-specific regexes.
+
+This workflow is also useful with `--from-json` when you want to reshape an existing scan instead of rescanning the original inputs.
+
+### 18. "I want tallies, facets, or clarity scoring"
+
+```sh
+provenant --json-pp summary.json --license --package --classify --summary --tallies /path/to/project
+```
+
+Build on that baseline when you need more structured review output:
+
+- add `--license-clarity-score` for project-level clarity scoring
+- add `--tallies-with-details` for file- and directory-level tallies
+- add `--tallies-key-files` for key-file-focused tallies
+- add one or more `--facet <facet>=<pattern>` rules, then `--tallies-by-facet`, to split tallies by shipping code vs tests/docs/examples
+
+Example:
+
+```sh
+provenant --json-pp summary.json --license --package --classify --summary --tallies --facet core=src/** --facet tests=test/** --tallies-by-facet --license-clarity-score /path/to/project
+```
+
+### 19. "I need to scan more than one input path"
 
 ```sh
 provenant --json-pp scan.json --license dir-a dir-b
@@ -398,8 +439,11 @@ These are worth learning early because they change what the output means:
 - `--license-text-diagnostics` requires `--license-text`
 - `--license-diagnostics` requires `--license`
 - `--license-references` requires `--license`
+- `--license-clarity-score` requires `--classify`
 - `--mark-source` requires `--info`
 - `--custom-output <FILE>` requires `--custom-template <FILE>`
+- `--tallies-key-files` requires `--tallies` and `--classify`
+- `--tallies-by-facet` requires `--facet` and `--tallies`
 - `--debian <FILE>` requires `--license`, `--copyright`, and `--license-text`
 
 ## A Simple Decision Guide
@@ -409,9 +453,11 @@ If you are not sure where to start, use this rule of thumb:
 - Want a general first scan? → `--json-pp` + `--license` + `--package`
 - Want copyright review too? → add `--copyright`
 - Want assembled top-level packages and dependencies? → `--package`
-- Want a narrower file-level package-data pass without normal top-level assembly? → `--package-only`
+- Want a narrower file-level package-data pass across application and installed-package inputs without normal top-level assembly? → `--package-only`
 - Want SBOM-oriented output? → add `--cyclonedx` or `--spdx-*`, usually with `--package`
 - Want browser-friendly review? → `--html`
+- Want policy-aware license review? → add `--license-references`, `--filter-clues`, and optionally `--license-policy`
+- Want summary/tally/facet review? → add `--classify`, `--summary`, and optionally `--tallies*` / `--facet`
 - Already have JSON and only want to filter or reshape it? → `--from-json`
 
 ## Where to Go Next
