@@ -23,7 +23,7 @@ The license detection system is a multi-phase, multi-strategy detection engine t
 
 **Default behavior**: Uses the built-in embedded license index. No external files required.
 
-> This document describes the current public license-detection surface and its stable architecture.
+> This document describes the current public license-detection surface and the repository's current engine/module layout.
 
 **Custom rules**: Use `--license-rules-path /path/to/rules` to load from a custom directory containing `.LICENSE` and `.RULE` files.
 
@@ -44,8 +44,7 @@ When license scanning is enabled, the current ScanCode-style public surface is:
 recompute the top-level license outputs when the loaded scan is reshaped or when
 license-reference generation is explicitly requested.
 
-The public-surface parity work is complete. This document is the evergreen
-reference for the current public license-detection surface.
+This document is the evergreen maintainer reference for the current public license-detection surface. It documents the live contract and module layout; it is not a claim that every downstream parity gap is closed.
 
 ### Initialization Flow
 
@@ -137,14 +136,7 @@ git commit -m "chore: update embedded license data"
 
 **File**: `src/license_detection/mod.rs`
 
-The orchestrator that coordinates the detection pipeline.
-
-```rust
-pub struct LicenseDetectionEngine {
-    index: Arc<LicenseIndex>,  // Pre-built index of rules/licenses
-    spdx_mapping: SpdxMapping, // ScanCode ↔ SPDX key mapping
-}
-```
+The orchestrator that coordinates the detection pipeline. Its durable responsibilities are to hold the prebuilt runtime index, expose the public load/construct entry points, and bridge internal license keys to SPDX-facing output.
 
 ### LicenseIndex
 
@@ -177,24 +169,7 @@ Pre-computed data structures for efficient matching:
 
 **File**: `src/license_detection/query/mod.rs`
 
-Tokenized input text ready for matching:
-
-```rust
-pub struct Query<'a> {
-    pub text: String,                          // Original text
-    pub tokens: Vec<u16>,                      // Token IDs (known tokens only)
-    pub line_by_pos: Vec<usize>,               // Position → line number
-    pub unknowns_by_pos: HashMap<Option<i32>, usize>, // Unknown token counts
-    pub stopwords_by_pos: HashMap<Option<i32>, usize>, // Stopword counts
-    pub shorts_and_digits_pos: HashSet<usize>, // Short/digit token positions
-    pub high_matchables: HashSet<usize>,       // Legalese token positions
-    pub low_matchables: HashSet<usize>,        // Non-legalese token positions
-    pub is_binary: bool,                       // Binary content flag
-    pub query_run_ranges: Vec<(usize, Option<usize>)>, // Query run boundaries
-    pub spdx_lines: Vec<(String, usize, usize)>, // SPDX identifier lines
-    pub index: &'a LicenseIndex,               // Reference to index
-}
-```
+Tokenized input text ready for matching. The stable concepts in a query are the original text, normalized/tokenized positions, matchable-token partitions, binary/text context, segmented query runs, SPDX identifier lines, and a reference to the loaded index.
 
 Also includes `QueryRun` values created on demand from stored run ranges.
 
@@ -324,15 +299,7 @@ OUTPUT: Vec<LicenseDetection>
   2. Ranking by containment, resemblance, matched length
   3. Sequence alignment for final scoring
 
-```rust
-pub struct ScoresVector {
-    pub is_highly_resemblant: bool, // True if resemblance >= threshold
-    pub containment: f32,           // Rule coverage in query
-    pub resemblance: f32,           // Jaccard similarity (squared)
-    pub matched_length: f32,        // Token overlap count
-    pub rid: usize,                 // Rule ID for tie-breaking
-}
-```
+Candidate ranking uses a compact score vector built from resemblance, containment, matched length, and a deterministic rule-ID tie-breaker.
 
 ### 5. Unknown Match (6-unknown)
 
@@ -396,51 +363,33 @@ Token ID assignment order:
 
 ---
 
-## Key Files Reference
+## Subsystem Layout
 
-| File                  | Role                                                  |
-| --------------------- | ----------------------------------------------------- |
-| `mod.rs`              | Engine orchestration, pipeline coordination           |
-| `detection.rs`        | Detection grouping, classification                    |
-| `models.rs`           | Core data structures (License, Rule, LicenseMatch)    |
-| `query.rs`            | Input tokenization, position tracking                 |
-| `tokenize.rs`         | Text → token conversion                               |
-| `index/mod.rs`        | Index data structures                                 |
-| `index/builder.rs`    | Index construction                                    |
-| `index/dictionary.rs` | Token → ID mapping                                    |
-| `index/token_sets.rs` | Token set/multiset operations for candidate selection |
-| `hash_match.rs`       | Exact hash matching                                   |
-| `spdx_lid.rs`         | SPDX-License-Identifier detection                     |
-| `aho_match.rs`        | Aho-Corasick matching                                 |
-| `seq_match.rs`        | Approximate sequence matching                         |
-| `unknown_match.rs`    | Unknown license detection                             |
-| `match_refine.rs`     | Match merging, filtering                              |
-| `rules/loader.rs`     | .LICENSE and .RULE file parsing                       |
-| `rules/legalese.rs`   | High-value token definitions                          |
-| `rules/thresholds.rs` | Match threshold calculations                          |
-| `spdx_mapping.rs`     | ScanCode ↔ SPDX key conversion                        |
-| `expression.rs`       | License expression parsing                            |
-| `spans.rs`            | Position span management                              |
+The subsystem is easier to maintain when described by responsibility rather than exact module paths:
+
+| Subsystem               | Responsibility                                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| Engine orchestration    | load the embedded/custom rule set and expose the public detection surface                             |
+| Query preparation       | tokenize text, preserve position data, segment query runs, and surface SPDX lines                     |
+| Runtime index           | hold token dictionaries, rule metadata, automata, and candidate-selection structures                  |
+| Matchers                | exact hash/SPDX matching, Aho-Corasick matching, approximate sequence matching, and unknown detection |
+| Refinement and grouping | merge/filter matches and build grouped detections                                                     |
+| Output mapping          | convert internal detections into public ScanCode-style and SPDX-facing structures                     |
+
+Use the `src/license_detection/` tree for the current file/module layout.
 
 ---
 
 ## Constants and Thresholds
 
-```rust
-// Matcher identifiers
-const MATCH_HASH: &str = "1-hash";
-const MATCH_SPDX_ID: &str = "1-spdx-id";
-const MATCH_AHO: &str = "2-aho";
-const MATCH_SEQ: &str = "3-seq";
-const MATCH_UNKNOWN: &str = "5-undetected";
+The durable thresholds to understand are:
 
-// Thresholds
-const LINES_THRESHOLD: usize = 4;            // Match grouping proximity
-const HIGH_RESEMBLANCE_THRESHOLD: f32 = 0.8;  // Near-duplicate detection
-const MAX_NEAR_DUPE_CANDIDATES: usize = 10;   // Top candidates to consider
-const SMALL_RULE: usize = 15;                 // Rule size classification
-const TINY_RULE: usize = 6;                   // Very small rules
-```
+- **matcher identifiers** remain stable enough to appear in public diagnostics (`1-hash`, `1-spdx-id`, `2-aho`, `3-seq`, `5-undetected`, `6-unknown`)
+- **grouping proximity** controls when nearby matches collapse into a single detection
+- **near-duplicate thresholds** control resemblance-based candidate admission
+- **small/tiny rule thresholds** adjust how aggressively very short rules are treated
+
+Exact numeric values are owned by the detector code and tests rather than this architecture doc.
 
 ---
 
@@ -459,21 +408,12 @@ are described here.
 
 ### Internal Detection Structure
 
-```rust
-pub struct LicenseDetection {
-    pub license_expression: Option<String>,      // ScanCode key
-    pub license_expression_spdx: Option<String>, // SPDX identifier
-    pub matches: Vec<LicenseMatch>,              // Individual matches
-    pub detection_log: Vec<String>,              // Classification
-    pub identifier: Option<String>,              // UUID
-    pub file_regions: Vec<FileRegion>,           // Internal aggregated locations
-}
-```
+Internally, a detection carries the normalized license expressions, the underlying matches, optional diagnostic/classification logs, a stable identifier when grouping requires one, and internal file-region aggregation metadata.
 
 ### JSON Output Example
 
 The current public JSON output still omits `file_region`, but it does preserve
-`detection_log` on public detections.
+`detection_log` on public detections. `file_regions` remain internal aggregation metadata used by detector and downstream post-processing flows.
 
 ```json
 {
@@ -491,3 +431,9 @@ The current public JSON output still omits `file_region`, but it does preserve
   ]
 }
 ```
+
+## Related Documentation
+
+- [CLI_GUIDE.md](CLI_GUIDE.md) - user-facing workflows for the public license flags documented here
+- [TESTING_STRATEGY.md](TESTING_STRATEGY.md) - verification layers and fixture ownership for license-related golden coverage
+- [ARCHITECTURE.md](ARCHITECTURE.md) - broader pipeline placement and cross-subsystem boundaries

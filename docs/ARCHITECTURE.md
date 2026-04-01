@@ -2,12 +2,12 @@
 
 ## Overview
 
-Provenant is a complete rewrite of [ScanCode Toolkit](https://github.com/aboutcode-org/scancode-toolkit) in Rust, designed as a **drop-in replacement** with all features of the original, but with:
+Provenant is a Rust reimplementation of [ScanCode Toolkit](https://github.com/aboutcode-org/scancode-toolkit) focused on trustworthy feature parity, explicit behavioral documentation, and targeted improvements where Rust makes the result safer or easier to maintain.
 
-- **Zero bugs**: Leveraging Rust's type system and ownership model
-- **Better performance**: Native code, parallel processing, zero-copy parsing
-- **Enhanced security**: No code execution, comprehensive DoS protection
-- **Feature parity or better**: 100% compatibility plus intentional improvements
+- **Strong compatibility goals**: preserve ScanCode behavior where users depend on it
+- **Better performance**: native code, parallel processing, and efficient parsing
+- **Enhanced security**: no code execution and explicit DoS protection
+- **Intentional improvements**: document deliberate Rust-side enhancements and any remaining parity gaps clearly
 
 See [SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md) for the full list of supported ecosystems and formats.
 
@@ -19,7 +19,7 @@ See [SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md) for the full list of supported 
 
 - Every feature, edge case, and requirement from Python ScanCode must be preserved
 - Zero tolerance for bugs - identify and fix issues from the original
-- Comprehensive test coverage (unit + golden tests against Python reference)
+- Comprehensive test coverage across unit, golden, scanner-contract, and integration layers
 
 ### 2. Security First
 
@@ -56,57 +56,27 @@ See [ADR 0002: Extraction vs Detection Separation](adr/0002-extraction-vs-detect
 
 ## System Architecture Overview
 
-### Complete Processing Pipeline
+### High-Level Processing Stages
 
-Provenant implements a multi-phase processing pipeline based on Python ScanCode's architecture:
+Provenant follows the same broad stage model as ScanCode, but the concrete implementation is narrower in a few places. In particular, Provenant primarily scans native paths and already-extracted inputs, while some archive-aware parsers inspect their own archive formats directly instead of relying on one universal pre-scan extraction stage.
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│                    ScanCode Processing Pipeline                 │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Phase 1: Pre-Scan                                              │
-│  ┌────────────────────────────────────────────────────────┐     │
-│  │ • Archive extraction                                    │    │
-│  │ • File type detection                                   │    │
-│  │ • Pre-processing hooks                                  │    │
-│  └────────────────────────────────────────────────────────┘     │
-│                           │                                     │
-│                           ▼                                     │
-│  Phase 2: Scanning                                              │
-│  ┌────────────────────────────────────────────────────────┐     │
-│  │ • Package manifest parsing (see SUPPORTED_FORMATS.md)  |     │
-│  │ • License text detection                               |     │
-│  │ • Copyright detection                                  |     │
-│  │ • Email/URL extraction                                 |     │
-│  └────────────────────────────────────────────────────────┘     │
-│                           │                                     │
-│                           ▼                                     │
-│  Phase 3: Post-Processing                                       │
-│  ┌──────────────────────────────────────────────────────────┐   |
-│  │ • Package assembly (sibling, nested, file-ref, workspace)│   │
-│  │ • Summary, tallies, classification, facets              │   │
-│  │ • License/copyright summarization                        │   │
-│  │ • Generated-code and key-file analysis                   │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                           │                                     │
-│                           ▼                                     │
-│  Phase 4: Filtering                                             │
-│  ┌────────────────────────────────────────────────────────┐     │
-│  │ • License policy filtering                             │     │
-│  │ • Policy/filtering rules                               │     │
-│  └────────────────────────────────────────────────────────┘     │
-│                           │                                     │
-│                           ▼                                     │
-│  Phase 5: Output                                                │
-│  ┌────────────────────────────────────────────────────────┐     │
-│  │ • JSON output (ScanCode-compatible)                    │     │
-│  │ • SPDX, CycloneDX, CSV, YAML, HTML, JSONL              │     │
-│  │ • HTML app and custom templates                        │     │
-│  └────────────────────────────────────────────────────────┘     │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+1. **Input preparation**
+   - collect input paths
+   - apply include/exclude rules and depth limits
+   - recognize extracted layouts and parser-specific archive surfaces where applicable
+2. **Scanning**
+   - package manifest and package-database parsing
+   - license detection
+   - copyright, email, and URL extraction
+3. **Post-processing**
+   - package assembly (sibling, nested, file-reference, workspace)
+   - summaries, tallies, classification, facets, generated-code handling
+4. **Filtering and reshaping**
+   - license-policy evaluation
+   - include/exclude and findings-only shaping over native scans or `--from-json` inputs
+5. **Output**
+   - ScanCode-style JSON / JSONL / YAML / HTML
+   - SPDX, CycloneDX, Debian copyright, and custom-template output
 
 ### Component Inventory
 
@@ -116,8 +86,8 @@ Provenant implements a multi-phase processing pipeline based on Python ScanCode'
 - **Package Assembly**: Sibling and nested merge strategies for combining related manifests
 - **Text Detection**: License detection (n-gram matching), copyright detection (4-stage pipeline), email/URL extraction
 - **Post-Processing**: Summarization, tallies, classification
-- **Output**: JSON, SPDX (TV/RDF), CycloneDX (JSON/XML), CSV, YAML, JSON Lines, HTML, HTML app, custom templates
-- **Testing Infrastructure**: Unit tests, doctests, golden tests, integration tests
+- **Output**: JSON, JSON Lines, YAML, HTML, SPDX (TV/RDF), CycloneDX (JSON/XML), Debian copyright, and custom templates
+- **Testing Infrastructure**: Doctests, unit tests, golden tests, parser-local scanner/assembly contract tests, and system integration tests
 - **Infrastructure**: Caching, enhanced progress tracking, static integration points
 
 ### Implementation Status
@@ -144,16 +114,7 @@ Provenant keeps the same high-level stages, but wires them statically through tr
 
 ### Trait-Based Parser System
 
-**Core Abstraction:**
-
-```rust
-pub trait PackageParser {
-    const PACKAGE_TYPE: &'static str;
-
-    fn is_match(path: &Path) -> bool;
-    fn extract_packages(path: &Path) -> Vec<PackageData>;
-}
-```
+**Core abstraction:** each parser exposes three durable concepts — its package type, a path-matching predicate, and an extraction entry point that returns one or more normalized `PackageData` values.
 
 **Benefits:**
 
@@ -162,26 +123,7 @@ pub trait PackageParser {
 - Clear contract for all parsers
 - Easy to test in isolation
 
-**Implementation:**
-
-```rust
-pub struct NpmParser;
-
-impl PackageParser for NpmParser {
-    const PACKAGE_TYPE: &'static str = "npm";
-
-    fn is_match(path: &Path) -> bool {
-        matches!(
-            path.file_name().and_then(|n| n.to_str()),
-            Some("package.json" | "package-lock.json")
-        )
-    }
-
-    fn extract_packages(path: &Path) -> Vec<PackageData> {
-        // Implementation
-    }
-}
-```
+**Implementation pattern:** parsers are usually zero-sized types with compile-time registration. The exact trait signature and helper APIs belong in code and the parser how-to guide, not in this architecture overview.
 
 See [ADR 0001: Trait-Based Parser Architecture](adr/0001-trait-based-parsers.md) for details.
 
@@ -189,30 +131,14 @@ See [ADR 0001: Trait-Based Parser Architecture](adr/0001-trait-based-parsers.md)
 
 **How parsers are wired to the scanner:**
 
-Parsers and recognizers are registered via the `register_package_handlers!` macro in `src/parsers/mod.rs`:
-
-```rust
-register_package_handlers! {
-    parsers: [
-        NpmParser,
-        NpmLockParser,
-        CargoParser,
-        CargoLockParser,
-        // ... more parsers ...
-    ],
-    recognizers: [
-        JavaJarRecognizer,
-        // ... file-type recognizers ...
-    ],
-}
-```
+Parsers and recognizers are registered centrally in `src/parsers/mod.rs` through the package-handler registration macro.
 
 **What this macro generates:**
 
-1. **`try_parse_file(path: &Path) -> Option<Vec<PackageData>>`**
+1. **`try_parse_file(path: &Path) -> Option<ParsePackagesResult>`**
    - Called by scanner for every file
    - Tries each parser's `is_match()` in order
-   - Returns first match's extracted data
+   - Returns extracted packages plus parser diagnostics
 
 2. **`parse_by_type_name(type_name: &str, path: &Path) -> Option<PackageData>`**
    - Used by test utilities for golden test generation
@@ -230,54 +156,15 @@ surfaces wired from the scanner rather than through `register_package_handlers!`
 
 ### Unified Data Model
 
-All parsers output a single `PackageData` struct:
+All parsers output the same normalized `PackageData` shape. The durable categories in that model are:
 
-```rust
-pub struct PackageData {
-    // Identity
-    pub package_type: Option<String>,
-    pub namespace: Option<String>,
-    pub name: Option<String>,
-    pub version: Option<String>,
-    pub purl: Option<String>,
-    pub datasource_id: Option<DatasourceId>,
+- **identity**: package type, namespace/name/version, qualifiers, PURL, datasource IDs
+- **metadata**: description, language, release/homepage information, parties, keywords
+- **dependencies**: dependency edges plus scope/optionality/runtime hints
+- **license metadata**: extracted statements, declared expressions, and parser-owned declared-license detections
+- **provenance and references**: checksums, repository/download/API URLs, source packages, file references, and extra ecosystem-specific metadata
 
-    // Metadata
-    pub description: Option<String>,
-    pub primary_language: Option<String>,
-    pub release_date: Option<String>,
-    pub homepage_url: Option<String>,
-    pub parties: Vec<Party>,
-    pub keywords: Vec<String>,
-
-    // Dependencies
-    pub dependencies: Vec<Dependency>,
-
-    // Licenses (extraction only - detection is separate)
-    pub extracted_license_statement: Option<String>,
-    pub declared_license_expression: Option<String>,
-    pub license_detections: Vec<LicenseDetection>,
-
-    // Checksums & URLs
-    pub sha1: Option<String>,
-    pub md5: Option<String>,
-    pub sha256: Option<String>,
-    pub sha512: Option<String>,
-    pub download_url: Option<String>,
-    pub vcs_url: Option<String>,
-    pub repository_homepage_url: Option<String>,
-    pub repository_download_url: Option<String>,
-    pub api_data_url: Option<String>,
-
-    // Additional data
-    pub extra_data: Option<HashMap<String, serde_json::Value>>,
-    pub source_packages: Vec<String>,
-    pub file_references: Vec<FileReference>,
-    pub is_private: bool,
-    pub is_virtual: bool,
-    // ... and more (see src/models/file_info.rs for complete definition)
-}
-```
+The field-level schema evolves over time and is owned by the Rust model definitions, not this overview.
 
 **Rationale:**
 
@@ -315,7 +202,7 @@ not travel through the standard parser registry.
 │  4. Output        v                                        │
 │  ┌─────────────────────────────────────┐                   │
 │  │ Output format dispatch              │                   │
-│  │ ─ JSON / YAML / CSV / JSONL         │                   │
+│  │ ─ JSON / YAML / JSONL               │                   │
 │  │ ─ SPDX / CycloneDX / HTML / template│                   │
 │  └─────────────────────────────────────┘                   │
 │                                                            │
@@ -331,33 +218,12 @@ not travel through the standard parser registry.
 
 ### Parallel Processing
 
-Uses `rayon` for multi-threaded file scanning:
+The scanner uses `rayon` to process files in parallel. At a high level, each worker:
 
-```rust
-// Actual implementation in src/scanner/process.rs
-files.par_iter()
-    .map(|(path, metadata)| {
-        // Each file processed in parallel
-        let file_entry = process_file(path, metadata, scan_strategy);
-        progress.file_completed(path, metadata.len(), &file_entry.scan_errors);
-        file_entry
-    })
-    .collect()
-```
-
-Inside `process_file()`, the scanner calls `try_parse_file(path)` (generated by `register_package_handlers!` macro), then runs license detection plus enabled text-detection options on UTF-8 content:
-
-```rust
-// src/scanner/process.rs — simplified flow
-if let Some(package_data) = try_parse_file(path) {
-    file_info_builder.package_data(package_data);
-}
-extract_license_information(&mut file_info_builder, text_content, scan_strategy)?;
-if text_options.detect_copyrights {
-    extract_copyright_information(&mut file_info_builder, path, &text_content);
-}
-extract_email_url_information(&mut file_info_builder, &text_content, text_options);
-```
+1. selects the relevant parser or recognizer for the file
+2. extracts package data when applicable
+3. runs enabled text-detection stages
+4. records scan errors and progress for that file
 
 **Benefits:**
 
@@ -427,33 +293,34 @@ Assembly is configurable via the `--no-assemble` CLI flag. See `src/assembly/` f
 └─────────────────────────────────────────────────────────┘
 ```
 
+The exact numeric thresholds are implementation details. Treat the code and tests as the canonical source for current limits; this document focuses on the architectural safety layers they enforce.
+
 See [ADR 0004: Security-First Parsing](adr/0004-security-first-parsing.md) for comprehensive security analysis.
 
 ## Testing Strategy
 
-### Four-Layer Test Pyramid
+### Five-Layer Test Model
 
 ```text
-          /\
-         /  \    Integration Tests
-        /    \   ─ End-to-end scanner pipeline
-       /------\  ─ Full scan validation
-      /        \
-     / Golden   \ Golden Tests
-    /  Tests     \ ─ Compare with Python ScanCode output
-   /--------------\ ─ Real-world manifest files
-  /                \
- /   Unit Tests     \ Unit Tests + Doctests
-/  + Doctests        \ ─ Parser functions, edge cases
-/_____________________\ ─ API documentation examples
+              /\
+             /  \   Layer 4: System integration tests
+            /----\  Layer 3: Scanner/assembly contract tests
+           /      \
+          / Golden \ Layer 2: Golden tests
+         /----------\
+        /   Unit     \ Layer 1: Unit tests
+       /--------------\
+      /   Doctests     \ Layer 0: API documentation examples
+     /__________________\
 ```
 
-**Four layers** (see [TESTING_STRATEGY.md](TESTING_STRATEGY.md) for full details):
+**Five layers** (see [TESTING_STRATEGY.md](TESTING_STRATEGY.md) for full details):
 
-1. **Doctests**: API documentation examples that run as tests
-2. **Unit Tests**: Component-level tests for individual functions and edge cases
-3. **Golden Tests**: Regression tests comparing output against Python ScanCode reference
-4. **Integration Tests**: End-to-end tests validating the full scanner pipeline
+1. **Layer 0 — Doctests**: API documentation examples that run as tests
+2. **Layer 1 — Unit Tests**: Component-level tests for individual functions and edge cases
+3. **Layer 2 — Golden Tests**: Fixture-backed regression tests for parser and subsystem contracts
+4. **Layer 3 — Scanner/Assembly Contract Tests**: parser-local tests that prove extracted data survives real scanner wiring and assembly
+5. **Layer 4 — System Integration Tests**: end-to-end tests validating user-facing behavior across the full scanner pipeline
 
 See [ADR 0003: Golden Test Strategy](adr/0003-golden-test-strategy.md) for golden test details.
 
@@ -526,7 +393,7 @@ The codebase follows a modular architecture:
 
 ### Benchmarks
 
-_(To be added: criterion benchmarks for parser performance)_
+For broad performance-sensitive changes, maintainers use `./scripts/benchmark.sh` to measure scanner behavior against a stable external repository. Smaller changes usually rely on targeted regression suites plus normal scan-time profiling during development.
 
 ### Optimization Strategies
 
@@ -671,9 +538,8 @@ Module location: `src/finder/`
 
 **Additional Formats**:
 
-- CSV (tabular data export)
 - YAML (human-readable)
-- HTML report + HTML app
+- HTML report
 - Custom templates (user-defined formats)
 
 #### Infrastructure Enhancements
@@ -719,15 +585,13 @@ Logging integration uses `indicatif-log-bridge` for startup and global warnings,
 
 Module location: `src/progress.rs`
 
-### Quality Enhancements
+### Quality Verification
 
-Ongoing quality improvements:
+Quality verification in this area is currently centered on:
 
-- Property-based testing with proptest
-- Fuzzing with cargo-fuzz
-- Performance benchmarks with criterion
-- Memory profiling and optimization
-- Continuous golden test expansion
+- fixture-backed golden and integration suites
+- targeted benchmark runs via `./scripts/benchmark.sh` when broad performance could change
+- explicit parity-gap tracking in evergreen docs and completed rollout records where behavior intentionally differs from Python
 
 ## License Data Architecture
 

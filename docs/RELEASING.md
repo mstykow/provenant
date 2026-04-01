@@ -35,12 +35,22 @@ cargo login
 Before the actual release, verify the repository is in good shape:
 
 ```sh
-cargo test --all --release --verbose
 npm ci
 npm run check:docs
+npm run validate:urls
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo check --all --verbose
+cargo test --doc --release --verbose
+cargo test --lib --release --verbose -- --skip _scan_test::
+cargo test --lib --release --verbose _scan_test::
+cargo test --test scanner_integration --release --verbose
+cargo test --test output_format_golden --release --verbose
+cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin generate-supported-formats -- --check
+./scripts/check_xtask_lockfile_sync.sh
 ```
 
-The GitHub `Quality Checks` workflow runs formatting, clippy, compilation, tests, golden tests, and documentation checks. It is best to start from a branch and commit state where those checks are already green.
+The GitHub `Quality Checks` workflow is the authoritative release gate. It also verifies the embedded license index, crate size, manifest sorting, unused dependencies, golden-test shards, Windows build smoke, and the split integration-test matrix defined in `.github/workflows/check.yml`. It is best to start from a branch and commit state where that workflow is already green.
 
 ## Release Commands
 
@@ -92,6 +102,7 @@ That workflow:
   - `aarch64-unknown-linux-gnu`
   - `aarch64-apple-darwin`
   - `x86_64-pc-windows-msvc`
+- Separately verifies the embedded license index before building release artifacts
 - Packages each build as `.tar.gz` or `.zip`
 - Generates SHA256 checksum files
 - Creates a GitHub Release and uploads all generated assets
