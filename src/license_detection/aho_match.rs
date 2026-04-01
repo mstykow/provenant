@@ -10,7 +10,7 @@
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::{TokenId, TokenKind};
 use crate::license_detection::models::position_span::PositionSpan;
-use crate::license_detection::models::{LicenseMatch, MatcherKind};
+use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind};
 use crate::license_detection::position_set::PositionSet;
 use crate::license_detection::query::QueryRun;
 
@@ -149,41 +149,40 @@ pub fn aho_match_with_extra_matchables(
 
             let qspan = PositionSpan::range(qstart, qend);
             let ispan = PositionSpan::range(0, matched_length);
+            let hispan = PositionSpan::from_positions(
+                (0..matched_length)
+                    .filter(|&p| index.dictionary.token_kind(rule_tids[p]) == TokenKind::Legalese),
+            );
 
-            let license_match =
-                LicenseMatch {
-                    license_expression: rule.license_expression.clone(),
-                    license_expression_spdx: index
-                        .rule_metadata_by_identifier
-                        .get(&rule.identifier)
-                        .and_then(|metadata| metadata.license_expression_spdx.clone()),
-                    from_file: None,
-                    start_line,
-                    end_line,
-                    start_token: qstart,
-                    end_token: qend,
-                    matcher: MATCH_AHO,
-                    score,
-                    matched_length,
-                    rule_length,
-                    match_coverage,
-                    rule_relevance: rule.relevance,
-                    rid,
-                    rule_identifier: rule.identifier.clone(),
-                    rule_url: String::new(),
-                    matched_text: None,
-                    referenced_filenames: rule.referenced_filenames.clone(),
-                    rule_kind: rule.kind(),
-                    is_from_license: rule.is_from_license,
-                    rule_start_token: 0,
-                    qspan,
-                    ispan,
-                    hispan: PositionSpan::from_positions((0..matched_length).filter(|&p| {
-                        index.dictionary.token_kind(rule_tids[p]) == TokenKind::Legalese
-                    })),
-                    candidate_resemblance: 0.0,
-                    candidate_containment: 0.0,
-                };
+            let license_match = LicenseMatch {
+                license_expression: rule.license_expression.clone(),
+                license_expression_spdx: index
+                    .rule_metadata_by_identifier
+                    .get(&rule.identifier)
+                    .and_then(|metadata| metadata.license_expression_spdx.clone()),
+                from_file: None,
+                start_line,
+                end_line,
+                start_token: qstart,
+                end_token: qend,
+                matcher: MATCH_AHO,
+                score,
+                matched_length,
+                rule_length,
+                match_coverage,
+                rule_relevance: rule.relevance,
+                rid,
+                rule_identifier: rule.identifier.clone(),
+                rule_url: String::new(),
+                matched_text: None,
+                referenced_filenames: rule.referenced_filenames.clone(),
+                rule_kind: rule.kind(),
+                is_from_license: rule.is_from_license,
+                rule_start_token: 0,
+                coordinates: MatchCoordinates::rule_aligned(qspan, ispan, hispan),
+                candidate_resemblance: 0.0,
+                candidate_containment: 0.0,
+            };
 
             matches.push(license_match);
         }

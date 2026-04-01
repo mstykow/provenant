@@ -8,7 +8,7 @@ use sha1::{Digest, Sha1};
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::{TokenId, TokenKind};
 use crate::license_detection::models::position_span::PositionSpan;
-use crate::license_detection::models::{LicenseMatch, MatcherKind};
+use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind};
 use crate::license_detection::position_set::PositionSet;
 use crate::license_detection::query::Query;
 use crate::license_detection::tokenize::STOPWORDS;
@@ -120,7 +120,7 @@ pub fn unknown_match(
 fn compute_covered_positions(_query: &Query, known_matches: &[LicenseMatch]) -> PositionSet {
     let mut covered = PositionSet::new();
     for m in known_matches {
-        covered.extend_from_span(&m.effective_span());
+        covered.extend_from_span(m.query_span());
     }
     covered
 }
@@ -254,6 +254,8 @@ fn create_unknown_match_from_qspan(query: &Query, qspan: &PositionSet) -> Option
 
     let score = calculate_score(ngram_count, match_len);
 
+    let qspan_span = qspan.to_position_span();
+
     LicenseMatch {
         rid: 0,
         license_expression: "unknown".to_string(),
@@ -276,9 +278,7 @@ fn create_unknown_match_from_qspan(query: &Query, qspan: &PositionSet) -> Option
         rule_kind: crate::license_detection::models::RuleKind::None,
         is_from_license: false,
         rule_start_token: 0,
-        qspan: qspan.to_position_span(),
-        ispan: PositionSpan::empty(),
-        hispan: PositionSpan::empty(),
+        coordinates: MatchCoordinates::query_region(qspan_span),
         candidate_resemblance: 0.0,
         candidate_containment: 0.0,
     }
@@ -826,9 +826,9 @@ mod tests {
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
             rule_start_token: 0,
-            qspan: PositionSpan::from_positions(vec![0, 1, 2, 7, 8, 9]),
-            ispan: PositionSpan::empty(),
-            hispan: PositionSpan::empty(),
+            coordinates: MatchCoordinates::query_region(PositionSpan::from_positions(vec![
+                0, 1, 2, 7, 8, 9,
+            ])),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }];
@@ -875,9 +875,7 @@ mod tests {
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
             rule_start_token: 0,
-            qspan: PositionSpan::empty(),
-            ispan: PositionSpan::empty(),
-            hispan: PositionSpan::empty(),
+            coordinates: MatchCoordinates::query_region(PositionSpan::range(5, 10)),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }];
@@ -925,9 +923,9 @@ mod tests {
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
             rule_start_token: 0,
-            qspan: PositionSpan::from_positions(vec![0, 1, 2, 3, 11, 12, 13, 14]),
-            ispan: PositionSpan::empty(),
-            hispan: PositionSpan::empty(),
+            coordinates: MatchCoordinates::query_region(PositionSpan::from_positions(vec![
+                0, 1, 2, 3, 11, 12, 13, 14,
+            ])),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }];
@@ -976,7 +974,7 @@ mod tests {
         let m = match_result.unwrap();
         assert_eq!(m.license_expression, "unknown");
         assert_eq!(m.matcher, MATCH_UNKNOWN);
-        assert!(!m.qspan.is_empty());
+        assert!(!m.coordinates.query_span().is_empty());
     }
 
     #[test]
@@ -1008,9 +1006,7 @@ mod tests {
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
             rule_start_token: 0,
-            qspan: PositionSpan::empty(),
-            ispan: PositionSpan::empty(),
-            hispan: PositionSpan::empty(),
+            coordinates: MatchCoordinates::query_region(PositionSpan::range(0, 5)),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }];

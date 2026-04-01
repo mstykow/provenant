@@ -169,7 +169,7 @@ pub fn filter_false_positive_license_lists_matches(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::license_detection::models::position_span::PositionSpan;
+    use crate::license_detection::models::{MatchCoordinates, PositionSpan};
 
     #[allow(clippy::too_many_arguments)]
     fn create_test_match_with_flags(
@@ -217,9 +217,7 @@ mod tests {
             .unwrap(),
             is_from_license: false,
             rule_start_token: 0,
-            qspan: PositionSpan::range(0, matched_length),
-            ispan: PositionSpan::empty(),
-            hispan: PositionSpan::empty(),
+            coordinates: MatchCoordinates::query_region(PositionSpan::range(0, matched_length)),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }

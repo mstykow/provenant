@@ -2,8 +2,8 @@
 
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::TokenId;
-use crate::license_detection::models::LicenseMatch;
 use crate::license_detection::models::position_span::PositionSpan;
+use crate::license_detection::models::{LicenseMatch, MatchCoordinates};
 use crate::license_detection::query::QueryRun;
 use bit_set::BitSet;
 use std::collections::HashMap;
@@ -283,15 +283,20 @@ pub fn seq_match_with_candidates(
                         continue;
                     }
 
-                    let qspan =
-                        PositionSpan::range(qpos + query_run.start, qpos + mlen + query_run.start);
-                    let ispan = PositionSpan::range(ipos, ipos + mlen);
-
                     let qend = qpos + mlen - 1;
                     let abs_qpos = qpos + query_run.start;
                     let abs_qend = qend + query_run.start;
                     let start_line = query_run.line_for_pos(abs_qpos).unwrap_or(1);
                     let end_line = query_run.line_for_pos(abs_qend).unwrap_or(start_line);
+
+                    let qspan =
+                        PositionSpan::range(qpos + query_run.start, qpos + mlen + query_run.start);
+                    let ispan = PositionSpan::range(ipos, ipos + mlen);
+                    let hispan = PositionSpan::from_positions((ipos..ipos + mlen).filter(|&p| {
+                        rule_tokens
+                            .get(p)
+                            .is_some_and(|t| t.as_usize() < len_legalese)
+                    }));
 
                     let rule_coverage = mlen as f32 / rule_length as f32;
                     let match_coverage = LicenseMatch::round_metric(rule_coverage * 100.0);
@@ -323,13 +328,7 @@ pub fn seq_match_with_candidates(
                         rule_kind: candidate.rule.kind(),
                         is_from_license: candidate.rule.is_from_license,
                         rule_start_token: ipos,
-                        qspan,
-                        ispan,
-                        hispan: PositionSpan::from_positions((ipos..ipos + mlen).filter(|&p| {
-                            rule_tokens
-                                .get(p)
-                                .is_some_and(|t| t.as_usize() < len_legalese)
-                        })),
+                        coordinates: MatchCoordinates::rule_aligned(qspan, ispan, hispan),
                         candidate_resemblance: candidate.score_vec_full.resemblance,
                         candidate_containment: candidate.score_vec_full.containment,
                     };

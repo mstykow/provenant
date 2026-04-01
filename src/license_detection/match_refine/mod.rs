@@ -329,6 +329,7 @@ fn filter_binary_low_coverage_same_expression_seq_bridges(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::license_detection::models::MatchCoordinates;
     use crate::license_detection::models::position_span::PositionSpan;
 
     fn parse_rule_id(rule_identifier: &str) -> Option<usize> {
@@ -373,9 +374,10 @@ mod tests {
             rule_kind: crate::license_detection::models::RuleKind::None,
             is_from_license: false,
             rule_start_token: 0,
-            qspan: PositionSpan::empty(),
-            ispan: PositionSpan::empty(),
-            hispan: PositionSpan::empty(),
+            coordinates: MatchCoordinates::query_region(PositionSpan::range(
+                start_line,
+                end_line + 1,
+            )),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }
@@ -389,19 +391,31 @@ mod tests {
         let mut m1 = create_test_match("#1", 1, 10, 0.5, 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
-        m1.qspan = PositionSpan::range(1, 11);
-        m1.ispan = PositionSpan::range(0, 10);
+        m1.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(1, 11),
+            PositionSpan::range(0, 10),
+            PositionSpan::empty(),
+        );
         let mut m2 = create_test_match("#1", 5, 15, 0.5, 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 4;
-        m2.qspan = PositionSpan::range(5, 16);
-        m2.ispan = PositionSpan::range(4, 15);
+        m2.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(5, 16),
+            PositionSpan::range(4, 15),
+            PositionSpan::empty(),
+        );
         let mut m3 = create_test_match("#2", 20, 25, 0.5, 100.0, 80);
-        m3.qspan = PositionSpan::range(20, 26);
-        m3.ispan = PositionSpan::range(0, 6);
+        m3.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(20, 26),
+            PositionSpan::range(0, 6),
+            PositionSpan::empty(),
+        );
         let mut m4 = create_test_match("#99", 30, 35, 0.5, 100.0, 100);
-        m4.qspan = PositionSpan::range(30, 36);
-        m4.ispan = PositionSpan::range(0, 6);
+        m4.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(30, 36),
+            PositionSpan::range(0, 6),
+            PositionSpan::empty(),
+        );
 
         let matches = vec![m1, m2, m3, m4];
 
@@ -446,11 +460,17 @@ mod tests {
         let index = LicenseIndex::with_legalese_count(10);
 
         let mut m1 = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
-        m1.qspan = PositionSpan::range(1, 11);
-        m1.ispan = PositionSpan::range(0, 10);
+        m1.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(1, 11),
+            PositionSpan::range(0, 10),
+            PositionSpan::empty(),
+        );
         let mut m2 = create_test_match("#2", 20, 30, 0.85, 85.0, 100);
-        m2.qspan = PositionSpan::range(20, 31);
-        m2.ispan = PositionSpan::range(0, 11);
+        m2.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(20, 31),
+            PositionSpan::range(0, 11),
+            PositionSpan::empty(),
+        );
 
         let matches = vec![m1, m2];
 
@@ -472,7 +492,11 @@ mod tests {
         exact.start_token = 10;
         exact.end_token = 16;
         exact.matched_length = 6;
-        exact.qspan = PositionSpan::range(10, 16);
+        exact.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(10, 16),
+            PositionSpan::empty(),
+            PositionSpan::empty(),
+        );
 
         let mut seq = create_test_match("#2", 140, 141, 10.0, 52.9, 100);
         seq.license_expression = "bsd-new".to_string();
@@ -480,7 +504,11 @@ mod tests {
         seq.start_token = 10;
         seq.end_token = 18;
         seq.matched_length = 7;
-        seq.qspan = PositionSpan::from_positions(vec![10, 11, 12, 13, 14, 16, 17]);
+        seq.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::from_positions(vec![10, 11, 12, 13, 14, 16, 17]),
+            PositionSpan::empty(),
+            PositionSpan::empty(),
+        );
 
         let filtered = filter_binary_low_coverage_same_expression_seq_bridges(
             vec![seq.clone(), exact.clone()],
@@ -497,14 +525,20 @@ mod tests {
         let mut first = create_test_match("#1", 1, 10, 0.9, 50.0, 100);
         first.rule_length = 20;
         first.rule_start_token = 0;
-        first.qspan = PositionSpan::range(1, 11);
-        first.ispan = PositionSpan::range(0, 10);
+        first.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(1, 11),
+            PositionSpan::range(0, 10),
+            PositionSpan::empty(),
+        );
 
         let mut second = create_test_match("#1", 11, 20, 0.85, 50.0, 100);
         second.rule_length = 20;
         second.rule_start_token = 10;
-        second.qspan = PositionSpan::range(11, 21);
-        second.ispan = PositionSpan::range(10, 20);
+        second.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(11, 21),
+            PositionSpan::range(10, 20),
+            PositionSpan::empty(),
+        );
 
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
         let refined = refine_aho_matches(&index, vec![first, second], &query);
@@ -520,14 +554,23 @@ mod tests {
         let index = LicenseIndex::with_legalese_count(10);
 
         let mut m1 = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
-        m1.qspan = PositionSpan::range(1, 11);
-        m1.ispan = PositionSpan::range(0, 10);
+        m1.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(1, 11),
+            PositionSpan::range(0, 10),
+            PositionSpan::empty(),
+        );
         let mut m2 = create_test_match("#2", 20, 30, 0.85, 85.0, 100);
-        m2.qspan = PositionSpan::range(20, 31);
-        m2.ispan = PositionSpan::range(0, 11);
+        m2.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(20, 31),
+            PositionSpan::range(0, 11),
+            PositionSpan::empty(),
+        );
         let mut m3 = create_test_match("#3", 40, 50, 0.8, 80.0, 100);
-        m3.qspan = PositionSpan::range(40, 51);
-        m3.ispan = PositionSpan::range(0, 11);
+        m3.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(40, 51),
+            PositionSpan::range(0, 11),
+            PositionSpan::empty(),
+        );
 
         let matches = vec![m1, m2, m3];
 
@@ -546,26 +589,38 @@ mod tests {
         m1.matched_length = 100;
         m1.rule_length = 100;
         m1.rule_start_token = 0;
-        m1.qspan = PositionSpan::range(1, 11);
-        m1.ispan = PositionSpan::range(0, 10);
+        m1.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(1, 11),
+            PositionSpan::range(0, 10),
+            PositionSpan::empty(),
+        );
         let mut m2 = create_test_match("#1", 8, 15, 0.8, 100.0, 100);
         m2.matched_length = 100;
         m2.rule_length = 100;
         m2.rule_start_token = 7;
-        m2.qspan = PositionSpan::range(8, 16);
-        m2.ispan = PositionSpan::range(7, 15);
+        m2.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(8, 16),
+            PositionSpan::range(7, 15),
+            PositionSpan::empty(),
+        );
         let mut m3 = create_test_match("#2", 20, 50, 0.9, 100.0, 100);
         m3.matched_length = 300;
         m3.rule_length = 300;
         m3.rule_start_token = 0;
-        m3.qspan = PositionSpan::range(20, 51);
-        m3.ispan = PositionSpan::range(0, 31);
+        m3.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(20, 51),
+            PositionSpan::range(0, 31),
+            PositionSpan::empty(),
+        );
         let mut m4 = create_test_match("#2", 25, 45, 0.85, 100.0, 100);
         m4.matched_length = 150;
         m4.rule_length = 300;
         m4.rule_start_token = 5;
-        m4.qspan = PositionSpan::range(25, 46);
-        m4.ispan = PositionSpan::range(5, 26);
+        m4.coordinates = MatchCoordinates::rule_aligned(
+            PositionSpan::range(25, 46),
+            PositionSpan::range(5, 26),
+            PositionSpan::empty(),
+        );
 
         let matches = vec![m1, m2, m3, m4];
 

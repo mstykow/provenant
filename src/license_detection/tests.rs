@@ -3,7 +3,7 @@ use once_cell::sync::Lazy;
 use std::path::PathBuf;
 use std::sync::Once;
 
-use crate::license_detection::models::position_span::PositionSpan;
+use crate::license_detection::models::{MatchCoordinates, position_span::PositionSpan};
 
 static TEST_ENGINE: Lazy<LicenseDetectionEngine> = Lazy::new(|| {
     LicenseDetectionEngine::from_embedded().expect("Should initialize from embedded artifact")
@@ -46,7 +46,7 @@ fn make_test_match(
         matched_length,
         rule_length: matched_length,
         match_coverage: 100.0,
-        qspan,
+        coordinates: MatchCoordinates::query_region(qspan),
         ..Default::default()
     }
 }

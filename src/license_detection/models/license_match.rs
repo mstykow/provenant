@@ -8,6 +8,75 @@ use crate::license_detection::models::RuleKind;
 use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::position_set::PositionSet;
 
+/// Coordinate data for a license match.
+///
+/// This enum distinguishes between:
+/// - `RuleAligned`: Matches that align query tokens to rule tokens (hash, aho, seq matchers)
+/// - `QueryRegion`: Matches that only have query-side location data (SPDX declarations, unknown regions)
+#[derive(Debug, Clone, PartialEq)]
+pub enum MatchCoordinates {
+    /// A match aligned between query and rule token sequences.
+    ///
+    /// Contains query span, rule span, and high-value legalese span within the rule.
+    RuleAligned {
+        qspan: PositionSpan,
+        ispan: PositionSpan,
+        hispan: PositionSpan,
+    },
+    /// A match that only has query-side coordinates.
+    ///
+    /// Used for SPDX declarations and unknown region matches which don't have
+    /// meaningful rule-side alignment.
+    QueryRegion { qspan: PositionSpan },
+}
+
+impl MatchCoordinates {
+    pub fn query_span(&self) -> &PositionSpan {
+        match self {
+            Self::RuleAligned { qspan, .. } => qspan,
+            Self::QueryRegion { qspan } => qspan,
+        }
+    }
+
+    pub fn rule_span(&self) -> Option<&PositionSpan> {
+        match self {
+            Self::RuleAligned { ispan, .. } => Some(ispan),
+            Self::QueryRegion { .. } => None,
+        }
+    }
+
+    pub fn hispan(&self) -> Option<&PositionSpan> {
+        match self {
+            Self::RuleAligned { hispan, .. } => Some(hispan),
+            Self::QueryRegion { .. } => None,
+        }
+    }
+
+    pub fn rule_aligned(qspan: PositionSpan, ispan: PositionSpan, hispan: PositionSpan) -> Self {
+        Self::RuleAligned {
+            qspan,
+            ispan,
+            hispan,
+        }
+    }
+
+    pub fn query_region(qspan: PositionSpan) -> Self {
+        Self::QueryRegion { qspan }
+    }
+
+    pub const fn has_rule_alignment(&self) -> bool {
+        matches!(self, Self::RuleAligned { .. })
+    }
+}
+
+impl Default for MatchCoordinates {
+    fn default() -> Self {
+        Self::QueryRegion {
+            qspan: PositionSpan::empty(),
+        }
+    }
+}
+
 /// Internal matcher kind used to create a license match.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize)]
 pub enum MatcherKind {
@@ -150,14 +219,8 @@ pub struct LicenseMatch {
     /// For approximate matches (seq), this is the position in the rule where alignment begins.
     pub rule_start_token: usize,
 
-    /// Token positions matched in the query text.
-    pub qspan: PositionSpan,
-
-    /// Token positions matched in the rule text.
-    pub ispan: PositionSpan,
-
-    /// Token positions in the rule that are high-value legalese tokens.
-    pub hispan: PositionSpan,
+    /// Coordinate data distinguishing rule-aligned from query-region matches.
+    pub coordinates: MatchCoordinates,
 
     /// Candidate resemblance score from set similarity.
     /// Used for cross-license tie-breaking when matches overlap.
@@ -266,9 +329,7 @@ impl Default for LicenseMatch {
             rule_kind: RuleKind::None,
             is_from_license: false,
             rule_start_token: 0,
-            qspan: PositionSpan::empty(),
-            ispan: PositionSpan::empty(),
-            hispan: PositionSpan::empty(),
+            coordinates: MatchCoordinates::default(),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,
         }
@@ -313,39 +374,43 @@ impl LicenseMatch {
     }
 
     pub fn hilen(&self) -> usize {
-        self.hispan.len()
+        self.coordinates.hispan().map_or(0, |h| h.len())
+    }
+
+    pub fn query_span(&self) -> &PositionSpan {
+        self.coordinates.query_span()
+    }
+
+    pub fn rule_span(&self) -> Option<&PositionSpan> {
+        self.coordinates.rule_span()
+    }
+
+    pub fn has_rule_alignment(&self) -> bool {
+        self.coordinates.has_rule_alignment()
     }
 
     pub fn qstart(&self) -> usize {
-        let (min, _) = self.effective_span().bounds();
+        let (min, _) = self.query_span().bounds();
         min
     }
 
-    pub fn effective_span(&self) -> PositionSpan {
-        if !self.qspan.is_empty() {
-            self.qspan.clone()
-        } else if self.start_token < self.end_token {
-            PositionSpan::range(self.start_token, self.end_token)
-        } else {
-            PositionSpan::empty()
-        }
-    }
-
     pub(crate) fn effective_ispan(&self) -> PositionSpan {
-        if !self.ispan.is_empty() {
-            self.ispan.clone()
-        } else if self.matched_length > 0 {
-            PositionSpan::range(
+        if let Some(ispan) = self.rule_span()
+            && !ispan.is_empty()
+        {
+            return ispan.clone();
+        }
+        if self.matcher == MatcherKind::Unknown && self.matched_length > 0 {
+            return PositionSpan::range(
                 self.rule_start_token,
                 self.rule_start_token + self.matched_length,
-            )
-        } else {
-            PositionSpan::empty()
+            );
         }
+        PositionSpan::empty()
     }
 
     pub(crate) fn qspan_set(&self) -> PositionSet {
-        self.effective_span().to_position_set()
+        self.query_span().to_position_set()
     }
 
     pub(crate) fn ispan_set(&self) -> PositionSet {
@@ -368,16 +433,16 @@ impl LicenseMatch {
     }
 
     pub(crate) fn len(&self) -> usize {
-        self.effective_span().len()
+        self.query_span().len()
     }
 
     fn qregion_len(&self) -> usize {
-        let (min, max) = self.effective_span().bounds();
+        let (min, max) = self.query_span().bounds();
         max.saturating_sub(min)
     }
 
     pub fn qmagnitude(&self, query: &crate::license_detection::query::Query) -> usize {
-        let span = self.effective_span();
+        let span = self.query_span();
         let qregion_len = self.qregion_len();
         if span.is_empty() {
             return qregion_len;
@@ -432,39 +497,30 @@ impl LicenseMatch {
     }
 
     pub fn qcontains(&self, other: &LicenseMatch) -> bool {
-        let self_span = self.effective_span();
-        let other_span = other.effective_span();
-
-        if self_span.is_empty() && other_span.is_empty() {
-            return self.start_line <= other.start_line && self.end_line >= other.end_line;
-        }
-
-        other_span.iter().all(|pos| self_span.contains(pos))
+        other
+            .query_span()
+            .iter()
+            .all(|pos| self.query_span().contains(pos))
     }
 
     pub fn qoverlap(&self, other: &LicenseMatch) -> usize {
-        let self_span = self.effective_span();
-        let other_span = other.effective_span();
-
-        if self_span.is_empty() && other_span.is_empty() {
-            let start = self.start_line.max(other.start_line);
-            let end = self.end_line.min(other.end_line);
-            return if start <= end { end - start + 1 } else { 0 };
-        }
-
-        other_span.iter().filter(|&p| self_span.contains(p)).count()
+        other
+            .query_span()
+            .iter()
+            .filter(|&p| self.query_span().contains(p))
+            .count()
     }
 
     pub fn qspan_overlap(&self, other: &LicenseMatch) -> usize {
-        let self_set = self.effective_span().to_position_set();
-        let other_set = other.effective_span().to_position_set();
+        let self_set = self.query_span().to_position_set();
+        let other_set = other.query_span().to_position_set();
         self_set.intersection_len(&other_set)
     }
 
     /// Return true if all matched tokens are continuous without gaps or unknowns.
     /// Python: len() == qregion_len() == qmagnitude()
     pub fn is_continuous(&self, query: &crate::license_detection::query::Query) -> bool {
-        if !self.effective_span().is_contiguous() {
+        if !self.query_span().is_contiguous() {
             return false;
         }
         let len = self.len();
@@ -474,18 +530,11 @@ impl LicenseMatch {
     }
 
     pub fn overlaps_with(&self, other: &PositionSet) -> bool {
-        self.effective_span().overlaps_set(other)
+        self.query_span().overlaps_set(other)
     }
 
     pub fn qspan_eq(&self, other: &LicenseMatch) -> bool {
-        let self_span = self.effective_span();
-        let other_span = other.effective_span();
-
-        if self_span.is_empty() && other_span.is_empty() {
-            self.start_line == other.start_line && self.end_line == other.end_line
-        } else {
-            self_span == other_span
-        }
+        self.query_span() == other.query_span()
     }
 
     pub fn qdistance_to(&self, other: &LicenseMatch) -> usize {
@@ -510,7 +559,7 @@ impl LicenseMatch {
     }
 
     pub fn qspan_bounds(&self) -> (usize, usize) {
-        self.effective_span().bounds()
+        self.query_span().bounds()
     }
 
     pub fn qspan_magnitude(&self) -> usize {
@@ -523,8 +572,11 @@ impl LicenseMatch {
     }
 
     pub fn idistance_to(&self, other: &LicenseMatch) -> usize {
-        let (self_start, self_end) = self.ispan_bounds();
-        let (other_start, other_end) = other.ispan_bounds();
+        let (Some(self_span), Some(other_span)) = (self.rule_span(), other.rule_span()) else {
+            return 0;
+        };
+        let (self_start, self_end) = self_span.bounds();
+        let (other_start, other_end) = other_span.bounds();
 
         if self_start < other_end && other_start < self_end {
             return 0;
@@ -547,8 +599,12 @@ impl LicenseMatch {
 
         let q_after = self_qstart >= other_qend;
 
-        let (self_istart, _self_iend) = self.ispan_bounds();
-        let (_other_istart, other_iend) = other.ispan_bounds();
+        let (Some(self_ispan), Some(other_ispan)) = (self.rule_span(), other.rule_span()) else {
+            return q_after;
+        };
+
+        let (self_istart, _self_iend) = self_ispan.bounds();
+        let (_other_istart, other_iend) = other_ispan.bounds();
 
         let i_after = self_istart >= other_iend;
 
@@ -556,12 +612,12 @@ impl LicenseMatch {
     }
 
     pub fn ispan_overlap(&self, other: &LicenseMatch) -> usize {
-        let self_set = self.effective_ispan().to_position_set();
-        other
-            .effective_ispan()
-            .iter()
-            .filter(|&p| self_set.contains(p))
-            .count()
+        let (Some(self_ispan), Some(other_ispan)) = (self.rule_span(), other.rule_span()) else {
+            return 0;
+        };
+
+        let self_set = self_ispan.to_position_set();
+        other_ispan.iter().filter(|&p| self_set.contains(p)).count()
     }
 
     pub fn has_unknown(&self) -> bool {
