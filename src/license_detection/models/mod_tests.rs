@@ -571,6 +571,15 @@ mod tests {
     }
 
     #[test]
+    fn test_license_match_coverage_rounds_to_two_decimals() {
+        let mut match_result = create_license_match();
+
+        match_result.match_coverage = 33.334;
+
+        assert_eq!(match_result.coverage(), 33.33);
+    }
+
+    #[test]
     fn test_license_match_serialization() {
         let match_result = create_license_match();
         let json = serde_json::to_string(&match_result).unwrap();

@@ -1184,6 +1184,10 @@ fn public_match_to_internal(
 fn internal_match_to_public(
     detection_match: crate::license_detection::models::LicenseMatch,
 ) -> Match {
+    let output_metric = |value: f32| ((value as f64) * 100.0).round() / 100.0;
+    let score = output_metric(detection_match.score);
+    let match_coverage = output_metric(detection_match.coverage());
+
     Match {
         license_expression: detection_match.license_expression,
         license_expression_spdx: detection_match.license_expression_spdx.unwrap_or_default(),
@@ -1191,9 +1195,9 @@ fn internal_match_to_public(
         start_line: detection_match.start_line,
         end_line: detection_match.end_line,
         matcher: Some(detection_match.matcher.to_string()),
-        score: detection_match.score as f64,
+        score,
         matched_length: Some(detection_match.matched_length),
-        match_coverage: Some(detection_match.match_coverage as f64),
+        match_coverage: Some(match_coverage),
         rule_relevance: Some(detection_match.rule_relevance as usize),
         rule_identifier: Some(detection_match.rule_identifier),
         rule_url: (!detection_match.rule_url.is_empty()).then_some(detection_match.rule_url),
@@ -2319,14 +2323,51 @@ fn compute_license_score(
 }
 
 fn is_good_match(license_match: &Match) -> bool {
-    let score = if license_match.score <= 1.0 {
-        license_match.score * 100.0
-    } else {
-        license_match.score
-    };
     match (license_match.match_coverage, license_match.rule_relevance) {
-        (Some(coverage), Some(relevance)) => score >= 80.0 && coverage >= 80.0 && relevance >= 80,
-        _ => score >= 80.0,
+        (Some(coverage), Some(relevance)) => {
+            license_match.score >= 80.0 && coverage >= 80.0 && relevance >= 80
+        }
+        _ => license_match.score >= 80.0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_good_match;
+    use crate::models::file_info::Match;
+
+    fn make_match(score: f64, coverage: Option<f64>, relevance: Option<usize>) -> Match {
+        Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: None,
+            start_line: 1,
+            end_line: 1,
+            matcher: Some("1-hash".to_string()),
+            score,
+            matched_length: Some(3),
+            match_coverage: coverage,
+            rule_relevance: relevance,
+            rule_identifier: Some("mit.LICENSE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }
+    }
+
+    #[test]
+    fn test_is_good_match_does_not_upscale_low_percent_scores() {
+        let license_match = make_match(1.0, Some(100.0), Some(100));
+
+        assert!(!is_good_match(&license_match));
+    }
+
+    #[test]
+    fn test_is_good_match_accepts_percent_scores() {
+        let license_match = make_match(81.82, Some(100.0), Some(100));
+
+        assert!(is_good_match(&license_match));
     }
 }
 

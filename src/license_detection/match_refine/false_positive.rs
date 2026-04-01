@@ -19,7 +19,7 @@ pub(super) fn is_candidate_false_positive(m: &LicenseMatch) -> bool {
         || m.is_license_clue();
 
     let is_not_spdx_id = m.matcher != MatcherKind::SpdxId;
-    let is_exact_match = (m.match_coverage - 100.0).abs() < f32::EPSILON;
+    let is_exact_match = m.coverage() == 100.0;
     let is_short = m.len() <= MAX_CANDIDATE_LENGTH;
 
     is_tag_or_ref && is_not_spdx_id && is_exact_match && is_short

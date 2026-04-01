@@ -125,7 +125,7 @@ pub fn aho_match_with_extra_matchables(
             let rule_length = rule.tokens.len();
 
             let match_coverage = if rule_length > 0 {
-                (matched_length as f32 / rule_length as f32) * 100.0
+                LicenseMatch::round_metric((matched_length as f32 / rule_length as f32) * 100.0)
             } else {
                 100.0
             };

@@ -53,9 +53,10 @@ fn combine_matches(a: &LicenseMatch, b: &LicenseMatch) -> LicenseMatch {
     merged.ispan_positions = Some(ispan_vec);
 
     if merged.rule_length > 0 {
-        merged.match_coverage = (merged.matched_length.min(merged.rule_length) as f32
-            / merged.rule_length as f32)
-            * 100.0;
+        merged.match_coverage = LicenseMatch::round_metric(
+            (merged.matched_length.min(merged.rule_length) as f32 / merged.rule_length as f32)
+                * 100.0,
+        );
     }
 
     merged

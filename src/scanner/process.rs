@@ -914,6 +914,7 @@ fn convert_match_to_model(
     text_content: &str,
     query: Option<&Query<'_>>,
 ) -> Match {
+    let output_metric = |value: f32| ((value as f64) * 100.0).round() / 100.0;
     let rule_url = if m.rule_url.is_empty() {
         None
     } else {
@@ -942,9 +943,9 @@ fn convert_match_to_model(
         start_line: m.start_line,
         end_line: m.end_line,
         matcher: Some(m.matcher.to_string()),
-        score: m.score as f64,
+        score: output_metric(m.score),
         matched_length: Some(m.matched_length),
-        match_coverage: Some(m.match_coverage as f64),
+        match_coverage: Some(output_metric(m.coverage())),
         rule_relevance: Some(m.rule_relevance as usize),
         rule_identifier: Some(m.rule_identifier.clone()),
         rule_url,
@@ -1203,6 +1204,21 @@ mod tests {
         let converted = converted.expect("detection should convert");
 
         assert_eq!(converted.matches[0].rule_url, None);
+        assert!(clues.is_empty());
+    }
+
+    #[test]
+    fn test_convert_detection_to_model_rounds_match_coverage() {
+        let mut detection = make_detection("");
+        detection.matches[0].score = 81.82;
+        detection.matches[0].match_coverage = 33.334;
+
+        let (converted, clues) =
+            convert_detection_to_model(&detection, LicenseScanOptions::default(), "", None);
+        let converted = converted.expect("detection should convert");
+
+        assert_eq!(converted.matches[0].score, 81.82);
+        assert_eq!(converted.matches[0].match_coverage, Some(33.33));
         assert!(clues.is_empty());
     }
 
