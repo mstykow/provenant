@@ -125,17 +125,7 @@ pub(crate) fn create_output(
             .count(),
         directories_count: context.total_dirs,
         excluded_count: scan_result.excluded_count,
-        system_environment: SystemEnvironment {
-            operating_system: sys_info::os_type().ok(),
-            cpu_architecture: env::consts::ARCH.to_string(),
-            platform: format!(
-                "{}-{}-{}",
-                sys_info::os_type().unwrap_or_else(|_| "unknown".to_string()),
-                sys_info::os_release().unwrap_or_else(|_| "unknown".to_string()),
-                env::consts::ARCH
-            ),
-            rust_version: rustc_version_runtime::version().to_string(),
-        },
+        system_environment: current_system_environment(),
     };
 
     let mut errors: Vec<String> = scan_result
@@ -243,6 +233,74 @@ pub(crate) fn create_output(
         files,
         license_references: context.license_references,
         license_rule_references: context.license_rule_references,
+    }
+}
+
+fn current_system_environment() -> SystemEnvironment {
+    let info = os_info::get();
+    let operating_system = operating_system_name(&info);
+    let os_version = operating_system_version(&info);
+
+    SystemEnvironment {
+        operating_system: operating_system.clone(),
+        cpu_architecture: env::consts::ARCH.to_string(),
+        platform: build_platform_label(
+            operating_system.as_deref(),
+            os_version.as_deref(),
+            env::consts::ARCH,
+        ),
+        rust_version: rustc_version_runtime::version().to_string(),
+    }
+}
+
+fn operating_system_name(info: &os_info::Info) -> Option<String> {
+    match info.os_type() {
+        os_info::Type::Unknown => None,
+        os_type => Some(os_type.to_string()),
+    }
+}
+
+fn operating_system_version(info: &os_info::Info) -> Option<String> {
+    match info.version() {
+        os_info::Version::Unknown => None,
+        version => Some(version.to_string()),
+    }
+}
+
+fn build_platform_label(
+    operating_system: Option<&str>,
+    operating_system_version: Option<&str>,
+    architecture: &str,
+) -> String {
+    format!(
+        "{}-{}-{architecture}",
+        operating_system.unwrap_or("unknown"),
+        operating_system_version.unwrap_or("unknown")
+    )
+}
+
+#[cfg(test)]
+mod system_environment_tests {
+    use super::{build_platform_label, operating_system_name, operating_system_version};
+
+    #[test]
+    fn build_platform_label_uses_unknown_fallbacks() {
+        assert_eq!(
+            build_platform_label(None, None, "x86_64"),
+            "unknown-unknown-x86_64"
+        );
+        assert_eq!(
+            build_platform_label(Some("Linux"), Some("6.8"), "x86_64"),
+            "Linux-6.8-x86_64"
+        );
+    }
+
+    #[test]
+    fn os_info_unknown_values_map_to_none() {
+        let info = os_info::Info::unknown();
+
+        assert_eq!(operating_system_name(&info), None);
+        assert_eq!(operating_system_version(&info), None);
     }
 }
 
