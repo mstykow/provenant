@@ -4,8 +4,8 @@ use serde::Serialize;
 use std::fmt;
 use std::str::FromStr;
 
-use crate::license_detection::models::RuleKind;
 use crate::license_detection::models::position_span::PositionSpan;
+use crate::license_detection::models::RuleKind;
 use crate::license_detection::position_set::PositionSet;
 
 /// Internal matcher kind used to create a license match.
@@ -331,6 +331,19 @@ impl LicenseMatch {
         }
     }
 
+    fn effective_ispan(&self) -> PositionSpan {
+        if !self.ispan.is_empty() {
+            self.ispan.clone()
+        } else if self.matched_length > 0 {
+            PositionSpan::range(
+                self.rule_start_token,
+                self.rule_start_token + self.matched_length,
+            )
+        } else {
+            PositionSpan::empty()
+        }
+    }
+
     pub fn is_small(
         &self,
         min_matched_len: usize,
@@ -384,11 +397,12 @@ impl LicenseMatch {
     }
 
     pub fn idensity(&self) -> f32 {
-        let ispan_len = self.ispan.len();
+        let ispan = self.effective_ispan();
+        let ispan_len = ispan.len();
         if ispan_len == 0 {
             return 0.0;
         }
-        let (min, max) = self.ispan.bounds();
+        let (min, max) = ispan.bounds();
         let ispan_magnitude = max.saturating_sub(min);
         if ispan_magnitude == 0 {
             return 0.0;
@@ -404,36 +418,45 @@ impl LicenseMatch {
     }
 
     pub fn surround(&self, other: &LicenseMatch) -> bool {
-        let (self_qstart, self_qend) = self.qspan.bounds();
-        let (other_qstart, other_qend) = other.qspan.bounds();
+        let (self_qstart, self_qend) = self.qspan_bounds();
+        let (other_qstart, other_qend) = other.qspan_bounds();
         self_qstart <= other_qstart && self_qend >= other_qend
     }
 
     pub fn qcontains(&self, other: &LicenseMatch) -> bool {
-        if self.qspan.is_empty() && other.qspan.is_empty() {
+        let self_span = self.effective_span();
+        let other_span = other.effective_span();
+
+        if self_span.is_empty() && other_span.is_empty() {
             return self.start_line <= other.start_line && self.end_line >= other.end_line;
         }
-        other.qspan.iter().all(|pos| self.qspan.contains(pos))
+
+        other_span.iter().all(|pos| self_span.contains(pos))
     }
 
     pub fn qoverlap(&self, other: &LicenseMatch) -> usize {
-        other
-            .qspan
-            .iter()
-            .filter(|&p| self.qspan.contains(p))
-            .count()
+        let self_span = self.effective_span();
+        let other_span = other.effective_span();
+
+        if self_span.is_empty() && other_span.is_empty() {
+            let start = self.start_line.max(other.start_line);
+            let end = self.end_line.min(other.end_line);
+            return if start <= end { end - start + 1 } else { 0 };
+        }
+
+        other_span.iter().filter(|&p| self_span.contains(p)).count()
     }
 
     pub fn qspan_overlap(&self, other: &LicenseMatch) -> usize {
-        let self_set = self.qspan.to_position_set();
-        let other_set = other.qspan.to_position_set();
+        let self_set = self.effective_span().to_position_set();
+        let other_set = other.effective_span().to_position_set();
         self_set.intersection_len(&other_set)
     }
 
     /// Return true if all matched tokens are continuous without gaps or unknowns.
     /// Python: len() == qregion_len() == qmagnitude()
     pub fn is_continuous(&self, query: &crate::license_detection::query::Query) -> bool {
-        if !self.qspan.is_contiguous() {
+        if !self.effective_span().is_contiguous() {
             return false;
         }
         let len = self.len();
@@ -443,11 +466,18 @@ impl LicenseMatch {
     }
 
     pub fn overlaps_with(&self, other: &PositionSet) -> bool {
-        self.qspan.overlaps_set(other)
+        self.effective_span().overlaps_set(other)
     }
 
     pub fn qspan_eq(&self, other: &LicenseMatch) -> bool {
-        self.qspan == other.qspan
+        let self_span = self.effective_span();
+        let other_span = other.effective_span();
+
+        if self_span.is_empty() && other_span.is_empty() {
+            self.start_line == other.start_line && self.end_line == other.end_line
+        } else {
+            self_span == other_span
+        }
     }
 
     pub fn qdistance_to(&self, other: &LicenseMatch) -> usize {
@@ -455,8 +485,8 @@ impl LicenseMatch {
             return 0;
         }
 
-        let (self_start, self_end_exclusive) = self.qspan.bounds();
-        let (other_start, other_end_exclusive) = other.qspan.bounds();
+        let (self_start, self_end_exclusive) = self.qspan_bounds();
+        let (other_start, other_end_exclusive) = other.qspan_bounds();
         let self_end = self_end_exclusive.saturating_sub(1);
         let other_end = other_end_exclusive.saturating_sub(1);
 
@@ -472,21 +502,21 @@ impl LicenseMatch {
     }
 
     pub fn qspan_bounds(&self) -> (usize, usize) {
-        self.qspan.bounds()
+        self.effective_span().bounds()
     }
 
     pub fn qspan_magnitude(&self) -> usize {
-        let (start, end) = self.qspan.bounds();
+        let (start, end) = self.qspan_bounds();
         end.saturating_sub(start)
     }
 
     pub fn ispan_bounds(&self) -> (usize, usize) {
-        self.ispan.bounds()
+        self.effective_ispan().bounds()
     }
 
     pub fn idistance_to(&self, other: &LicenseMatch) -> usize {
-        let (self_start, self_end) = self.ispan.bounds();
-        let (other_start, other_end) = other.ispan.bounds();
+        let (self_start, self_end) = self.ispan_bounds();
+        let (other_start, other_end) = other.ispan_bounds();
 
         if self_start < other_end && other_start < self_end {
             return 0;
@@ -504,13 +534,13 @@ impl LicenseMatch {
     }
 
     pub fn is_after(&self, other: &LicenseMatch) -> bool {
-        let (self_qstart, _self_qend) = self.qspan.bounds();
-        let (_other_qstart, other_qend) = other.qspan.bounds();
+        let (self_qstart, _self_qend) = self.qspan_bounds();
+        let (_other_qstart, other_qend) = other.qspan_bounds();
 
         let q_after = self_qstart >= other_qend;
 
-        let (self_istart, _self_iend) = self.ispan.bounds();
-        let (_other_istart, other_iend) = other.ispan.bounds();
+        let (self_istart, _self_iend) = self.ispan_bounds();
+        let (_other_istart, other_iend) = other.ispan_bounds();
 
         let i_after = self_istart >= other_iend;
 
@@ -518,8 +548,12 @@ impl LicenseMatch {
     }
 
     pub fn ispan_overlap(&self, other: &LicenseMatch) -> usize {
-        let self_set = self.ispan.to_position_set();
-        other.ispan.iter().filter(|&p| self_set.contains(p)).count()
+        let self_set = self.effective_ispan().to_position_set();
+        other
+            .effective_ispan()
+            .iter()
+            .filter(|&p| self_set.contains(p))
+            .count()
     }
 
     pub fn has_unknown(&self) -> bool {

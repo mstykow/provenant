@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::license_detection::index::LicenseIndex;
     use crate::license_detection::index::dictionary::tid;
+    use crate::license_detection::index::LicenseIndex;
     use crate::license_detection::models::position_span::PositionSpan;
     use crate::license_detection::models::{License, LicenseMatch, MatcherKind, Rule, RuleKind};
     use crate::license_detection::position_set::PositionSet;
@@ -1253,5 +1253,126 @@ mod tests {
 
         m.license_expression = "apache-2.0".to_string();
         assert!(!m.has_unknown());
+    }
+
+    #[test]
+    fn test_effective_span_fallback_qspan_bounds() {
+        let mut m = create_license_match();
+        m.start_token = 10;
+        m.end_token = 20;
+        m.qspan = PositionSpan::empty();
+
+        let bounds = m.qspan_bounds();
+        assert_eq!(bounds, (10, 20));
+    }
+
+    #[test]
+    fn test_effective_span_fallback_ispan_bounds() {
+        let mut m = create_license_match();
+        m.rule_start_token = 5;
+        m.matched_length = 30;
+        m.ispan = PositionSpan::empty();
+
+        let bounds = m.ispan_bounds();
+        assert_eq!(bounds, (5, 35));
+    }
+
+    #[test]
+    fn test_effective_span_fallback_qoverlap_lines() {
+        let a = LicenseMatch {
+            start_token: 0,
+            end_token: 0,
+            start_line: 1,
+            end_line: 10,
+            qspan: PositionSpan::empty(),
+            ..create_license_match()
+        };
+        let b = LicenseMatch {
+            start_token: 0,
+            end_token: 0,
+            start_line: 5,
+            end_line: 15,
+            qspan: PositionSpan::empty(),
+            ..create_license_match()
+        };
+
+        assert_eq!(a.qoverlap(&b), 6);
+        assert_eq!(b.qoverlap(&a), 6);
+    }
+
+    #[test]
+    fn test_effective_span_fallback_qspan_eq_lines() {
+        let a = LicenseMatch {
+            start_token: 0,
+            end_token: 0,
+            start_line: 1,
+            end_line: 10,
+            qspan: PositionSpan::empty(),
+            ..create_license_match()
+        };
+        let b = LicenseMatch {
+            start_token: 0,
+            end_token: 0,
+            start_line: 1,
+            end_line: 10,
+            qspan: PositionSpan::empty(),
+            ..create_license_match()
+        };
+
+        assert!(a.qspan_eq(&b));
+    }
+
+    #[test]
+    fn test_effective_span_fallback_qspan_eq_lines_differ() {
+        let a = LicenseMatch {
+            start_token: 0,
+            end_token: 0,
+            start_line: 1,
+            end_line: 10,
+            qspan: PositionSpan::empty(),
+            ..create_license_match()
+        };
+        let b = LicenseMatch {
+            start_token: 0,
+            end_token: 0,
+            start_line: 1,
+            end_line: 20,
+            qspan: PositionSpan::empty(),
+            ..create_license_match()
+        };
+
+        assert!(!a.qspan_eq(&b));
+    }
+
+    #[test]
+    fn test_effective_span_fallback_qoverlap_with_tokens_vs_empty() {
+        let a = LicenseMatch {
+            start_token: 10,
+            end_token: 20,
+            qspan: PositionSpan::empty(),
+            ..create_license_match()
+        };
+        let b = LicenseMatch {
+            start_token: 15,
+            end_token: 25,
+            qspan: PositionSpan::range(15, 25),
+            ..create_license_match()
+        };
+
+        let overlap_ab: usize = b.qspan.iter().filter(|&p| (10..20).contains(&p)).count();
+        let overlap_ba: usize = (10..20).filter(|p| (15..25).contains(p)).count();
+        assert_eq!(a.qoverlap(&b), overlap_ab);
+        assert_eq!(b.qoverlap(&a), overlap_ba);
+        assert_eq!(overlap_ab, overlap_ba);
+    }
+
+    #[test]
+    fn test_effective_span_nonempty_preferred_over_tokens() {
+        let mut m = create_license_match();
+        m.start_token = 100;
+        m.end_token = 200;
+        m.qspan = PositionSpan::range(10, 20);
+
+        assert_eq!(m.qspan_bounds(), (10, 20));
     }
 }
