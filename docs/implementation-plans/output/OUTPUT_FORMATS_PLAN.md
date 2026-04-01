@@ -1,13 +1,15 @@
 # Output Formats Implementation Plan
 
-> **Status**: Baseline parity complete; maintenance mode
-> **Priority**: P1 - High Priority (User-Facing Feature)
-> **Estimated Effort**: Iterative; tracked per phase/task in this document
-> **Dependencies**: None for infrastructure and core format emitters
+> **Status**: 🟢 Historical rollout record with ongoing maintenance notes
+> **Current contract owner**: [`PARITY_SCORECARD.md`](PARITY_SCORECARD.md) for current output parity status, plus [`../../CLI_GUIDE.md`](../../CLI_GUIDE.md) and [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) for live user-facing and architectural output guidance
+> **Historical priority / effort**: P1, iterative rollout tracked in this document
+> **Dependencies at implementation time**: None for infrastructure and core format emitters
 
 ## Overview
 
-Implement production output formats beyond ScanCode-compatible JSON: SPDX, CycloneDX, CSV, YAML, HTML, and JSON Lines.
+This file records the rollout and design history of the output layer. Treat planning language below as historical unless a section explicitly says it remains a maintained checklist; use `PARITY_SCORECARD.md` as the canonical current parity view.
+
+Implement production output formats beyond ScanCode-compatible JSON: SPDX, CycloneDX, YAML, HTML, and JSON Lines.
 
 This plan is based on:
 
@@ -25,11 +27,9 @@ This plan is based on:
 - **SPDX RDF/XML**
 - **CycloneDX JSON**
 - **CycloneDX XML**
-- **CSV**
 - **YAML**
 - **HTML report**
 - **JSON Lines**
-- **HTML app** (implemented)
 - **Custom templates** (implemented)
 
 ### What This Doesn't Cover
@@ -45,7 +45,6 @@ This plan is based on:
 - `output_json.py`: `JsonCompactOutput`, `JsonPrettyOutput`, `write_results`, `get_results`
 - `output_jsonlines.py`: `JsonLinesOutput`
 - `output_yaml.py`: `YamlOutput` (reuses `output_json.get_results`)
-- `output_csv.py`: `CsvOutput`, `flatten_scan`, `flatten_package`
 - `output_html.py`: `HtmlOutput`, `HtmlAppOutput`, `CustomTemplateOutput`
 - `output_spdx.py`: `SpdxTvOutput`, `SpdxRdfOutput`, `write_spdx`
 - `output_cyclonedx.py`: `CycloneDxJsonOutput`, `CycloneDxXmlOutput`, model mapping helpers
@@ -59,9 +58,9 @@ This plan is based on:
 
 ### Practical parity notes
 
-- Python CSV is explicitly marked deprecated in upstream.
 - Python CycloneDX warns when package data is missing.
 - Python SPDX implementation is custom-mapped and uses `spdx-tools` Python library.
+- Deprecated upstream CSV and HTML-app outputs are intentionally out of current Provenant scope and therefore no longer part of this plan's live offering.
 
 ## Current Capabilities
 
@@ -72,7 +71,7 @@ This plan is based on:
 - Output writer abstraction (`OutputWriter`, `OutputFormat`, dispatch)
 - Main output path dispatches through `write_output_file` in
   [`src/output/mod.rs`](../../../src/output/mod.rs)
-- Emitters for JSON, YAML, CSV, JSON Lines, SPDX TV/RDF, CycloneDX JSON/XML, HTML report, HTML app, custom templates
+- Emitters for JSON, YAML, JSON Lines, SPDX TV/RDF, CycloneDX JSON/XML, HTML report, and custom templates
 - Output schema models are complete and serializable in
   [`src/models/output.rs`](../../../src/models/output.rs) and
   [`src/models/file_info.rs`](../../../src/models/file_info.rs)
@@ -98,7 +97,6 @@ This plan is based on:
    - All format writers consume one normalized `Output` value.
 4. **Use dedicated libraries where mature**
    - CycloneDX: `cyclonedx-bom`
-   - CSV: `csv`
    - YAML: `yaml_serde`
    - HTML/templates: `tera` (for controlled templating)
 5. **SPDX strategy**
@@ -107,7 +105,7 @@ This plan is based on:
 
 ## Library Strategy (Current)
 
-Current implementation uses serde/csv/tera with a modular output layer in
+Current implementation uses serde and tera with a modular output layer in
 [`src/output/`](../../../src/output/).
 
 Adopting dedicated SPDX/CycloneDX model crates remains optional future work,
@@ -116,8 +114,8 @@ gated by clear parity, validation, or maintainability wins.
 ## Implementation Status by Format
 
 - Implemented in [`src/output/`](../../../src/output/): JSON/JSON-PP, YAML,
-  CSV, JSON Lines, SPDX Tag-Value, SPDX RDF/XML, CycloneDX JSON,
-  CycloneDX XML, HTML report, HTML app, and custom template output.
+  JSON Lines, SPDX Tag-Value, SPDX RDF/XML, CycloneDX JSON,
+  CycloneDX XML, HTML report, and custom template output.
 - Output dispatch and writer abstraction are implemented and wired through CLI
   format selection.
 - Parity scope and acceptance tracking are maintained in
@@ -143,7 +141,7 @@ scheduled, and should follow user-impact priorities from
 - JSON output remains the compatibility baseline.
 - SPDX and CycloneDX emitters are implemented and covered by parity-focused
   tests defined in [`PARITY_SCORECARD.md`](PARITY_SCORECARD.md).
-- CSV, YAML, and JSON Lines parity is fixture-backed and maintained via golden tests.
+- YAML and JSON Lines parity are fixture-backed and maintained via golden tests.
 - Output writers remain covered by unit and golden/integration tests.
 
 ## Related Documents

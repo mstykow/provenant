@@ -1,10 +1,13 @@
 # Package Assembly Implementation Plan
 
-> **Status**: 🟢 **COMPLETE** — All phases done (Feb 11, 2026). Package assembly is feature-complete.
-> **Priority**: P0 - Critical for Package Detection Completeness
-> **Dependencies**: PARSER_PLAN.md (parsers must exist first)
+> **Status**: 🟢 Historical rollout record — the assembly rollout tracked here is complete
+> **Current contract owner**: [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) for current assembly behavior and [`../../HOW_TO_ADD_A_PARSER.md`](../../HOW_TO_ADD_A_PARSER.md) for datasource/assembly guidance for new parsers
+> **Historical priority**: P0 - Critical for Package Detection Completeness
+> **Dependencies at implementation time**: PARSER_PLAN.md (parsers had to exist first)
 
 ## Overview
+
+This file is retained as a dated assembly rollout record. Phase breakdowns, commit references, and dated status snapshots below are historical evidence, not the canonical source for current assembly behavior.
 
 Package assembly merges related manifest files into logical packages. For example, `package.json` + `package-lock.json` + `yarn.lock` are assembled into a single Package with complete dependency information.
 
@@ -16,7 +19,7 @@ Package assembly merges related manifest files into logical packages. For exampl
 
 ---
 
-## Current State (Accurate as of Feb 11, 2026)
+## Historical Implementation State (Accurate as of Feb 11, 2026)
 
 ### ✅ Phase 1: Sibling-Merge — COMPLETE (Feb 10, 2026)
 

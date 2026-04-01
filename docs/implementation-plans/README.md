@@ -1,6 +1,6 @@
 # Implementation Plans
 
-This directory contains **temporary planning documents** for porting Python ScanCode features to Rust. These are working documents that track implementation progress and will be archived once features are complete. When a feature ships and a permanent architecture/reference document becomes the canonical maintainer guide, this index links to that evergreen document instead of restoring a retired plan. Some documents are also kept as explicit product-scope records when Provenant intentionally chooses not to implement an upstream feature.
+This directory contains the project's **active implementation plans**, **completed rollout records**, and **deferred-scope decision records** for porting Python ScanCode features to Rust. Not every file here is a current source of truth. Use this index to tell which documents are still active, which are historical, and which evergreen document now owns the live maintainer contract.
 
 ## Directory Structure
 
@@ -17,19 +17,14 @@ implementation-plans/
 
 ## Active Plans
 
-### Post-Processing (`post-processing/`)
-
-- **[SUMMARIZATION_PLAN.md](post-processing/SUMMARIZATION_PLAN.md)** - License/copyright tallies, facets, classification
-  - Status: ✅ Complete — summary/tally/classify/generated parity and Phase 11 performance hardening are implemented, including package-preferred summary origin, package-origin other-license tallies/summary consumption, localized fixture coverage, facet-rule optimization, and scanner-owned generated flags
-
 ### Infrastructure (`infrastructure/`)
 
 - **[CACHING_PLAN.md](infrastructure/CACHING_PLAN.md)** - Scan result caching and incremental scanning
   - Status: 🟡 Active — cache CLI/runtime integration is tracked in [CACHING_PLAN.md](infrastructure/CACHING_PLAN.md)
 
-## Complete / Reference Documents
+## Historical Rollout Records and Reference Documents
 
-These topics are implemented. Some remain as completed historical plans, while others now point at their evergreen maintainer reference.
+These topics are implemented. Some remain useful as completed historical records, while others point to the evergreen maintainer document that now owns the live contract.
 
 ### Package Detection (`package-detection/`)
 
@@ -58,6 +53,9 @@ These topics are implemented. Some remain as completed historical plans, while o
 
 ### Post-Processing (`post-processing/`)
 
+- **[SUMMARIZATION_PLAN.md](post-processing/SUMMARIZATION_PLAN.md)** - Completed summary/tally/classify/generated rollout record
+  - Status: 🟢 Historical — implemented, but not the canonical source for current testing or architecture guidance
+
 - **[SCAN_RESULT_SHAPING_PLAN.md](post-processing/SCAN_RESULT_SHAPING_PLAN.md)** - Include/filter/root/source output shaping
   - Status: 🟢 Complete — shaping-specific CLI behavior now lives in `src/scan_result_shaping/`, scanner path selection, and the main orchestration pipeline; remaining non-shaping parity follow-up is tracked in adjacent plans
 
@@ -71,11 +69,11 @@ These topics are implemented. Some remain as completed historical plans, while o
 
 ### Output Formats (`output/`)
 
-- **[OUTPUT_FORMATS_PLAN.md](output/OUTPUT_FORMATS_PLAN.md)** - SPDX, CycloneDX, CSV, YAML, HTML output
-  - Status: 🟢 Fixture-backed parity hardening complete across SPDX/CycloneDX/HTML/CSV/JSONL/YAML
+- **[OUTPUT_FORMATS_PLAN.md](output/OUTPUT_FORMATS_PLAN.md)** - SPDX, CycloneDX, YAML, HTML, JSON Lines, Debian, and template output
+  - Status: 🟢 Historical — broad output coverage is implemented, but use [PARITY_SCORECARD.md](output/PARITY_SCORECARD.md) for the current equivalent/partial parity breakdown
 
 - **[PARITY_SCORECARD.md](output/PARITY_SCORECARD.md)** - Format-by-format parity contract and fixture coverage
-  - Status: 🟢 Maintained as the canonical output parity contract and verification checklist
+  - Status: 🟢 Canonical reference — maintained as the current output parity contract and verification checklist
 
 ## Deferred / Not Planned
 
@@ -100,7 +98,7 @@ These remain intentionally high-level until implementation work begins.
 1. **Placeholder** - Brief description of component, scope, and dependencies
 2. **Planning** - Detailed analysis, design decisions, implementation phases
 3. **Active** - Work in progress, updated with status
-4. **Complete** - Feature implemented, document retained as completed living documentation or archived if it no longer has ongoing maintainer value
+4. **Complete** - Feature implemented; document retained either as historical rollout documentation or, if explicitly marked, as a maintained checklist/reference
 5. **Deferred / Not Planned** - Explicitly out of current product scope; retained as a decision record and future reference
 
 ### Documentation Style for Plan Status
@@ -112,8 +110,7 @@ These remain intentionally high-level until implementation work begins.
 
 ## Relationship to Evergreen Docs
 
-These implementation plans are **temporary** and complement the **evergreen**
-documentation in [`docs/`](../):
+These implementation plans complement the **evergreen** documentation in [`docs/`](../), but they are usually **not** the canonical source of truth once a feature has shipped:
 
 | Evergreen (Permanent)               | Implementation Plans (Temporary)                  |
 | ----------------------------------- | ------------------------------------------------- |
@@ -124,4 +121,4 @@ documentation in [`docs/`](../):
 | `adr/`                              | Design decisions made during implementation       |
 | `improvements/`                     | Beyond-parity features documented here            |
 
-Once a feature is complete, relevant architectural decisions move to ADRs, and the implementation plan is archived or redirected to the evergreen document that now owns the topic.
+Once a feature is complete, relevant architectural decisions move to ADRs, and the implementation plan should either be archived, clearly marked historical, or redirected to the evergreen document that now owns the topic. Unless a file is explicitly labeled as a maintained checklist/reference (for example `PARITY_SCORECARD.md`), treat completed plans here as non-canonical historical records.

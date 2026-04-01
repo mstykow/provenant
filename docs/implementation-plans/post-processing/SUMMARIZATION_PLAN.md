@@ -1,11 +1,13 @@
 # Summary, Tallies & Analysis Implementation Plan
 
-> **Status**: ✅ Complete — shared provenance cleanup, package-aware summary/tally reducers (including package-origin other-license evidence), localized summary/score/classify/generated/facet/tallies fixtures, package-preferred summary origin, package-copyright holder precedence, package-datafile summary eligibility, active summary/score/generated/classify/tally parity, and Phase 11 performance hardening are implemented
-> **Priority**: P2 - Medium Priority (Post-Processing Feature)
-> **Estimated Effort**: 3-4 weeks
-> **Dependencies**: [LICENSE_DETECTION_ARCHITECTURE.md](../../LICENSE_DETECTION_ARCHITECTURE.md), [COPYRIGHT_DETECTION_PLAN.md](../text-detection/COPYRIGHT_DETECTION_PLAN.md), [ASSEMBLY_PLAN.md](../package-detection/ASSEMBLY_PLAN.md)
+> **Status**: 🟢 Historical rollout record — the summary/tally/classify/generated implementation tracked here is complete
+> **Current contract owner**: [`../../CLI_GUIDE.md`](../../CLI_GUIDE.md) for public workflows, [`../../TESTING_STRATEGY.md`](../../TESTING_STRATEGY.md) for verification expectations, and [`SCAN_RESULT_SHAPING_PLAN.md`](SCAN_RESULT_SHAPING_PLAN.md) / [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) for adjacent current boundaries
+> **Historical priority / effort**: P2, originally estimated at 3-4 weeks
+> **Dependencies at implementation time**: [LICENSE_DETECTION_ARCHITECTURE.md](../../LICENSE_DETECTION_ARCHITECTURE.md), [COPYRIGHT_DETECTION_PLAN.md](../text-detection/COPYRIGHT_DETECTION_PLAN.md), [ASSEMBLY_PLAN.md](../package-detection/ASSEMBLY_PLAN.md)
 
 ## Overview
+
+This document is kept as a completed rollout record. Sections such as recommendation, execution order, phase plans, and success criteria below should be read as historical implementation context rather than the live maintainer contract.
 
 This plan covers the remaining ScanCode-compatible **summary and tally surface**: codebase summary output, codebase/file/directory tallies, license clarity scoring, key-file classification, facets, and generated-code detection.
 
@@ -15,7 +17,7 @@ Upstream implements these behaviors across multiple plugins (`--summary`, `--tal
 
 This plan does **not** own the separate output-shaping layer (`--include`, `--only-findings`, `--strip-root`, `--full-root`, `--mark-source`, `--filter-clues`). That work now has its own sibling plan in [`SCAN_RESULT_SHAPING_PLAN.md`](SCAN_RESULT_SHAPING_PLAN.md).
 
-## Recommendation
+## Historical Recommendation
 
 **Finish the summary/tally pipeline with performance-first constraints.**
 

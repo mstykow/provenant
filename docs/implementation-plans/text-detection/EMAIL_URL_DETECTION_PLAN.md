@@ -1,9 +1,9 @@
 # Email and URL Detection Implementation Plan
 
-> **Status**: 🟢 Implemented with scanner/runtime ingestion parity complete
-> **Priority**: P2 - Medium Priority
-> **Estimated Effort**: 1-2 weeks
-> **Dependencies**: None (independent of copyright and license detection)
+> **Status**: 🟢 Historical rollout record — implemented, including scanner/runtime ingestion parity work
+> **Current contract owner**: [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) for the current subsystem description and [`../../CLI_GUIDE.md`](../../CLI_GUIDE.md) for user-facing CLI workflows
+> **Historical priority / effort**: P2, originally estimated at 1-2 weeks
+> **Dependencies at implementation time**: None (independent of copyright and license detection)
 
 ## Table of Contents
 
@@ -18,6 +18,8 @@
 ---
 
 ## Overview
+
+This file is retained as a completed implementation record. Treat future-tense rollout notes, old success criteria, and historical implementation phases below as historical context rather than as the live maintainer contract.
 
 Email and URL detection extracts email addresses and URLs from text-bearing scan inputs for contact information and reference tracking. This primarily means source and text files, and in Rust it additionally includes supported-image EXIF/XMP metadata as a beyond-parity clue source. It is the simplest of the three text detection features (license, copyright, email/URL) — primarily regex-based with a filter pipeline to remove junk results.
 
