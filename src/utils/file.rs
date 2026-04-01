@@ -1644,4 +1644,68 @@ mod tests {
         assert!(classification.is_script);
         assert_eq!(classification.file_type, "python script, text executable");
     }
+
+    #[test]
+    fn test_classify_file_info_preserves_language_detection_precedence_matrix() {
+        let cases = [
+            (
+                Path::new("bin/run"),
+                b"#!/usr/bin/env node\nconsole.log('hello');\n".as_slice(),
+                Some("JavaScript"),
+                true,
+                true,
+            ),
+            (
+                Path::new("Dockerfile"),
+                b"FROM scratch\n".as_slice(),
+                Some("Dockerfile"),
+                true,
+                false,
+            ),
+            (
+                Path::new("package.json"),
+                br#"{"name":"demo"}"#.as_slice(),
+                None,
+                false,
+                false,
+            ),
+            (
+                Path::new("config.yaml"),
+                b"key: value\n".as_slice(),
+                None,
+                false,
+                false,
+            ),
+            (
+                Path::new("Makefile"),
+                b"all:\n\techo hi\n".as_slice(),
+                None,
+                false,
+                false,
+            ),
+        ];
+
+        for (path, bytes, expected_language, expected_is_source, expected_is_script) in cases {
+            let classification = classify_file_info(path, bytes);
+
+            assert_eq!(
+                classification.programming_language.as_deref(),
+                expected_language,
+                "unexpected language for {}",
+                path.display()
+            );
+            assert_eq!(
+                classification.is_source,
+                expected_is_source,
+                "unexpected is_source for {}",
+                path.display()
+            );
+            assert_eq!(
+                classification.is_script,
+                expected_is_script,
+                "unexpected is_script for {}",
+                path.display()
+            );
+        }
+    }
 }

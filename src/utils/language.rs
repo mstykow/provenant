@@ -1,7 +1,8 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use content_inspector::{ContentType, inspect};
-use tokei::LanguageType;
+use file_identify::tags_from_filename;
 
 fn is_utf8_text(content_type: ContentType) -> bool {
     content_type == ContentType::UTF_8 || content_type == ContentType::UTF_8_BOM
@@ -14,11 +15,11 @@ pub fn detect_language(path: &Path, content: &[u8]) -> Option<String> {
         return Some(language);
     }
 
-    if let Some(language) = detect_special_file_name_language(path) {
+    if let Some(language) = detect_file_identify_language(path) {
         return Some(language);
     }
 
-    if let Some(language) = detect_tokei_extension_language(path) {
+    if let Some(language) = detect_repo_special_file_name_language(path) {
         return Some(language);
     }
 
@@ -89,7 +90,136 @@ fn detect_shebang_language(content: &[u8]) -> Option<String> {
     }
 }
 
-fn detect_special_file_name_language(path: &Path) -> Option<String> {
+fn detect_file_identify_language(path: &Path) -> Option<String> {
+    let file_name = path.file_name()?.to_str()?;
+    let tags = tags_from_filename(file_name);
+
+    map_file_identify_tags(&tags).map(str::to_string)
+}
+
+fn map_file_identify_tags(tags: &HashSet<&'static str>) -> Option<&'static str> {
+    if tags.contains("dockerfile") {
+        return Some("Dockerfile");
+    }
+    if tags.contains("makefile") {
+        return Some("Makefile");
+    }
+    if tags.contains("rust") {
+        return Some("Rust");
+    }
+    if tags.contains("python") {
+        return Some("Python");
+    }
+    if tags.contains("javascript") || tags.contains("jsx") {
+        return Some("JavaScript");
+    }
+    if tags.contains("ts") || tags.contains("tsx") {
+        return Some("TypeScript");
+    }
+    if tags.contains("html") {
+        return Some("HTML");
+    }
+    if tags.contains("css") {
+        return Some("CSS");
+    }
+    if tags.contains("c") {
+        return Some("C");
+    }
+    if tags.contains("cpp") {
+        return Some("C++");
+    }
+    if tags.contains("java") {
+        return Some("Java");
+    }
+    if tags.contains("go") {
+        return Some("Go");
+    }
+    if tags.contains("ruby") {
+        return Some("Ruby");
+    }
+    if tags.contains("php") {
+        return Some("PHP");
+    }
+    if tags.contains("perl") {
+        return Some("Perl");
+    }
+    if tags.contains("swift") {
+        return Some("Swift");
+    }
+    if tags.contains("shell") || tags.contains("bash") || tags.contains("zsh") {
+        return Some("Shell");
+    }
+    if tags.contains("kotlin") {
+        return Some("Kotlin");
+    }
+    if tags.contains("dart") {
+        return Some("Dart");
+    }
+    if tags.contains("scala") {
+        return Some("Scala");
+    }
+    if tags.contains("csharp") {
+        return Some("C#");
+    }
+    if tags.contains("fsharp") {
+        return Some("F#");
+    }
+    if tags.contains("r") {
+        return Some("R");
+    }
+    if tags.contains("lua") {
+        return Some("Lua");
+    }
+    if tags.contains("julia") {
+        return Some("Julia");
+    }
+    if tags.contains("elixir") {
+        return Some("Elixir");
+    }
+    if tags.contains("clojure") {
+        return Some("Clojure");
+    }
+    if tags.contains("haskell") {
+        return Some("Haskell");
+    }
+    if tags.contains("erlang") {
+        return Some("Erlang");
+    }
+    if tags.contains("sql") {
+        return Some("SQL");
+    }
+    if tags.contains("tex") {
+        return Some("TeX");
+    }
+    if tags.contains("groovy") || tags.contains("gradle") {
+        return Some("Groovy");
+    }
+    if tags.contains("nix") {
+        return Some("Nix");
+    }
+    if tags.contains("zig") {
+        return Some("Zig");
+    }
+    if tags.contains("powershell") {
+        return Some("PowerShell");
+    }
+    if tags.contains("starlark") {
+        return Some("Starlark");
+    }
+    if tags.contains("awk") {
+        return Some("Awk");
+    }
+    if tags.contains("ocaml") {
+        return Some("OCaml");
+    }
+    if tags.contains("meson") {
+        return Some("Meson");
+    }
+
+    None
+}
+
+fn detect_repo_special_file_name_language(path: &Path) -> Option<String> {
     let file_name = path
         .file_name()
         .and_then(|n| n.to_str())
@@ -98,13 +228,6 @@ fn detect_special_file_name_language(path: &Path) -> Option<String> {
 
     if matches!(
         file_name.as_str(),
-        "dockerfile" | "containerfile" | "containerfile.core"
-    ) {
-        Some("Dockerfile".to_string())
-    } else if matches!(file_name.as_str(), "makefile" | "makefile.inc") {
-        Some("Makefile".to_string())
-    } else if matches!(
-        file_name.as_str(),
         "gemfile" | "rakefile" | "podfile" | "vagrantfile" | "brewfile"
     ) {
         Some("Ruby".to_string())
@@ -112,6 +235,8 @@ fn detect_special_file_name_language(path: &Path) -> Option<String> {
         Some("Shell".to_string())
     } else if matches!(file_name.as_str(), "meson.build") {
         Some("Meson".to_string())
+    } else if matches!(file_name.as_str(), "containerfile.core") {
+        Some("Dockerfile".to_string())
     } else if matches!(file_name.as_str(), "build" | "workspace" | "buck") {
         Some("Starlark".to_string())
     } else if matches!(
@@ -122,12 +247,6 @@ fn detect_special_file_name_language(path: &Path) -> Option<String> {
     } else {
         None
     }
-}
-
-fn detect_tokei_extension_language(path: &Path) -> Option<String> {
-    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
-    let language = LanguageType::from_file_extension(&extension)?;
-    map_tokei_language(language).map(str::to_string)
 }
 
 fn detect_manual_extension_language(path: &Path) -> Option<String> {
@@ -176,47 +295,6 @@ fn detect_manual_extension_language(path: &Path) -> Option<String> {
         "bzl" | "bazel" | "star" | "sky" => Some("Starlark".to_string()),
         "awk" => Some("Awk".to_string()),
         "ml" | "mli" => Some("OCaml".to_string()),
-        _ => None,
-    }
-}
-
-fn map_tokei_language(language: LanguageType) -> Option<&'static str> {
-    match language {
-        LanguageType::Rust => Some("Rust"),
-        LanguageType::Python => Some("Python"),
-        LanguageType::JavaScript | LanguageType::Jsx => Some("JavaScript"),
-        LanguageType::TypeScript | LanguageType::Tsx => Some("TypeScript"),
-        LanguageType::Html => Some("HTML"),
-        LanguageType::Css => Some("CSS"),
-        LanguageType::C | LanguageType::CHeader => Some("C"),
-        LanguageType::Cpp | LanguageType::CppHeader | LanguageType::CppModule => Some("C++"),
-        LanguageType::AssemblyGAS => Some("GAS"),
-        LanguageType::Java => Some("Java"),
-        LanguageType::Go => Some("Go"),
-        LanguageType::Ruby | LanguageType::Rakefile => Some("Ruby"),
-        LanguageType::Php => Some("PHP"),
-        LanguageType::Perl => Some("Perl"),
-        LanguageType::Swift => Some("Swift"),
-        LanguageType::Bash
-        | LanguageType::CShell
-        | LanguageType::Fish
-        | LanguageType::Ksh
-        | LanguageType::Sh
-        | LanguageType::Zsh => Some("Shell"),
-        LanguageType::Kotlin => Some("Kotlin"),
-        LanguageType::Dart => Some("Dart"),
-        LanguageType::Scala => Some("Scala"),
-        LanguageType::CSharp => Some("C#"),
-        LanguageType::FSharp => Some("F#"),
-        LanguageType::R => Some("R"),
-        LanguageType::Lua => Some("Lua"),
-        LanguageType::Julia => Some("Julia"),
-        LanguageType::Elixir => Some("Elixir"),
-        LanguageType::Clojure | LanguageType::ClojureC => Some("Clojure"),
-        LanguageType::Haskell => Some("Haskell"),
-        LanguageType::Erlang => Some("Erlang"),
-        LanguageType::Sql => Some("SQL"),
-        LanguageType::Tex => Some("TeX"),
         _ => None,
     }
 }
