@@ -69,7 +69,6 @@ lazy_static = { workspace = true }
 liblzma = "0.4.6"
 log = "0.4.29"
 regex = { workspace = true }
-unicode-normalization = "0.1.25"
 base64 = "0.22.1"
 chrono = "0.4.44"
 clap = { workspace = true }
@@ -79,7 +78,6 @@ zstd = { workspace = true }
 derive_builder = "0.20.2"
 glob = "0.3.3"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "tiff", "webp"] }
-include_dir = "0.7.4"
 indicatif = "0.18.4"
 indicatif-log-bridge = "0.2.3"
 json5 = "1.3.1"
@@ -103,14 +101,10 @@ tar = "0.4.45"
 tempfile = { workspace = true }
 toml = "1.0.6"
 url = { workspace = true }
-urlencoding = "2.1.3"
-xml-rs = "1.0.0"
 quick-xml = "0.39.2"
 zip = "8.4.0"
 uuid = { version = "1.23.0", features = ["v4"] }
-blake3 = "1.8.4"
 once_cell = "1.21.4"
-deunicode = "1.6.2"
 tera = { version = "1.20.1", default-features = false }
 file-identify = "0.2.0"
 env_logger = "0.11.10"
