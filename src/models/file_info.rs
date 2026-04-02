@@ -15,7 +15,7 @@ use crate::license_detection::tokenize::tokenize_without_stopwords;
 use crate::models::output::Tallies;
 use crate::utils::spdx::combine_license_expressions;
 
-#[derive(Debug, Builder, Deserialize)]
+#[derive(Debug, Builder, Deserialize, Clone)]
 #[builder(build_fn(skip))]
 /// File-level scan result containing metadata and detected findings.
 pub struct FileInfo {
