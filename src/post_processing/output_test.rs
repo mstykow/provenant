@@ -1477,6 +1477,63 @@ fn create_output_preserves_top_level_license_references_from_context() {
 }
 
 #[test]
+fn create_output_projects_file_scan_errors_into_headers_and_serialized_files() {
+    let start = Utc::now();
+    let end = start;
+    let parse_error =
+        "Failed to read or parse package.json at \"project/package.json\": expected value";
+
+    let mut manifest = file("project/package.json");
+    manifest.scan_errors = vec![parse_error.to_string()];
+
+    let output = create_output(
+        start,
+        end,
+        crate::scanner::ProcessResult {
+            files: vec![dir("project"), manifest],
+            excluded_count: 0,
+        },
+        CreateOutputContext {
+            total_dirs: 1,
+            assembly_result: assembly::AssemblyResult {
+                packages: vec![],
+                dependencies: vec![],
+            },
+            license_detections: vec![],
+            license_references: vec![],
+            license_rule_references: vec![],
+            extra_errors: vec![],
+            options: CreateOutputOptions {
+                facet_rules: &[],
+                include_classify: false,
+                include_tallies_by_facet: false,
+                include_summary: false,
+                include_license_clarity_score: false,
+                include_tallies: false,
+                include_tallies_with_details: false,
+                include_tallies_of_key_files: false,
+                include_generated: false,
+            },
+        },
+    );
+
+    assert_eq!(
+        output.headers[0].errors,
+        vec![format!("project/package.json: {parse_error}")]
+    );
+
+    let serialized = serde_json::to_value(&output).expect("serialize output with scan errors");
+    let serialized_manifest = serialized["files"]
+        .as_array()
+        .expect("files should serialize as an array")
+        .iter()
+        .find(|entry| entry["path"] == "project/package.json")
+        .expect("serialized package.json entry should exist");
+
+    assert_eq!(serialized_manifest["scan_errors"], json!([parse_error]));
+}
+
+#[test]
 fn create_output_preserves_top_level_license_detections_from_context() {
     let start = Utc::now();
     let end = start;
