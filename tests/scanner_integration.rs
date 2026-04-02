@@ -1,5 +1,6 @@
 use glob::Pattern;
-use provenant::license_detection::{LicenseDetectionEngine, SCANCODE_LICENSES_DATA_PATH};
+use once_cell::sync::Lazy;
+use provenant::license_detection::LicenseDetectionEngine;
 use provenant::models::PackageType;
 use provenant::parsers::list_parser_types;
 use provenant::progress::{ProgressMode, ScanProgress};
@@ -10,22 +11,15 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
+static TEST_LICENSE_ENGINE: Lazy<Arc<LicenseDetectionEngine>> = Lazy::new(|| {
+    Arc::new(
+        LicenseDetectionEngine::from_embedded()
+            .expect("embedded license index should be available for tests"),
+    )
+});
+
 fn create_license_detection_engine() -> Option<Arc<LicenseDetectionEngine>> {
-    let data_path = Path::new(SCANCODE_LICENSES_DATA_PATH);
-    if !data_path.exists() {
-        eprintln!("Reference data not available at {:?}", data_path);
-        return None;
-    }
-    match LicenseDetectionEngine::from_directory(data_path) {
-        Ok(engine) => {
-            eprintln!("License detection engine initialized for tests");
-            Some(Arc::new(engine))
-        }
-        Err(e) => {
-            eprintln!("Failed to create engine: {:?}", e);
-            None
-        }
-    }
+    Some(Arc::clone(&TEST_LICENSE_ENGINE))
 }
 
 fn hidden_progress() -> Arc<ScanProgress> {

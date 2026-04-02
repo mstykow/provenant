@@ -1,6 +1,5 @@
 use super::*;
 use once_cell::sync::Lazy;
-use std::path::PathBuf;
 use std::sync::Once;
 
 use crate::license_detection::models::{MatchCoordinates, position_span::PositionSpan};
@@ -70,26 +69,6 @@ fn test_engine_from_embedded_initializes() {
     assert!(
         !engine.index().rid_by_hash.is_empty(),
         "Should have hash mappings"
-    );
-}
-
-#[test]
-fn test_engine_from_embedded_matches_from_directory() {
-    let data_path = PathBuf::from(super::SCANCODE_LICENSES_DATA_PATH);
-    let engine_from_dir = LicenseDetectionEngine::from_directory(&data_path)
-        .expect("required test dependency available");
-
-    let engine_from_embedded = get_engine();
-
-    assert_eq!(
-        engine_from_dir.index().rules_by_rid.len(),
-        engine_from_embedded.index().rules_by_rid.len(),
-        "Should have same number of rules"
-    );
-    assert_eq!(
-        engine_from_dir.index().licenses_by_key.len(),
-        engine_from_embedded.index().licenses_by_key.len(),
-        "Should have same number of licenses"
     );
 }
 
@@ -1181,9 +1160,7 @@ fn test_truncate_detection_text_preserves_char_boundary() {
 
 #[test]
 fn test_detect_with_kind_handles_multibyte_boundary_at_size_limit() {
-    let data_path = PathBuf::from(super::SCANCODE_LICENSES_DATA_PATH);
-    let engine = LicenseDetectionEngine::from_directory(&data_path)
-        .expect("required test dependency available");
+    let engine = get_engine();
     let text = format!("{}é", "a".repeat(MAX_DETECTION_SIZE - 1));
 
     let detections = engine

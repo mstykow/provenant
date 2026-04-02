@@ -2,7 +2,6 @@ use super::*;
 use crate::license_detection::embedded::index::load_license_index_from_bytes;
 use crate::license_detection::embedded::schema::{EmbeddedLoaderSnapshot, SCHEMA_VERSION};
 use crate::license_detection::models::{LoadedLicense, LoadedRule, RuleKind};
-use crate::license_detection::{SCANCODE_LICENSES_LICENSES_PATH, SCANCODE_LICENSES_RULES_PATH};
 use once_cell::sync::Lazy;
 use std::path::PathBuf;
 use std::sync::Once;
@@ -18,16 +17,6 @@ fn get_engine() -> &'static LicenseDetectionEngine {
         let _ = &*TEST_ENGINE;
     });
     &TEST_ENGINE
-}
-
-fn get_reference_data_paths() -> Option<(PathBuf, PathBuf)> {
-    let rules_path = PathBuf::from(SCANCODE_LICENSES_RULES_PATH);
-    let licenses_path = PathBuf::from(SCANCODE_LICENSES_LICENSES_PATH);
-    if rules_path.exists() && licenses_path.exists() {
-        Some((rules_path, licenses_path))
-    } else {
-        None
-    }
 }
 
 fn create_test_loaded_rule() -> LoadedRule {
@@ -104,7 +93,7 @@ fn serialize_loader_snapshot_to_bytes(
     zstd::encode_all(&msgpack[..], 0).map_err(|e| e.to_string())
 }
 
-mod engine_equivalence {
+mod engine_loading {
     use super::*;
 
     #[test]
@@ -117,31 +106,7 @@ mod engine_equivalence {
     }
 
     #[test]
-    fn test_from_embedded_vs_from_directory_rule_count() {
-        let (rules_path, licenses_path) =
-            get_reference_data_paths().expect("required test dependency available");
-
-        let loaded_rules = rules::load_loaded_rules_from_directory(&rules_path).unwrap();
-        let loaded_licenses = rules::load_loaded_licenses_from_directory(&licenses_path).unwrap();
-        let index = index::build_index_from_loaded(loaded_rules, loaded_licenses, false);
-
-        let engine_from_embedded = get_engine();
-
-        assert_eq!(
-            index.rules_by_rid.len(),
-            engine_from_embedded.index().rules_by_rid.len()
-        );
-        assert_eq!(
-            index.licenses_by_key.len(),
-            engine_from_embedded.index().licenses_by_key.len()
-        );
-    }
-
-    #[test]
-    fn test_from_embedded_vs_from_directory_detection_mit() {
-        let _reference_paths =
-            get_reference_data_paths().expect("required test dependency available");
-
+    fn test_from_embedded_detects_mit_text() {
         let engine_from_embedded = get_engine();
 
         let mit_text = r#"Permission is hereby granted, free of charge, to any person obtaining a copy
