@@ -402,7 +402,8 @@ Guardrails:
 - **Use the correct enum variant** for the exact file format being parsed.
 - **Handle multi-datasource parsers explicitly** when one parser supports multiple file formats.
 - **Add new datasource variants and assembly wiring together** so sibling/related files can merge correctly.
-- **Preserve upstream typos with `#[serde(rename)]` when required** (for example `NugetNuspec` → `"nuget_nupsec"`, `RpmSpecfile` → `"rpm_spefile"`).
+- **Use canonical spellings for serialization** (e.g., `NugetNuspec` → `"nuget_nuspec"`, `RpmSpecfile` → `"rpm_specfile"`).
+- **Add legacy deserialization aliases** with `#[serde(alias = "...")]` when correcting upstream typos to maintain backward compatibility with `--from-json`.
 
 For the full datasource and assembly workflow, see [`docs/HOW_TO_ADD_A_PARSER.md`](docs/HOW_TO_ADD_A_PARSER.md#step-6-add-assembly-support-if-applicable).
 

@@ -28,16 +28,17 @@ Each test includes:
 ### Fixed Issues
 
 - ✅ PURL generation for packages
-- ✅ `datasource_id` field: Uses `"nuget_nupsec"` (matches Python reference value)
+- ✅ `datasource_id` field: Uses canonical spelling `"nuget_nuspec"` (corrected from typo `"nuget_nupsec"` in Python reference)
 - ✅ party `type` now records `person` for NuGet author/owner data
 - ✅ modern NuGet license metadata preserves `license_type`/`license_file` in parser `extra_data`
 - PackageReference and legacy `project.json` manifests are covered in the parser-fixture set.
 
 ### Note on `datasource_id` spelling
 
-The `datasource_id` value `"nuget_nupsec"` matches the Python ScanCode reference exactly.
-This is a known typo in the original, but we preserve it for compatibility. A comment
-in the `DatasourceId` enum documents this.
+The `datasource_id` value now uses the canonical spelling `"nuget_nuspec"`, correcting the typo
+`"nuget_nupsec"` from the Python ScanCode reference. For backward compatibility with existing
+JSON files, the legacy typo spelling is still accepted during deserialization via `--from-json`.
+The `DatasourceId` enum documents this with both `rename` (canonical output) and `alias` (legacy input) attributes.
 
 ## Parser Implementation
 
