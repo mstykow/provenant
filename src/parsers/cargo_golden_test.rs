@@ -4,16 +4,20 @@ mod golden_tests {
     use crate::parsers::cargo::CargoParser;
     use crate::parsers::cargo_lock::CargoLockParser;
     use crate::parsers::golden_test_utils::compare_package_data_parser_only;
+    use std::path::Path;
     use std::path::PathBuf;
+
+    fn assert_fixture_exists(path: &Path) {
+        assert!(path.exists(), "missing fixture: {}", path.display());
+    }
 
     #[test]
     fn test_golden_clap() {
         let test_file = PathBuf::from("testdata/cargo-golden/clap/Cargo.toml");
         let expected_file = PathBuf::from("testdata/cargo-golden/clap/Cargo.toml.expected");
 
-        if !test_file.exists() || !expected_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = CargoParser::extract_first_package(&test_file);
 
@@ -28,9 +32,8 @@ mod golden_tests {
         let test_file = PathBuf::from("testdata/cargo-golden/package/Cargo.toml");
         let expected_file = PathBuf::from("testdata/cargo-golden/package/Cargo.toml.expected");
 
-        if !test_file.exists() || !expected_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = CargoParser::extract_first_package(&test_file);
 
@@ -45,9 +48,8 @@ mod golden_tests {
         let test_file = PathBuf::from("testdata/cargo-golden/rustup/Cargo.toml");
         let expected_file = PathBuf::from("testdata/cargo-golden/rustup/Cargo.toml.expected");
 
-        if !test_file.exists() || !expected_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = CargoParser::extract_first_package(&test_file);
 
@@ -62,9 +64,8 @@ mod golden_tests {
         let test_file = PathBuf::from("testdata/cargo-golden/scan/Cargo.toml");
         let expected_file = PathBuf::from("testdata/cargo-golden/scan/Cargo.toml.expected");
 
-        if !test_file.exists() || !expected_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = CargoParser::extract_first_package(&test_file);
 
@@ -80,9 +81,8 @@ mod golden_tests {
         let expected_file =
             PathBuf::from("testdata/cargo-golden/single-file-scan/Cargo.toml.expected");
 
-        if !test_file.exists() || !expected_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = CargoParser::extract_first_package(&test_file);
 
@@ -97,9 +97,8 @@ mod golden_tests {
         let test_file = PathBuf::from("testdata/cargo-golden/tauri/Cargo.toml");
         let expected_file = PathBuf::from("testdata/cargo-golden/tauri/Cargo.toml.expected");
 
-        if !test_file.exists() || !expected_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = CargoParser::extract_first_package(&test_file);
 
@@ -115,9 +114,8 @@ mod golden_tests {
         let expected_file =
             PathBuf::from("testdata/cargo-golden/publish-false/Cargo.toml.expected");
 
-        if !test_file.exists() || !expected_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = CargoParser::extract_first_package(&test_file);
 
@@ -132,9 +130,8 @@ mod golden_tests {
         let test_file = PathBuf::from("testdata/cargo-golden/lock-basic/Cargo.lock");
         let expected_file = PathBuf::from("testdata/cargo-golden/lock-basic/Cargo.lock.expected");
 
-        if !test_file.exists() || !expected_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = CargoLockParser::extract_first_package(&test_file);
 

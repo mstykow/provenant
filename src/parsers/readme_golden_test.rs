@@ -3,7 +3,12 @@ mod golden_tests {
     use crate::parsers::PackageParser;
     use crate::parsers::golden_test_utils::compare_package_data_parser_only;
     use crate::parsers::readme::ReadmeParser;
+    use std::path::Path;
     use std::path::PathBuf;
+
+    fn assert_fixture_exists(path: &Path) {
+        assert!(path.exists(), "missing fixture: {}", path.display());
+    }
 
     #[test]
     fn test_golden_android_basic() {
@@ -11,9 +16,8 @@ mod golden_tests {
         let expected_file =
             PathBuf::from("testdata/readme-golden/android/basic/README.android.expected.json");
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = ReadmeParser::extract_first_package(&test_file);
 
@@ -29,9 +33,8 @@ mod golden_tests {
         let expected_file =
             PathBuf::from("testdata/readme-golden/chromium/basic/README.chromium.expected.json");
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = ReadmeParser::extract_first_package(&test_file);
 
@@ -47,9 +50,8 @@ mod golden_tests {
         let expected_file =
             PathBuf::from("testdata/readme-golden/facebook/basic/README.facebook.expected.json");
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = ReadmeParser::extract_first_package(&test_file);
 
@@ -67,9 +69,8 @@ mod golden_tests {
             "testdata/readme-golden/facebook/capital-filename/README.FACEBOOK.expected.json",
         );
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = ReadmeParser::extract_first_package(&test_file);
 
@@ -88,9 +89,8 @@ mod golden_tests {
             "testdata/readme-golden/facebook/download-link-as-download_url/README.facebook.expected.json",
         );
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = ReadmeParser::extract_first_package(&test_file);
 
@@ -109,9 +109,8 @@ mod golden_tests {
             "testdata/readme-golden/facebook/downloaded-from-as-download_url/README.facebook.expected.json",
         );
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = ReadmeParser::extract_first_package(&test_file);
 
@@ -129,9 +128,8 @@ mod golden_tests {
             "testdata/readme-golden/facebook/missing-type/README.facebook.expected.json",
         );
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = ReadmeParser::extract_first_package(&test_file);
 
@@ -149,9 +147,8 @@ mod golden_tests {
             "testdata/readme-golden/facebook/project-as-name/README.facebook.expected.json",
         );
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = ReadmeParser::extract_first_package(&test_file);
 
@@ -169,9 +166,8 @@ mod golden_tests {
             "testdata/readme-golden/facebook/repo-as-homepage_url/README.facebook.expected.json",
         );
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = ReadmeParser::extract_first_package(&test_file);
 
@@ -189,9 +185,8 @@ mod golden_tests {
             "testdata/readme-golden/facebook/source-as-homepage_url/README.facebook.expected.json",
         );
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = ReadmeParser::extract_first_package(&test_file);
 
@@ -210,9 +205,8 @@ mod golden_tests {
             "testdata/readme-golden/facebook/use-parent-dir-name-as-package-name/setuptools/README.facebook.expected.json",
         );
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = ReadmeParser::extract_first_package(&test_file);
 
@@ -231,9 +225,8 @@ mod golden_tests {
             "testdata/readme-golden/facebook/website-as-homepage_url/README.facebook.expected.json",
         );
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = ReadmeParser::extract_first_package(&test_file);
 
@@ -249,9 +242,8 @@ mod golden_tests {
         let expected_file =
             PathBuf::from("testdata/readme-golden/google/basic/README.google.expected.json");
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = ReadmeParser::extract_first_package(&test_file);
 
@@ -268,9 +260,8 @@ mod golden_tests {
             "testdata/readme-golden/thirdparty/basic/README.thirdparty.expected.json",
         );
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = ReadmeParser::extract_first_package(&test_file);
 

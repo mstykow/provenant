@@ -7,6 +7,10 @@ use super::PackageParser;
 use super::rpm_specfile::RpmSpecfileParser;
 use crate::models::DatasourceId;
 
+fn assert_fixture_exists(path: &std::path::Path) {
+    assert!(path.exists(), "missing fixture: {}", path.display());
+}
+
 #[test]
 fn test_is_match_positive() {
     assert!(RpmSpecfileParser::is_match(&PathBuf::from("cpio.spec")));
@@ -31,10 +35,7 @@ fn test_is_match_negative() {
 #[test]
 fn test_parse_minimal_spec() {
     let test_file = PathBuf::from("testdata/rpm/specfile/minimal.spec");
-    if !test_file.exists() {
-        eprintln!("Test file not found: {:?}", test_file);
-        return;
-    }
+    assert_fixture_exists(&test_file);
 
     let pkg = RpmSpecfileParser::extract_first_package(&test_file);
 
@@ -54,10 +55,7 @@ fn test_parse_minimal_spec() {
 #[test]
 fn test_parse_cpio_spec() {
     let test_file = PathBuf::from("testdata/rpm/specfile/cpio.spec");
-    if !test_file.exists() {
-        eprintln!("Test file not found: {:?}", test_file);
-        return;
-    }
+    assert_fixture_exists(&test_file);
 
     let pkg = RpmSpecfileParser::extract_first_package(&test_file);
 
@@ -133,10 +131,7 @@ fn test_parse_cpio_spec() {
 #[test]
 fn test_parse_openssl_spec() {
     let test_file = PathBuf::from("testdata/rpm/specfile/openssl.spec");
-    if !test_file.exists() {
-        eprintln!("Test file not found: {:?}", test_file);
-        return;
-    }
+    assert_fixture_exists(&test_file);
 
     let pkg = RpmSpecfileParser::extract_first_package(&test_file);
 
@@ -179,9 +174,7 @@ fn test_parse_openssl_spec() {
 #[test]
 fn test_macro_expansion() {
     let test_file = PathBuf::from("testdata/rpm/specfile/cpio.spec");
-    if !test_file.exists() {
-        return;
-    }
+    assert_fixture_exists(&test_file);
 
     let pkg = RpmSpecfileParser::extract_first_package(&test_file);
 
@@ -198,9 +191,7 @@ fn test_macro_expansion() {
 #[test]
 fn test_comma_separated_buildrequires() {
     let test_file = PathBuf::from("testdata/rpm/specfile/cpio.spec");
-    if !test_file.exists() {
-        return;
-    }
+    assert_fixture_exists(&test_file);
 
     let pkg = RpmSpecfileParser::extract_first_package(&test_file);
 
@@ -229,9 +220,7 @@ fn test_comma_separated_buildrequires() {
 #[test]
 fn test_purl_generation() {
     let test_file = PathBuf::from("testdata/rpm/specfile/minimal.spec");
-    if !test_file.exists() {
-        return;
-    }
+    assert_fixture_exists(&test_file);
 
     let pkg = RpmSpecfileParser::extract_first_package(&test_file);
 
@@ -251,9 +240,7 @@ fn test_purl_generation() {
 #[test]
 fn test_description_overrides_summary() {
     let test_file = PathBuf::from("testdata/rpm/specfile/cpio.spec");
-    if !test_file.exists() {
-        return;
-    }
+    assert_fixture_exists(&test_file);
 
     let pkg = RpmSpecfileParser::extract_first_package(&test_file);
 

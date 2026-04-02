@@ -13,10 +13,6 @@ mod tests {
 
     #[test]
     fn test_rpm_sqlite_scan_assigns_referenced_files_from_rootfs_layout() {
-        if !rpm_command_available() {
-            return;
-        }
-
         let temp_dir = tempfile::TempDir::new().expect("create temp dir");
         let rpmdb_dir = temp_dir.path().join("usr/lib/sysimage/rpm");
         let licenses_dir = temp_dir.path().join("usr/share/licenses/libgcc");
@@ -39,6 +35,24 @@ mod tests {
 
         let (files, result) = scan_and_assemble(temp_dir.path());
 
+        let rpmdb = files
+            .iter()
+            .find(|file| file.path.ends_with("/usr/lib/sysimage/rpm/rpmdb.sqlite"))
+            .expect("rpmdb sqlite should be scanned");
+
+        if !rpm_command_available() {
+            assert!(
+                result
+                    .packages
+                    .iter()
+                    .all(|package| package.name.as_deref() != Some("libgcc"))
+            );
+            assert!(rpmdb.package_data.iter().any(|pkg_data| {
+                pkg_data.datasource_id == Some(DatasourceId::RpmInstalledDatabaseSqlite)
+            }));
+            return;
+        }
+
         let package = result
             .packages
             .iter()
@@ -48,11 +62,6 @@ mod tests {
             .iter()
             .find(|file| file.path.ends_with("/usr/share/licenses/libgcc/COPYING"))
             .expect("COPYING should be scanned");
-        let rpmdb = files
-            .iter()
-            .find(|file| file.path.ends_with("/usr/lib/sysimage/rpm/rpmdb.sqlite"))
-            .expect("rpmdb sqlite should be scanned");
-
         assert_eq!(package.package_type, Some(PackageType::Rpm));
         assert!(copying.for_packages.contains(&package.package_uid));
         assert!(rpmdb.package_data.iter().any(|pkg_data| {
@@ -62,10 +71,6 @@ mod tests {
 
     #[test]
     fn test_rpm_yumdb_scan_assembles_virtual_package_and_preserves_metadata() {
-        if !rpm_command_available() {
-            return;
-        }
-
         let (files, result) = scan_and_assemble(Path::new("testdata/rpm/var/lib/yum/yumdb"));
 
         let package = result

@@ -291,10 +291,7 @@ fn test_extract_from_testdata() {
 #[test]
 fn test_basic_file() {
     let path = PathBuf::from("testdata/freebsd/basic/+COMPACT_MANIFEST");
-    if !path.exists() {
-        println!("Test data not available, skipping");
-        return;
-    }
+    assert!(path.exists(), "missing fixture: {}", path.display());
 
     let pkg = FreebsdCompactManifestParser::extract_first_package(&path);
 
@@ -353,10 +350,7 @@ fn test_build_freebsd_license_data_single_license() {
 #[test]
 fn test_multi_license_file() {
     let path = PathBuf::from("testdata/freebsd/multi_license/+COMPACT_MANIFEST");
-    if !path.exists() {
-        println!("Test data not available, skipping");
-        return;
-    }
+    assert!(path.exists(), "missing fixture: {}", path.display());
 
     let pkg = FreebsdCompactManifestParser::extract_first_package(&path);
 
@@ -370,10 +364,7 @@ fn test_multi_license_file() {
 #[test]
 fn test_dual_license_file() {
     let path = PathBuf::from("testdata/freebsd/dual_license/+COMPACT_MANIFEST");
-    if !path.exists() {
-        println!("Test data not available, skipping");
-        return;
-    }
+    assert!(path.exists(), "missing fixture: {}", path.display());
 
     let pkg = FreebsdCompactManifestParser::extract_first_package(&path);
 
@@ -387,10 +378,7 @@ fn test_dual_license_file() {
 #[test]
 fn test_no_licenses_file() {
     let path = PathBuf::from("testdata/freebsd/no_licenses/+COMPACT_MANIFEST");
-    if !path.exists() {
-        println!("Test data not available, skipping");
-        return;
-    }
+    assert!(path.exists(), "missing fixture: {}", path.display());
 
     let pkg = FreebsdCompactManifestParser::extract_first_package(&path);
 

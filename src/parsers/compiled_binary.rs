@@ -322,19 +322,21 @@ fn split_module_path(module_path: &str) -> (Option<String>, String) {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::process::Command;
+    use std::path::Path;
 
     use flate2::Compression;
     use flate2::write::ZlibEncoder;
 
     use super::*;
 
+    const RUST_COMPILED_BINARY_FIXTURE: &str =
+        "testdata/compiled-binary-golden/rust/cargo_dependencies";
+    const GO_COMPILED_BINARY_FIXTURE: &str = "testdata/compiled-binary-golden/go-basic/demo";
+
     #[test]
     fn parse_rust_binary_reads_cargo_auditable_packages() {
-        let path = Path::new(
-            "reference/scancode-toolkit/tests/packagedcode/data/cargo/binary/cargo_dependencies",
-        );
+        let path = Path::new(RUST_COMPILED_BINARY_FIXTURE);
+        assert!(path.exists(), "missing fixture: {}", path.display());
 
         let packages = parse_rust_binary(path);
 
@@ -357,32 +359,11 @@ mod tests {
     }
 
     #[test]
-    fn parse_go_binary_reads_module_path_from_go_tooling() {
-        if Command::new("go").arg("version").output().is_err() {
-            return;
-        }
+    fn parse_go_binary_reads_module_path_from_fixture() {
+        let path = Path::new(GO_COMPILED_BINARY_FIXTURE);
+        assert!(path.exists(), "missing fixture: {}", path.display());
 
-        let temp = tempfile::tempdir().expect("temp dir");
-        fs::write(
-            temp.path().join("go.mod"),
-            "module example.com/demo\n\ngo 1.23.0\n",
-        )
-        .expect("write go.mod");
-        fs::write(
-            temp.path().join("main.go"),
-            "package main\nfunc main() {}\n",
-        )
-        .expect("write main.go");
-        let binary = temp.path().join("demo");
-        let status = Command::new("go")
-            .current_dir(temp.path())
-            .args(["build", "-o"])
-            .arg(&binary)
-            .status()
-            .expect("run go build");
-        assert!(status.success());
-
-        let packages = parse_go_binary(&binary);
+        let packages = parse_go_binary(path);
 
         assert!(
             packages

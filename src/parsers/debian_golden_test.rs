@@ -7,6 +7,10 @@ mod golden_tests {
     use std::path::Path;
     use std::path::PathBuf;
 
+    fn assert_fixture_exists(path: &Path) {
+        assert!(path.exists(), "missing fixture: {}", path.display());
+    }
+
     fn compare_debian_package_data(actual: &PackageData, expected_file: &Path) {
         match compare_package_data_parser_only(actual, expected_file) {
             Ok(_) => (),
@@ -20,9 +24,8 @@ mod golden_tests {
         let expected_file =
             PathBuf::from("testdata/debian/deb/adduser_3.112ubuntu1_all.deb.expected.json");
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = DebianDebParser::extract_first_package(&test_file);
 
@@ -35,9 +38,8 @@ mod golden_tests {
         let expected_file =
             PathBuf::from("testdata/debian/dsc_files/zsh_5.7.1-1+deb10u1.dsc.expected.json");
 
-        if !test_file.exists() {
-            return;
-        }
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = DebianDscParser::extract_first_package(&test_file);
 
@@ -49,6 +51,9 @@ mod golden_tests {
         let test_file = PathBuf::from("testdata/debian/copyright/copyright");
         let expected_file = PathBuf::from("testdata/debian/copyright/copyright.expected.json");
 
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
+
         let package_data = DebianCopyrightParser::extract_first_package(&test_file);
         compare_debian_package_data(&package_data, &expected_file);
     }
@@ -58,6 +63,9 @@ mod golden_tests {
         let test_file = PathBuf::from("testdata/debian/project/debian/control");
         let expected_file = PathBuf::from("testdata/debian/project/debian/control.expected.json");
 
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
+
         let package_data = DebianControlParser::extract_first_package(&test_file);
         compare_debian_package_data(&package_data, &expected_file);
     }
@@ -66,6 +74,9 @@ mod golden_tests {
     fn test_golden_debian_installed_status() {
         let test_file = PathBuf::from("testdata/debian/var/lib/dpkg/status");
         let expected_file = PathBuf::from("testdata/debian/var/lib/dpkg/status.expected.json");
+
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = DebianInstalledParser::extract_first_package(&test_file);
         compare_debian_package_data(&package_data, &expected_file);
@@ -77,6 +88,9 @@ mod golden_tests {
         let expected_file =
             PathBuf::from("testdata/debian/var/lib/dpkg/status.d/base-files.expected.json");
 
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
+
         let package_data = DebianDistrolessInstalledParser::extract_first_package(&test_file);
         compare_debian_package_data(&package_data, &expected_file);
     }
@@ -85,6 +99,9 @@ mod golden_tests {
     fn test_golden_debian_orig_tar() {
         let test_file = PathBuf::from("testdata/debian/example_1.0.orig.tar.gz");
         let expected_file = PathBuf::from("testdata/debian/example_1.0.orig.tar.gz.expected.json");
+
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = DebianOrigTarParser::extract_first_package(&test_file);
         compare_debian_package_data(&package_data, &expected_file);
@@ -96,6 +113,9 @@ mod golden_tests {
         let expected_file =
             PathBuf::from("testdata/debian/example_1.0.debian.tar.xz.expected.json");
 
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
+
         let package_data = DebianDebianTarParser::extract_first_package(&test_file);
         compare_debian_package_data(&package_data, &expected_file);
     }
@@ -106,6 +126,9 @@ mod golden_tests {
         let expected_file =
             PathBuf::from("testdata/debian/var/lib/dpkg/info/bash.list.expected.json");
 
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
+
         let package_data = DebianInstalledListParser::extract_first_package(&test_file);
         compare_debian_package_data(&package_data, &expected_file);
     }
@@ -115,6 +138,9 @@ mod golden_tests {
         let test_file = PathBuf::from("testdata/debian/var/lib/dpkg/info/bash.md5sums");
         let expected_file =
             PathBuf::from("testdata/debian/var/lib/dpkg/info/bash.md5sums.expected.json");
+
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
 
         let package_data = DebianInstalledMd5sumsParser::extract_first_package(&test_file);
         compare_debian_package_data(&package_data, &expected_file);

@@ -15,10 +15,11 @@ license_expressions:
   - bsd-new
   - zlib
   - w3c-software-19980720
-  - unknown
+  - unknown-license-reference
   - jscheme
   - bsd-3-clause-no-change
-  - apache-1.1
+  - bsd-simplified
+  - bsd-new OR apache-2.0 OR gpl-2.0-plus OR lgpl-2.1-plus
   - w3c
   - w3c
   - apache-1.1
@@ -33,22 +34,21 @@ license_expressions:
   - apache-1.1
   - standard-ml-nj
   - sax-pd
-  - bzip2-libbzip-2010
-  - bzip2-libbzip-2010
+  - bsd-simplified
+  - apache-1.1
+  - bsd-new OR apache-2.0 OR gpl-2.0-plus OR lgpl-2.1-plus
   - bsd-new
   - libpng
-  - unknown
+  - unknown-license-reference
   - apache-2.0
   - apache-2.0
   - apache-2.0
   - x11
-  - unknown
-  - unicode
-  - bzip2-libbzip-2010
+  - unknown-license-reference
+  - apache-1.1
   - mit
-  - unknown
-  - unknown
-  - xfree86-1.1
+  - unknown-license-reference
+  - unknown-license-reference
   - apache-1.1
   - warranty-disclaimer
   - ijg
@@ -58,30 +58,34 @@ license_expressions:
   - xfree86-1.0
   - apache-2.0
   - apache-2.0
+  - unknown-license-reference
   - unknown
-  - apache-2.0
+  - free-unknown
+  - free-unknown
+  - warranty-disclaimer
+  - unknown-license-reference
   - apache-2.0
   - mit-no-advert-export-control
-  - unknown
-  - mit
-  - x11-keith-packard
+  - unicode-tou
   - unicode
-  - historical
-  - x11 AND other-permissive
-  - mit
+  - other-permissive
+  - warranty-disclaimer
+  - x11-opengroup
   - historical
   - warranty-disclaimer
-  - x11-xconsortium
+  - x11-no-permit-persons
   - x11
-  - x11-keith-packard
+  - x11-opengroup
+  - warranty-disclaimer
+  - x11
   - x11-opengroup
   - x11-keith-packard
   - x11-xconsortium
-  - x11-xconsortium
+  - x11-no-permit-persons
   - x11-keith-packard
-  - unknown
-  - mit
-  - unknown
+  - unknown-license-reference
+  - json
+  - unknown-license-reference
   - free-unknown
   - zlib
   - apache-1.1
@@ -106,7 +110,6 @@ license_expressions:
   - mit
   - gpl-2.0-plus
   - gpl-2.0-plus
-expected_failure: yes
 notes: This tests behaves differently between Python 2 and Python 3 due to differences in rounding
   causing different license match candidates to be selected for the license sequence matcher
   The expectations here are for Python 3 and the test is expected to fail on Python 2, but is

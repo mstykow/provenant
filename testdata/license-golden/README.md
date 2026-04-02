@@ -37,13 +37,6 @@ license_expressions:
   - gpl-2.0
 ```
 
-For tests expected to fail:
-```yaml
-license_expressions:
-  - some-license
-expected_failure: true
-```
-
 ## Running Tests
 
 ```bash
@@ -56,12 +49,6 @@ cargo test test_golden_lic1
 # Run with output
 cargo test test_golden_summary -- --nocapture
 ```
-
-## Current Status
-
-**Expected: Many tests will fail.** This is expected at this stage.
-
-The Rust license detection engine is still under development. Failures indicate areas where the Rust implementation differs from Python. These will be addressed in subsequent phases.
 
 ## Test Implementation
 

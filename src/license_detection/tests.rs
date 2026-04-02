@@ -76,10 +76,8 @@ fn test_engine_from_embedded_initializes() {
 #[test]
 fn test_engine_from_embedded_matches_from_directory() {
     let data_path = PathBuf::from(super::SCANCODE_LICENSES_DATA_PATH);
-    let Some(engine_from_dir) = LicenseDetectionEngine::from_directory(&data_path).ok() else {
-        eprintln!("Skipping test: reference directory not found");
-        return;
-    };
+    let engine_from_dir = LicenseDetectionEngine::from_directory(&data_path)
+        .expect("required test dependency available");
 
     let engine_from_embedded = get_engine();
 
@@ -1087,13 +1085,8 @@ fn test_no_token_boundary_false_positives() {
 
     let test_file =
         std::path::PathBuf::from("testdata/license-golden/datadriven/lic1/config.guess-gpl2.txt");
-    let text = match std::fs::read_to_string(&test_file) {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("Skipping test: cannot read test file: {}", e);
-            return;
-        }
-    };
+    let text = std::fs::read_to_string(&test_file)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", test_file.display()));
 
     let detections = engine
         .detect_with_kind(&text, false, false)
@@ -1189,10 +1182,8 @@ fn test_truncate_detection_text_preserves_char_boundary() {
 #[test]
 fn test_detect_with_kind_handles_multibyte_boundary_at_size_limit() {
     let data_path = PathBuf::from(super::SCANCODE_LICENSES_DATA_PATH);
-    let Some(engine) = LicenseDetectionEngine::from_directory(&data_path).ok() else {
-        eprintln!("Skipping test: reference directory not found");
-        return;
-    };
+    let engine = LicenseDetectionEngine::from_directory(&data_path)
+        .expect("required test dependency available");
     let text = format!("{}é", "a".repeat(MAX_DETECTION_SIZE - 1));
 
     let detections = engine

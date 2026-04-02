@@ -33,10 +33,7 @@ mod tests {
         let path = PathBuf::from(
             "testdata/debian/extracted-md5sums/example_1.0-1_amd64.deb-extract/control.tar.gz-extract/md5sums",
         );
-
-        if !path.exists() {
-            return;
-        }
+        assert!(path.exists(), "missing fixture: {}", path.display());
 
         let packages = DebianMd5sumInPackageParser::extract_packages(&path);
         assert_eq!(packages.len(), 1);
@@ -75,10 +72,7 @@ mod tests {
         let path = PathBuf::from(
             "testdata/debian/extracted-md5sums/testpkg_2.5-3_i386.deb-extract/control.tar.xz-extract/md5sums",
         );
-
-        if !path.exists() {
-            return;
-        }
+        assert!(path.exists(), "missing fixture: {}", path.display());
 
         let packages = DebianMd5sumInPackageParser::extract_packages(&path);
         assert_eq!(packages.len(), 1);
@@ -151,10 +145,7 @@ mod tests {
         let path = PathBuf::from(
             "testdata/debian/extracted-md5sums/example_1.0-1_amd64.deb-extract/control.tar.gz-extract/control",
         );
-
-        if !path.exists() {
-            return;
-        }
+        assert!(path.exists(), "missing fixture: {}", path.display());
 
         let packages = DebianControlInExtractedDebParser::extract_packages(&path);
         assert_eq!(packages.len(), 1);
@@ -185,10 +176,7 @@ mod tests {
         let path = PathBuf::from(
             "testdata/debian/extracted-md5sums/testpkg_2.5-3_i386.deb-extract/control.tar.xz-extract/control",
         );
-
-        if !path.exists() {
-            return;
-        }
+        assert!(path.exists(), "missing fixture: {}", path.display());
 
         let packages = DebianControlInExtractedDebParser::extract_packages(&path);
         assert_eq!(packages.len(), 1);

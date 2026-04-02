@@ -115,6 +115,15 @@ pub fn extract_text_for_detection(path: &Path, bytes: &[u8]) -> (String, Extract
         .map(|s| s.to_ascii_lowercase());
     let detected_format = detect_file_format(bytes);
 
+    if looks_like_rtf(bytes, ext.as_deref()) {
+        let text = extract_rtf_text(bytes);
+        return if text.trim().is_empty() {
+            (String::new(), ExtractedTextKind::None)
+        } else {
+            (text, ExtractedTextKind::Decoded)
+        };
+    }
+
     if looks_like_pdf(bytes) || detected_format.short_name() == Some("PDF") {
         let text = extract_pdf_text(path, bytes);
         return if text.is_empty() {
@@ -789,6 +798,117 @@ fn media_file_type_from_content(bytes: &[u8]) -> Option<&'static str> {
 
 fn looks_like_pdf(bytes: &[u8]) -> bool {
     bytes.starts_with(b"%PDF-")
+}
+
+fn looks_like_rtf(bytes: &[u8], ext: Option<&str>) -> bool {
+    ext == Some("rtf") || bytes.starts_with(b"{\\rtf")
+}
+
+fn extract_rtf_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let chars: Vec<char> = text.chars().collect();
+    let mut output = String::new();
+    let mut index = 0usize;
+
+    while index < chars.len() {
+        match chars[index] {
+            '{' | '}' => {
+                index += 1;
+            }
+            '\\' => {
+                index += 1;
+                if index >= chars.len() {
+                    break;
+                }
+
+                match chars[index] {
+                    '\\' | '{' | '}' => {
+                        output.push(chars[index]);
+                        index += 1;
+                    }
+                    '\'' => {
+                        if index + 2 < chars.len() {
+                            let hex = [chars[index + 1], chars[index + 2]];
+                            let hex: String = hex.iter().collect();
+                            if let Ok(value) = u8::from_str_radix(&hex, 16) {
+                                output.push(value as char);
+                                index += 3;
+                                continue;
+                            }
+                        }
+                        index += 1;
+                    }
+                    control if control.is_ascii_alphabetic() => {
+                        let start = index;
+                        while index < chars.len() && chars[index].is_ascii_alphabetic() {
+                            index += 1;
+                        }
+                        let control_word: String = chars[start..index].iter().collect();
+
+                        let number_start = index;
+                        if index < chars.len()
+                            && (chars[index] == '-' || chars[index].is_ascii_digit())
+                        {
+                            index += 1;
+                            while index < chars.len() && chars[index].is_ascii_digit() {
+                                index += 1;
+                            }
+                        }
+                        let parameter: String = chars[number_start..index].iter().collect();
+
+                        if index < chars.len() && chars[index] == ' ' {
+                            index += 1;
+                        }
+
+                        match control_word.as_str() {
+                            "par" | "line" => output.push('\n'),
+                            "tab" => output.push('\t'),
+                            "emdash" => output.push('—'),
+                            "endash" => output.push('–'),
+                            "bullet" => output.push('•'),
+                            "lquote" | "rquote" => output.push('\''),
+                            "ldblquote" | "rdblquote" => output.push('"'),
+                            "u" => {
+                                if let Ok(codepoint) = parameter.parse::<i32>() {
+                                    let normalized = if codepoint < 0 {
+                                        codepoint + 65_536
+                                    } else {
+                                        codepoint
+                                    };
+                                    if let Ok(normalized) = u32::try_from(normalized)
+                                        && let Some(ch) = char::from_u32(normalized)
+                                    {
+                                        output.push(ch);
+                                    }
+                                }
+
+                                if index < chars.len()
+                                    && !matches!(chars[index], '\\' | '{' | '}' | '\n' | '\r')
+                                {
+                                    index += 1;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    _ => {
+                        index += 1;
+                    }
+                }
+            }
+            ch => {
+                output.push(ch);
+                index += 1;
+            }
+        }
+    }
+
+    output
+        .replace(['\r', '\u{0c}'], "\n")
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn looks_like_gzip(bytes: &[u8]) -> bool {
@@ -1491,6 +1611,21 @@ mod tests {
 
         assert_eq!(kind, ExtractedTextKind::Decoded);
         assert!(text.contains("creativecommons.org/licenses/publicdomain"));
+    }
+
+    #[test]
+    fn test_extract_text_for_detection_decodes_rtf_fixture_text() {
+        let path = Path::new(
+            "testdata/license-golden/datadriven/external/fossology-tests/LGPL/License.rtf",
+        );
+        let bytes = std::fs::read(path).expect("failed to read rtf fixture");
+
+        let (text, kind) = extract_text_for_detection(path, &bytes);
+
+        assert_eq!(kind, ExtractedTextKind::Decoded);
+        assert!(text.contains("GNU Lesser General Public"));
+        assert!(text.contains("version"));
+        assert!(text.contains("2.1 of the License"));
     }
 
     #[test]

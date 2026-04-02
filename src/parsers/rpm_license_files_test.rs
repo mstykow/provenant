@@ -126,10 +126,7 @@ mod rpm_license_files_tests {
 
         for test_file in test_files {
             let path = PathBuf::from(test_file);
-            if !path.exists() {
-                eprintln!("Warning: Test file {} not found, skipping", test_file);
-                continue;
-            }
+            assert!(path.exists(), "missing fixture: {}", path.display());
 
             let packages = RpmLicenseFilesParser::extract_packages(&path);
             assert_eq!(packages.len(), 1);

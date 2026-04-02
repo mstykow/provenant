@@ -118,10 +118,8 @@ mod engine_equivalence {
 
     #[test]
     fn test_from_embedded_vs_from_directory_rule_count() {
-        let Some((rules_path, licenses_path)) = get_reference_data_paths() else {
-            eprintln!("Skipping test: reference directories not found");
-            return;
-        };
+        let (rules_path, licenses_path) =
+            get_reference_data_paths().expect("required test dependency available");
 
         let loaded_rules = rules::load_loaded_rules_from_directory(&rules_path).unwrap();
         let loaded_licenses = rules::load_loaded_licenses_from_directory(&licenses_path).unwrap();
@@ -141,10 +139,8 @@ mod engine_equivalence {
 
     #[test]
     fn test_from_embedded_vs_from_directory_detection_mit() {
-        let Some(_) = get_reference_data_paths() else {
-            eprintln!("Skipping test: reference directories not found");
-            return;
-        };
+        let _reference_paths =
+            get_reference_data_paths().expect("required test dependency available");
 
         let engine_from_embedded = get_engine();
 

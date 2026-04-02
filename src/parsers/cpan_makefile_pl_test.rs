@@ -507,10 +507,7 @@ WriteMakefile(
     #[test]
     fn test_extract_from_testdata() {
         let path = PathBuf::from("testdata/cpan/makefile-pl/basic/Makefile.PL");
-        if !path.exists() {
-            // Skip if test data doesn't exist yet
-            return;
-        }
+        assert!(path.exists(), "missing fixture: {}", path.display());
 
         let packages = CpanMakefilePlParser::extract_packages(&path);
         assert_eq!(packages.len(), 1);

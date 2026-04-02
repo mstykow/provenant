@@ -375,10 +375,8 @@ mod test_cases {
     fn test_build_index_from_reference_rules() {
         use crate::license_detection::LicenseDetectionEngine;
 
-        let Some(engine) = LicenseDetectionEngine::from_embedded().ok() else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine =
+            LicenseDetectionEngine::from_embedded().expect("required test dependency available");
 
         let index = engine.index();
 
@@ -865,10 +863,8 @@ SOFTWARE."#;
     fn test_build_index_mit_or_boost_rule_variants() {
         use crate::license_detection::LicenseDetectionEngine;
 
-        let Some(engine) = LicenseDetectionEngine::from_embedded().ok() else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine =
+            LicenseDetectionEngine::from_embedded().expect("required test dependency available");
 
         let index = engine.index();
 
@@ -913,15 +909,14 @@ SOFTWARE."#;
         let test_file = Path::new(
             "testdata/license-golden/datadriven/external/fossology-tests/Dual-license/BSL-1.0_or_MIT.txt",
         );
-        if !test_file.exists() {
-            eprintln!("Skipping test: test file not found");
-            return;
-        }
+        assert!(
+            test_file.exists(),
+            "missing fixture: {}",
+            test_file.display()
+        );
 
-        let Some(engine) = LicenseDetectionEngine::from_embedded().ok() else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine =
+            LicenseDetectionEngine::from_embedded().expect("required test dependency available");
 
         let index = engine.index();
         let text = std::fs::read_to_string(test_file).unwrap();
@@ -1036,15 +1031,14 @@ SOFTWARE."#;
         let test_file = Path::new(
             "testdata/license-golden/datadriven/external/fossology-tests/Dual-license/BSL-1.0_or_MIT.txt",
         );
-        if !test_file.exists() {
-            eprintln!("Skipping test: test file not found");
-            return;
-        }
+        assert!(
+            test_file.exists(),
+            "missing fixture: {}",
+            test_file.display()
+        );
 
-        let Some(engine) = LicenseDetectionEngine::from_embedded().ok() else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine =
+            LicenseDetectionEngine::from_embedded().expect("required test dependency available");
 
         let text = std::fs::read_to_string(test_file).unwrap();
 

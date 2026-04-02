@@ -64,8 +64,6 @@ mod golden_tests {
     struct LicenseTestYaml {
         #[serde(default)]
         license_expressions: Vec<String>,
-        #[serde(default)]
-        expected_failure: bool,
     }
 
     /// A single golden test case
@@ -205,9 +203,7 @@ mod golden_tests {
     }
 
     fn discover_tests_recursive(dir: &Path, tests: &mut Vec<LicenseGoldenTest>) {
-        if !dir.exists() {
-            return;
-        }
+        assert!(dir.exists(), "missing golden suite dir: {}", dir.display());
 
         let entries: Vec<_> = match fs::read_dir(dir) {
             Ok(e) => e.filter_map(|e| e.ok()).collect(),
@@ -253,6 +249,8 @@ mod golden_tests {
         end: Option<usize>,
         unknown_licenses: bool,
     ) -> SuiteResult {
+        assert!(dir.exists(), "missing golden suite dir: {}", dir.display());
+
         let mut result = SuiteResult {
             total: 0,
             passed: 0,
@@ -293,11 +291,6 @@ mod golden_tests {
         );
 
         for test in &tests {
-            if test.yaml.expected_failure {
-                result.skipped += 1;
-                continue;
-            }
-
             match test.run(engine, unknown_licenses) {
                 Ok(()) => result.passed += 1,
                 Err(e) => {

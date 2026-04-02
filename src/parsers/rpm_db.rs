@@ -617,13 +617,19 @@ mod tests {
 
     #[test]
     fn test_parse_rpm_database_sqlite() {
-        if !rpm_command_available() {
-            return;
-        }
-
         let test_file = PathBuf::from("testdata/rpm/rpmdb.sqlite");
 
         let pkg = RpmSqliteDatabaseParser::extract_first_package(&test_file);
+
+        if !rpm_command_available() {
+            assert_eq!(pkg.package_type, Some(PackageType::Rpm));
+            assert_eq!(
+                pkg.datasource_id,
+                Some(DatasourceId::RpmInstalledDatabaseSqlite)
+            );
+            assert_eq!(pkg.name, None);
+            return;
+        }
 
         assert_eq!(pkg.package_type, Some(PackageType::Rpm));
         assert_eq!(
@@ -635,13 +641,14 @@ mod tests {
 
     #[test]
     fn test_parse_rpm_database_sqlite_preserves_release_in_version() {
-        if !rpm_command_available() {
-            return;
-        }
-
         let test_file = PathBuf::from("testdata/rpm/rpmdb.sqlite");
 
         let pkg = RpmSqliteDatabaseParser::extract_first_package(&test_file);
+
+        if !rpm_command_available() {
+            assert_eq!(pkg.version, None);
+            return;
+        }
 
         assert!(
             pkg.version

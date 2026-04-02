@@ -752,11 +752,8 @@ MIT License"#;
 
 #[test]
 fn test_ibmpl_rule_loaded() {
-    let Some(engine) = crate::license_detection::LicenseDetectionEngine::from_embedded().ok()
-    else {
-        eprintln!("Skipping test: embedded engine not available");
-        return;
-    };
+    let engine = crate::license_detection::LicenseDetectionEngine::from_embedded()
+        .expect("required test dependency available");
 
     let index = engine.index();
 
@@ -806,10 +803,8 @@ fn test_ibmpl_rule_tokens() {
 fn test_ibmpl_detection() {
     use crate::license_detection::LicenseDetectionEngine;
 
-    let Some(engine) = LicenseDetectionEngine::from_embedded().ok() else {
-        eprintln!("Skipping test: embedded engine not available");
-        return;
-    };
+    let engine =
+        LicenseDetectionEngine::from_embedded().expect("required test dependency available");
 
     // Test with exact rule text
     let exact_text = "distributed under the IBM Public License (IPL).";

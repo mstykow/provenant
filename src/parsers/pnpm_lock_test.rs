@@ -25,9 +25,11 @@ fn test_is_match_shrinkwrap_yaml() {
 #[test]
 fn test_extract_from_testdata_v5() {
     let test_data_path = PathBuf::from("testdata/pnpm/pnpm-v5.yaml");
-    if !test_data_path.exists() {
-        return; // Skip if test data not available
-    }
+    assert!(
+        test_data_path.exists(),
+        "missing fixture: {}",
+        test_data_path.display()
+    );
 
     let data = PnpmLockParser::extract_first_package(&test_data_path);
 
@@ -41,9 +43,11 @@ fn test_extract_from_testdata_v5() {
 #[test]
 fn test_extract_from_testdata_v6() {
     let test_data_path = PathBuf::from("testdata/pnpm/pnpm-v6.yaml");
-    if !test_data_path.exists() {
-        return; // Skip if test data not available
-    }
+    assert!(
+        test_data_path.exists(),
+        "missing fixture: {}",
+        test_data_path.display()
+    );
 
     let data = PnpmLockParser::extract_first_package(&test_data_path);
 
@@ -57,9 +61,11 @@ fn test_extract_from_testdata_v6() {
 #[test]
 fn test_extract_from_testdata_v9() {
     let test_data_path = PathBuf::from("testdata/pnpm/pnpm-v9.yaml");
-    if !test_data_path.exists() {
-        return; // Skip if test data not available
-    }
+    assert!(
+        test_data_path.exists(),
+        "missing fixture: {}",
+        test_data_path.display()
+    );
 
     let data = PnpmLockParser::extract_first_package(&test_data_path);
 
@@ -219,9 +225,11 @@ fn test_create_purl_non_scoped() {
 #[test]
 fn test_pnpm_dev_dependencies_v6() {
     let test_data_path = std::path::PathBuf::from("testdata/pnpm/pnpm-v6.yaml");
-    if !test_data_path.exists() {
-        return;
-    }
+    assert!(
+        test_data_path.exists(),
+        "missing fixture: {}",
+        test_data_path.display()
+    );
 
     let data = PnpmLockParser::extract_first_package(&test_data_path);
 

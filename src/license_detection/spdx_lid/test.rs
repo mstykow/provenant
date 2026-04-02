@@ -600,11 +600,8 @@ mod tests {
 
     #[test]
     fn test_spdx_key_lookup_gpl_2_0_plus() {
-        let Some(engine) = crate::license_detection::LicenseDetectionEngine::from_embedded().ok()
-        else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine = crate::license_detection::LicenseDetectionEngine::from_embedded()
+            .expect("required test dependency available");
 
         let index = engine.index();
 
@@ -701,11 +698,8 @@ mod tests {
 
     #[test]
     fn test_unknown_spdx_identifier_fallback() {
-        let Some(engine) = crate::license_detection::LicenseDetectionEngine::from_embedded().ok()
-        else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine = crate::license_detection::LicenseDetectionEngine::from_embedded()
+            .expect("required test dependency available");
 
         let index = engine.index();
 
@@ -729,11 +723,8 @@ mod tests {
 
     #[test]
     fn test_deprecated_spdx_substitution() {
-        let Some(engine) = crate::license_detection::LicenseDetectionEngine::from_embedded().ok()
-        else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine = crate::license_detection::LicenseDetectionEngine::from_embedded()
+            .expect("required test dependency available");
 
         let index = engine.index();
 
@@ -751,11 +742,8 @@ mod tests {
 
     #[test]
     fn test_primary_spdx_key_mapping() {
-        let Some(engine) = crate::license_detection::LicenseDetectionEngine::from_embedded().ok()
-        else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine = crate::license_detection::LicenseDetectionEngine::from_embedded()
+            .expect("required test dependency available");
 
         let index = engine.index();
 
@@ -780,11 +768,8 @@ mod tests {
 
     #[test]
     fn test_spdx_expression_with_or_operator() {
-        let Some(engine) = crate::license_detection::LicenseDetectionEngine::from_embedded().ok()
-        else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine = crate::license_detection::LicenseDetectionEngine::from_embedded()
+            .expect("required test dependency available");
 
         let index = engine.index();
 
@@ -801,11 +786,8 @@ mod tests {
 
     #[test]
     fn test_spdx_expression_with_with_operator() {
-        let Some(engine) = crate::license_detection::LicenseDetectionEngine::from_embedded().ok()
-        else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine = crate::license_detection::LicenseDetectionEngine::from_embedded()
+            .expect("required test dependency available");
 
         let index = engine.index();
 
@@ -824,11 +806,8 @@ mod tests {
 
     #[test]
     fn test_spdx_expression_complex_or() {
-        let Some(engine) = crate::license_detection::LicenseDetectionEngine::from_embedded().ok()
-        else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine = crate::license_detection::LicenseDetectionEngine::from_embedded()
+            .expect("required test dependency available");
 
         let index = engine.index();
 
@@ -910,11 +889,8 @@ mod tests {
 
     #[test]
     fn test_uboot_bare_list_as_or() {
-        let Some(engine) = crate::license_detection::LicenseDetectionEngine::from_embedded().ok()
-        else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine = crate::license_detection::LicenseDetectionEngine::from_embedded()
+            .expect("required test dependency available");
 
         let index = engine.index();
 
@@ -954,11 +930,8 @@ mod tests {
 
     #[test]
     fn test_recovery_parsing_bare_list() {
-        let Some(engine) = crate::license_detection::LicenseDetectionEngine::from_embedded().ok()
-        else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine = crate::license_detection::LicenseDetectionEngine::from_embedded()
+            .expect("required test dependency available");
 
         let index = engine.index();
 
@@ -975,11 +948,8 @@ mod tests {
 
     #[test]
     fn test_recovery_parsing_malformed_parens() {
-        let Some(engine) = crate::license_detection::LicenseDetectionEngine::from_embedded().ok()
-        else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine = crate::license_detection::LicenseDetectionEngine::from_embedded()
+            .expect("required test dependency available");
 
         let index = engine.index();
 
@@ -997,11 +967,8 @@ mod tests {
 
     #[test]
     fn test_recovery_parsing_unknown_identifier() {
-        let Some(engine) = crate::license_detection::LicenseDetectionEngine::from_embedded().ok()
-        else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine = crate::license_detection::LicenseDetectionEngine::from_embedded()
+            .expect("required test dependency available");
 
         let index = engine.index();
 
@@ -1030,11 +997,8 @@ mod tests {
 
     #[test]
     fn test_recovery_parsing_text_after_identifier() {
-        let Some(engine) = crate::license_detection::LicenseDetectionEngine::from_embedded().ok()
-        else {
-            eprintln!("Skipping test: embedded engine not available");
-            return;
-        };
+        let engine = crate::license_detection::LicenseDetectionEngine::from_embedded()
+            .expect("required test dependency available");
 
         let index = engine.index();
 
