@@ -2,48 +2,17 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use clap::ValueEnum;
+use directories::ProjectDirs;
+
+use super::locking::scans_lock_path;
 
 pub const DEFAULT_CACHE_DIR_NAME: &str = ".provenant-cache";
 pub const CACHE_DIR_ENV_VAR: &str = "PROVENANT_CACHE";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum CacheKind {
-    #[value(alias = "scan")]
-    ScanResults,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct CacheKinds {
-    scan_results: bool,
-}
-
-impl CacheKinds {
-    pub fn from_cli(kinds: &[CacheKind]) -> Self {
-        let mut selected = Self::default();
-
-        for kind in kinds {
-            match kind {
-                CacheKind::ScanResults => selected.scan_results = true,
-            }
-        }
-
-        selected
-    }
-
-    pub const fn scan_results(self) -> bool {
-        self.scan_results
-    }
-
-    pub const fn any_enabled(self) -> bool {
-        self.scan_results
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CacheConfig {
     root_dir: PathBuf,
-    kinds: CacheKinds,
+    incremental: bool,
 }
 
 impl CacheConfig {
@@ -51,12 +20,15 @@ impl CacheConfig {
     pub fn new(root_dir: PathBuf) -> Self {
         Self {
             root_dir,
-            kinds: CacheKinds::default(),
+            incremental: false,
         }
     }
 
-    pub fn with_kinds(root_dir: PathBuf, kinds: CacheKinds) -> Self {
-        Self { root_dir, kinds }
+    pub fn with_options(root_dir: PathBuf, incremental: bool) -> Self {
+        Self {
+            root_dir,
+            incremental,
+        }
     }
 
     #[cfg(test)]
@@ -64,8 +36,13 @@ impl CacheConfig {
         Self::new(scan_root.join(DEFAULT_CACHE_DIR_NAME))
     }
 
-    pub fn from_scan_root_with_kinds(scan_root: &Path, kinds: CacheKinds) -> Self {
-        Self::with_kinds(scan_root.join(DEFAULT_CACHE_DIR_NAME), kinds)
+    fn project_cache_root() -> Option<PathBuf> {
+        ProjectDirs::from("com", "Provenant", "provenant")
+            .map(|dirs| dirs.cache_dir().to_path_buf())
+    }
+
+    pub fn default_root_dir(scan_root: &Path) -> PathBuf {
+        Self::project_cache_root().unwrap_or_else(|| scan_root.join(DEFAULT_CACHE_DIR_NAME))
     }
 
     pub fn resolve_root_dir(
@@ -81,22 +58,18 @@ impl CacheConfig {
             return path.to_path_buf();
         }
 
-        scan_root.join(DEFAULT_CACHE_DIR_NAME)
+        Self::default_root_dir(scan_root)
     }
 
     pub fn from_overrides(
         scan_root: &Path,
         cli_cache_dir: Option<&Path>,
         env_cache_dir: Option<&Path>,
-        kinds: CacheKinds,
+        incremental: bool,
     ) -> Self {
-        if cli_cache_dir.is_none() && env_cache_dir.is_none() {
-            return Self::from_scan_root_with_kinds(scan_root, kinds);
-        }
-
-        Self::with_kinds(
+        Self::with_options(
             Self::resolve_root_dir(scan_root, cli_cache_dir, env_cache_dir),
-            kinds,
+            incremental,
         )
     }
 
@@ -104,29 +77,49 @@ impl CacheConfig {
         &self.root_dir
     }
 
-    pub fn scan_results_dir(&self) -> PathBuf {
-        self.root_dir.join("scan-results")
+    pub fn incremental_dir(&self) -> PathBuf {
+        self.root_dir.join("incremental")
     }
 
-    pub const fn scan_results_enabled(&self) -> bool {
-        self.kinds.scan_results()
-    }
-
-    pub const fn any_enabled(&self) -> bool {
-        self.kinds.any_enabled()
+    pub const fn incremental_enabled(&self) -> bool {
+        self.incremental
     }
 
     pub fn ensure_dirs(&self) -> io::Result<()> {
-        if self.scan_results_enabled() {
-            fs::create_dir_all(self.scan_results_dir())?;
+        if self.incremental_enabled() {
+            fs::create_dir_all(self.incremental_dir())?;
         }
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn clear(&self) -> io::Result<()> {
         if self.root_dir().exists() {
             fs::remove_dir_all(&self.root_dir)?;
         }
+        Ok(())
+    }
+
+    pub fn clear_contents(&self) -> io::Result<()> {
+        if !self.root_dir().exists() {
+            return Ok(());
+        }
+
+        let lock_path = scans_lock_path(self.root_dir());
+        for entry in fs::read_dir(self.root_dir())? {
+            let entry = entry?;
+            let path = entry.path();
+            if path == lock_path {
+                continue;
+            }
+
+            if path.is_dir() {
+                fs::remove_dir_all(path)?;
+            } else {
+                fs::remove_file(path)?;
+            }
+        }
+
         Ok(())
     }
 }
@@ -150,32 +143,14 @@ mod tests {
     #[test]
     fn test_ensure_dirs_creates_expected_tree() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let config = CacheConfig::from_scan_root_with_kinds(
-            temp_dir.path(),
-            CacheKinds { scan_results: true },
-        );
+        let config = CacheConfig::with_options(temp_dir.path().join(DEFAULT_CACHE_DIR_NAME), true);
 
         config
             .ensure_dirs()
             .expect("Failed to create cache directories");
 
         assert!(config.root_dir().exists());
-        assert!(config.scan_results_dir().exists());
-    }
-
-    #[test]
-    fn test_ensure_dirs_only_creates_scan_results_subdirectory() {
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let config = CacheConfig::from_scan_root_with_kinds(
-            temp_dir.path(),
-            CacheKinds { scan_results: true },
-        );
-
-        config
-            .ensure_dirs()
-            .expect("Failed to create selected cache directories");
-
-        assert!(config.scan_results_dir().exists());
+        assert!(config.incremental_dir().exists());
     }
 
     #[test]
@@ -194,23 +169,14 @@ mod tests {
         );
         assert_eq!(
             CacheConfig::resolve_root_dir(scan_root, None, None),
-            PathBuf::from(format!("/scan-root/{DEFAULT_CACHE_DIR_NAME}"))
+            CacheConfig::default_root_dir(scan_root)
         );
-    }
-
-    #[test]
-    fn test_cache_kinds_from_cli_supports_scan_results() {
-        let selected = CacheKinds::from_cli(&[CacheKind::ScanResults]);
-        assert!(selected.scan_results());
     }
 
     #[test]
     fn test_clear_removes_cache_root_directory() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let config = CacheConfig::with_kinds(
-            temp_dir.path().join("cache-root"),
-            CacheKinds { scan_results: true },
-        );
+        let config = CacheConfig::with_options(temp_dir.path().join("cache-root"), true);
 
         config
             .ensure_dirs()

@@ -3,13 +3,16 @@ use std::path::Path;
 use glob::Pattern;
 
 mod config;
+mod incremental;
 mod io;
-mod metadata;
-mod paths;
-mod scan_cache;
+pub(crate) mod locking;
 
-pub use config::{CACHE_DIR_ENV_VAR, CacheConfig, CacheKind, CacheKinds, DEFAULT_CACHE_DIR_NAME};
-pub use scan_cache::{CachedScanFindings, read_cached_findings, write_cached_findings};
+pub use config::{CACHE_DIR_ENV_VAR, CacheConfig, DEFAULT_CACHE_DIR_NAME};
+pub use incremental::{
+    IncrementalManifest, IncrementalManifestEntry, incremental_manifest_path,
+    load_incremental_manifest, manifest_entry_matches_path, metadata_fingerprint,
+    write_incremental_manifest,
+};
 
 pub fn build_collection_exclude_patterns(scan_root: &Path, cache_root: &Path) -> Vec<Pattern> {
     let mut patterns = Vec::new();
