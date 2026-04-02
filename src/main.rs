@@ -2,14 +2,21 @@ use anyhow::{Result, anyhow};
 use chrono::Utc;
 use clap::Parser;
 use regex::Regex;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::cache::{CACHE_DIR_ENV_VAR, CacheConfig, CacheKinds, build_collection_exclude_patterns};
+use crate::cache::{
+    CACHE_DIR_ENV_VAR, CacheConfig, IncrementalManifest, IncrementalManifestEntry,
+    build_collection_exclude_patterns, incremental_manifest_path, load_incremental_manifest,
+    manifest_entry_matches_path, metadata_fingerprint, write_incremental_manifest,
+};
 use crate::cli::Cli;
 use crate::license_detection::LicenseDetectionEngine;
+use crate::models::{FileInfo, FileType};
 use crate::output::{OutputWriteConfig, write_output_file};
 use crate::post_processing::{
     CreateOutputContext, CreateOutputOptions, DEFAULT_LICENSEDB_URL_TEMPLATE,
@@ -27,7 +34,9 @@ use crate::scan_result_shaping::{
 };
 use crate::scanner::{
     LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected_with_memory_limit,
+    scan_options_fingerprint,
 };
+use crate::utils::hash::calculate_sha256;
 
 mod assembly;
 mod cache;
@@ -132,6 +141,12 @@ fn run() -> Result<()> {
         let total_dirs = collected.directory_count();
         let total_size = collected.total_file_bytes;
         let excluded_count = collected.excluded_count + user_excluded_count;
+        let all_collected_files = collected.files.clone();
+        let ordered_file_paths: Vec<PathBuf> = collected
+            .files
+            .iter()
+            .map(|(path, _)| path.clone())
+            .collect();
         for (path, err) in &collected.collection_errors {
             progress.record_runtime_error(path, err);
         }
@@ -182,13 +197,8 @@ fn run() -> Result<()> {
             max_emails: cli.max_email,
             max_urls: cli.max_url,
             timeout_seconds: cli.timeout,
-            scan_cache_dir: cache_config
-                .scan_results_enabled()
-                .then(|| cache_config.scan_results_dir()),
         };
 
-        let thread_count = resolve_thread_count(cli.processes);
-        progress.start_scan(total_files);
         let license_options = LicenseScanOptions {
             include_text: cli.license_text,
             include_text_diagnostics: cli.license_text_diagnostics,
@@ -196,6 +206,26 @@ fn run() -> Result<()> {
             unknown_licenses: cli.unknown_licenses,
             min_score: cli.license_score,
         };
+        let options_fingerprint =
+            scan_options_fingerprint(&text_options, license_options, license_engine.as_deref());
+
+        if cli.incremental {
+            let manifest_path = incremental_manifest_path(
+                cache_config.root_dir(),
+                &incremental_manifest_key(Path::new(&scan_path), &options_fingerprint),
+            );
+            let previous_manifest =
+                load_incremental_manifest(&manifest_path, &options_fingerprint)?;
+            let reused_files = partition_incremental_files(
+                &mut collected.files,
+                Path::new(&scan_path),
+                previous_manifest.as_ref(),
+            );
+            progress.record_incremental_reused(reused_files.len());
+        }
+
+        let thread_count = resolve_thread_count(cli.processes);
+        progress.start_scan(collected.file_count());
         let mut result = run_with_thread_pool(thread_count, || {
             Ok(process_collected_with_memory_limit(
                 &collected,
@@ -206,6 +236,28 @@ fn run() -> Result<()> {
                 cli.max_in_memory,
             ))
         })?;
+
+        if cli.incremental {
+            let manifest_path = incremental_manifest_path(
+                cache_config.root_dir(),
+                &incremental_manifest_key(Path::new(&scan_path), &options_fingerprint),
+            );
+            let reused_files = partition_incremental_files(
+                &mut all_collected_files.clone(),
+                Path::new(&scan_path),
+                load_incremental_manifest(&manifest_path, &options_fingerprint)?.as_ref(),
+            );
+            result.files =
+                merge_incremental_file_results(result.files, reused_files, &ordered_file_paths);
+
+            let manifest = build_incremental_manifest(
+                Path::new(&scan_path),
+                &all_collected_files,
+                &result.files,
+                &options_fingerprint,
+            );
+            write_incremental_manifest(cache_config.root_dir(), &manifest_path, &manifest)?;
+        }
 
         result.excluded_count = excluded_count;
         progress.finish_scan();
@@ -482,9 +534,15 @@ fn validate_scan_option_compatibility(cli: &Cli) -> Result<()> {
         ));
     }
 
-    if cli.from_json && (!cli.cache.is_empty() || cli.cache_dir.is_some() || cli.cache_clear) {
+    if cli.from_json && (cli.cache_dir.is_some() || cli.cache_clear) {
         return Err(anyhow!(
             "Persistent cache options are only supported for directory scan mode, not --from-json"
+        ));
+    }
+
+    if cli.from_json && cli.incremental {
+        return Err(anyhow!(
+            "--incremental is only supported for directory scan mode, not --from-json"
         ));
     }
 
@@ -507,23 +565,152 @@ fn validate_scan_option_compatibility(cli: &Cli) -> Result<()> {
 
 fn prepare_cache_for_scan(scan_path: &str, cli: &Cli) -> Result<CacheConfig> {
     let env_cache_dir = env::var_os(CACHE_DIR_ENV_VAR).map(PathBuf::from);
-    let cache_kinds = CacheKinds::from_cli(&cli.cache);
     let config = CacheConfig::from_overrides(
         Path::new(scan_path),
         cli.cache_dir.as_deref().map(Path::new),
         env_cache_dir.as_deref(),
-        cache_kinds,
+        cli.incremental,
     );
 
     if cli.cache_clear {
-        config.clear()?;
+        crate::cache::locking::with_exclusive_cache_lock(config.root_dir(), || {
+            config.clear_contents()
+        })?;
     }
 
-    if config.any_enabled() {
+    if config.incremental_enabled() {
         config.ensure_dirs()?;
     }
 
     Ok(config)
+}
+
+fn partition_incremental_files(
+    collected_files: &mut Vec<(PathBuf, fs::Metadata)>,
+    scan_root: &Path,
+    manifest: Option<&IncrementalManifest>,
+) -> Vec<FileInfo> {
+    let Some(manifest) = manifest else {
+        return Vec::new();
+    };
+
+    let mut files_to_scan = Vec::new();
+    let mut reused_files = Vec::new();
+
+    for (path, metadata) in collected_files.drain(..) {
+        let relative_path = normalize_relative_scan_path(&path, scan_root);
+        let Some(entry) = manifest.entry(&relative_path) else {
+            files_to_scan.push((path, metadata));
+            continue;
+        };
+
+        match manifest_entry_matches_path(entry, &path, &metadata) {
+            Ok(true) => reused_files.push(entry.file_info.clone()),
+            Ok(false) | Err(_) => files_to_scan.push((path, metadata)),
+        }
+    }
+
+    *collected_files = files_to_scan;
+    reused_files
+}
+
+fn merge_incremental_file_results(
+    processed_files: Vec<FileInfo>,
+    reused_files: Vec<FileInfo>,
+    ordered_file_paths: &[PathBuf],
+) -> Vec<FileInfo> {
+    let mut processed_file_entries = HashMap::new();
+    let mut directory_entries = Vec::new();
+    for file in processed_files {
+        if file.file_type == FileType::File {
+            processed_file_entries.insert(file.path.clone(), file);
+        } else {
+            directory_entries.push(file);
+        }
+    }
+
+    let mut reused_file_entries: HashMap<_, _> = reused_files
+        .into_iter()
+        .map(|file| (file.path.clone(), file))
+        .collect();
+
+    let mut merged_files = Vec::new();
+    for path in ordered_file_paths {
+        let path_string = path.to_string_lossy().to_string();
+        if let Some(file) = processed_file_entries.remove(&path_string) {
+            merged_files.push(file);
+            continue;
+        }
+
+        if let Some(file) = reused_file_entries.remove(&path_string) {
+            merged_files.push(file);
+        }
+    }
+
+    merged_files.extend(processed_file_entries.into_values());
+    merged_files.extend(reused_file_entries.into_values());
+    merged_files.extend(directory_entries);
+    merged_files
+}
+
+fn build_incremental_manifest(
+    scan_root: &Path,
+    collected_files: &[(PathBuf, fs::Metadata)],
+    files: &[FileInfo],
+    options_fingerprint: &str,
+) -> IncrementalManifest {
+    let files_by_relative_path: HashMap<_, _> = files
+        .iter()
+        .filter(|file| file.file_type == FileType::File)
+        .map(|file| {
+            (
+                normalize_relative_scan_path(Path::new(&file.path), scan_root),
+                file.clone(),
+            )
+        })
+        .collect();
+
+    let entries = collected_files
+        .iter()
+        .filter_map(|(path, metadata)| {
+            let relative_path = normalize_relative_scan_path(path, scan_root);
+            let state = metadata_fingerprint(metadata)?;
+            let file_info = files_by_relative_path.get(&relative_path)?.clone();
+            let content_sha256 = file_info.sha256.clone().unwrap_or_else(|| {
+                fs::read(path)
+                    .map(|bytes| calculate_sha256(&bytes))
+                    .unwrap_or_default()
+            });
+            Some((
+                relative_path,
+                IncrementalManifestEntry {
+                    state,
+                    content_sha256,
+                    file_info,
+                },
+            ))
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    IncrementalManifest::new(options_fingerprint.to_string(), entries)
+}
+
+fn incremental_manifest_key(scan_root: &Path, options_fingerprint: &str) -> String {
+    let canonical_root = fs::canonicalize(scan_root).unwrap_or_else(|_| scan_root.to_path_buf());
+    calculate_sha256(
+        format!(
+            "{}\n{options_fingerprint}",
+            canonical_root.to_string_lossy()
+        )
+        .as_bytes(),
+    )
+}
+
+fn normalize_relative_scan_path(path: &Path, scan_root: &Path) -> String {
+    path.strip_prefix(scan_root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
 }
 
 fn compile_regex_patterns(option_name: &str, patterns: &[String]) -> Result<Vec<Regex>> {

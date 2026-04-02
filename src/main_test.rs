@@ -37,20 +37,36 @@ fn validate_scan_option_compatibility_rejects_scan_flags_with_from_json() {
 }
 
 #[test]
-fn validate_scan_option_compatibility_rejects_cache_flags_with_from_json() {
+fn validate_scan_option_compatibility_rejects_cache_root_flags_with_from_json() {
     let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
         "--from-json",
-        "--cache",
-        "scan-results",
+        "--cache-dir",
+        "/tmp/cache",
         "sample-scan.json",
     ])
     .unwrap();
 
     let error = validate_scan_option_compatibility(&cli).unwrap_err();
     assert!(error.to_string().contains("Persistent cache options"));
+}
+
+#[test]
+fn validate_scan_option_compatibility_rejects_incremental_with_from_json() {
+    let cli = crate::cli::Cli::try_parse_from([
+        "provenant",
+        "--json-pp",
+        "scan.json",
+        "--from-json",
+        "--incremental",
+        "sample-scan.json",
+    ])
+    .unwrap();
+
+    let error = validate_scan_option_compatibility(&cli).unwrap_err();
+    assert!(error.to_string().contains("--incremental"));
 }
 
 #[test]
@@ -720,9 +736,8 @@ fn prepare_cache_for_scan_defaults_to_scan_root_cache_directory_without_creating
             .unwrap();
     let config = prepare_cache_for_scan(scan_root.to_str().unwrap(), &cli).unwrap();
 
-    assert_eq!(config.root_dir(), scan_root.join(DEFAULT_CACHE_DIR_NAME));
-    assert!(!config.any_enabled());
-    assert!(!config.root_dir().exists());
+    assert_eq!(config.root_dir(), CacheConfig::default_root_dir(&scan_root));
+    assert!(!config.incremental_enabled());
 }
 
 #[test]
@@ -732,16 +747,14 @@ fn prepare_cache_for_scan_respects_cache_dir_and_cache_clear() {
     fs::create_dir_all(&scan_root).expect("create scan root");
 
     let explicit_cache_dir = temp_dir.path().join("explicit-cache");
-    fs::create_dir_all(explicit_cache_dir.join("scan-results")).unwrap();
-    let stale_file = explicit_cache_dir.join("scan-results").join("stale.txt");
+    fs::create_dir_all(explicit_cache_dir.join("incremental")).unwrap();
+    let stale_file = explicit_cache_dir.join("incremental").join("stale.txt");
     fs::write(&stale_file, "old").unwrap();
 
     let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
-        "--cache",
-        "scan-results",
         "--cache-dir",
         explicit_cache_dir.to_str().unwrap(),
         "--cache-clear",
@@ -752,11 +765,10 @@ fn prepare_cache_for_scan_respects_cache_dir_and_cache_clear() {
 
     assert_eq!(config.root_dir(), explicit_cache_dir);
     assert!(!stale_file.exists());
-    assert!(config.scan_results_dir().exists());
 }
 
 #[test]
-fn prepare_cache_for_scan_creates_scan_results_dir_when_enabled() {
+fn prepare_cache_for_scan_creates_incremental_dir_when_enabled() {
     let temp_dir = tempfile::TempDir::new().expect("create temp dir");
     let scan_root = temp_dir.path().join("scan");
     fs::create_dir_all(&scan_root).expect("create scan root");
@@ -765,15 +777,14 @@ fn prepare_cache_for_scan_creates_scan_results_dir_when_enabled() {
         "provenant",
         "--json-pp",
         "scan.json",
-        "--cache",
-        "scan-results",
+        "--incremental",
         "sample-dir",
     ])
     .unwrap();
     let config = prepare_cache_for_scan(scan_root.to_str().unwrap(), &cli).unwrap();
 
-    assert!(config.scan_results_enabled());
-    assert!(config.scan_results_dir().exists());
+    assert!(config.incremental_enabled());
+    assert!(config.incremental_dir().exists());
 }
 
 #[test]
@@ -781,12 +792,12 @@ fn build_collection_exclude_patterns_skips_default_cache_dir() {
     let temp_dir = tempfile::TempDir::new().expect("create temp dir");
     let scan_root = temp_dir.path().join("scan");
     fs::create_dir_all(scan_root.join("src")).unwrap();
-    fs::create_dir_all(scan_root.join(DEFAULT_CACHE_DIR_NAME).join("scan-results")).unwrap();
+    fs::create_dir_all(scan_root.join(DEFAULT_CACHE_DIR_NAME).join("incremental")).unwrap();
     fs::write(scan_root.join("src").join("main.rs"), "fn main() {}").unwrap();
     fs::write(
         scan_root
             .join(DEFAULT_CACHE_DIR_NAME)
-            .join("scan-results")
+            .join("incremental")
             .join("stale.txt"),
         "cached",
     )
@@ -811,12 +822,10 @@ fn build_collection_exclude_patterns_skips_explicit_in_tree_cache_dir() {
     let scan_root = temp_dir.path().join("scan");
     let explicit_cache_dir = scan_root.join("custom-cache");
     fs::create_dir_all(scan_root.join("docs")).unwrap();
-    fs::create_dir_all(explicit_cache_dir.join("scan-results")).unwrap();
+    fs::create_dir_all(explicit_cache_dir.join("incremental")).unwrap();
     fs::write(scan_root.join("docs").join("README.md"), "hello").unwrap();
     fs::write(
-        explicit_cache_dir
-            .join("scan-results")
-            .join("entry.msgpack.zst"),
+        explicit_cache_dir.join("incremental").join("manifest.json"),
         "cached",
     )
     .unwrap();
