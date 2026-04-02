@@ -1,11 +1,11 @@
 //! Candidate selection using set and multiset similarity.
 
-use crate::license_detection::TokenMultiset;
-use crate::license_detection::TokenSet;
-use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::TokenId;
+use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::models::Rule;
 use crate::license_detection::query::QueryRun;
+use crate::license_detection::TokenMultiset;
+use crate::license_detection::TokenSet;
 use std::collections::{HashMap, HashSet};
 
 use super::HIGH_RESEMBLANCE_THRESHOLD;
@@ -283,7 +283,7 @@ fn build_ranked_candidate<'a>(
     })
 }
 
-fn collect_set_phase_candidates<'a>(
+fn find_set_candidates<'a>(
     index: &'a LicenseIndex,
     query_data: &QueryData,
     high_resemblance: bool,
@@ -348,7 +348,7 @@ fn collect_set_phase_candidates<'a>(
     candidates
 }
 
-fn collect_multiset_phase_candidates<'a>(
+fn rescore_candidates_with_multisets<'a>(
     index: &'a LicenseIndex,
     query_data: &QueryData,
     shortlisted: Vec<Candidate<'a>>,
@@ -416,6 +416,19 @@ struct DupeGroupKey {
     rule_length: usize,
 }
 
+impl DupeGroupKey {
+    fn from_candidate(candidate: &Candidate<'_>) -> Self {
+        Self {
+            license_expression: candidate.rule.license_expression.clone(),
+            is_highly_resemblant: candidate.score_vec_rounded.is_highly_resemblant,
+            containment: quantize_tenths(candidate.score_vec_rounded.containment),
+            resemblance: quantize_tenths(candidate.score_vec_rounded.resemblance),
+            matched_length: quantize_tenths(candidate.score_vec_rounded.matched_length),
+            rule_length: candidate.rule.tokens.len(),
+        }
+    }
+}
+
 /// Filter duplicate candidates, keeping only the best from each group.
 ///
 /// Candidates are grouped by (license_expression, is_highly_resemblant, containment,
@@ -430,14 +443,7 @@ pub(super) fn filter_dupes(candidates: Vec<Candidate<'_>>) -> Vec<Candidate<'_>>
     let mut groups: HashMap<DupeGroupKey, Vec<Candidate>> = HashMap::new();
 
     for candidate in candidates {
-        let key = DupeGroupKey {
-            license_expression: candidate.rule.license_expression.clone(),
-            is_highly_resemblant: candidate.score_vec_rounded.is_highly_resemblant,
-            containment: quantize_tenths(candidate.score_vec_rounded.containment),
-            resemblance: quantize_tenths(candidate.score_vec_rounded.resemblance),
-            matched_length: quantize_tenths(candidate.score_vec_rounded.matched_length),
-            rule_length: candidate.rule.tokens.len(),
-        };
+        let key = DupeGroupKey::from_candidate(&candidate);
         groups.entry(key).or_default().push(candidate);
     }
 
@@ -473,14 +479,13 @@ pub fn compute_candidates_with_msets<'a>(
         return Vec::new();
     };
 
-    let mut set_phase_candidates =
-        collect_set_phase_candidates(index, &query_data, high_resemblance);
+    let mut candidates = find_set_candidates(index, &query_data, high_resemblance);
 
-    if set_phase_candidates.is_empty() {
+    if candidates.is_empty() {
         return Vec::new();
     }
 
-    set_phase_candidates.sort_by(|a, b| {
+    candidates.sort_by(|a, b| {
         compare_candidate_rank(
             &b.score_vec_rounded,
             &b.score_vec_full,
@@ -491,21 +496,17 @@ pub fn compute_candidates_with_msets<'a>(
         )
     });
 
-    set_phase_candidates.truncate(top_n * 10);
+    candidates.truncate(top_n * 10);
 
-    let mut sortable_candidates = collect_multiset_phase_candidates(
-        index,
-        &query_data,
-        set_phase_candidates,
-        high_resemblance,
-    );
+    let mut candidates =
+        rescore_candidates_with_multisets(index, &query_data, candidates, high_resemblance);
 
-    sortable_candidates = filter_dupes(sortable_candidates);
+    candidates = filter_dupes(candidates);
 
-    sortable_candidates.sort_by(|a, b| b.cmp(a));
-    sortable_candidates.truncate(top_n);
+    candidates.sort_by(|a, b| b.cmp(a));
+    candidates.truncate(top_n);
 
-    sortable_candidates
+    candidates
 }
 
 #[cfg(test)]
