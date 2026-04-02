@@ -26,7 +26,7 @@ use super::lexer::get_tokens;
 use super::line_tracking::{LineNumberIndex, PreparedLineCache};
 use super::parser::{parse, parse_with_deadline};
 use super::refiner::{
-    is_junk_copyright, refine_author, refine_copyright, refine_holder,
+    is_junk_copyright, is_junk_holder, refine_author, refine_copyright, refine_holder,
     refine_holder_in_copyright_context,
 };
 use super::types::{
@@ -310,6 +310,7 @@ pub fn detect_copyrights_from_text_with_deadline(
     );
 
     refine_final_copyrights(&mut copyrights);
+    drop_scan_only_holders_from_copyright_scan_lines(&raw_lines, &copyrights, &mut holders);
 
     for group in &groups {
         extend_dash_obfuscated_email_suffixes(&raw_lines, group, &mut copyrights[..], &holders[..]);
@@ -13612,7 +13613,7 @@ fn build_holder_from_tokens(
     } else {
         refine_holder(&node_string)?
     };
-    if is_junk_copyright(&refined) {
+    if is_junk_copyright(&refined) || is_junk_holder(&refined) {
         return None;
     }
     Some(HolderDetection {
@@ -13671,6 +13672,41 @@ fn collect_filtered_leaves_inner<'a>(
             }
         }
     }
+}
+
+fn drop_scan_only_holders_from_copyright_scan_lines(
+    raw_lines: &[&str],
+    copyrights: &[CopyrightDetection],
+    holders: &mut Vec<HolderDetection>,
+) {
+    if holders.is_empty() || raw_lines.is_empty() {
+        return;
+    }
+
+    static COPYRIGHT_SCAN_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)\bcopyright\s+scan(?:s|ner|ning)?\b").unwrap());
+
+    let copyright_spans: HashSet<(usize, usize)> = copyrights
+        .iter()
+        .map(|c| (c.start_line, c.end_line))
+        .collect();
+
+    holders.retain(|holder| {
+        let span = (holder.start_line, holder.end_line);
+        if copyright_spans.contains(&span) {
+            return true;
+        }
+        if !holder.holder.eq_ignore_ascii_case("scan") {
+            return true;
+        }
+        if holder.start_line == 0 || holder.start_line != holder.end_line {
+            return true;
+        }
+
+        raw_lines
+            .get(holder.start_line - 1)
+            .is_none_or(|line| !COPYRIGHT_SCAN_RE.is_match(line))
+    });
 }
 
 /// Tags whose filtering should cause adjacent commas to be considered orphaned.

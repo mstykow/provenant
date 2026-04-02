@@ -1966,11 +1966,56 @@ static HOLDERS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
 /// Return true if `s` matches any known junk copyright pattern.
 pub fn is_junk_copyright(s: &str) -> bool {
     COPYRIGHTS_JUNK_PATTERNS.iter().any(|re| re.is_match(s))
+        || is_junk_copyright_scan_phrase(s)
+        || is_junk_c_sign_path_fragment(s)
+}
+
+fn has_copyright_year(s: &str) -> bool {
+    static COPYRIGHT_YEAR_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)\b(?:19\d{2}|20\d{2})(?:\s*[-–/]\s*(?:19\d{2}|20\d{2}|\d{2}))?\b").unwrap()
+    });
+
+    COPYRIGHT_YEAR_RE.is_match(s)
+}
+
+fn is_junk_copyright_scan_phrase(s: &str) -> bool {
+    static COPYRIGHT_SCAN_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)\bcopyright\s+scan(?:s|ner|ning)?\b").unwrap());
+
+    !has_copyright_year(s) && COPYRIGHT_SCAN_RE.is_match(s)
+}
+
+fn is_junk_c_sign_path_fragment(s: &str) -> bool {
+    let Some(tail) = s.trim().strip_prefix("(c)") else {
+        return false;
+    };
+
+    !has_copyright_year(s) && is_path_like_code_fragment(tail)
 }
 
 /// Return true if `s` matches any known junk holder pattern.
-fn is_junk_holder(s: &str) -> bool {
-    HOLDERS_JUNK_PATTERNS.iter().any(|re| re.is_match(s))
+pub(crate) fn is_junk_holder(s: &str) -> bool {
+    HOLDERS_JUNK_PATTERNS.iter().any(|re| re.is_match(s)) || is_path_like_code_fragment(s)
+}
+
+fn is_path_like_code_fragment(s: &str) -> bool {
+    static PATH_LIKE_CODE_FRAGMENT_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?x)
+            ^
+            [A-Za-z_$][A-Za-z0-9_$]*
+            (?:
+                /[A-Za-z_$][A-Za-z0-9_$]*
+              | \.[A-Za-z_$][A-Za-z0-9_$]*
+              | \$[A-Za-z_$][A-Za-z0-9_$]*
+            )+
+            $
+            ",
+        )
+        .unwrap()
+    });
+
+    PATH_LIKE_CODE_FRAGMENT_RE.is_match(s.trim())
 }
 
 // ─── Core refinement functions ───────────────────────────────────────────────
@@ -3396,8 +3441,9 @@ fn strip_trailing_ampas_acronym(s: &str) -> String {
 }
 
 fn strip_trailing_javadoc_tags(s: &str) -> String {
-    static JAVADOC_TAGS_RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"(?i)\s+@(?:version|since|param|return|see)\b.*$").unwrap());
+    static JAVADOC_TAGS_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)\s+@(?:generated|version|since|param|return|see)\b.*$").unwrap()
+    });
     JAVADOC_TAGS_RE.replace(s, "").trim().to_string()
 }
 
