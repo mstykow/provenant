@@ -5,6 +5,7 @@ use regex::Regex;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::cache::{CACHE_DIR_ENV_VAR, CacheConfig, CacheKinds, build_collection_exclude_patterns};
 use crate::cli::Cli;
@@ -65,12 +66,14 @@ fn run() -> Result<()> {
     progress.set_scan_names(configured_scan_names(&cli));
     progress.init_logging_bridge();
 
+    progress.start_setup();
     validate_scan_option_compatibility(&cli)?;
     let facet_rules = build_facet_rules(&cli.facet)?;
 
     let ignore_author_patterns = compile_regex_patterns("--ignore-author", &cli.ignore_author)?;
     let ignore_copyright_holder_patterns =
         compile_regex_patterns("--ignore-copyright-holder", &cli.ignore_copyright_holder)?;
+    progress.finish_setup();
 
     progress.start_discovery();
 
@@ -141,9 +144,11 @@ fn run() -> Result<()> {
         }
 
         let license_engine = if cli.license {
+            progress.start_setup();
             progress.start_license_detection_engine_creation();
             let engine = init_license_engine(&cli.license_rules_path)?;
-            progress.finish_license_detection_engine_creation();
+            progress.finish_license_detection_engine_creation("setup_scan:licenses");
+            progress.finish_setup();
             progress.output_written(&describe_license_engine_source(
                 &engine,
                 cli.license_rules_path.as_deref(),
@@ -219,12 +224,16 @@ fn run() -> Result<()> {
         )
     };
 
+    progress.start_post_scan();
+
     if cli.filter_clues {
-        let clue_rule_lookup = prepare_filter_clue_rule_lookup(
-            &scan_result.files,
-            active_license_engine.as_deref(),
-            cli.license_rules_path.as_deref(),
-        )?;
+        let clue_rule_lookup = record_detail_timing(&progress, "post-scan:filter-clues", || {
+            prepare_filter_clue_rule_lookup(
+                &scan_result.files,
+                active_license_engine.as_deref(),
+                cli.license_rules_path.as_deref(),
+            )
+        })?;
         if let Some(clue_rule_lookup) = clue_rule_lookup.as_ref() {
             filter_redundant_clues_with_rules(&mut scan_result.files, Some(clue_rule_lookup));
         } else {
@@ -233,46 +242,63 @@ fn run() -> Result<()> {
     }
 
     if !ignore_author_patterns.is_empty() || !ignore_copyright_holder_patterns.is_empty() {
-        apply_ignore_resource_filter(
-            &mut scan_result.files,
-            &ignore_copyright_holder_patterns,
-            &ignore_author_patterns,
-        );
+        record_detail_timing(&progress, "post-scan:ignore-resource", || {
+            apply_ignore_resource_filter(
+                &mut scan_result.files,
+                &ignore_copyright_holder_patterns,
+                &ignore_author_patterns,
+            );
+        });
     }
 
     if cli.from_json && (!cli.include.is_empty() || !cli.exclude.is_empty()) {
-        apply_cli_path_selection_filter(&mut scan_result.files, &cli.include, &cli.exclude);
+        record_detail_timing(&progress, "output-filter:path-selection", || {
+            apply_cli_path_selection_filter(&mut scan_result.files, &cli.include, &cli.exclude);
+        });
     }
 
     if cli.only_findings {
-        apply_only_findings_filter(&mut scan_result.files);
+        record_detail_timing(&progress, "output-filter:only-findings", || {
+            apply_only_findings_filter(&mut scan_result.files);
+        });
     }
 
     if cli.info && cli.mark_source {
-        apply_mark_source(&mut scan_result.files);
+        record_detail_timing(&progress, "post-scan:mark-source", || {
+            apply_mark_source(&mut scan_result.files);
+        });
     }
 
     if should_include_info_surface(&scan_result.files, &cli) {
-        populate_info_resource_counts(&mut scan_result.files);
+        record_detail_timing(&progress, "post-scan:info-resource-counts", || {
+            populate_info_resource_counts(&mut scan_result.files);
+        });
     }
 
-    for file in &mut scan_result.files {
-        file.backfill_license_provenance();
-    }
+    record_detail_timing(&progress, "post-scan:license-provenance", || {
+        for file in &mut scan_result.files {
+            file.backfill_license_provenance();
+        }
+    });
 
     let mut extra_errors = Vec::new();
     if let Some(policy_path) = cli.license_policy.as_deref() {
-        extra_errors =
-            apply_license_policy_from_file(&mut scan_result.files, Path::new(policy_path))?;
+        extra_errors = record_detail_timing(&progress, "post-scan:license-policy", || {
+            apply_license_policy_from_file(&mut scan_result.files, Path::new(policy_path))
+        })?;
     }
 
     if cli.from_json {
-        trim_preloaded_assembly_to_files(
-            &scan_result.files,
-            &mut preloaded_assembly.packages,
-            &mut preloaded_assembly.dependencies,
-        );
+        record_detail_timing(&progress, "post-scan:trim-preloaded-assembly", || {
+            trim_preloaded_assembly_to_files(
+                &scan_result.files,
+                &mut preloaded_assembly.packages,
+                &mut preloaded_assembly.dependencies,
+            );
+        });
     }
+
+    progress.finish_post_scan();
 
     let manifests_seen = scan_result
         .files
@@ -304,34 +330,46 @@ fn run() -> Result<()> {
             .dir_path
             .first()
             .ok_or_else(|| anyhow!("No input path available for path normalization"))?;
-        normalize_paths(
-            &mut scan_result.files,
-            root_path,
-            cli.strip_root,
-            cli.full_root,
-        );
-        normalize_top_level_output_paths(
-            &mut assembly_result.packages,
-            &mut assembly_result.dependencies,
-            root_path,
-            cli.strip_root,
-        );
+        progress.start_post_scan();
+        record_detail_timing(&progress, "post-scan:path-normalization", || {
+            normalize_paths(
+                &mut scan_result.files,
+                root_path,
+                cli.strip_root,
+                cli.full_root,
+            );
+            normalize_top_level_output_paths(
+                &mut assembly_result.packages,
+                &mut assembly_result.dependencies,
+                root_path,
+                cli.strip_root,
+            );
+        });
+        progress.finish_post_scan();
     }
 
-    for package in &mut assembly_result.packages {
-        package.backfill_license_provenance();
-    }
+    progress.start_post_scan();
+    record_detail_timing(&progress, "post-scan:package-license-provenance", || {
+        for package in &mut assembly_result.packages {
+            package.backfill_license_provenance();
+        }
+    });
 
-    apply_package_reference_following(&mut scan_result.files, &mut assembly_result.packages);
+    record_detail_timing(&progress, "post-scan:package-reference-following", || {
+        apply_package_reference_following(&mut scan_result.files, &mut assembly_result.packages);
+    });
+    progress.finish_post_scan();
 
-    let end_time = Utc::now();
+    progress.start_finalize();
 
-    let license_detections = if cli.from_json {
-        let _ = preloaded_license_detections;
-        collect_top_level_license_detections(&scan_result.files)
-    } else {
-        collect_top_level_license_detections(&scan_result.files)
-    };
+    let license_detections = record_detail_timing(&progress, "finalize:license-detections", || {
+        if cli.from_json {
+            let _ = preloaded_license_detections;
+            collect_top_level_license_detections(&scan_result.files)
+        } else {
+            collect_top_level_license_detections(&scan_result.files)
+        }
+    });
 
     let should_recompute_license_references = cli.from_json
         && (!preloaded_license_references.is_empty()
@@ -341,54 +379,63 @@ fn run() -> Result<()> {
                 && !preloaded_license_references.is_empty()));
 
     if should_recompute_license_references && active_license_engine.is_none() {
+        progress.start_license_detection_engine_creation();
         active_license_engine = Some(init_license_engine(&cli.license_rules_path)?);
+        progress.finish_license_detection_engine_creation("finalize:license-engine-creation");
     }
 
     let (license_references, license_rule_references) =
-        if cli.from_json && !should_recompute_license_references {
-            (
-                preloaded_license_references,
-                preloaded_license_rule_references,
-            )
-        } else if cli.license_references || should_recompute_license_references {
-            if let Some(engine) = active_license_engine.as_deref() {
-                collect_top_level_license_references(
-                    &scan_result.files,
-                    &assembly_result.packages,
-                    engine.index(),
-                    &cli.license_url_template,
+        record_detail_timing(&progress, "finalize:license-references", || {
+            if cli.from_json && !should_recompute_license_references {
+                (
+                    preloaded_license_references,
+                    preloaded_license_rule_references,
                 )
+            } else if cli.license_references || should_recompute_license_references {
+                if let Some(engine) = active_license_engine.as_deref() {
+                    collect_top_level_license_references(
+                        &scan_result.files,
+                        &assembly_result.packages,
+                        engine.index(),
+                        &cli.license_url_template,
+                    )
+                } else {
+                    (Vec::new(), Vec::new())
+                }
             } else {
                 (Vec::new(), Vec::new())
             }
-        } else {
-            (Vec::new(), Vec::new())
-        };
+        });
 
-    let output = create_output(
-        start_time,
-        end_time,
-        scan_result,
-        CreateOutputContext {
-            total_dirs,
-            assembly_result,
-            license_detections,
-            license_references,
-            license_rule_references,
-            extra_errors,
-            options: CreateOutputOptions {
-                facet_rules: &facet_rules,
-                include_classify: cli.classify,
-                include_summary: cli.summary,
-                include_license_clarity_score: cli.license_clarity_score,
-                include_tallies: cli.tallies,
-                include_tallies_of_key_files: cli.tallies_key_files,
-                include_tallies_with_details: cli.tallies_with_details,
-                include_tallies_by_facet: cli.tallies_by_facet,
-                include_generated: cli.generated,
+    let end_time = Utc::now();
+
+    let output = record_detail_timing(&progress, "finalize:output-prepare", || {
+        create_output(
+            start_time,
+            end_time,
+            scan_result,
+            CreateOutputContext {
+                total_dirs,
+                assembly_result,
+                license_detections,
+                license_references,
+                license_rule_references,
+                extra_errors,
+                options: CreateOutputOptions {
+                    facet_rules: &facet_rules,
+                    include_classify: cli.classify,
+                    include_summary: cli.summary,
+                    include_license_clarity_score: cli.license_clarity_score,
+                    include_tallies: cli.tallies,
+                    include_tallies_of_key_files: cli.tallies_key_files,
+                    include_tallies_with_details: cli.tallies_with_details,
+                    include_tallies_by_facet: cli.tallies_by_facet,
+                    include_generated: cli.generated,
+                },
             },
-        },
-    );
+        )
+    });
+    progress.finish_finalize();
 
     progress.start_output();
     for target in cli.output_targets() {
@@ -402,15 +449,18 @@ fn run() -> Result<()> {
             },
         };
 
-        write_output_file(&target.file, &output, &output_config)?;
+        let timing_name = format!("output:{:?}", target.format).to_lowercase();
+        record_detail_timing(&progress, timing_name, || {
+            write_output_file(&target.file, &output, &output_config)
+        })?;
         progress.output_written(&format!(
             "{:?} output written to {}",
             target.format, target.file
         ));
     }
+    progress.record_final_counts(&output.files);
     progress.finish_output();
 
-    progress.record_final_counts(&output.files);
     progress.display_summary(&start_time.to_rfc3339(), &Utc::now().to_rfc3339());
 
     Ok(())
@@ -596,6 +646,16 @@ fn populate_info_resource_counts(files: &mut [crate::models::FileInfo]) {
             }
         }
     }
+}
+
+fn record_detail_timing<T, F>(progress: &Arc<ScanProgress>, name: impl Into<String>, f: F) -> T
+where
+    F: FnOnce() -> T,
+{
+    let started = Instant::now();
+    let result = f();
+    progress.record_detail_timing(name.into(), started.elapsed().as_secs_f64());
+    result
 }
 
 fn run_with_thread_pool<T, F>(threads: usize, f: F) -> Result<T>

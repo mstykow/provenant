@@ -33,7 +33,8 @@ pub struct ScanStats {
     pub total_bytes_scanned: u64,
     pub packages_assembled: usize,
     pub manifests_seen: usize,
-    pub phase_timings: Vec<(String, f64)>,
+    pub top_level_timings: Vec<(String, f64)>,
+    pub detail_timings: Vec<(String, f64)>,
 }
 
 pub struct ScanProgress {
@@ -43,7 +44,6 @@ pub struct ScanProgress {
     stats: Mutex<ScanStats>,
     phase_starts: Mutex<HashMap<&'static str, Instant>>,
     phase_spinner: Mutex<Option<ProgressBar>>,
-    started_at: Instant,
     stderr_is_tty: bool,
 }
 
@@ -82,9 +82,16 @@ impl ScanProgress {
             stats: Mutex::new(ScanStats::default()),
             phase_starts: Mutex::new(HashMap::new()),
             phase_spinner: Mutex::new(None),
-            started_at: Instant::now(),
             stderr_is_tty,
         }
+    }
+
+    pub fn start_setup(&self) {
+        self.start_phase("setup");
+    }
+
+    pub fn finish_setup(&self) {
+        self.finish_top_level_phase("setup");
     }
 
     pub fn set_processes(&self, processes: usize) {
@@ -114,7 +121,7 @@ impl ScanProgress {
     }
 
     pub fn start_discovery(&self) {
-        self.start_phase("discovery");
+        self.start_phase("inventory");
         match self.mode {
             ProgressMode::Quiet => {}
             ProgressMode::Default => {
@@ -128,7 +135,7 @@ impl ScanProgress {
 
     pub fn finish_discovery(&self, files: usize, dirs: usize, size: u64, excluded: usize) {
         self.finish_spinner();
-        self.finish_phase("discovery");
+        self.finish_top_level_phase("inventory");
         let mut stats = self.stats.lock().expect("stats lock poisoned");
         stats.initial_files = files;
         stats.initial_dirs = dirs;
@@ -141,8 +148,8 @@ impl ScanProgress {
         self.message("Loading SPDX data, this may take a while...");
     }
 
-    pub fn finish_license_detection_engine_creation(&self) {
-        self.finish_phase("license_detection_engine_creation");
+    pub fn finish_license_detection_engine_creation(&self, detail_name: impl Into<String>) {
+        self.finish_detail_phase(detail_name.into(), "license_detection_engine_creation");
     }
 
     pub fn start_scan(&self, total_files: usize) {
@@ -198,7 +205,7 @@ impl ScanProgress {
     }
 
     pub fn finish_scan(&self) {
-        self.finish_phase("scan");
+        self.finish_top_level_phase("scan");
         if self.mode == ProgressMode::Default && self.stderr_is_tty {
             self.scan_bar.finish_with_message("Scan complete!");
         } else {
@@ -217,7 +224,7 @@ impl ScanProgress {
 
     pub fn finish_assembly(&self, packages_assembled: usize, manifests_seen: usize) {
         self.finish_spinner();
-        self.finish_phase("assembly");
+        self.finish_top_level_phase("assembly");
         let mut stats = self.stats.lock().expect("stats lock poisoned");
         stats.packages_assembled = packages_assembled;
         stats.manifests_seen = manifests_seen;
@@ -238,7 +245,28 @@ impl ScanProgress {
 
     pub fn finish_output(&self) {
         self.finish_spinner();
-        self.finish_phase("output");
+        self.finish_top_level_phase("output");
+    }
+
+    pub fn start_post_scan(&self) {
+        self.start_phase("post-scan");
+    }
+
+    pub fn finish_post_scan(&self) {
+        self.finish_top_level_phase("post-scan");
+    }
+
+    pub fn start_finalize(&self) {
+        self.start_phase("finalize");
+    }
+
+    pub fn finish_finalize(&self) {
+        self.finish_top_level_phase("finalize");
+    }
+
+    pub fn record_detail_timing(&self, name: impl Into<String>, duration: f64) {
+        let mut stats = self.stats.lock().expect("stats lock poisoned");
+        accumulate_timing(&mut stats.detail_timings, name.into(), duration);
     }
 
     pub fn record_final_counts(&self, files: &[FileInfo]) {
@@ -263,70 +291,13 @@ impl ScanProgress {
             return;
         }
 
-        let mut stats = self.stats.lock().expect("stats lock poisoned");
-        let total = self.started_at.elapsed().as_secs_f64();
-        stats
-            .phase_timings
-            .push(("total".to_string(), total.max(0.0)));
+        let stats = self.stats.lock().expect("stats lock poisoned");
 
         if stats.error_count > 0 {
             self.error("Some files failed to scan properly:");
         }
-
-        let speed_files = if total > 0.0 {
-            stats.final_files as f64 / total
-        } else {
-            0.0
-        };
-        let speed_bytes = if total > 0.0 {
-            stats.total_bytes_scanned as f64 / total
-        } else {
-            0.0
-        };
-
-        self.message("Scanning done.");
-        let processes = if stats.processes > 0 {
-            stats.processes
-        } else {
-            num_cpus_for_display()
-        };
-        let scan_names = if stats.scan_names.is_empty() {
-            "scan".to_string()
-        } else {
-            stats.scan_names.clone()
-        };
-        self.message(&format!(
-            "Summary:        {scan_names} with {processes} process(es)"
-        ));
-        self.message(&format!("Errors count:   {}", stats.error_count));
-        self.message(&format!(
-            "Scan Speed:     {speed_files:.2} files/sec. {}/sec.",
-            format_size(speed_bytes as u64)
-        ));
-        self.message(&format!(
-            "Initial counts: {} resource(s): {} file(s) and {} directorie(s) for {}",
-            stats.initial_files + stats.initial_dirs,
-            stats.initial_files,
-            stats.initial_dirs,
-            format_size(stats.initial_size)
-        ));
-        self.message(&format!(
-            "Final counts:   {} resource(s): {} file(s) and {} directorie(s) for {}",
-            stats.final_files + stats.final_dirs,
-            stats.final_files,
-            stats.final_dirs,
-            format_size(stats.final_size)
-        ));
-        self.message(&format!("Excluded count: {}", stats.excluded_count));
-        self.message(&format!(
-            "Packages:       {} assembled from {} manifests",
-            stats.packages_assembled, stats.manifests_seen
-        ));
-        self.message("Timings:");
-        self.message(&format!("  scan_start: {scan_start}"));
-        self.message(&format!("  scan_end:   {scan_end}"));
-        for (name, value) in &stats.phase_timings {
-            self.message(&format!("  {name}: {value:.2}s"));
+        for line in build_summary_messages(&stats, scan_start, scan_end) {
+            self.message(&line);
         }
     }
 
@@ -361,7 +332,7 @@ impl ScanProgress {
             .insert(phase, Instant::now());
     }
 
-    fn finish_phase(&self, phase: &'static str) {
+    fn finish_top_level_phase(&self, phase: &'static str) {
         let start = self
             .phase_starts
             .lock()
@@ -369,9 +340,27 @@ impl ScanProgress {
             .remove(phase);
         if let Some(start) = start {
             let mut stats = self.stats.lock().expect("stats lock poisoned");
-            stats
-                .phase_timings
-                .push((phase.to_string(), start.elapsed().as_secs_f64()));
+            accumulate_timing(
+                &mut stats.top_level_timings,
+                phase.to_string(),
+                start.elapsed().as_secs_f64(),
+            );
+        }
+    }
+
+    fn finish_detail_phase(&self, name: String, phase: &'static str) {
+        let start = self
+            .phase_starts
+            .lock()
+            .expect("phase lock poisoned")
+            .remove(phase);
+        if let Some(start) = start {
+            let mut stats = self.stats.lock().expect("stats lock poisoned");
+            accumulate_timing(
+                &mut stats.detail_timings,
+                name,
+                start.elapsed().as_secs_f64(),
+            );
         }
     }
 
@@ -407,6 +396,17 @@ impl ScanProgress {
     }
 }
 
+fn accumulate_timing(timings: &mut Vec<(String, f64)>, name: String, duration: f64) {
+    if let Some((_, existing)) = timings
+        .iter_mut()
+        .find(|(existing_name, _)| *existing_name == name)
+    {
+        *existing += duration;
+    } else {
+        timings.push((name, duration));
+    }
+}
+
 fn supports_color(stderr_is_tty: bool) -> bool {
     if !stderr_is_tty {
         return false;
@@ -415,6 +415,108 @@ fn supports_color(stderr_is_tty: bool) -> bool {
         return false;
     }
     !matches!(env::var("TERM"), Ok(term) if term == "dumb")
+}
+
+fn build_summary_messages(stats: &ScanStats, scan_start: &str, scan_end: &str) -> Vec<String> {
+    let total = stats
+        .top_level_timings
+        .iter()
+        .map(|(_, value)| *value)
+        .sum::<f64>()
+        .max(0.0);
+    let scan_time = stats
+        .top_level_timings
+        .iter()
+        .find_map(|(name, value)| (name == "scan").then_some(*value))
+        .unwrap_or(0.0);
+
+    let speed_files = if scan_time > 0.0 {
+        stats.final_files as f64 / scan_time
+    } else {
+        0.0
+    };
+    let speed_bytes = if scan_time > 0.0 {
+        stats.total_bytes_scanned as f64 / scan_time
+    } else {
+        0.0
+    };
+
+    let processes = if stats.processes > 0 {
+        stats.processes
+    } else {
+        num_cpus_for_display()
+    };
+    let scan_names = if stats.scan_names.is_empty() {
+        "scan".to_string()
+    } else {
+        stats.scan_names.clone()
+    };
+
+    let mut lines = vec![
+        "Scanning done.".to_string(),
+        format!("Summary:        {scan_names} with {processes} process(es)"),
+        format!("Errors count:   {}", stats.error_count),
+        format!(
+            "Scan Speed:     {speed_files:.2} files/sec. {}/sec.",
+            format_size(speed_bytes as u64)
+        ),
+        format!(
+            "Initial counts: {} resource(s): {} file(s) and {} directorie(s) for {}",
+            stats.initial_files + stats.initial_dirs,
+            stats.initial_files,
+            stats.initial_dirs,
+            format_size(stats.initial_size)
+        ),
+        format!(
+            "Final counts:   {} resource(s): {} file(s) and {} directorie(s) for {}",
+            stats.final_files + stats.final_dirs,
+            stats.final_files,
+            stats.final_dirs,
+            format_size(stats.final_size)
+        ),
+        format!("Excluded count: {}", stats.excluded_count),
+        format!(
+            "Packages:       {} assembled from {} manifests",
+            stats.packages_assembled, stats.manifests_seen
+        ),
+        "Timings:".to_string(),
+        format!("  scan_start: {scan_start}"),
+        format!("  scan_end:   {scan_end}"),
+    ];
+
+    for (name, value) in &stats.top_level_timings {
+        lines.push(format!("  {name}: {value:.2}s"));
+        lines.extend(
+            stats
+                .detail_timings
+                .iter()
+                .filter(|(detail_name, _)| detail_parent_phase(detail_name) == Some(name.as_str()))
+                .map(|(detail_name, detail_value)| {
+                    format!("    {detail_name}: {detail_value:.2}s")
+                }),
+        );
+    }
+    lines.push(format!("  total: {total:.2}s"));
+
+    lines
+}
+
+fn detail_parent_phase(detail_name: &str) -> Option<&'static str> {
+    if detail_name.starts_with("setup:") || detail_name.starts_with("setup_scan:") {
+        Some("setup")
+    } else if detail_name.starts_with("scan:") {
+        Some("scan")
+    } else if detail_name.starts_with("post-scan:") || detail_name.starts_with("output-filter:") {
+        Some("post-scan")
+    } else if detail_name.starts_with("assembly:") {
+        Some("assembly")
+    } else if detail_name.starts_with("finalize:") {
+        Some("finalize")
+    } else if detail_name.starts_with("output:") {
+        Some("output")
+    } else {
+        None
+    }
 }
 
 pub fn format_size(bytes: u64) -> String {
@@ -447,7 +549,7 @@ fn num_cpus_for_display() -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::format_size;
+    use super::{ScanStats, build_summary_messages, format_size};
 
     #[test]
     fn format_size_matches_expected_shape() {
@@ -455,5 +557,73 @@ mod tests {
         assert_eq!(format_size(1), "1 Byte");
         assert_eq!(format_size(1024), "1.00 KB");
         assert_eq!(format_size(2_567_000), "2.45 MB");
+    }
+
+    #[test]
+    fn summary_messages_render_detail_timings_hierarchically() {
+        let stats = ScanStats {
+            processes: 4,
+            scan_names: "licenses, packages".to_string(),
+            initial_files: 10,
+            initial_dirs: 2,
+            initial_size: 2_048,
+            excluded_count: 1,
+            final_files: 8,
+            final_dirs: 1,
+            final_size: 1_024,
+            error_count: 0,
+            total_bytes_scanned: 800,
+            packages_assembled: 3,
+            manifests_seen: 5,
+            top_level_timings: vec![
+                ("setup".to_string(), 1.0),
+                ("inventory".to_string(), 2.0),
+                ("scan".to_string(), 3.0),
+                ("post-scan".to_string(), 4.0),
+                ("assembly".to_string(), 5.0),
+                ("finalize".to_string(), 6.0),
+                ("output".to_string(), 7.0),
+            ],
+            detail_timings: vec![
+                ("setup_scan:licenses".to_string(), 0.5),
+                ("scan:packages".to_string(), 1.25),
+                ("output-filter:only-findings".to_string(), 1.5),
+                ("finalize:output-prepare".to_string(), 2.0),
+            ],
+        };
+
+        let lines = build_summary_messages(&stats, "start", "end");
+        let line_index = |needle: &str| {
+            lines
+                .iter()
+                .position(|line| line == needle)
+                .unwrap_or_else(|| panic!("missing line: {needle}"))
+        };
+
+        assert!(lines.contains(&"  total: 28.00s".to_string()));
+        assert!(lines.contains(&"    setup_scan:licenses: 0.50s".to_string()));
+        assert!(lines.contains(&"    scan:packages: 1.25s".to_string()));
+        assert!(lines.contains(&"    output-filter:only-findings: 1.50s".to_string()));
+        assert!(lines.contains(&"    finalize:output-prepare: 2.00s".to_string()));
+        assert!(line_index("  setup: 1.00s") < line_index("    setup_scan:licenses: 0.50s"));
+        assert!(line_index("  scan: 3.00s") < line_index("    scan:packages: 1.25s"));
+        assert!(
+            line_index("  post-scan: 4.00s") < line_index("    output-filter:only-findings: 1.50s")
+        );
+        assert!(line_index("  finalize: 6.00s") < line_index("    finalize:output-prepare: 2.00s"));
+    }
+
+    #[test]
+    fn summary_messages_use_scan_time_for_scan_speed() {
+        let stats = ScanStats {
+            final_files: 20,
+            total_bytes_scanned: 2_048,
+            top_level_timings: vec![("scan".to_string(), 4.0)],
+            ..ScanStats::default()
+        };
+
+        let lines = build_summary_messages(&stats, "start", "end");
+
+        assert!(lines.contains(&"Scan Speed:     5.00 files/sec. 512 Bytes/sec.".to_string()));
     }
 }
