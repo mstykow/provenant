@@ -8,7 +8,8 @@ use crate::license_detection::query::QueryRun;
 use bit_set::BitSet;
 use std::collections::HashMap;
 
-use super::{Candidate, MATCH_SEQ};
+use super::MATCH_SEQ;
+use super::candidates::Candidate;
 
 /// Find the longest matching block between query and rule token sequences.
 ///
@@ -209,7 +210,7 @@ pub(super) fn match_blocks(
 /// # Returns
 ///
 /// Vector of LicenseMatch results
-pub fn seq_match_with_candidates(
+pub(crate) fn seq_match_with_candidates(
     index: &LicenseIndex,
     query_run: &QueryRun,
     candidates: &[Candidate<'_>],
@@ -329,8 +330,8 @@ pub fn seq_match_with_candidates(
                         is_from_license: candidate.rule.is_from_license,
                         rule_start_token: ipos,
                         coordinates: MatchCoordinates::rule_aligned(qspan, ispan, hispan),
-                        candidate_resemblance: candidate.score_vec_full.resemblance,
-                        candidate_containment: candidate.score_vec_full.containment,
+                        candidate_resemblance: candidate.metrics.amplified_resemblance_f32(),
+                        candidate_containment: candidate.metrics.containment_f32(),
                     };
 
                     matches.push(license_match);

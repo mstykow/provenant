@@ -62,6 +62,9 @@ fn main() -> std::io::Result<()> {
 }
 
 fn run() -> Result<()> {
+    #[cfg(feature = "golden-tests")]
+    touch_license_golden_symbols();
+
     let cli = Cli::parse();
 
     if cli.show_attribution {
@@ -516,6 +519,14 @@ fn run() -> Result<()> {
     progress.display_summary(&start_time.to_rfc3339(), &Utc::now().to_rfc3339());
 
     Ok(())
+}
+
+#[cfg(feature = "golden-tests")]
+fn touch_license_golden_symbols() {
+    let _ = crate::license_detection::golden_utils::read_golden_input_content;
+    let _ = crate::license_detection::golden_utils::detect_matches_for_golden;
+    let _ = crate::license_detection::golden_utils::detect_license_expressions_for_golden;
+    let _ = crate::license_detection::LicenseDetectionEngine::detect_matches_with_kind;
 }
 
 fn validate_scan_option_compatibility(cli: &Cli) -> Result<()> {

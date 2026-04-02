@@ -168,9 +168,9 @@ Useful examples:
 
 ### License Golden YAML Fixtures
 
-`update_license_golden.sh` syncs license golden YAML fixtures from the Python reference by invoking the `update-license-golden` binary from the unpublished `xtask/` helper crate.
+`update_license_golden.sh` syncs and updates license golden YAML fixtures by invoking the `update-license-golden` binary from the unpublished `xtask/` helper crate.
 
-**Why this exists**: it keeps license detection golden YAMLs in sync with the Python reference when the reference submodule is updated.
+**Why this exists**: it keeps license golden YAMLs in sync with the Python reference when parity holds, while still allowing intentional Rust-owned deviations to be updated from current detector output.
 
 Show CLI help:
 
@@ -181,22 +181,59 @@ cargo run --manifest-path xtask/Cargo.toml --bin update-license-golden -- --help
 
 CLI arguments:
 
-- `--list-diffs`: print files where our expected values differ from Python reference
-- `--show-diff`: print detailed diff for differing files
+- `--list-mismatches` (`--list-diffs` alias): print files where Python reference expectations differ from current Rust detector output (parity precheck)
+- `--show-diff`: print detailed diff for those mismatches
 - `--filter PATTERN`: limit processing to paths containing `PATTERN`
 - `--suite SUITE`: process only one suite (lic1, lic2, lic3, lic4, external, unknown)
+- `--sync-actual`: write expected values from current Rust detector output
 - `--write`: apply file updates (without it, command is dry-run)
 
+Important distinction: golden tests compare Rust detector output to local Rust-owned fixture YAMLs. The default sync workflow only updates from Python reference when the current Rust detector already matches those reference expectations.
+
+### Expected Workflow (License Fixtures)
+
+Use this workflow when maintaining `testdata/license-golden/*`:
+
+1. **Check Python-reference parity impact first**
+   - Run:
+
+     ```bash
+     ./scripts/update_license_golden.sh --list-mismatches --show-diff
+     ```
+
+   - Purpose: identify fixtures where current Rust output diverges from upstream Python reference expectations.
+
+2. **If parity is acceptable for a fixture, sync from Python reference**
+   - Run with `--write` (optionally with `--suite` or `--filter`):
+
+     ```bash
+     ./scripts/update_license_golden.sh --suite lic1 --filter <pattern> --write
+     ```
+
+   - This is a **selective, parity-gated sync** from `reference/scancode-toolkit/tests/licensedcode/data/datadriven/...`.
+
+3. **If divergence is intentional or Rust-specific, update to Rust actuals**
+   - Run:
+
+     ```bash
+     ./scripts/update_license_golden.sh --sync-actual --suite unknown --filter <pattern> --write
+     ```
+
+   - Use this for accepted Rust improvements or known intentional differences.
+
+4. **Validate with tests**
+   - Run golden tests after updates to confirm repository expectations are coherent.
+
 ```bash
-./scripts/update_license_golden.sh [--list-diffs] [--show-diff] [--filter PATTERN] [--suite SUITE] [--write]
+./scripts/update_license_golden.sh [--list-mismatches] [--show-diff] [--filter PATTERN] [--suite SUITE] [--sync-actual] [--write]
 ```
 
 Useful examples:
 
 ```bash
-./scripts/update_license_golden.sh --list-diffs
-./scripts/update_license_golden.sh --suite lic1 --list-diffs --show-diff
-./scripts/update_license_golden.sh --filter bsd --write
+./scripts/update_license_golden.sh --list-mismatches
+./scripts/update_license_golden.sh --suite lic1 --list-mismatches --show-diff
+./scripts/update_license_golden.sh --sync-actual --suite unknown --filter cigna-go-you-mobile-app-eula --write
 ```
 
 ## URL Validation Tool

@@ -3,8 +3,10 @@ license_expressions:
   - proprietary-license
   - unknown-license-reference
   - warranty-disclaimer
-  - proprietary-license
+  - warranty-disclaimer
   - warranty-disclaimer
   - unknown-license-reference
   - unknown
-notes: this designed to use unknwown license detection
+notes: |
+  this designed to use unknwown license detection
+  Rust intentionally keeps the stronger warranty-disclaimer candidate here after exact seq candidate scoring.

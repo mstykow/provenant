@@ -8,16 +8,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::license_detection::TokenSet;
 use crate::license_detection::automaton::{Automaton, AutomatonBuilder};
 use crate::license_detection::hash_match::compute_hash;
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::{
     KnownToken, TokenDictionary, TokenId, TokenKind,
-};
-use crate::license_detection::index::token_sets::{
-    build_set_and_mset, high_multiset_subset, high_tids_set_subset, multiset_counter,
-    tids_set_counter,
 };
 use crate::license_detection::models::{License, LoadedLicense, LoadedRule, Rule};
 use crate::license_detection::rules::legalese;
@@ -28,6 +23,7 @@ use crate::license_detection::spdx_mapping::build_spdx_mapping;
 use crate::license_detection::tokenize::{
     parse_required_phrase_spans, tokenize, tokenize_with_stopwords,
 };
+use crate::license_detection::{TokenMultiset, TokenSet};
 
 const UNKNOWN_NGRAM_LENGTH: usize = 6;
 const LICENSE_TOKEN_STRINGS: &[&str] = &["license", "licence", "licensed"];
@@ -288,7 +284,7 @@ pub fn is_good_tokens_ngram(tokens_ngram: &[String], known_tokens_ngram: &[Known
         return false;
     }
 
-    let unique_tids: HashSet<TokenId> = known_tokens_ngram.iter().map(|token| token.id).collect();
+    let unique_tids = TokenSet::from_token_ids(known_tokens_ngram.iter().map(|token| token.id));
     if unique_tids.len() <= 2 {
         return false;
     }
@@ -348,16 +344,17 @@ pub fn build_index(rules: Vec<Rule>, licenses: Vec<License>) -> LicenseIndex {
         }
     }
 
-    let license_token_ids: HashSet<TokenId> = LICENSE_TOKEN_STRINGS
-        .iter()
-        .filter_map(|&token| dictionary.lookup(token).map(|token| token.id))
-        .collect();
+    let license_token_ids = TokenSet::from_token_ids(
+        LICENSE_TOKEN_STRINGS
+            .iter()
+            .filter_map(|&token| dictionary.lookup(token).map(|token| token.id)),
+    );
 
     let mut rid_by_hash: HashMap<[u8; 20], usize> = HashMap::new();
     let mut rules_by_rid: Vec<Rule> = Vec::with_capacity(rules.len());
     let mut tids_by_rid: Vec<Vec<TokenId>> = Vec::with_capacity(rules.len());
     let mut sets_by_rid: HashMap<usize, TokenSet> = HashMap::new();
-    let mut msets_by_rid: HashMap<usize, HashMap<TokenId, usize>> = HashMap::new();
+    let mut msets_by_rid: HashMap<usize, TokenMultiset> = HashMap::new();
     let mut high_sets_by_rid: HashMap<usize, TokenSet> = HashMap::new();
     let mut high_postings_by_rid: HashMap<usize, HashMap<TokenId, Vec<usize>>> = HashMap::new();
     let mut false_positive_rids: HashSet<usize> = HashSet::new();
@@ -406,11 +403,11 @@ pub fn build_index(rules: Vec<Rule>, licenses: Vec<License>) -> LicenseIndex {
 
         rule.starts_with_license = rule_token_ids
             .first()
-            .map(|&tid| license_token_ids.contains(&tid))
+            .map(|&tid| license_token_ids.contains_token_id(tid))
             .unwrap_or(false);
         rule.ends_with_license = rule_token_ids
             .last()
-            .map(|&tid| license_token_ids.contains(&tid))
+            .map(|&tid| license_token_ids.contains_token_id(tid))
             .unwrap_or(false);
 
         let rule_hash = compute_hash(&rule_token_ids);
@@ -461,32 +458,32 @@ pub fn build_index(rules: Vec<Rule>, licenses: Vec<License>) -> LicenseIndex {
             }
         }
 
-        let (tids_set, mset) = build_set_and_mset(&rule_token_ids);
+        let tids_set = TokenSet::from_token_ids(rule_token_ids.iter().copied());
+        let mset = TokenMultiset::from_token_ids(&rule_token_ids);
 
-        let tids_set_token: TokenSet =
-            TokenSet::from_u16_iter(tids_set.iter().map(|tid| tid.raw()));
-        sets_by_rid.insert(rid, tids_set_token.clone());
+        sets_by_rid.insert(rid, tids_set.clone());
         msets_by_rid.insert(rid, mset.clone());
 
-        let tids_set_high = high_tids_set_subset(&tids_set, &dictionary);
-        let mset_high = high_multiset_subset(&mset, &dictionary);
+        let tids_set_high = tids_set.high_subset(&dictionary);
+        let mset_high = mset.high_subset(&dictionary);
 
-        let tids_set_high_token: TokenSet =
-            TokenSet::from_u16_iter(tids_set_high.iter().map(|tid| tid.raw()));
         if !tids_set_high.is_empty() {
-            high_sets_by_rid.insert(rid, tids_set_high_token.clone());
+            high_sets_by_rid.insert(rid, tids_set_high.clone());
         }
 
         // Build inverted index: map high-value tokens to rules containing them
         if approx_matchable_rids.contains(&rid) {
-            for &tid in &tids_set_high {
-                rids_by_high_tid.entry(tid).or_default().insert(rid);
+            for tid in tids_set_high.iter() {
+                rids_by_high_tid
+                    .entry(TokenId::new(tid))
+                    .or_default()
+                    .insert(rid);
             }
         }
 
-        rule.length_unique = tids_set_counter(&tids_set);
-        rule.high_length_unique = tids_set_counter(&tids_set_high);
-        rule.high_length = multiset_counter(&mset_high);
+        rule.length_unique = tids_set.len();
+        rule.high_length_unique = tids_set_high.len();
+        rule.high_length = mset_high.total_count();
 
         let (updated_coverage, min_matched_length, min_high_matched_length) =
             compute_thresholds_occurrences(rule.minimum_coverage, rule_length, rule.high_length);
@@ -776,16 +773,17 @@ fn build_index_with_automatons(
         }
     }
 
-    let license_token_ids: HashSet<TokenId> = LICENSE_TOKEN_STRINGS
-        .iter()
-        .filter_map(|&token| dictionary.lookup(token).map(|token| token.id))
-        .collect();
+    let license_token_ids = TokenSet::from_token_ids(
+        LICENSE_TOKEN_STRINGS
+            .iter()
+            .filter_map(|&token| dictionary.lookup(token).map(|token| token.id)),
+    );
 
     let mut rid_by_hash: HashMap<[u8; 20], usize> = HashMap::new();
     let mut rules_by_rid: Vec<Rule> = Vec::with_capacity(rules.len() + licenses.len());
     let mut tids_by_rid: Vec<Vec<TokenId>> = Vec::with_capacity(rules.len() + licenses.len());
     let mut sets_by_rid: HashMap<usize, TokenSet> = HashMap::new();
-    let mut msets_by_rid: HashMap<usize, HashMap<TokenId, usize>> = HashMap::new();
+    let mut msets_by_rid: HashMap<usize, TokenMultiset> = HashMap::new();
     let mut high_sets_by_rid: HashMap<usize, TokenSet> = HashMap::new();
     let mut high_postings_by_rid: HashMap<usize, HashMap<TokenId, Vec<usize>>> = HashMap::new();
     let mut false_positive_rids: HashSet<usize> = HashSet::new();
@@ -829,11 +827,11 @@ fn build_index_with_automatons(
 
         rule.starts_with_license = rule_token_ids
             .first()
-            .map(|&tid| license_token_ids.contains(&tid))
+            .map(|&tid| license_token_ids.contains_token_id(tid))
             .unwrap_or(false);
         rule.ends_with_license = rule_token_ids
             .last()
-            .map(|&tid| license_token_ids.contains(&tid))
+            .map(|&tid| license_token_ids.contains_token_id(tid))
             .unwrap_or(false);
 
         let rule_hash = compute_hash(&rule_token_ids);
@@ -864,31 +862,31 @@ fn build_index_with_automatons(
             }
         }
 
-        let (tids_set, mset) = build_set_and_mset(&rule_token_ids);
+        let tids_set = TokenSet::from_token_ids(rule_token_ids.iter().copied());
+        let mset = TokenMultiset::from_token_ids(&rule_token_ids);
 
-        let tids_set_token: TokenSet =
-            TokenSet::from_u16_iter(tids_set.iter().map(|tid| tid.raw()));
-        sets_by_rid.insert(rid, tids_set_token.clone());
+        sets_by_rid.insert(rid, tids_set.clone());
         msets_by_rid.insert(rid, mset.clone());
 
-        let tids_set_high = high_tids_set_subset(&tids_set, &dictionary);
-        let mset_high = high_multiset_subset(&mset, &dictionary);
+        let tids_set_high = tids_set.high_subset(&dictionary);
+        let mset_high = mset.high_subset(&dictionary);
 
-        let tids_set_high_token: TokenSet =
-            TokenSet::from_u16_iter(tids_set_high.iter().map(|tid| tid.raw()));
         if !tids_set_high.is_empty() {
-            high_sets_by_rid.insert(rid, tids_set_high_token.clone());
+            high_sets_by_rid.insert(rid, tids_set_high.clone());
         }
 
         if approx_matchable_rids.contains(&rid) {
-            for &tid in &tids_set_high {
-                rids_by_high_tid.entry(tid).or_default().insert(rid);
+            for tid in tids_set_high.iter() {
+                rids_by_high_tid
+                    .entry(TokenId::new(tid))
+                    .or_default()
+                    .insert(rid);
             }
         }
 
-        rule.length_unique = tids_set_counter(&tids_set);
-        rule.high_length_unique = tids_set_counter(&tids_set_high);
-        rule.high_length = multiset_counter(&mset_high);
+        rule.length_unique = tids_set.len();
+        rule.high_length_unique = tids_set_high.len();
+        rule.high_length = mset_high.total_count();
 
         let (updated_coverage, min_matched_length, min_high_matched_length) =
             compute_thresholds_occurrences(rule.minimum_coverage, rule_length, rule.high_length);
@@ -946,11 +944,11 @@ fn build_index_with_automatons(
 
         rule.starts_with_license = rule_token_ids
             .first()
-            .map(|&tid| license_token_ids.contains(&tid))
+            .map(|&tid| license_token_ids.contains_token_id(tid))
             .unwrap_or(false);
         rule.ends_with_license = rule_token_ids
             .last()
-            .map(|&tid| license_token_ids.contains(&tid))
+            .map(|&tid| license_token_ids.contains_token_id(tid))
             .unwrap_or(false);
 
         let rule_hash = compute_hash(&rule_token_ids);
@@ -981,31 +979,31 @@ fn build_index_with_automatons(
             }
         }
 
-        let (tids_set, mset) = build_set_and_mset(&rule_token_ids);
+        let tids_set = TokenSet::from_token_ids(rule_token_ids.iter().copied());
+        let mset = TokenMultiset::from_token_ids(&rule_token_ids);
 
-        let tids_set_token: TokenSet =
-            TokenSet::from_u16_iter(tids_set.iter().map(|tid| tid.raw()));
-        sets_by_rid.insert(rid, tids_set_token.clone());
+        sets_by_rid.insert(rid, tids_set.clone());
         msets_by_rid.insert(rid, mset.clone());
 
-        let tids_set_high = high_tids_set_subset(&tids_set, &dictionary);
-        let mset_high = high_multiset_subset(&mset, &dictionary);
+        let tids_set_high = tids_set.high_subset(&dictionary);
+        let mset_high = mset.high_subset(&dictionary);
 
-        let tids_set_high_token: TokenSet =
-            TokenSet::from_u16_iter(tids_set_high.iter().map(|tid| tid.raw()));
         if !tids_set_high.is_empty() {
-            high_sets_by_rid.insert(rid, tids_set_high_token.clone());
+            high_sets_by_rid.insert(rid, tids_set_high.clone());
         }
 
         if approx_matchable_rids.contains(&rid) {
-            for &tid in &tids_set_high {
-                rids_by_high_tid.entry(tid).or_default().insert(rid);
+            for tid in tids_set_high.iter() {
+                rids_by_high_tid
+                    .entry(TokenId::new(tid))
+                    .or_default()
+                    .insert(rid);
             }
         }
 
-        rule.length_unique = tids_set_counter(&tids_set);
-        rule.high_length_unique = tids_set_counter(&tids_set_high);
-        rule.high_length = multiset_counter(&mset_high);
+        rule.length_unique = tids_set.len();
+        rule.high_length_unique = tids_set_high.len();
+        rule.high_length = mset_high.total_count();
 
         let (updated_coverage, min_matched_length, min_high_matched_length) =
             compute_thresholds_occurrences(rule.minimum_coverage, rule_length, rule.high_length);

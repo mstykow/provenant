@@ -5,6 +5,7 @@ pub mod automaton;
 pub(crate) mod detection;
 pub mod embedded;
 mod position_set;
+mod token_multiset;
 mod token_set;
 
 #[cfg(test)]
@@ -12,6 +13,8 @@ mod embedded_test;
 pub mod expression;
 #[cfg(test)]
 mod golden_test;
+#[cfg(feature = "golden-tests")]
+pub mod golden_utils;
 pub mod hash_match;
 pub mod index;
 mod match_refine;
@@ -78,12 +81,12 @@ pub use match_refine::{
     refine_matches_without_false_positive_filter, split_weak_matches,
 };
 pub use position_set::PositionSet;
-pub use seq_match::{
-    MAX_NEAR_DUPE_CANDIDATES, compute_candidates_with_msets, seq_match_with_candidates,
-};
 pub use spdx_lid::spdx_lid_match;
+pub use token_multiset::TokenMultiset;
 pub use token_set::TokenSet;
 pub use unknown_match::unknown_match;
+
+use self::seq_match::{MAX_NEAR_DUPE_CANDIDATES, select_seq_candidates, seq_match_with_candidates};
 
 /// License detection engine that orchestrates the detection pipeline.
 ///
@@ -376,7 +379,7 @@ fn collect_whole_query_exact_followup_matches(
 
     if whole_run.is_matchable(false, matched_qspans) {
         let near_dupe_candidates =
-            compute_candidates_with_msets(index, whole_run, true, MAX_NEAR_DUPE_CANDIDATES);
+            select_seq_candidates(index, whole_run, true, MAX_NEAR_DUPE_CANDIDATES);
 
         if !near_dupe_candidates.is_empty() {
             let near_dupe_matches =
@@ -411,7 +414,7 @@ fn collect_regular_seq_matches(
         }
 
         let candidates =
-            compute_candidates_with_msets(index, &query_run, false, MAX_REGULAR_SEQ_CANDIDATES);
+            select_seq_candidates(index, &query_run, false, MAX_REGULAR_SEQ_CANDIDATES);
         if !candidates.is_empty() {
             let matches = seq_match_with_candidates(index, &query_run, &candidates);
             seq_all_matches.extend(matches);
@@ -668,8 +671,9 @@ impl LicenseDetectionEngine {
 
     /// Detect licenses and return raw matches (like Python's idx.match()).
     ///
-    /// This method is only used by unit/golden tests for parity checks.
-    #[cfg(test)]
+    /// This is primarily used by golden tests and maintenance tooling that need
+    /// raw match sequences before grouping or post-processing into detections.
+    #[cfg(any(test, feature = "golden-tests"))]
     pub fn detect_matches_with_kind(
         &self,
         text: &str,

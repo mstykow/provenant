@@ -2,7 +2,6 @@
 
 pub mod builder;
 pub mod dictionary;
-pub mod token_sets;
 
 // build_index is used by library tests (see spdx_lid/test.rs, index/builder/tests.rs)
 // even though the binary doesn't use it directly.
@@ -12,9 +11,9 @@ pub use builder::{
     loaded_license_to_license, loaded_rule_to_rule,
 };
 
-use crate::license_detection::TokenSet;
 use crate::license_detection::automaton::Automaton;
 use crate::license_detection::index::dictionary::{TokenDictionary, TokenId};
+use crate::license_detection::{TokenMultiset, TokenSet};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -115,7 +114,7 @@ pub struct LicenseIndex {
     /// Used for ranking candidates by token frequency overlap.
     ///
     /// Corresponds to Python: `self.msets_by_rid = []` (line 213)
-    pub msets_by_rid: HashMap<usize, HashMap<TokenId, usize>>,
+    pub msets_by_rid: HashMap<usize, TokenMultiset>,
 
     /// High-value token sets per rule for early candidate rejection.
     ///

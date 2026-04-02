@@ -2,10 +2,13 @@ use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::ops::Deref;
 
+use crate::license_detection::index::dictionary::{TokenDictionary, TokenId, TokenKind};
+
 /// A set of token IDs stored as a sorted SmallVec.
 ///
 /// Invariant: elements are always sorted and deduplicated.
-/// Construct via `TokenSet::from_u16_iter()` or `.collect()` from an iterator of u16.
+/// Construct via `TokenSet::from_token_ids()`, `TokenSet::from_u16_iter()`,
+/// or `.collect()` from an iterator of u16.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TokenSet(SmallVec<[u16; 64]>);
 
@@ -17,6 +20,11 @@ impl TokenSet {
         inner.sort_unstable();
         inner.dedup();
         Self(inner)
+    }
+
+    /// Create a TokenSet from an iterator of TokenId values.
+    pub fn from_token_ids<I: IntoIterator<Item = TokenId>>(iter: I) -> Self {
+        Self::from_u16_iter(iter.into_iter().map(|tid| tid.raw()))
     }
 
     /// Create an empty TokenSet.
@@ -32,6 +40,19 @@ impl TokenSet {
     /// Is the set empty?
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// Return true if the set contains the given token ID.
+    pub fn contains_token_id(&self, token_id: TokenId) -> bool {
+        self.0.contains(&token_id.raw())
+    }
+
+    /// Get the subset containing only high-value (legalese) tokens.
+    pub fn high_subset(&self, dictionary: &TokenDictionary) -> Self {
+        Self::from_u16_iter(
+            self.iter()
+                .filter(|&tid| dictionary.token_kind(TokenId::new(tid)) == TokenKind::Legalese),
+        )
     }
 
     /// Count intersection with another TokenSet (no allocation).
@@ -91,5 +112,31 @@ impl Default for TokenSet {
 impl std::iter::FromIterator<u16> for TokenSet {
     fn from_iter<T: IntoIterator<Item = u16>>(iter: T) -> Self {
         Self::from_u16_iter(iter)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::license_detection::index::dictionary::tid;
+
+    #[test]
+    fn test_from_token_ids() {
+        let set = TokenSet::from_token_ids([tid(4), tid(2), tid(4), tid(1)]);
+
+        assert_eq!(set.iter().collect::<Vec<_>>(), vec![1, 2, 4]);
+        assert!(set.contains_token_id(tid(1)));
+        assert!(set.contains_token_id(tid(2)));
+        assert!(set.contains_token_id(tid(4)));
+    }
+
+    #[test]
+    fn test_high_subset() {
+        let set = TokenSet::from_u16_iter([1, 2, 5, 10]);
+        let dict = TokenDictionary::new_with_legalese(&[("one", 1), ("two", 2)]);
+
+        let high_set = set.high_subset(&dict);
+
+        assert_eq!(high_set.iter().collect::<Vec<_>>(), vec![1, 2]);
     }
 }

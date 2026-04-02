@@ -2,6 +2,9 @@
 //!
 //! These tests validate that the Rust license detection engine produces
 //! correct results compared to the Python reference implementation.
+//! The expected YAML files in `testdata/license-golden/` are repository-owned so
+//! intentional Rust-specific improvements can be recorded locally when parity is
+//! no longer the best behavior.
 //!
 //! ## Test Data
 //!
@@ -27,7 +30,7 @@
 #[cfg(all(test, feature = "golden-tests"))]
 mod golden_tests {
     use crate::license_detection::LicenseDetectionEngine;
-    use crate::utils::file::{ExtractedTextKind, extract_text_for_detection};
+    use crate::license_detection::golden_utils::detect_license_expressions_for_golden;
     use once_cell::sync::Lazy;
     use serde::Deserialize;
     use std::fs;
@@ -99,82 +102,19 @@ mod golden_tests {
             })
         }
 
-        /// Read file content using production text extraction.
-        /// Returns None for files that should be skipped.
-        fn read_test_file_content(&self) -> Result<Option<(String, ExtractedTextKind)>, String> {
-            let bytes = fs::read(&self.test_file)
-                .map_err(|e| format!("Failed to read {}: {}", self.test_file.display(), e))?;
-            let (text, text_kind) = extract_text_for_detection(&self.test_file, &bytes);
-            let classification = crate::utils::file::classify_file_info(&self.test_file, &bytes);
-
-            if text.is_empty() {
-                return Ok(None);
-            }
-
-            if crate::utils::sourcemap::is_sourcemap(&self.test_file) {
-                if let Some(sourcemap_content) =
-                    crate::utils::sourcemap::extract_sourcemap_content(&text)
-                {
-                    Ok(Some((sourcemap_content, text_kind)))
-                } else {
-                    Ok(Some((text, text_kind)))
-                }
-            } else if crate::utils::text::should_remove_verbatim_escape_sequences(
-                &self.test_file,
-                classification.is_source,
-            ) {
-                Ok(Some((
-                    crate::utils::text::remove_verbatim_escape_sequences(&text),
-                    text_kind,
-                )))
-            } else {
-                Ok(Some((text, text_kind)))
-            }
-        }
-
         /// Run this test against the detection engine
         fn run(
             &self,
             engine: &LicenseDetectionEngine,
             unknown_licenses: bool,
         ) -> Result<(), String> {
-            let (text, text_kind) = match self.read_test_file_content()? {
-                Some(t) => t,
-                None => {
-                    let expected: Vec<&str> = self
-                        .yaml
-                        .license_expressions
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect();
+            let actual =
+                detect_license_expressions_for_golden(engine, &self.test_file, unknown_licenses)
+                    .map_err(|e| {
+                        format!("Detection failed for {}: {e:?}", self.test_file.display())
+                    })?;
 
-                    if !expected.is_empty() {
-                        return Err(format!(
-                            "Binary file {} has unexpected non-empty license_expressions: {:?}",
-                            self.name, expected
-                        ));
-                    }
-                    return Ok(());
-                }
-            };
-
-            // Use detect_matches() for raw matches like Python's idx.match()
-            // This avoids the grouping step that causes false test failures
-
-            let matches = engine
-                .detect_matches_with_kind(
-                    &text,
-                    unknown_licenses,
-                    matches!(text_kind, ExtractedTextKind::BinaryStrings),
-                )
-                .map_err(|e| {
-                    format!("Detection failed for {}: {:?}", self.test_file.display(), e)
-                })?;
-
-            let actual: Vec<&str> = matches
-                .iter()
-                .map(|m| m.license_expression.as_str())
-                .collect();
+            let actual: Vec<&str> = actual.iter().map(|s| s.as_str()).collect();
 
             let expected: Vec<&str> = self
                 .yaml

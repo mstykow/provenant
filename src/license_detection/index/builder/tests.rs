@@ -900,10 +900,9 @@ SOFTWARE."#;
 
     #[test]
     fn test_sequence_matching_bsl_file() {
-        use crate::license_detection::LicenseDetectionEngine;
-        use crate::license_detection::index::token_sets::build_set_and_mset;
         use crate::license_detection::query::Query;
         use crate::license_detection::seq_match::HIGH_RESEMBLANCE_THRESHOLD;
+        use crate::license_detection::{LicenseDetectionEngine, TokenSet};
         use std::path::Path;
 
         let test_file = Path::new(
@@ -925,7 +924,7 @@ SOFTWARE."#;
         eprintln!("Query token count: {}", query.tokens.len());
 
         // Build query set and mset
-        let (query_set, _query_mset) = build_set_and_mset(&query.tokens);
+        let query_set = TokenSet::from_token_ids(query.tokens.iter().copied());
         eprintln!("Query unique tokens: {}", query_set.len());
 
         // Find the mit_or_boost rule and compare
@@ -948,17 +947,13 @@ SOFTWARE."#;
                 indexed_set.len()
             );
 
-            // Compute intersection count between query HashSet and indexed TokenSet
-            let intersection_count = query_set
-                .iter()
-                .filter(|&&tid| indexed_set.contains(&tid.raw()))
-                .count();
+            let intersection_count = query_set.intersection_count(indexed_set);
             eprintln!("Intersection unique tokens: {}", intersection_count);
 
             // Compute union count
             let indexed_only_count = indexed_set
                 .iter()
-                .filter(|&t| !query_set.contains(&TokenId::new(t)))
+                .filter(|&t| !query_set.contains(&t))
                 .count();
             let union_len = query_set.len() + indexed_only_count;
             let resemblance = intersection_count as f32 / union_len as f32;
@@ -975,15 +970,15 @@ SOFTWARE."#;
             eprintln!("https token id: {:?}", https_tid);
             eprintln!(
                 "Query has http: {:?}",
-                http_tid.map(|t| query_set.contains(&t))
+                http_tid.map(|t| query_set.contains_token_id(t))
             );
             eprintln!(
                 "Indexed set has http: {:?}",
-                http_tid.map(|t| indexed_set.contains(&t.raw()))
+                http_tid.map(|t| indexed_set.contains_token_id(t))
             );
             eprintln!(
                 "Indexed set has https: {:?}",
-                https_tid.map(|t| indexed_set.contains(&t.raw()))
+                https_tid.map(|t| indexed_set.contains_token_id(t))
             );
 
             // Check if rule is approx_matchable
@@ -1013,7 +1008,7 @@ SOFTWARE."#;
                 .iter()
                 .filter(|&t| {
                     index.dictionary.token_kind(TokenId::new(t)) == TokenKind::Legalese
-                        && query_set.contains(&TokenId::new(t))
+                        && query_set.contains_token_id(TokenId::new(t))
                 })
                 .count();
             eprintln!(
