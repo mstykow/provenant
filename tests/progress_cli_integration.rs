@@ -1,6 +1,7 @@
 use std::fs;
 use std::process::Command;
 
+use serde_json::Value;
 use tempfile::TempDir;
 
 fn provenant_command() -> Command {
@@ -13,7 +14,8 @@ fn create_scan_fixture() -> (TempDir, String) {
     let temp = TempDir::new().expect("failed to create temp dir");
     let scan_dir = temp.path().join("scan");
     fs::create_dir_all(&scan_dir).expect("failed to create scan dir");
-    fs::write(scan_dir.join("a.txt"), "hello world\n").expect("failed to write fixture file");
+    fs::write(scan_dir.join("a.txt"), "hello cache@example.com\n")
+        .expect("failed to write fixture file");
     (temp, scan_dir.to_string_lossy().to_string())
 }
 
@@ -169,4 +171,60 @@ fn verbose_mode_includes_structured_parser_failure_details() {
         stderr.contains("Failed to read or parse package.json"),
         "verbose mode should include structured parser failure details"
     );
+}
+
+#[test]
+fn incremental_mode_reuses_unchanged_files_and_keeps_them_in_output() {
+    let (temp, scan_dir) = create_scan_fixture();
+    let cache_dir = temp.path().join("shared-cache");
+    let first_output = temp.path().join("first.json");
+    let second_output = temp.path().join("second.json");
+
+    let first = provenant_command()
+        .args([
+            "--json-pp",
+            first_output.to_str().expect("utf8 output path"),
+            "--cache-dir",
+            cache_dir.to_str().expect("utf8 cache path"),
+            "--incremental",
+            "--email",
+            &scan_dir,
+        ])
+        .output()
+        .expect("failed to run first incremental scan");
+    assert!(first.status.success());
+
+    let second = provenant_command()
+        .args([
+            "--json-pp",
+            second_output.to_str().expect("utf8 output path"),
+            "--cache-dir",
+            cache_dir.to_str().expect("utf8 cache path"),
+            "--incremental",
+            "--email",
+            &scan_dir,
+        ])
+        .output()
+        .expect("failed to run second incremental scan");
+    assert!(second.status.success());
+
+    let stderr = String::from_utf8_lossy(&second.stderr);
+    assert!(stderr.contains("Incremental:"), "stderr was: {stderr}");
+    assert!(
+        stderr.contains("1 unchanged file(s) reused"),
+        "stderr was: {stderr}"
+    );
+
+    let output_json: Value = serde_json::from_slice(
+        &fs::read(&second_output).expect("failed to read second incremental output"),
+    )
+    .expect("failed to parse second incremental output");
+    let files = output_json["files"]
+        .as_array()
+        .expect("files should be an array");
+    assert!(files.iter().any(|file| {
+        file["path"]
+            .as_str()
+            .is_some_and(|path| path.ends_with("a.txt"))
+    }));
 }

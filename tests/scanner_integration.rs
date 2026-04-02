@@ -5,7 +5,6 @@ use provenant::parsers::list_parser_types;
 use provenant::progress::{ProgressMode, ScanProgress};
 use provenant::scanner::LicenseScanOptions;
 use provenant::utils::file::{ExtractedTextKind, extract_text_for_detection};
-use provenant::utils::hash::calculate_sha256;
 use provenant::{FileType, TextDetectionOptions, collect_paths, process_collected};
 use std::fs;
 use std::path::Path;
@@ -572,7 +571,6 @@ fn test_scanner_detects_emails_and_urls_when_enabled() {
         max_emails: 50,
         max_urls: 50,
         timeout_seconds: 120.0,
-        scan_cache_dir: None,
     };
 
     let result = scan(test_path, 10, &patterns, engine, false, Some(&options));
@@ -619,7 +617,6 @@ fn test_scanner_detects_copyrights_in_latin1_text() {
         max_emails: 50,
         max_urls: 50,
         timeout_seconds: 120.0,
-        scan_cache_dir: None,
     };
 
     let result = scan(test_path, 10, &patterns, engine, false, Some(&options));
@@ -669,7 +666,6 @@ fn test_scanner_detects_copyrights_in_pdf_text() {
         max_emails: 50,
         max_urls: 50,
         timeout_seconds: 120.0,
-        scan_cache_dir: None,
     };
 
     let result = scan(test_path, 10, &patterns, engine, false, Some(&options));
@@ -732,7 +728,6 @@ fn test_scanner_detects_emails_and_urls_in_pdf_text() {
         max_emails: 50,
         max_urls: 50,
         timeout_seconds: 120.0,
-        scan_cache_dir: None,
     };
 
     let result = scan(test_path, 10, &patterns, engine, false, Some(&options));
@@ -797,7 +792,6 @@ fn test_scanner_detects_copyrights_in_supported_image_exif_containers() {
         max_emails: 50,
         max_urls: 50,
         timeout_seconds: 120.0,
-        scan_cache_dir: None,
     };
 
     let result = scan(test_path, 10, &patterns, engine, false, Some(&options));
@@ -876,7 +870,6 @@ fn test_scanner_detects_emails_and_urls_in_xmp_metadata() {
         max_emails: 50,
         max_urls: 50,
         timeout_seconds: 120.0,
-        scan_cache_dir: None,
     };
 
     let result = scan(test_path, 10, &patterns, engine, false, Some(&options));
@@ -957,7 +950,6 @@ fn test_scanner_detects_urls_in_additional_xmp_fields() {
         max_emails: 50,
         max_urls: 50,
         timeout_seconds: 120.0,
-        scan_cache_dir: None,
     };
 
     let result = scan(test_path, 10, &patterns, engine, false, Some(&options));
@@ -1023,7 +1015,6 @@ fn test_scanner_detects_emails_in_exif_user_comment() {
         max_emails: 50,
         max_urls: 50,
         timeout_seconds: 120.0,
-        scan_cache_dir: None,
     };
 
     let result = scan(test_path, 10, &patterns, engine, false, Some(&options));
@@ -1079,7 +1070,6 @@ fn test_scanner_ignores_non_clue_image_metadata() {
         max_emails: 50,
         max_urls: 50,
         timeout_seconds: 120.0,
-        scan_cache_dir: None,
     };
 
     let result = scan(test_path, 10, &patterns, engine, false, Some(&options));
@@ -1127,7 +1117,6 @@ fn test_scanner_ignores_xml_namespace_garbage_in_copyright_detection() {
         max_emails: 50,
         max_urls: 50,
         timeout_seconds: 120.0,
-        scan_cache_dir: None,
     };
 
     let result = scan(test_path, 10, &patterns, engine, false, Some(&options));
@@ -1187,7 +1176,6 @@ fn test_scanner_detects_copyrights_in_windows_dll_strings() {
         max_emails: 50,
         max_urls: 50,
         timeout_seconds: 120.0,
-        scan_cache_dir: None,
     };
 
     let result = scan(test_path, 10, &patterns, engine, false, Some(&options));
@@ -1237,7 +1225,6 @@ fn test_scanner_avoids_false_positive_copyrights_in_executable_strings() {
         max_emails: 50,
         max_urls: 50,
         timeout_seconds: 120.0,
-        scan_cache_dir: None,
     };
 
     let result = scan(test_path, 10, &patterns, engine, false, Some(&options));
@@ -1294,7 +1281,6 @@ fn test_scanner_respects_email_url_thresholds() {
         max_emails: 2,
         max_urls: 2,
         timeout_seconds: 120.0,
-        scan_cache_dir: None,
     };
 
     let result = scan(test_path, 10, &patterns, engine, false, Some(&options));
@@ -1312,64 +1298,4 @@ fn test_scanner_respects_email_url_thresholds() {
 
     assert_eq!(file.emails.len(), 2);
     assert_eq!(file.urls.len(), 2);
-}
-
-#[test]
-fn test_scanner_persists_scan_result_cache_entries() {
-    use tempfile::TempDir;
-
-    let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let test_path = temp_dir.path();
-    let cache_dir = test_path.join("scan-cache");
-    let content_path = test_path.join("contacts.txt");
-    fs::write(
-        &content_path,
-        "copyright 2024 Acme Corp\nmail us at support@many.org\nvisit www.acme.dev/docs\n",
-    )
-    .expect("Failed to write test file");
-
-    let patterns: Vec<Pattern> = vec![];
-    let options = TextDetectionOptions {
-        collect_info: false,
-        detect_packages: false,
-        detect_application_packages: false,
-        detect_system_packages: false,
-        detect_packages_in_compiled: false,
-        detect_copyrights: true,
-        detect_generated: false,
-        detect_emails: true,
-        detect_urls: true,
-        max_emails: 50,
-        max_urls: 50,
-        timeout_seconds: 120.0,
-        scan_cache_dir: Some(cache_dir.clone()),
-    };
-
-    let first = scan(test_path, 10, &patterns, None, false, Some(&options));
-
-    let first_file = first
-        .files
-        .iter()
-        .find(|f| f.file_type == FileType::File && f.path.ends_with("contacts.txt"))
-        .expect("Should find contacts file");
-    assert_eq!(first_file.emails.len(), 1);
-    assert_eq!(first_file.urls.len(), 1);
-
-    let content = fs::read(&content_path).expect("Failed to read contacts file");
-    let sha256 = calculate_sha256(&content);
-    let cache_path = cache_dir
-        .join(&sha256[0..2])
-        .join(&sha256[2..4])
-        .join(format!("{sha256}.msgpack.zst"));
-    assert!(cache_path.exists(), "Expected scan cache entry to exist");
-
-    let second = scan(test_path, 10, &patterns, None, false, Some(&options));
-    let second_file = second
-        .files
-        .iter()
-        .find(|f| f.file_type == FileType::File && f.path.ends_with("contacts.txt"))
-        .expect("Should find contacts file on second scan");
-
-    assert_eq!(second_file.emails.len(), 1);
-    assert_eq!(second_file.urls.len(), 1);
 }

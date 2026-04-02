@@ -44,7 +44,6 @@ fn scanner_matches_structured_credits_fixture() {
         max_emails: 50,
         max_urls: 50,
         timeout_seconds: 120.0,
-        scan_cache_dir: None,
     };
 
     let collected = collect_paths(&fixture_dir, 0, &patterns);
