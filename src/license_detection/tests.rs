@@ -184,8 +184,9 @@ fn test_engine_detect_spdx_identifier() {
 #[test]
 fn test_engine_detects_terser_license_as_bsd_simplified_only() {
     let engine = get_engine();
-    let fixture =
-        PathBuf::from("testdata/license-golden/datadriven/external/terser-license-bsd-2.txt");
+    let fixture = std::path::PathBuf::from(
+        "testdata/license-golden/datadriven/external/terser-license-bsd-2.txt",
+    );
     let text = std::fs::read_to_string(&fixture).expect("terser fixture should be readable");
 
     let expressions: Vec<String> = engine
