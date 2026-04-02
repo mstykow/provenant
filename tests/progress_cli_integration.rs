@@ -69,6 +69,36 @@ fn default_mode_emits_summary_to_stderr() {
 }
 
 #[test]
+fn default_mode_emits_hierarchical_timing_summary() {
+    let (temp, scan_dir) = create_scan_fixture();
+    let output_file = temp.path().join("out.json");
+
+    let output = provenant_command()
+        .args([
+            "--json-pp",
+            output_file.to_str().expect("utf8 output path"),
+            "--only-findings",
+            "--package",
+            &scan_dir,
+        ])
+        .output()
+        .expect("failed to run provenant");
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Timings:"));
+    assert!(stderr.contains("  setup:"));
+    assert!(stderr.contains("  inventory:"));
+    assert!(stderr.contains("  scan:"));
+    assert!(stderr.contains("  post-scan:"));
+    assert!(stderr.contains("  finalize:"));
+    assert!(stderr.contains("  output:"));
+    assert!(stderr.contains("  total:"));
+    assert!(stderr.contains("    scan:packages:"));
+    assert!(stderr.contains("    output-filter:only-findings:"));
+}
+
+#[test]
 fn verbose_mode_emits_file_by_file_paths() {
     let (temp, scan_dir) = create_scan_fixture();
     let output_file = temp.path().join("out.json");

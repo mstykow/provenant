@@ -55,6 +55,7 @@ pub fn process_collected(
             let file_entry = process_file(
                 path,
                 metadata,
+                progress.as_ref(),
                 license_engine.clone(),
                 license_options,
                 text_options,
@@ -118,6 +119,7 @@ pub fn process_collected_with_memory_limit(
                 let file_entry = process_file(
                     path,
                     metadata,
+                    progress.as_ref(),
                     license_engine.clone(),
                     license_options,
                     text_options,
@@ -243,6 +245,7 @@ impl FileInfoSpillStore {
 fn process_file(
     path: &Path,
     metadata: &fs::Metadata,
+    progress: &ScanProgress,
     license_engine: Option<Arc<LicenseDetectionEngine>>,
     license_options: LicenseScanOptions,
     text_options: &TextDetectionOptions,
@@ -260,6 +263,7 @@ fn process_file(
         &mut file_info_builder,
         &mut scan_errors,
         path,
+        progress,
         license_engine,
         license_options,
         text_options,
@@ -346,6 +350,7 @@ fn extract_information_from_content(
     file_info_builder: &mut FileInfoBuilder,
     scan_errors: &mut Vec<String>,
     path: &Path,
+    progress: &ScanProgress,
     license_engine: Option<Arc<LicenseDetectionEngine>>,
     license_options: LicenseScanOptions,
     text_options: &TextDetectionOptions,
@@ -420,6 +425,7 @@ fn extract_information_from_content(
     // Package parsing and text-based detection (copyright, license) are independent.
     // Python ScanCode runs all enabled plugins on every file, so we do the same.
     if text_options.detect_packages {
+        let started = Instant::now();
         let parse_result = try_parse_file(path).or_else(|| {
             text_options
                 .detect_packages_in_compiled
@@ -452,6 +458,7 @@ fn extract_information_from_content(
             file_info_builder.package_data(packages);
             scan_errors.extend(parse_result.scan_errors);
         }
+        progress.record_detail_timing("scan:packages", started.elapsed().as_secs_f64());
     }
 
     if is_timeout_exceeded(started, text_options.timeout_seconds) {
@@ -507,15 +514,29 @@ fn extract_information_from_content(
         text_content
     };
 
-    extract_license_information(
-        file_info_builder,
-        scan_errors,
-        path,
-        text_content_for_license_detection,
-        license_engine,
-        license_options,
-        from_binary_strings,
-    )?;
+    if license_enabled {
+        let started = Instant::now();
+        extract_license_information(
+            file_info_builder,
+            scan_errors,
+            path,
+            text_content_for_license_detection,
+            license_engine,
+            license_options,
+            from_binary_strings,
+        )?;
+        progress.record_detail_timing("scan:licenses", started.elapsed().as_secs_f64());
+    } else {
+        extract_license_information(
+            file_info_builder,
+            scan_errors,
+            path,
+            text_content_for_license_detection,
+            license_engine,
+            license_options,
+            from_binary_strings,
+        )?;
+    }
 
     Ok((is_generated, sha256, classification.is_source))
 }
