@@ -3,7 +3,6 @@ use std::fs;
 use std::path::Path;
 use yaml_serde::Value;
 
-use crate::cache::CacheKind;
 use crate::license_detection::DEFAULT_LICENSEDB_URL_TEMPLATE;
 use crate::output::OutputFormat;
 
@@ -185,17 +184,11 @@ pub struct Cli {
     #[arg(long = "cache-dir", value_name = "PATH")]
     pub cache_dir: Option<String>,
 
-    #[arg(
-        long = "cache",
-        value_name = "KIND",
-        value_enum,
-        value_delimiter = ',',
-        help = "Enable the persistent scan-results cache"
-    )]
-    pub cache: Vec<CacheKind>,
-
     #[arg(long = "cache-clear")]
     pub cache_clear: bool,
+
+    #[arg(long = "incremental")]
+    pub incremental: bool,
 
     /// Maximum number of file and directory scan details kept in memory.
     /// Use 0 for unlimited memory or -1 for disk-only spill during the scan.
@@ -1159,8 +1152,6 @@ mod tests {
             "provenant",
             "--json-pp",
             "scan.json",
-            "--cache",
-            "scan-results",
             "--cache-dir",
             "/tmp/sc-cache",
             "--cache-clear",
@@ -1171,9 +1162,23 @@ mod tests {
         .expect("cli parse should accept cache flags");
 
         assert_eq!(parsed.cache_dir.as_deref(), Some("/tmp/sc-cache"));
-        assert_eq!(parsed.cache, vec![CacheKind::ScanResults]);
         assert!(parsed.cache_clear);
+        assert!(!parsed.incremental);
         assert_eq!(parsed.max_in_memory, 5000);
+    }
+
+    #[test]
+    fn test_parses_incremental_flag() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--incremental",
+            "samples",
+        ])
+        .expect("cli parse should accept incremental flag");
+
+        assert!(parsed.incremental);
     }
 
     #[test]
@@ -1218,21 +1223,6 @@ mod tests {
         ]);
 
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_parses_cache_alias_flag() {
-        let parsed = Cli::try_parse_from([
-            "provenant",
-            "--json-pp",
-            "scan.json",
-            "--cache",
-            "scan",
-            "samples",
-        ])
-        .expect("cli parse should accept cache=scan alias");
-
-        assert_eq!(parsed.cache, vec![CacheKind::ScanResults]);
     }
 
     #[test]
