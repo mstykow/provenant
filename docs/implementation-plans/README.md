@@ -93,6 +93,11 @@ These documents are retained as explicit product-scope decisions. They describe 
 
 These remain intentionally high-level until implementation work begins.
 
+## Cross-Cutting Audits
+
+- **[UPSTREAM_BUG_AUDIT.md](UPSTREAM_BUG_AUDIT.md)** - Provenant-side audit matrix for notable unresolved upstream ScanCode `bug` issues
+  - Status: 🟡 Active reference — tracks which upstream bugs still look relevant, already covered locally, or still need targeted investigation on the Rust side
+
 ## Document Lifecycle
 
 1. **Placeholder** - Brief description of component, scope, and dependencies
