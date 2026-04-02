@@ -26,8 +26,8 @@ use super::lexer::get_tokens;
 use super::line_tracking::{LineNumberIndex, PreparedLineCache};
 use super::parser::{parse, parse_with_deadline};
 use super::refiner::{
-    is_junk_copyright, is_junk_holder, refine_author, refine_copyright, refine_holder,
-    refine_holder_in_copyright_context,
+    is_junk_copyright, is_junk_holder, is_path_like_code_fragment, refine_author, refine_copyright,
+    refine_holder, refine_holder_in_copyright_context,
 };
 use super::types::{
     AuthorDetection, CopyrightDetection, HolderDetection, ParseNode, PosTag, Token, TreeLabel,
@@ -310,6 +310,7 @@ pub fn detect_copyrights_from_text_with_deadline(
     );
 
     refine_final_copyrights(&mut copyrights);
+    drop_path_fragment_holders_from_bare_c_code_lines(&raw_lines, &copyrights, &mut holders);
     drop_scan_only_holders_from_copyright_scan_lines(&raw_lines, &copyrights, &mut holders);
 
     for group in &groups {
@@ -13706,6 +13707,54 @@ fn drop_scan_only_holders_from_copyright_scan_lines(
         raw_lines
             .get(holder.start_line - 1)
             .is_none_or(|line| !COPYRIGHT_SCAN_RE.is_match(line))
+    });
+}
+
+fn drop_path_fragment_holders_from_bare_c_code_lines(
+    raw_lines: &[&str],
+    copyrights: &[CopyrightDetection],
+    holders: &mut Vec<HolderDetection>,
+) {
+    if holders.is_empty() || raw_lines.is_empty() {
+        return;
+    }
+
+    static BARE_C_PATH_FRAGMENT_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?ix)
+            ^\s*\(c\)\s*
+            [A-Za-z_$][A-Za-z0-9_$]*
+            (?:
+                /[A-Za-z_$][A-Za-z0-9_$]*
+              | \.[A-Za-z_$][A-Za-z0-9_$]*
+              | \$[A-Za-z_$][A-Za-z0-9_$]*
+            )+
+            \s*$
+            ",
+        )
+        .unwrap()
+    });
+
+    let copyright_spans: HashSet<(usize, usize)> = copyrights
+        .iter()
+        .map(|c| (c.start_line, c.end_line))
+        .collect();
+
+    holders.retain(|holder| {
+        let span = (holder.start_line, holder.end_line);
+        if copyright_spans.contains(&span) {
+            return true;
+        }
+        if holder.start_line == 0 || holder.start_line != holder.end_line {
+            return true;
+        }
+        if !is_path_like_code_fragment(&holder.holder) {
+            return true;
+        }
+
+        raw_lines
+            .get(holder.start_line - 1)
+            .is_none_or(|line| !BARE_C_PATH_FRAGMENT_RE.is_match(line))
     });
 }
 

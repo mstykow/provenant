@@ -1995,10 +1995,10 @@ fn is_junk_c_sign_path_fragment(s: &str) -> bool {
 
 /// Return true if `s` matches any known junk holder pattern.
 pub(crate) fn is_junk_holder(s: &str) -> bool {
-    HOLDERS_JUNK_PATTERNS.iter().any(|re| re.is_match(s)) || is_path_like_code_fragment(s)
+    HOLDERS_JUNK_PATTERNS.iter().any(|re| re.is_match(s))
 }
 
-fn is_path_like_code_fragment(s: &str) -> bool {
+pub(crate) fn is_path_like_code_fragment(s: &str) -> bool {
     static PATH_LIKE_CODE_FRAGMENT_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?x)
