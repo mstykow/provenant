@@ -209,7 +209,9 @@ mod tests {
 #[cfg(test)]
 mod integration_tests {
     use super::super::super::index::dictionary::{TokenDictionary, TokenId};
-    use super::super::super::index::token_sets::*;
+    use super::super::super::index::token_sets::{
+        build_set_and_mset, high_tids_set_subset, tids_set_counter,
+    };
     use super::super::super::models::Rule;
     use super::*;
     use std::collections::HashMap;
@@ -273,12 +275,12 @@ mod integration_tests {
         );
         let (tids_set, tids_mset) = build_set_and_mset(&tokens);
         let tids_set_high = high_tids_set_subset(&tids_set, &dictionary);
-        let tids_mset_high = high_multiset_subset(&tids_mset, &dictionary);
+        let tids_mset_high = tids_mset.high_subset(&dictionary);
 
         // Compute token counts
         rule.length_unique = tids_set_counter(&tids_set);
         rule.high_length_unique = tids_set_counter(&tids_set_high);
-        rule.high_length = multiset_counter(&tids_mset_high);
+        rule.high_length = tids_mset_high.total_count();
 
         // Compute thresholds
         let (updated_coverage, min_len, min_high_len) =

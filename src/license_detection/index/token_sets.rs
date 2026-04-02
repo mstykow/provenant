@@ -1,7 +1,8 @@
 //! Token set and multiset utilities for license detection.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
+use crate::license_detection::TokenMultiset;
 use crate::license_detection::index::dictionary::{TokenDictionary, TokenId, TokenKind};
 
 /// Build a token ID set and multiset from a sequence of token IDs.
@@ -17,14 +18,9 @@ use crate::license_detection::index::dictionary::{TokenDictionary, TokenId, Toke
 ///
 /// # Returns
 ///
-/// A tuple of (set of unique token IDs, multiset as HashMap of token ID -> count)
-pub fn build_set_and_mset(token_ids: &[TokenId]) -> (HashSet<TokenId>, HashMap<TokenId, usize>) {
-    let mut tids_mset = HashMap::new();
-
-    for &tid in token_ids {
-        *tids_mset.entry(tid).or_insert(0) += 1;
-    }
-
+/// A tuple of (set of unique token IDs, multiset of token ID -> count)
+pub fn build_set_and_mset(token_ids: &[TokenId]) -> (HashSet<TokenId>, TokenMultiset) {
+    let tids_mset = TokenMultiset::from_token_ids(token_ids);
     let tids_set: HashSet<TokenId> = tids_mset.keys().copied().collect();
 
     (tids_set, tids_mset)
@@ -43,21 +39,6 @@ pub fn build_set_and_mset(token_ids: &[TokenId]) -> (HashSet<TokenId>, HashMap<T
 /// Number of unique tokens in the set
 pub fn tids_set_counter(tids_set: &HashSet<TokenId>) -> usize {
     tids_set.len()
-}
-
-/// Count total occurrences of tokens in a multiset.
-///
-/// Corresponds to Python: `multiset_counter()` in match_set.py (line 140)
-///
-/// # Arguments
-///
-/// * `mset` - Multiset as HashMap of token ID -> count
-///
-/// # Returns
-///
-/// Sum of all occurrence counts in the multiset
-pub fn multiset_counter(mset: &HashMap<TokenId, usize>) -> usize {
-    mset.values().sum()
 }
 
 /// Get subset of a token set containing only high-value (legalese) tokens.
@@ -82,28 +63,6 @@ pub fn high_tids_set_subset(
         .iter()
         .filter(|&&tid| dictionary.token_kind(tid) == TokenKind::Legalese)
         .copied()
-        .collect()
-}
-
-/// Get subset of a multiset containing only high-value (legalese) tokens.
-///
-/// Corresponds to Python: `high_tids_multiset_subset()` in match_set.py (line 155)
-///
-/// # Arguments
-///
-/// * `mset` - Multiset as HashMap of token ID -> count
-/// * `len_legalese` - Number of legalese tokens (IDs < this are high-value)
-///
-/// # Returns
-///
-/// Subset of mset containing only token IDs < len_legalese
-pub fn high_multiset_subset(
-    mset: &HashMap<TokenId, usize>,
-    dictionary: &TokenDictionary,
-) -> HashMap<TokenId, usize> {
-    mset.iter()
-        .filter(|(tid, _)| dictionary.token_kind(**tid) == TokenKind::Legalese)
-        .map(|(&tid, &count)| (tid, count))
         .collect()
 }
 
@@ -148,15 +107,6 @@ mod tests {
     }
 
     #[test]
-    fn test_multiset_counter() {
-        let mut mset = HashMap::new();
-        mset.insert(tid(1), 3);
-        mset.insert(tid(2), 2);
-        mset.insert(tid(3), 1);
-        assert_eq!(multiset_counter(&mset), 6);
-    }
-
-    #[test]
     fn test_high_tids_set_subset() {
         let mut set = HashSet::new();
         set.insert(tid(1));
@@ -172,23 +122,5 @@ mod tests {
         assert!(high_set.contains(&tid(2)));
         assert!(!high_set.contains(&tid(5)));
         assert!(!high_set.contains(&tid(10)));
-    }
-
-    #[test]
-    fn test_high_multiset_subset() {
-        let mut mset = HashMap::new();
-        mset.insert(tid(1), 3);
-        mset.insert(tid(2), 2);
-        mset.insert(tid(5), 1);
-        mset.insert(tid(10), 1);
-
-        let dict = TokenDictionary::new_with_legalese(&[("one", 1), ("two", 2)]);
-
-        let high_mset = high_multiset_subset(&mset, &dict);
-        assert_eq!(high_mset.len(), 2);
-        assert_eq!(high_mset.get(&tid(1)), Some(&3));
-        assert_eq!(high_mset.get(&tid(2)), Some(&2));
-        assert!(!high_mset.contains_key(&tid(5)));
-        assert!(!high_mset.contains_key(&tid(10)));
     }
 }

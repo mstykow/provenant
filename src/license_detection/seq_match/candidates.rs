@@ -1,8 +1,9 @@
 //! Candidate selection using set and multiset similarity.
 
-use crate::license_detection::index::dictionary::TokenId;
-use crate::license_detection::index::token_sets::{build_set_and_mset, high_multiset_subset};
+use crate::license_detection::TokenMultiset;
 use crate::license_detection::index::LicenseIndex;
+use crate::license_detection::index::dictionary::TokenId;
+use crate::license_detection::index::token_sets::build_set_and_mset;
 use crate::license_detection::models::Rule;
 use crate::license_detection::query::QueryRun;
 use crate::license_detection::token_set::TokenSet;
@@ -85,9 +86,9 @@ pub struct Candidate<'a> {
 #[derive(Debug, Clone)]
 struct QueryData {
     query_set: TokenSet,
-    query_mset: HashMap<TokenId, usize>,
+    query_mset: TokenMultiset,
     query_high_set: TokenSet,
-    query_high_mset: HashMap<TokenId, usize>,
+    query_high_mset: TokenMultiset,
     query_set_len: usize,
     query_mset_len: usize,
 }
@@ -122,9 +123,9 @@ impl QueryData {
             return None;
         }
 
-        let query_high_mset = high_multiset_subset(&query_mset, &index.dictionary);
+        let query_high_mset = query_mset.high_subset(&index.dictionary);
         let query_set_len = query_set.len();
-        let query_mset_len = query_mset.values().sum();
+        let query_mset_len = query_mset.total_count();
 
         Some(Self {
             query_set,
@@ -361,25 +362,24 @@ fn collect_multiset_phase_candidates<'a>(
             continue;
         };
 
-        let rule_high_mset = high_multiset_subset(rule_mset, &index.dictionary);
-        let high_intersection_mset =
-            multisets_intersector(&query_data.query_high_mset, &rule_high_mset);
+        let rule_high_mset = rule_mset.high_subset(&index.dictionary);
+        let high_intersection_mset = query_data.query_high_mset.intersection(&rule_high_mset);
         if high_intersection_mset.is_empty() {
             continue;
         }
 
-        let high_matched_length: usize = high_intersection_mset.values().sum();
+        let high_matched_length = high_intersection_mset.total_count();
         if high_matched_length < candidate.rule.min_high_matched_length {
             continue;
         }
 
-        let full_intersection_mset = multisets_intersector(&query_data.query_mset, rule_mset);
-        let matched_length: usize = full_intersection_mset.values().sum();
+        let full_intersection_mset = query_data.query_mset.intersection(rule_mset);
+        let matched_length = full_intersection_mset.total_count();
         if matched_length < candidate.rule.min_matched_length {
             continue;
         }
 
-        let iset_len: usize = rule_mset.values().sum();
+        let iset_len = rule_mset.total_count();
 
         let Some(candidate) = build_ranked_candidate(
             candidate.rid,
@@ -507,27 +507,6 @@ pub fn compute_candidates_with_msets<'a>(
     sortable_candidates.truncate(top_n);
 
     sortable_candidates
-}
-
-/// Compute intersection of two multisets.
-///
-/// For each token ID present in both multisets, the intersection value is the
-/// smaller of the occurrence counts.
-///
-/// Corresponds to Python: `multisets_intersector()` in match_set.py (line 119)
-pub fn multisets_intersector(
-    qmset: &HashMap<TokenId, usize>,
-    imset: &HashMap<TokenId, usize>,
-) -> HashMap<TokenId, usize> {
-    let (set1, set2) = if qmset.len() < imset.len() {
-        (qmset, imset)
-    } else {
-        (imset, qmset)
-    };
-
-    set1.iter()
-        .filter_map(|(&tid, &count1)| set2.get(&tid).map(|&count2| (tid, count1.min(count2))))
-        .collect()
 }
 
 #[cfg(test)]
