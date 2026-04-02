@@ -17,11 +17,6 @@ implementation-plans/
 
 ## Active Plans
 
-### Infrastructure (`infrastructure/`)
-
-- **[CACHING_PLAN.md](infrastructure/CACHING_PLAN.md)** - Scan result caching and incremental scanning
-  - Status: 🟡 Active — cache CLI/runtime integration is tracked in [CACHING_PLAN.md](infrastructure/CACHING_PLAN.md)
-
 ## Historical Rollout Records and Reference Documents
 
 These topics are implemented. Some remain useful as completed historical records, while others point to the evergreen maintainer document that now owns the live contract.
@@ -60,6 +55,9 @@ These topics are implemented. Some remain useful as completed historical records
   - Status: 🟢 Complete — shaping-specific CLI behavior now lives in `src/scan_result_shaping/`, scanner path selection, and the main orchestration pipeline; remaining non-shaping parity follow-up is tracked in adjacent plans
 
 ### Infrastructure (`infrastructure/`)
+
+- **[CACHING_PLAN.md](infrastructure/CACHING_PLAN.md)** - Incremental scanning
+  - Status: 🟢 Complete — incremental scanning, XDG cache defaults, and cache lock coordination are implemented; the plan remains as the rollout record
 
 - **[CLI_PLAN.md](infrastructure/CLI_PLAN.md)** - Completed command-line interface parity rollout record
   - Status: 🟢 Complete — the current ScanCode-facing CLI surface and explicit `Won't do` scope decisions are implemented and recorded in [CLI_PLAN.md](infrastructure/CLI_PLAN.md); any post-rollout parity follow-up remains tracked there as maintenance

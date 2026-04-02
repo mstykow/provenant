@@ -144,7 +144,7 @@ Most areas with improvements have a dedicated document. Cross-cutting security h
 Related broader architecture/security docs:
 
 - **Cross-cutting parser security hardening** - File size limits, iteration limits, and archive-safety policy are documented in [ADR 0004: Security-First Parsing](../adr/0004-security-first-parsing.md).
-- **Persistent scan-result caching** - The implemented read-before-scan / write-after-scan cache path is documented in [ARCHITECTURE.md](../ARCHITECTURE.md).
+- **Incremental rescans** - The implemented unchanged-file reuse workflow is documented in [ARCHITECTURE.md](../ARCHITECTURE.md).
 - **Scan-result shaping parity** - The shaping pipeline and landed behavior are documented in [ARCHITECTURE.md#post-processing-pipeline](../ARCHITECTURE.md#post-processing-pipeline).
 
 ## Contributing Improvements

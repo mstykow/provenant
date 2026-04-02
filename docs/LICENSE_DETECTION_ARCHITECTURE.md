@@ -25,7 +25,7 @@ The license detection system is a multi-phase, multi-strategy detection engine t
 
 > This document describes the current public license-detection surface and the repository's current engine/module layout.
 
-**Custom rules**: Use `--license-rules-path /path/to/rules` to load from a custom directory containing `.LICENSE` and `.RULE` files.
+**Custom rules**: Use `--license-rules-path /path/to/rules` to load from a custom directory containing `.LICENSE` and `.RULE` files. This is an advanced maintainer/expert override rather than the recommended default workflow; normal scans should keep using the embedded artifact. Custom-rule scans still use the normal incremental manifest workflow, and Provenant does not plan a separate persistent startup snapshot cache for this override.
 
 ### Current Public Output Surface
 
