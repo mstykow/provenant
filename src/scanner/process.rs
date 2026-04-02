@@ -12,7 +12,6 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::cache::{CachedScanFindings, read_cached_findings, write_cached_findings};
 use crate::copyright::{
     self, AuthorDetection, CopyrightDetection, CopyrightDetectionOptions, HolderDetection,
 };
@@ -258,7 +257,6 @@ fn process_file(
 
     let mut generated_flag = None;
     let mut is_source_file = false;
-    let mut cache_key_sha256 = None;
     match extract_information_from_content(
         &mut file_info_builder,
         &mut scan_errors,
@@ -270,8 +268,8 @@ fn process_file(
     ) {
         Ok((is_generated, sha256, is_source)) => {
             generated_flag = is_generated;
-            cache_key_sha256 = Some(sha256);
             is_source_file = is_source;
+            let _ = sha256;
         }
         Err(e) => scan_errors.push(e.to_string()),
     };
@@ -326,23 +324,6 @@ fn process_file(
         file_info.percentage_of_license_text = Some(0.0);
     }
 
-    if let (Some(scan_results_dir), Some(sha256)) = (
-        text_options.scan_cache_dir.as_deref(),
-        cache_key_sha256.as_deref(),
-    ) && file_info.scan_errors.is_empty()
-    {
-        let findings = CachedScanFindings::from_file_info(&file_info);
-        let options_fingerprint =
-            scan_cache_fingerprint(text_options, license_options, license_enabled);
-        if let Err(err) =
-            write_cached_findings(scan_results_dir, sha256, &options_fingerprint, &findings)
-        {
-            file_info
-                .scan_errors
-                .push(format!("Failed to write scan cache entry: {err}"));
-        }
-    }
-
     file_info
 }
 
@@ -394,32 +375,6 @@ fn extract_information_from_content(
 
     if should_skip_text_detection(path, &buffer) {
         return Ok((is_generated, sha256, classification.is_source));
-    }
-
-    if let Some(scan_results_dir) = text_options.scan_cache_dir.as_deref() {
-        let options_fingerprint =
-            scan_cache_fingerprint(text_options, license_options, license_enabled);
-        match read_cached_findings(scan_results_dir, &sha256, &options_fingerprint) {
-            Ok(Some(findings)) => {
-                file_info_builder
-                    .package_data(findings.package_data)
-                    .license_expression(findings.license_expression)
-                    .license_detections(findings.license_detections)
-                    .license_clues(findings.license_clues)
-                    .percentage_of_license_text(findings.percentage_of_license_text)
-                    .copyrights(findings.copyrights)
-                    .holders(findings.holders)
-                    .authors(findings.authors)
-                    .emails(findings.emails)
-                    .urls(findings.urls)
-                    .programming_language(findings.programming_language);
-                return Ok((is_generated, sha256, classification.is_source));
-            }
-            Ok(None) => {}
-            Err(err) => {
-                scan_errors.push(format!("Failed to read scan cache for {:?}: {}", path, err));
-            }
-        }
     }
 
     // Package parsing and text-based detection (copyright, license) are independent.
@@ -545,33 +500,6 @@ fn is_timeout_exceeded(started: Instant, timeout_seconds: f64) -> bool {
     timeout_seconds.is_finite()
         && timeout_seconds > 0.0
         && started.elapsed().as_secs_f64() > timeout_seconds
-}
-
-fn scan_cache_fingerprint(
-    text_options: &TextDetectionOptions,
-    license_options: LicenseScanOptions,
-    license_enabled: bool,
-) -> String {
-    format!(
-        "info={};packages={};app_packages={};system_packages={};compiled_packages={};copyrights={};emails={};urls={};max_emails={};max_urls={};timeout={:.6};license_enabled={};license_text={};license_text_diagnostics={};license_diagnostics={};unknown_licenses={};license_score={}",
-        text_options.collect_info,
-        text_options.detect_packages,
-        text_options.detect_application_packages,
-        text_options.detect_system_packages,
-        text_options.detect_packages_in_compiled,
-        text_options.detect_copyrights,
-        text_options.detect_emails,
-        text_options.detect_urls,
-        text_options.max_emails,
-        text_options.max_urls,
-        text_options.timeout_seconds,
-        license_enabled,
-        license_options.include_text,
-        license_options.include_text_diagnostics,
-        license_options.include_diagnostics,
-        license_options.unknown_licenses,
-        license_options.min_score,
-    )
 }
 
 fn is_system_datasource(datasource_id: &DatasourceId) -> bool {
@@ -1134,8 +1062,7 @@ fn process_directory(
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_percentage_of_license_text, convert_detection_to_model,
-        is_go_non_production_source, scan_cache_fingerprint,
+        compute_percentage_of_license_text, convert_detection_to_model, is_go_non_production_source,
     };
     use crate::license_detection::LicenseDetection as InternalLicenseDetection;
     use crate::license_detection::index::LicenseIndex;
@@ -1144,6 +1071,7 @@ mod tests {
     use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind, RuleKind};
     use crate::license_detection::query::Query;
     use crate::scanner::LicenseScanOptions;
+    use crate::scanner::scan_options_fingerprint;
     use std::fs;
     use tempfile::tempdir;
 
@@ -1376,23 +1304,23 @@ mod tests {
     }
 
     #[test]
-    fn test_scan_cache_fingerprint_changes_with_license_score() {
+    fn test_scan_options_fingerprint_changes_with_license_score() {
         let text_options = crate::scanner::TextDetectionOptions::default();
-        let default_fingerprint = scan_cache_fingerprint(
+        let default_fingerprint = scan_options_fingerprint(
             &text_options,
             LicenseScanOptions {
                 min_score: 0,
                 ..LicenseScanOptions::default()
             },
-            true,
+            None,
         );
-        let filtered_fingerprint = scan_cache_fingerprint(
+        let filtered_fingerprint = scan_options_fingerprint(
             &text_options,
             LicenseScanOptions {
                 min_score: 70,
                 ..LicenseScanOptions::default()
             },
-            true,
+            None,
         );
 
         assert_ne!(default_fingerprint, filtered_fingerprint);

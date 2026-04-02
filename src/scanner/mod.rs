@@ -1,8 +1,7 @@
 mod collect;
 mod process;
 
-use std::path::PathBuf;
-
+use crate::license_detection::LicenseDetectionEngine;
 use crate::models::FileInfo;
 
 pub struct ProcessResult {
@@ -33,7 +32,6 @@ pub struct TextDetectionOptions {
     pub max_emails: usize,
     pub max_urls: usize,
     pub timeout_seconds: f64,
-    pub scan_cache_dir: Option<PathBuf>,
 }
 
 impl Default for TextDetectionOptions {
@@ -51,9 +49,59 @@ impl Default for TextDetectionOptions {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         }
     }
+}
+
+pub fn scan_options_fingerprint(
+    text_options: &TextDetectionOptions,
+    license_options: LicenseScanOptions,
+    license_engine: Option<&LicenseDetectionEngine>,
+) -> String {
+    let (license_enabled, rules_count, first_rule_id, last_rule_id) = match license_engine {
+        Some(engine) => {
+            let rules = &engine.index().rules_by_rid;
+            (
+                true,
+                rules.len(),
+                rules
+                    .first()
+                    .map(|rule| rule.identifier.as_str())
+                    .unwrap_or(""),
+                rules
+                    .last()
+                    .map(|rule| rule.identifier.as_str())
+                    .unwrap_or(""),
+            )
+        }
+        None => (false, 0, "", ""),
+    };
+
+    format!(
+        "tool_version={};info={};packages={};app_packages={};system_packages={};compiled_packages={};copyrights={};generated={};emails={};urls={};max_emails={};max_urls={};timeout={:.6};license_enabled={};rules_count={};first_rule_id={};last_rule_id={};license_text={};license_text_diagnostics={};license_diagnostics={};unknown_licenses={};license_score={}",
+        env!("CARGO_PKG_VERSION"),
+        text_options.collect_info,
+        text_options.detect_packages,
+        text_options.detect_application_packages,
+        text_options.detect_system_packages,
+        text_options.detect_packages_in_compiled,
+        text_options.detect_copyrights,
+        text_options.detect_generated,
+        text_options.detect_emails,
+        text_options.detect_urls,
+        text_options.max_emails,
+        text_options.max_urls,
+        text_options.timeout_seconds,
+        license_enabled,
+        rules_count,
+        first_rule_id,
+        last_rule_id,
+        license_options.include_text,
+        license_options.include_text_diagnostics,
+        license_options.include_diagnostics,
+        license_options.unknown_licenses,
+        license_options.min_score,
+    )
 }
 
 pub use self::collect::{CollectedPaths, collect_paths};
@@ -156,7 +204,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_single_file(
             "contacts.txt",
@@ -197,7 +244,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let pem_fixture = concat!(
             "-----BEGIN CERTIFICATE-----\n",
@@ -257,7 +303,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let credits_fixture = concat!(
             "N: Jack Lloyd\n",
@@ -299,7 +344,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_single_file(
             "generated.c",
@@ -325,7 +369,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_single_file(
             "generated.c",
@@ -351,7 +394,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_single_file(
             "script.py",
@@ -386,7 +428,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let latin1_python = b"# coding: latin-1\nprint(\"caf\xe9\")\n# comment padding\n";
         let scanned = scan_file_at_relative_path("script.py", latin1_python, &options);
@@ -417,7 +458,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let archive_like = b"PK\x03\x04\x14\x00\x00\x00\x08\x00MIT License\ncontact@example.com\nhttps://example.com\n";
         let scanned = scan_file_at_relative_path("demo.whl", archive_like, &options);
@@ -445,7 +485,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_single_file("main.ts", "export const answer: number = 42;\n", &options);
 
@@ -476,7 +515,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_single_file("main.ts", "// comment-only TypeScript fixture\n", &options);
 
@@ -506,7 +544,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_single_file("test.txt", "", &options);
 
@@ -536,7 +573,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_single_file("package.json", r#"{"name":"demo"}"#, &options);
 
@@ -563,7 +599,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
 
         let gradle = scan_single_file("build.gradle", "plugins { id 'java' }\n", &options);
@@ -595,7 +630,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_file_at_relative_path(
             ".gitmodules",
@@ -628,7 +662,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_file_at_relative_path(
             "bin/run",
@@ -660,7 +693,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_single_file("Dockerfile", "FROM scratch\n", &options);
 
@@ -688,7 +720,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_single_file("Makefile", "all:\n\techo hi\n", &options);
 
@@ -717,7 +748,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_single_file(
             "script.py",
@@ -755,7 +785,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_single_file(
             "package.json",
@@ -785,7 +814,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_single_file(
             "package.json",
@@ -816,7 +844,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_single_file(
             "package.json",
@@ -846,7 +873,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let scanned = scan_file_at_relative_path(
             "var/lib/dpkg/status",
@@ -904,7 +930,6 @@ mod tests {
                 max_emails: 50,
                 max_urls: 50,
                 timeout_seconds: 120.0,
-                scan_cache_dir: None,
             },
         );
         let with_compiled = process_collected(
@@ -925,7 +950,6 @@ mod tests {
                 max_emails: 50,
                 max_urls: 50,
                 timeout_seconds: 120.0,
-                scan_cache_dir: None,
             },
         );
 
@@ -963,7 +987,6 @@ mod tests {
             max_emails: 50,
             max_urls: 50,
             timeout_seconds: 120.0,
-            scan_cache_dir: None,
         };
         let with_info = TextDetectionOptions {
             collect_info: true,
@@ -1001,7 +1024,6 @@ mod tests {
                 max_emails: 50,
                 max_urls: 50,
                 timeout_seconds: 120.0,
-                scan_cache_dir: None,
             },
         );
 
@@ -1045,7 +1067,6 @@ mod tests {
                 max_emails: 50,
                 max_urls: 50,
                 timeout_seconds: 120.0,
-                scan_cache_dir: None,
             },
         );
 
@@ -1123,7 +1144,6 @@ mod tests {
                 max_emails: 50,
                 max_urls: 50,
                 timeout_seconds: 120.0,
-                scan_cache_dir: None,
             },
             1,
         );
@@ -1155,7 +1175,6 @@ mod tests {
                 max_emails: 50,
                 max_urls: 50,
                 timeout_seconds: 120.0,
-                scan_cache_dir: None,
             },
             -1,
         );

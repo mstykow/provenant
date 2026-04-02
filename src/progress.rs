@@ -35,6 +35,7 @@ pub struct ScanStats {
     pub manifests_seen: usize,
     pub top_level_timings: Vec<(String, f64)>,
     pub detail_timings: Vec<(String, f64)>,
+    pub incremental_reused: usize,
 }
 
 pub struct ScanProgress {
@@ -213,6 +214,11 @@ impl ScanProgress {
         }
     }
 
+    pub fn record_incremental_reused(&self, count: usize) {
+        let mut stats = self.stats.lock().expect("stats lock poisoned");
+        stats.incremental_reused += count;
+    }
+
     pub fn start_assembly(&self) {
         self.start_phase("assembly");
         match self.mode {
@@ -298,6 +304,12 @@ impl ScanProgress {
         }
         for line in build_summary_messages(&stats, scan_start, scan_end) {
             self.message(&line);
+        }
+        if stats.incremental_reused > 0 {
+            self.message(&format!(
+                "Incremental:    {} unchanged file(s) reused",
+                stats.incremental_reused
+            ));
         }
     }
 
@@ -575,6 +587,7 @@ mod tests {
             total_bytes_scanned: 800,
             packages_assembled: 3,
             manifests_seen: 5,
+            incremental_reused: 0,
             top_level_timings: vec![
                 ("setup".to_string(), 1.0),
                 ("inventory".to_string(), 2.0),
