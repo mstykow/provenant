@@ -89,6 +89,8 @@ pub enum DatasourceId {
     #[serde(rename = "chef_cookbook_metadata_rb")]
     ChefCookbookMetadataRb,
 
+    CitationCff,
+
     // ── CocoaPods ──
     CocoapodsPodfile,
     CocoapodsPodfileLock,
@@ -324,6 +326,8 @@ pub enum DatasourceId {
     SwiftPackageResolved,
     SwiftPackageShowDependencies,
 
+    PubliccodeYaml,
+
     // ── vcpkg ──
     VcpkgJson,
 
@@ -331,6 +335,7 @@ pub enum DatasourceId {
     YarnLock,
     YarnLockV1,
     YarnLockV2,
+    YarnPnpCjs,
 
     // ── Git ──
     Gitmodules,
@@ -386,6 +391,8 @@ impl DatasourceId {
             // Chef
             Self::ChefCookbookMetadataJson => "chef_cookbook_metadata_json",
             Self::ChefCookbookMetadataRb => "chef_cookbook_metadata_rb",
+
+            Self::CitationCff => "citation_cff",
 
             // CocoaPods
             Self::CocoapodsPodfile => "cocoapods_podfile",
@@ -597,6 +604,8 @@ impl DatasourceId {
             Self::SwiftPackageResolved => "swift_package_resolved",
             Self::SwiftPackageShowDependencies => "swift_package_show_dependencies",
 
+            Self::PubliccodeYaml => "publiccode_yaml",
+
             // vcpkg
             Self::VcpkgJson => "vcpkg_json",
 
@@ -604,6 +613,7 @@ impl DatasourceId {
             Self::YarnLock => "yarn_lock",
             Self::YarnLockV1 => "yarn_lock_v1",
             Self::YarnLockV2 => "yarn_lock_v2",
+            Self::YarnPnpCjs => "yarn_pnp_cjs",
 
             // Git
             Self::Gitmodules => "gitmodules",
@@ -650,6 +660,9 @@ mod tests {
             "pypi_pyproject_toml"
         );
         assert_eq!(DatasourceId::HackageCabal.as_str(), "hackage_cabal");
+        assert_eq!(DatasourceId::CitationCff.as_str(), "citation_cff");
+        assert_eq!(DatasourceId::PubliccodeYaml.as_str(), "publiccode_yaml");
+        assert_eq!(DatasourceId::YarnPnpCjs.as_str(), "yarn_pnp_cjs");
     }
 
     #[test]

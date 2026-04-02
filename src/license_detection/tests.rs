@@ -203,6 +203,23 @@ fn test_engine_detect_spdx_identifier() {
 }
 
 #[test]
+fn test_engine_detects_terser_license_as_bsd_simplified_only() {
+    let engine = get_engine();
+    let fixture =
+        PathBuf::from("testdata/license-golden/datadriven/external/terser-license-bsd-2.txt");
+    let text = std::fs::read_to_string(&fixture).expect("terser fixture should be readable");
+
+    let expressions: Vec<String> = engine
+        .detect_matches_with_kind(&text, false, false)
+        .expect("terser license fixture should detect")
+        .into_iter()
+        .map(|detection| detection.license_expression)
+        .collect();
+
+    assert_eq!(expressions, vec!["bsd-simplified"]);
+}
+
+#[test]
 fn test_engine_detects_boost_short_notice_with_url() {
     let engine = get_engine();
 

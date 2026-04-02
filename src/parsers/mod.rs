@@ -46,6 +46,9 @@ mod chef;
 mod chef_scan_test;
 #[cfg(test)]
 mod chef_test;
+mod citation;
+#[cfg(test)]
+mod citation_test;
 mod clojure;
 #[cfg(test)]
 mod clojure_test;
@@ -230,6 +233,9 @@ mod podspec_json_test;
 mod poetry_lock;
 #[cfg(test)]
 mod poetry_lock_test;
+mod publiccode;
+#[cfg(test)]
+mod publiccode_test;
 mod pylock_toml;
 #[cfg(test)]
 mod pylock_toml_test;
@@ -294,11 +300,15 @@ mod vcpkg_test;
 mod yarn_lock;
 #[cfg(test)]
 mod yarn_lock_test;
+mod yarn_pnp;
+#[cfg(test)]
+mod yarn_pnp_test;
 
 #[cfg(all(test, feature = "golden-tests"))]
 mod golden_test;
 
 use std::cell::RefCell;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 
 use crate::models::{PackageData, PackageType};
@@ -314,7 +324,21 @@ pub struct ParsePackagesResult {
     pub scan_errors: Vec<String>,
 }
 
-pub(crate) fn capture_parser_diagnostics<F>(extract: F) -> ParsePackagesResult
+fn panic_payload_to_string(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_string()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "unknown panic payload".to_string()
+    }
+}
+
+pub(crate) fn capture_parser_diagnostics<F>(
+    extract: F,
+    handler_name: &str,
+    path: &Path,
+) -> ParsePackagesResult
 where
     F: FnOnce() -> Vec<PackageData>,
 {
@@ -322,19 +346,33 @@ where
         stack.borrow_mut().push(Vec::new());
     });
 
-    let packages = extract()
-        .into_iter()
-        .map(|mut package| {
-            finalize_package_declared_license_references(&mut package);
-            package
-        })
-        .collect();
-    let scan_errors =
+    let extract_result = catch_unwind(AssertUnwindSafe(extract));
+    let mut scan_errors =
         PARSER_DIAGNOSTIC_STACK.with(|stack| stack.borrow_mut().pop().unwrap_or_default());
 
-    ParsePackagesResult {
-        packages,
-        scan_errors,
+    match extract_result {
+        Ok(packages) => ParsePackagesResult {
+            packages: packages
+                .into_iter()
+                .map(|mut package| {
+                    finalize_package_declared_license_references(&mut package);
+                    package
+                })
+                .collect(),
+            scan_errors,
+        },
+        Err(payload) => {
+            scan_errors.push(format!(
+                "{} panicked while parsing {}: {}",
+                handler_name,
+                path.display(),
+                panic_payload_to_string(payload.as_ref())
+            ));
+            ParsePackagesResult {
+                packages: Vec::new(),
+                scan_errors,
+            }
+        }
     }
 }
 
@@ -450,6 +488,7 @@ pub use self::cargo::CargoParser;
 #[cfg_attr(not(test), allow(unused_imports))]
 pub use self::cargo_lock::CargoLockParser;
 pub use self::chef::{ChefMetadataJsonParser, ChefMetadataRbParser};
+pub use self::citation::CitationCffParser;
 pub use self::clojure::{ClojureDepsEdnParser, ClojureProjectCljParser};
 pub(crate) use self::compiled_binary::try_parse_compiled_bytes;
 pub use self::composer::{ComposerJsonParser, ComposerLockParser};
@@ -513,6 +552,7 @@ pub use self::podfile_lock::PodfileLockParser;
 pub use self::podspec::PodspecParser;
 pub use self::podspec_json::PodspecJsonParser;
 pub use self::poetry_lock::PoetryLockParser;
+pub use self::publiccode::PubliccodeParser;
 pub use self::pylock_toml::PylockTomlParser;
 pub use self::python::PythonParser;
 pub use self::readme::ReadmeParser;
@@ -533,6 +573,7 @@ pub use self::swift_show_dependencies::SwiftShowDependenciesParser;
 pub use self::uv_lock::UvLockParser;
 pub use self::vcpkg::VcpkgManifestParser;
 pub use self::yarn_lock::YarnLockParser;
+pub use self::yarn_pnp::YarnPnpParser;
 
 /// Registers all parsers and recognizers, generating dispatch functions.
 ///
@@ -547,12 +588,20 @@ macro_rules! register_package_handlers {
         pub fn try_parse_file(path: &Path) -> Option<ParsePackagesResult> {
             $(
                 if <$parser>::is_match(path) {
-                    return Some(capture_parser_diagnostics(|| <$parser>::extract_packages(path)));
+                    return Some(capture_parser_diagnostics(
+                        || <$parser>::extract_packages(path),
+                        stringify!($parser),
+                        path,
+                    ));
                 }
             )*
             $(
                 if <$recognizer>::is_match(path) {
-                    return Some(capture_parser_diagnostics(|| <$recognizer>::extract_packages(path)));
+                    return Some(capture_parser_diagnostics(
+                        || <$recognizer>::extract_packages(path),
+                        stringify!($recognizer),
+                        path,
+                    ));
                 }
             )*
             None
@@ -609,6 +658,7 @@ register_package_handlers! {
         CargoParser,
         ChefMetadataJsonParser,
         ChefMetadataRbParser,
+        CitationCffParser,
         ClojureDepsEdnParser,
         ClojureProjectCljParser,
         ComposerJsonParser,
@@ -694,6 +744,7 @@ register_package_handlers! {
         PodspecJsonParser,
         PodspecParser,
         PoetryLockParser,
+        PubliccodeParser,
         PylockTomlParser,
         PubspecLockParser,
         PubspecYamlParser,
@@ -715,6 +766,7 @@ register_package_handlers! {
         SwiftPackageResolvedParser,
         SwiftShowDependenciesParser,
         YarnLockParser,
+        YarnPnpParser,
     ],
     recognizers: [
         AndroidApkRecognizer,
@@ -741,4 +793,51 @@ register_package_handlers! {
         SharArchiveRecognizer,
         SquashfsRecognizer,
     ],
+}
+
+#[cfg(test)]
+mod panic_isolation_tests {
+    use super::*;
+
+    #[test]
+    fn capture_parser_diagnostics_turns_panics_into_scan_errors() {
+        let path = Path::new("fixtures/panic-package.json");
+        let result = capture_parser_diagnostics(
+            || -> Vec<PackageData> { panic!("panic boom") },
+            "PanicParser",
+            path,
+        );
+
+        assert!(result.packages.is_empty());
+        assert_eq!(result.scan_errors.len(), 1);
+        assert!(result.scan_errors[0].contains("PanicParser"));
+        assert!(result.scan_errors[0].contains("fixtures/panic-package.json"));
+        assert!(result.scan_errors[0].contains("panic boom"));
+    }
+
+    #[test]
+    fn capture_parser_diagnostics_recovers_after_panic() {
+        let panic_path = Path::new("fixtures/panic-package.json");
+        let _ = capture_parser_diagnostics(
+            || -> Vec<PackageData> { panic!("panic boom") },
+            "PanicParser",
+            panic_path,
+        );
+
+        let ok_path = Path::new("fixtures/recovered-package.json");
+        let result = capture_parser_diagnostics(
+            || {
+                crate::parser_warn!("recoverable parser warning");
+                vec![PackageData {
+                    package_type: Some(PackageType::Npm),
+                    ..Default::default()
+                }]
+            },
+            "RecoveringParser",
+            ok_path,
+        );
+
+        assert_eq!(result.packages.len(), 1);
+        assert_eq!(result.scan_errors, vec!["recoverable parser warning"]);
+    }
 }

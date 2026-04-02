@@ -13,6 +13,7 @@ Provenant improves several npm and Yarn behaviors that are missing, incomplete, 
 - npm lockfiles now preserve link-style and non-version dependency specs without incorrectly treating them as pinned registry versions.
 - `yarn.lock` can infer direct dependency scope from a sibling `package.json`.
 - Yarn Berry lockfiles now preserve raw non-`@npm:` resolution references plus lock metadata such as `resolution`, `languageName`, `linkType`, `bin`, and `dependenciesMeta`.
+- `.pnp.cjs` can now contribute npm-style dependency metadata instead of being treated as package-root ownership only.
 - npm package-root resource assignment now skips first-level `node_modules` while allowing nested bundled packages to own their own files, including `.pnp.cjs`-style project files at the package root.
 - Workspace assembly now accepts array, string, and object-style npm workspace declarations, preserves unattached lockfile dependencies when a sibling manifest is not packageable, and emits deterministic package/file ordering.
 
@@ -94,6 +95,12 @@ When a sibling `package.json` exists but is not packageable, Rust now keeps lock
 
 The assembly phase also sorts `datafile_paths`, `datasource_ids`, and `for_packages`, so workspace and sibling-merge output stays deterministic across runs.
 
+### 10. Parse Yarn Plug-and-Play `.pnp.cjs` runtime state
+
+Rust now treats root-level `.pnp.cjs` files as a bounded npm-family dependency source rather than only as a package-root resource.
+
+The parser extracts dependency entries from the embedded `RAW_RUNTIME_STATE`, emits npm-shaped dependency records, and wires the new datasource into npm sibling assembly so `.pnp.cjs` dependencies hoist into the same top-level package as the sibling `package.json`.
+
 ## Primary Areas Affected
 
 - npm manifest parsing and metadata normalization
@@ -101,6 +108,7 @@ The assembly phase also sorts `datafile_paths`, `datasource_ids`, and `for_packa
 - npm platform/compatibility metadata preservation
 - npm lockfile root identity and dependency-spec extraction
 - Yarn lockfile dependency-scope inference and Berry resolution-detail preservation
+- npm/Yarn `.pnp.cjs` dependency extraction
 - npm/Yarn assembly behavior for sibling manifests, workspaces, deterministic ordering, and nested package ownership
 
 ## Coverage
@@ -111,4 +119,5 @@ This enhancement set is covered by:
 - malformed `package.json` fallback tests
 - npm lockfile-focused unit tests
 - Yarn lockfile-focused unit tests
+- Yarn Plug-and-Play parser unit, golden, assembly, and scan tests
 - focused npm and Yarn parser/assembly tests for the affected behaviors

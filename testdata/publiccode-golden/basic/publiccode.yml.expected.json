@@ -1,0 +1,34 @@
+{
+  "type": "publiccode",
+  "name": "Demo Public Service",
+  "version": "2.3.4",
+  "description": "Service description",
+  "homepage_url": "https://example.com/service",
+  "vcs_url": "https://github.com/example/public-service",
+  "copyright": "Example City",
+  "declared_license_expression": "agpl-3.0-or-later",
+  "declared_license_expression_spdx": "AGPL-3.0-or-later",
+  "license_detections": [
+    {
+      "license_expression": "agpl-3.0-or-later",
+      "license_expression_spdx": "AGPL-3.0-or-later",
+      "matches": [
+        {
+          "license_expression": "agpl-3.0-or-later",
+          "license_expression_spdx": "AGPL-3.0-or-later",
+          "score": 100.0
+        }
+      ]
+    }
+  ],
+  "extracted_license_statement": "AGPL-3.0-or-later",
+  "parties": [
+    {
+      "type": "person",
+      "role": "maintainer",
+      "name": "Maintainer One",
+      "email": "maintainer@example.com"
+    }
+  ],
+  "datasource_id": "publiccode_yaml"
+}

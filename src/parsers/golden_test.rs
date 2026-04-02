@@ -22,6 +22,8 @@ mod bun_lockb_golden_test;
 mod cargo_golden_test;
 #[path = "chef_golden_test.rs"]
 mod chef_golden_test;
+#[path = "citation_golden_test.rs"]
+mod citation_golden_test;
 #[path = "clojure_golden_test.rs"]
 mod clojure_golden_test;
 #[path = "cocoapods_golden_test.rs"]
@@ -90,6 +92,8 @@ mod pixi_golden_test;
 mod pnpm_lock_golden_test;
 #[path = "poetry_lock_golden_test.rs"]
 mod poetry_lock_golden_test;
+#[path = "publiccode_golden_test.rs"]
+mod publiccode_golden_test;
 #[path = "pylock_toml_golden_test.rs"]
 mod pylock_toml_golden_test;
 #[path = "python_golden_test.rs"]
@@ -110,3 +114,5 @@ mod swift_golden_test;
 mod uv_lock_golden_test;
 #[path = "vcpkg_golden_test.rs"]
 mod vcpkg_golden_test;
+#[path = "yarn_pnp_golden_test.rs"]
+mod yarn_pnp_golden_test;

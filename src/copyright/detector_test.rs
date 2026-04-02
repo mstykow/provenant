@@ -454,6 +454,50 @@ fn test_math_c_fixture_restores_angle_email_holders_for_modified_by_lines() {
 }
 
 #[test]
+fn test_gailly_c_fixture_keeps_original_busybox_gzip_copyright() {
+    let path = PathBuf::from("testdata/copyright-golden/copyrights/gailly-c.c");
+    let content = fs::read_to_string(&path).expect("read fixture");
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(&content);
+
+    assert!(
+        copyrights
+            .iter()
+            .any(|c| c.copyright == "Copyright (c) 1992-1993 Jean-loup Gailly"),
+        "copyrights: {:#?}",
+        copyrights.iter().map(|c| &c.copyright).collect::<Vec<_>>()
+    );
+    assert!(
+        holders.iter().any(|h| h.holder == "Jean-loup Gailly"),
+        "holders: {:#?}",
+        holders.iter().map(|h| &h.holder).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_busybox_env_modified_by_line_does_not_absorb_correct_usage_bullet() {
+    let content = "* Modified by Vladimir Oleynik <dzo@simtreas.ru> (C) 2003\n* - correct \"-\" option usage\n";
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
+
+    assert!(
+        copyrights
+            .iter()
+            .any(|c| c.copyright == "Vladimir Oleynik <dzo@simtreas.ru> (c) 2003"),
+        "copyrights: {:#?}",
+        copyrights.iter().map(|c| &c.copyright).collect::<Vec<_>>()
+    );
+    assert!(
+        !copyrights.iter().any(|c| c.copyright.contains("- correct")),
+        "copyrights: {:#?}",
+        copyrights.iter().map(|c| &c.copyright).collect::<Vec<_>>()
+    );
+    assert!(
+        holders.iter().any(|h| h.holder == "Vladimir Oleynik"),
+        "holders: {:#?}",
+        holders.iter().map(|h| &h.holder).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn test_andre_darcy_fixture_extracts_modifications_copyright_by_line() {
     let path = PathBuf::from("testdata/copyright-golden/copyrights/andre_darcy-c.c");
     let content = fs::read_to_string(&path).expect("read fixture");

@@ -1,0 +1,15 @@
+publiccodeYmlVersion: '0.4'
+name:
+  en: Demo Public Service
+softwareVersion: 2.3.4
+url: https://github.com/example/public-service
+landingURL: https://example.com/service
+longDescription:
+  en: Service description
+legal:
+  license: AGPL-3.0-or-later
+  mainCopyrightOwner: Example City
+maintenance:
+  contacts:
+    - name: Maintainer One
+      email: maintainer@example.com
