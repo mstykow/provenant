@@ -230,4 +230,51 @@ mod tests {
             "shrinkwrap.yaml",
         );
     }
+
+    #[test]
+    fn test_yarn_pnp_scan_assembles_dependency_source_into_root_package() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+
+        fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{
+  "name": "root-app",
+  "version": "1.0.0"
+}
+"#,
+        )
+        .expect("write package.json");
+        fs::write(
+            temp_dir.path().join(".pnp.cjs"),
+            include_str!("../../testdata/yarn-pnp-golden/basic/.pnp.cjs"),
+        )
+        .expect("write .pnp.cjs");
+
+        let (files, result) = scan_and_assemble(temp_dir.path());
+
+        let package = result
+            .packages
+            .iter()
+            .find(|package| package.name.as_deref() == Some("root-app"))
+            .expect("root package should be assembled");
+        assert!(package.datasource_ids.contains(&DatasourceId::YarnPnpCjs));
+        assert_dependency_present(&result.dependencies, "pkg:npm/left-pad@1.3.0", ".pnp.cjs");
+        assert_dependency_present(
+            &result.dependencies,
+            "pkg:npm/%40scope/demo@2.0.0",
+            ".pnp.cjs",
+        );
+
+        let pnp_file = files
+            .iter()
+            .find(|file| file.path.ends_with("/.pnp.cjs"))
+            .expect(".pnp.cjs should be scanned");
+        assert!(pnp_file.for_packages.contains(&package.package_uid));
+        assert!(
+            pnp_file
+                .package_data
+                .iter()
+                .any(|pkg_data| { pkg_data.datasource_id == Some(DatasourceId::YarnPnpCjs) })
+        );
+    }
 }

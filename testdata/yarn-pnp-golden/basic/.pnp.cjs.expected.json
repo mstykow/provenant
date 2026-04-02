@@ -1,0 +1,25 @@
+{
+  "type": "npm",
+  "primary_language": "JavaScript",
+  "dependencies": [
+    {
+      "purl": "pkg:npm/left-pad@1.3.0",
+      "extracted_requirement": "npm:1.3.0",
+      "scope": "dependencies",
+      "is_runtime": true,
+      "is_optional": false,
+      "is_pinned": true,
+      "is_direct": true
+    },
+    {
+      "purl": "pkg:npm/%40scope/demo@2.0.0",
+      "extracted_requirement": "npm:2.0.0",
+      "scope": "dependencies",
+      "is_runtime": true,
+      "is_optional": false,
+      "is_pinned": true,
+      "is_direct": true
+    }
+  ],
+  "datasource_id": "yarn_pnp_cjs"
+}

@@ -28,6 +28,20 @@ fn create_malformed_package_fixture() -> (TempDir, String) {
     (temp, scan_dir.to_string_lossy().to_string())
 }
 
+fn create_ignore_fixture() -> (TempDir, String) {
+    let temp = TempDir::new().expect("failed to create temp dir");
+    let scan_dir = temp.path().join("scan");
+    let build_dir = scan_dir.join("build");
+
+    fs::create_dir_all(&build_dir).expect("failed to create build dir");
+    fs::write(scan_dir.join("keep.txt"), "keep me\n").expect("failed to write keep.txt");
+    fs::write(scan_dir.join("report.csv"), "col\n1\n").expect("failed to write report.csv");
+    fs::write(build_dir.join("generated.txt"), "generated\n")
+        .expect("failed to write generated.txt");
+
+    (temp, scan_dir.to_string_lossy().to_string())
+}
+
 #[test]
 fn quiet_mode_suppresses_stderr_output() {
     let (temp, scan_dir) = create_scan_fixture();
@@ -227,4 +241,94 @@ fn incremental_mode_reuses_unchanged_files_and_keeps_them_in_output() {
             .as_str()
             .is_some_and(|path| path.ends_with("a.txt"))
     }));
+}
+
+#[test]
+fn ignore_build_glob_excludes_build_subtree_from_cli_output() {
+    let (temp, scan_dir) = create_ignore_fixture();
+    let output_file = temp.path().join("out.json");
+
+    let output = provenant_command()
+        .args([
+            "--json-pp",
+            output_file.to_str().expect("utf8 output path"),
+            "--ignore",
+            "build/*",
+            &scan_dir,
+        ])
+        .output()
+        .expect("failed to run provenant");
+
+    assert!(output.status.success());
+    let output_json: Value =
+        serde_json::from_slice(&fs::read(&output_file).expect("failed to read output json"))
+            .expect("output json should parse");
+    let files = output_json["files"]
+        .as_array()
+        .expect("files should be an array");
+    let paths: Vec<&str> = files
+        .iter()
+        .filter_map(|file| file["path"].as_str())
+        .collect();
+
+    assert!(
+        paths
+            .iter()
+            .any(|path| path.ends_with("/keep.txt") || *path == "keep.txt"),
+        "paths: {paths:#?}"
+    );
+    assert!(
+        paths
+            .iter()
+            .any(|path| path.ends_with("/build") || *path == "build"),
+        "paths: {paths:#?}"
+    );
+    assert!(
+        !paths
+            .iter()
+            .any(|path| path.ends_with("/build/generated.txt") || *path == "build/generated.txt"),
+        "build descendants should be excluded: {paths:#?}"
+    );
+}
+
+#[test]
+fn ignore_root_csv_glob_excludes_root_csv_from_cli_output() {
+    let (temp, scan_dir) = create_ignore_fixture();
+    let output_file = temp.path().join("out.json");
+
+    let output = provenant_command()
+        .args([
+            "--json-pp",
+            output_file.to_str().expect("utf8 output path"),
+            "--ignore",
+            "*.csv",
+            &scan_dir,
+        ])
+        .output()
+        .expect("failed to run provenant");
+
+    assert!(output.status.success());
+    let output_json: Value =
+        serde_json::from_slice(&fs::read(&output_file).expect("failed to read output json"))
+            .expect("output json should parse");
+    let files = output_json["files"]
+        .as_array()
+        .expect("files should be an array");
+    let paths: Vec<&str> = files
+        .iter()
+        .filter_map(|file| file["path"].as_str())
+        .collect();
+
+    assert!(
+        paths
+            .iter()
+            .any(|path| path.ends_with("/keep.txt") || *path == "keep.txt"),
+        "paths: {paths:#?}"
+    );
+    assert!(
+        !paths
+            .iter()
+            .any(|path| path.ends_with("/report.csv") || *path == "report.csv"),
+        "root csv should be excluded: {paths:#?}"
+    );
 }

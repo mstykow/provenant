@@ -1146,6 +1146,63 @@ mod tests {
     }
 
     #[test]
+    fn test_assemble_npm_package_json_with_yarn_pnp() {
+        let mut files = vec![
+            create_test_file_info(
+                "project/package.json",
+                DatasourceId::NpmPackageJson,
+                Some("pkg:npm/root-app@1.0.0"),
+                Some("root-app"),
+                Some("1.0.0"),
+                vec![],
+            ),
+            create_test_file_info(
+                "project/.pnp.cjs",
+                DatasourceId::YarnPnpCjs,
+                None,
+                None,
+                None,
+                vec![Dependency {
+                    purl: Some("pkg:npm/left-pad@1.3.0".to_string()),
+                    extracted_requirement: Some("npm:1.3.0".to_string()),
+                    scope: Some("dependencies".to_string()),
+                    is_runtime: Some(true),
+                    is_optional: Some(false),
+                    is_pinned: Some(true),
+                    is_direct: Some(true),
+                    resolved_package: None,
+                    extra_data: None,
+                }],
+            ),
+        ];
+
+        let result = assemble(&mut files);
+
+        assert_eq!(result.packages.len(), 1);
+        assert_eq!(result.dependencies.len(), 1);
+        assert_eq!(
+            result.dependencies[0].purl.as_deref(),
+            Some("pkg:npm/left-pad@1.3.0")
+        );
+        assert_eq!(
+            result.dependencies[0].datasource_id,
+            DatasourceId::YarnPnpCjs
+        );
+        assert_eq!(result.dependencies[0].datafile_path, "project/.pnp.cjs");
+        assert!(
+            files[1]
+                .for_packages
+                .iter()
+                .any(|uid| uid == &result.packages[0].package_uid)
+        );
+        assert!(
+            result.packages[0]
+                .datasource_ids
+                .contains(&DatasourceId::YarnPnpCjs)
+        );
+    }
+
+    #[test]
     fn test_assemble_npm_package_json_skips_mismatched_lockfile() {
         let mut files = vec![
             create_test_file_info(
