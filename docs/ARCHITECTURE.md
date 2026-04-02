@@ -393,7 +393,7 @@ The codebase follows a modular architecture:
 
 ### Benchmarks
 
-For broad performance-sensitive changes, maintainers use `./scripts/benchmark.sh` to measure scanner behavior against a stable external repository. Smaller changes usually rely on targeted regression suites plus normal scan-time profiling during development.
+For broad performance-sensitive changes, maintainers use `./scripts/benchmark.sh` with an explicit target (`--repo-url` or `--target-path`) to measure scanner behavior. Smaller changes usually rely on targeted regression suites plus normal scan-time profiling during development.
 
 ### Optimization Strategies
 
@@ -552,22 +552,23 @@ Module location: `src/finder/`
 
 **Caching**:
 
-Provenant uses one shared persistent cache root. The currently implemented persistent cache is the
-optional scan-result cache stored under `scan-results/`, while incremental scanning remains future
-work.
+Provenant uses one shared persistent cache root for the opt-in incremental manifest stored under
+`incremental/`.
 
-The cache implementation lives in `src/cache/` (`config`, `metadata`, `paths`, `io`,
-`scan_cache`). It provides cache-root selection, snapshot metadata and invalidation, sharded
-scan-result paths, and atomic snapshot persistence.
+The cache implementation lives in `src/cache/` (`config`, `io`, `locking`, `incremental`). It
+provides cache-root selection, sidecar lock coordination for cache writes/clears, incremental
+manifest persistence, and atomic manifest persistence.
+
+The intent is straightforward: repeated scans of the same checkout should reuse unchanged file
+results from the last completed scan instead of rescanning the whole tree every time.
 
 User-facing behavior is:
 
-1. `--cache <kind>` currently enables `scan-results`
-2. `--cache-dir` and `PROVENANT_CACHE` select the shared cache root
-3. `--cache-clear` clears that root before scanning
-4. persistent caching is opt-in; nothing is written unless `--cache` is specified
+1. `--cache-dir` and `PROVENANT_CACHE` select the shared incremental cache root
+2. `--cache-clear` clears that root before scanning
+3. `--incremental` reuses unchanged file results from the last completed scan after validating stored metadata + SHA256 against the previous manifest
 
-Follow-up work is focused on multi-process coordination, incremental scanning, and a more unified default cache-root strategy.
+Custom `--license-rules-path` scans still participate in the incremental manifest workflow. A separate persistent startup snapshot cache for that advanced override is intentionally not planned.
 
 **Progress Tracking**:
 

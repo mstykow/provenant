@@ -191,8 +191,8 @@ and the resulting package data shape.
 - Exclusion patterns work correctly
 - Max depth limits are respected
 - Empty directories handled gracefully
-- Scan-result cache entry persistence (first scan writes cache, repeat scan reuses stable findings)
-- Cache-control CLI wiring behavior (`--cache`, `--cache-dir`, `--cache-clear`) via startup/runtime tests
+- Incremental manifest persistence and unchanged-file reuse across repeated scans
+- Cache-root CLI wiring behavior (`--cache-dir`, `--cache-clear`, `--incremental`) via startup/runtime tests
 
 **Why This Matters**: Layer 3 proves scanner-wired package contracts; Layer 4 proves the system still works together from the user's perspective.
 

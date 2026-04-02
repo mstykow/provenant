@@ -134,6 +134,8 @@ This is especially useful for:
 - comparing license-detection changes between runs
 - collecting top-level license results without package-focused noise
 
+If you are validating a custom rule set or doing maintainer-level license-engine work, you can override the embedded rules with `--license-rules-path /path/to/rules`. That flag is intentionally kept as an advanced workflow, but it is not the recommended default for ordinary scans.
+
 If you need the matched text that triggered a detection, add `--license-text`:
 
 ```sh
@@ -361,23 +363,30 @@ This is a good second-step workflow after a first broad scan, especially on larg
 ### 16. "I run the same scan repeatedly"
 
 ```sh
-provenant --json-pp scan.json --license --package --cache scan-results /path/to/project
+provenant --json-pp scan.json --license --package --incremental /path/to/project
 ```
 
-Use the persistent cache for repeated native directory scans.
+Use incremental reuse for repeated native directory scans.
+
+After a completed scan, Provenant stores an incremental manifest under the cache root and uses it
+on the next run to skip unchanged files. In practice, this is most useful when you are scanning
+the same checkout repeatedly: local iteration, CI retries, or rerunning after a later failed or
+interrupted scan.
 
 Good use cases:
 
 - iterative local review on the same repository
 - repeated scans in a CI-like workflow
 - large trees where rescanning unchanged content is expensive
+- retrying a later scan without redoing unchanged work from the last completed run
 
 Important details:
 
-- `--cache scan-results` enables caching.
-- `--cache-dir PATH` chooses where the cache lives, but does not enable it by itself.
-- `--cache-clear` clears the selected cache root before the run.
-- cache support is for native scans, not `--from-json` reshaping.
+- `--incremental` enables this behavior.
+- `--cache-dir PATH` and `PROVENANT_CACHE` choose where the incremental manifest lives.
+- `--cache-clear` clears that manifest state before the run.
+- if the previous manifest is missing, unreadable, or incompatible, Provenant falls back to a full rescan and rewrites it.
+- incremental reuse applies to native scans, not `--from-json` reshaping.
 
 ### 17. "I want policy-aware license review"
 
