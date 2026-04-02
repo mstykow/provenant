@@ -266,7 +266,7 @@ Canonical hook and CI definitions live in [`lefthook.yml`](lefthook.yml), [`pack
 - **Early filtering**: Exclusion patterns applied early during traversal
 - **Atomic progress**: Progress bar updates use atomic operations
 - **Release optimizations**: Release builds use additional optimization settings; consult the Cargo configuration and architecture docs for current details
-- **Benchmarking**: Run `./scripts/benchmark.sh` to measure performance on a standardized test repository. Use this after changes that could affect general performance. When committing performance-related changes, include the timing data in the commit message.
+- **Benchmarking**: Run `./scripts/benchmark.sh --repo-url <url>` or `./scripts/benchmark.sh --target-path <path>` to measure performance on an explicit benchmark target. Use this after changes that could affect general performance. When committing performance-related changes, include the timing data in the commit message.
 
 ## Common Pitfalls
 

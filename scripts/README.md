@@ -1,5 +1,67 @@
 # Scripts Documentation
 
+## Benchmark Script
+
+### Purpose
+
+`benchmark.sh` measures Provenant against an explicitly supplied benchmark target
+and reports a repeated-run matrix for:
+
+- uncached runs
+- incremental runs
+
+This makes it useful for checking repeated-run speedups on unchanged input.
+
+### Usage
+
+```bash
+./scripts/benchmark.sh --repo-url https://github.com/org/repo.git -- -clupe
+./scripts/benchmark.sh --repo-url https://github.com/org/repo.git --repo-commit <sha> -- -clupe
+./scripts/benchmark.sh --target-path /path/to/local/directory -- -clupe
+./scripts/benchmark.sh --target-path /path/to/local/directory -- --timeout 300 --license-text
+./scripts/benchmark.sh --target-path /path/to/local/directory -- --license --package
+```
+
+CLI arguments:
+
+- Exactly one of `--repo-url` or `--target-path` is required.
+- `--repo-url URL`: clone and benchmark the given repository URL
+- `--target-path PATH`: benchmark an existing local directory in place
+- `--repo-commit SHA`: check out a specific revision after cloning `--repo-url`
+- Benchmark scan flags are required after `--` and are forwarded to Provenant unchanged.
+- A common profile is `-clupe` (`--copyright --license --url --package --email`).
+
+### What It Does
+
+1. Either clones the repository supplied via `--repo-url` or scans a local directory passed via `--target-path`
+2. Builds Provenant in release mode
+3. Runs cold/warm scenarios with isolated cache roots while forwarding the requested Provenant scan flags unchanged
+4. Captures per-scenario output under `/tmp/provenant-benchmark/results/`
+5. Prints a summary table with wall time, key phase timings, peak RSS, and
+   incremental reuse signals
+
+### Output
+
+For each scenario, the script writes:
+
+- `results/<scenario>/scan-output.json`
+- `results/<scenario>/provenant-stdout.txt`
+
+It also writes a tab-separated summary file at:
+
+- `results/summary.tsv`
+
+### Notes
+
+- The script uses an explicit per-scenario `--cache-dir` so incremental manifest
+  results do not leak across scenarios.
+- `--target-path` mode scans the directory in place; it does not reset, stash, or
+  otherwise mutate that path.
+- Warm-run comparisons are meaningful only within one invocation because the
+  script recreates `/tmp/provenant-benchmark` on every run.
+- On macOS, the script falls back to `/usr/bin/time -l`; on systems with GNU
+  `time`, it uses verbose memory reporting automatically.
+
 ## Golden Fixture Helper Scripts
 
 ### Parser Golden Snapshots
