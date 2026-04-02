@@ -179,6 +179,41 @@ tokio = { version = "1.0", features = ["full"] }
     }
 
     #[test]
+    fn test_extract_short_composite_declared_license_preserves_mit_zero_and_or() {
+        let content = r#"
+[package]
+name = "constant_time_eq"
+version = "0.3.1"
+license = "CC0-1.0 OR MIT-0 OR Apache-2.0"
+        "#;
+
+        let (_temp_file, cargo_path) = create_temp_cargo_toml(content);
+        let package_data = CargoParser::extract_first_package(&cargo_path);
+
+        assert_eq!(
+            package_data.declared_license_expression.as_deref(),
+            Some("cc0-1.0 OR mit-0 OR apache-2.0")
+        );
+        assert_eq!(
+            package_data.declared_license_expression_spdx.as_deref(),
+            Some("CC0-1.0 OR MIT-0 OR Apache-2.0")
+        );
+        assert_eq!(package_data.license_detections.len(), 1);
+        assert_eq!(
+            package_data.license_detections[0].license_expression,
+            "cc0-1.0 OR mit-0 OR apache-2.0"
+        );
+        assert_eq!(
+            package_data.license_detections[0].license_expression_spdx,
+            "CC0-1.0 OR MIT-0 OR Apache-2.0"
+        );
+        assert_eq!(
+            package_data.extracted_license_statement.as_deref(),
+            Some("CC0-1.0 OR MIT-0 OR Apache-2.0")
+        );
+    }
+
+    #[test]
     fn test_extract_with_complex_dependencies() {
         let content = r#"
 [package]
