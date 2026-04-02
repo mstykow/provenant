@@ -244,8 +244,9 @@ pub enum DatasourceId {
     NugetProjectLockJson,
     NugetPackagesConfig,
     NugetPackagesLock,
-    /// Serializes to `"nuget_nupsec"` to match Python reference value (typo in original).
-    #[serde(rename = "nuget_nupsec")]
+    /// Serializes to `"nuget_nuspec"` (corrected from typo `"nuget_nupsec"` in Python reference).
+    /// Legacy alias `"nuget_nupsec"` is supported for backward compatibility with `--from-json`.
+    #[serde(rename = "nuget_nuspec", alias = "nuget_nupsec")]
     NugetNuspec,
     NugetVbproj,
     NugetFsproj,
@@ -292,8 +293,9 @@ pub enum DatasourceId {
     RpmInstalledDatabaseSqlite,
     RpmMarinerManifest,
     RpmPackageLicenses,
-    /// Serializes to `"rpm_spefile"` to match Python reference value (typo in original).
-    #[serde(rename = "rpm_spefile")]
+    /// Serializes to `"rpm_specfile"` (corrected from typo `"rpm_spefile"` in Python reference).
+    /// Legacy alias `"rpm_spefile"` is supported for backward compatibility with `--from-json`.
+    #[serde(rename = "rpm_specfile", alias = "rpm_spefile")]
     RpmSpecfile,
     RpmYumdb,
 
@@ -523,7 +525,7 @@ impl DatasourceId {
             Self::NugetProjectLockJson => "nuget_project_lock_json",
             Self::NugetPackagesConfig => "nuget_packages_config",
             Self::NugetPackagesLock => "nuget_packages_lock",
-            Self::NugetNuspec => "nuget_nupsec",
+            Self::NugetNuspec => "nuget_nuspec",
             Self::NugetVbproj => "nuget_vbproj",
             Self::NugetFsproj => "nuget_fsproj",
 
@@ -569,7 +571,7 @@ impl DatasourceId {
             Self::RpmInstalledDatabaseSqlite => "rpm_installed_database_sqlite",
             Self::RpmMarinerManifest => "rpm_mariner_manifest",
             Self::RpmPackageLicenses => "rpm_package_licenses",
-            Self::RpmSpecfile => "rpm_spefile",
+            Self::RpmSpecfile => "rpm_specfile",
             Self::RpmYumdb => "rpm_yumdb",
 
             // Ruby/RubyGems
@@ -693,7 +695,35 @@ mod tests {
             DatasourceId::GemArchiveExtracted.as_str(),
             "gem_archive_extracted"
         );
-        assert_eq!(DatasourceId::NugetNuspec.as_str(), "nuget_nupsec");
-        assert_eq!(DatasourceId::RpmSpecfile.as_str(), "rpm_spefile");
+        // Corrected from typos in Python reference
+        assert_eq!(DatasourceId::NugetNuspec.as_str(), "nuget_nuspec");
+        assert_eq!(DatasourceId::RpmSpecfile.as_str(), "rpm_specfile");
+    }
+
+    #[test]
+    fn test_legacy_deserialization_aliases() {
+        // Test that legacy typo spellings are accepted for backward compatibility
+        let legacy_nuget: DatasourceId = serde_json::from_str(r#""nuget_nupsec""#).unwrap();
+        assert_eq!(legacy_nuget, DatasourceId::NugetNuspec);
+
+        let legacy_rpm: DatasourceId = serde_json::from_str(r#""rpm_spefile""#).unwrap();
+        assert_eq!(legacy_rpm, DatasourceId::RpmSpecfile);
+
+        // Canonical spellings should also work
+        let canonical_nuget: DatasourceId = serde_json::from_str(r#""nuget_nuspec""#).unwrap();
+        assert_eq!(canonical_nuget, DatasourceId::NugetNuspec);
+
+        let canonical_rpm: DatasourceId = serde_json::from_str(r#""rpm_specfile""#).unwrap();
+        assert_eq!(canonical_rpm, DatasourceId::RpmSpecfile);
+    }
+
+    #[test]
+    fn test_canonical_serialization() {
+        // Test that canonical spellings are used for serialization
+        let nuget_json = serde_json::to_string(&DatasourceId::NugetNuspec).unwrap();
+        assert_eq!(nuget_json, r#""nuget_nuspec""#);
+
+        let rpm_json = serde_json::to_string(&DatasourceId::RpmSpecfile).unwrap();
+        assert_eq!(rpm_json, r#""rpm_specfile""#);
     }
 }

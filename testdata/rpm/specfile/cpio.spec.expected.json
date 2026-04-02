@@ -54,7 +54,7 @@
         "is_direct": true
       }
     ],
-    "datasource_id": "rpm_spefile",
+    "datasource_id": "rpm_specfile",
     "purl": "pkg:rpm/cpio@2.9"
   }
 ]
