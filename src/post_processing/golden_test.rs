@@ -342,6 +342,14 @@ mod tests {
     }
 
     #[test]
+    fn test_golden_reference_follow_readme_mit_see_license() {
+        assert_reference_follow_fixture_matches_expected(
+            "testdata/summarycode-golden/reference_following/readme_mit_see_license",
+            "testdata/summarycode-golden/reference_following/readme_mit_see_license/expected.json",
+        );
+    }
+
+    #[test]
     fn test_golden_reference_follow_file_to_package_inheritance() {
         assert_reference_follow_fixture_matches_expected(
             "testdata/summarycode-golden/reference_following/file_to_package_inheritance",
