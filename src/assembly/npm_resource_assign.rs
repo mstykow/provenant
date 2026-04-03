@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::models::{FileInfo, Package, PackageType};
+use crate::utils::path::{parent_dir, parent_dir_for_lookup};
 
 pub fn assign_npm_package_resources(files: &mut [FileInfo], packages: &[Package]) {
     let package_roots: HashMap<String, String> = packages
@@ -54,16 +55,4 @@ fn strip_root_prefix<'a>(path: &'a str, root: &str) -> Option<&'a str> {
 
     path.strip_prefix(root)
         .and_then(|suffix| suffix.strip_prefix('/'))
-}
-
-fn parent_dir(path: &str) -> &str {
-    path.rsplit_once('/').map_or("", |(parent, _)| parent)
-}
-
-fn parent_dir_for_lookup(path: &str) -> Option<&str> {
-    if path.is_empty() {
-        return None;
-    }
-
-    path.rsplit_once('/').map(|(parent, _)| parent).or(Some(""))
 }

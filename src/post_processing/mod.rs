@@ -24,6 +24,7 @@ use crate::models::{
     Package, PackageData, Summary, SystemEnvironment, Tallies, TallyEntry,
     TopLevelLicenseDetection,
 };
+use crate::utils::path::{parent_dir, parent_dir_for_lookup};
 
 const SCANCODE_LICENSE_URL_BASE: &str =
     "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses";
@@ -87,9 +88,10 @@ struct ResolvedReferenceTarget {
 }
 
 struct ClassificationContext {
-    package_roots: HashMap<String, PathBuf>,
+    package_roots: HashMap<String, String>,
     package_file_references: HashMap<String, HashSet<String>>,
-    scan_roots: Vec<PathBuf>,
+    scan_roots: HashSet<String>,
+    scan_root_ancestors: HashSet<String>,
     package_data_top_level_dirs: HashSet<String>,
 }
 
@@ -1455,10 +1457,13 @@ fn is_synthetic_rule(rule: &crate::license_detection::models::Rule) -> bool {
 }
 
 fn build_classification_context(files: &[FileInfo], packages: &[Package]) -> ClassificationContext {
+    let scan_roots = build_scan_roots(files);
+
     ClassificationContext {
         package_roots: build_package_roots(packages),
         package_file_references: build_package_file_reference_map(files),
-        scan_roots: build_scan_roots(files),
+        scan_root_ancestors: build_scan_root_ancestors(&scan_roots),
+        scan_roots,
         package_data_top_level_dirs: build_package_data_top_level_dirs(files),
     }
 }
@@ -1467,10 +1472,12 @@ fn classify_file(
     file: &FileInfo,
     classification_context: &ClassificationContext,
 ) -> FileClassification {
-    let path = Path::new(&file.path);
+    let path = file.path.as_str();
+    let path_parent = parent_dir(path);
     let is_manifest = file.file_type == FileType::File
         && (!file.package_data.is_empty() || is_manifest_file(&file.path));
-    let is_scan_root_top_level = is_scan_top_level(path, &classification_context.scan_roots);
+    let is_scan_root_top_level =
+        is_scan_top_level(path, &classification_context.scan_roots, &classification_context.scan_root_ancestors);
     let is_referenced = file.for_packages.iter().any(|uid| {
         classification_context
             .package_file_references
@@ -1485,8 +1492,7 @@ fn classify_file(
         classification_context
             .package_roots
             .get(uid)
-            .and_then(|root| path.strip_prefix(root).ok())
-            .is_some_and(|relative| relative.components().count() == 1)
+            .is_some_and(|root| path_parent == root)
     });
     let is_package_data_top_level = if file.file_type == FileType::Directory {
         classification_context
@@ -1494,14 +1500,9 @@ fn classify_file(
             .contains(file.path.as_str())
     } else {
         (!file.package_data.is_empty() && !file.for_packages.is_empty() && is_manifest)
-            || path
-                .parent()
-                .and_then(|parent| parent.to_str())
-                .is_some_and(|parent| {
-                    classification_context
-                        .package_data_top_level_dirs
-                        .contains(parent)
-                })
+            || classification_context
+                .package_data_top_level_dirs
+                .contains(path_parent)
     };
     let is_top_level =
         is_scan_root_top_level || is_referenced || is_root_top_level || is_package_data_top_level;
@@ -1586,29 +1587,23 @@ fn build_package_data_top_level_dirs(files: &[FileInfo]) -> HashSet<String> {
             && !file.package_data.is_empty()
             && !file.for_packages.is_empty()
     }) {
-        let path = Path::new(&file.path);
-        if path.components().count() <= 2 {
+        let parent = parent_dir(&file.path);
+        if parent.is_empty() || !parent.contains('/') {
             continue;
         }
-        for ancestor in path.ancestors().skip(1) {
-            let Some(ancestor_str) = ancestor.to_str() else {
-                continue;
-            };
-            if ancestor_str.is_empty() {
-                continue;
-            }
-            top_level_dirs.insert(ancestor_str.to_string());
-        }
+
+        top_level_dirs.insert(parent.to_string());
+        insert_nonempty_ancestors(parent, &mut top_level_dirs);
     }
 
     top_level_dirs
 }
 
-fn build_package_roots(packages: &[Package]) -> HashMap<String, PathBuf> {
+fn build_package_roots(packages: &[Package]) -> HashMap<String, String> {
     let mut roots = HashMap::new();
     for package in packages {
         if let Some(root) = package_root(package) {
-            roots.insert(package.package_uid.clone(), root);
+            roots.insert(package.package_uid.clone(), root.to_string_lossy().into_owned());
         }
     }
     roots
@@ -1642,7 +1637,7 @@ fn package_root(package: &Package) -> Option<PathBuf> {
     None
 }
 
-fn build_scan_roots(files: &[FileInfo]) -> Vec<PathBuf> {
+fn build_scan_roots(files: &[FileInfo]) -> HashSet<String> {
     let parent_dirs: Vec<PathBuf> = files
         .iter()
         .filter(|file| file.file_type == FileType::File)
@@ -1677,6 +1672,32 @@ fn build_scan_roots(files: &[FileInfo]) -> Vec<PathBuf> {
     }
 
     roots
+        .into_iter()
+        .map(|root| root.to_string_lossy().into_owned())
+        .collect()
+}
+
+fn build_scan_root_ancestors(scan_roots: &HashSet<String>) -> HashSet<String> {
+    let mut ancestors = HashSet::new();
+
+    for root in scan_roots {
+        insert_nonempty_ancestors(root, &mut ancestors);
+    }
+
+    ancestors
+}
+
+fn insert_nonempty_ancestors(path: &str, ancestors: &mut HashSet<String>) {
+    let mut current = parent_dir_for_lookup(path);
+
+    while let Some(candidate) = current {
+        if candidate.is_empty() {
+            break;
+        }
+
+        ancestors.insert(candidate.to_string());
+        current = parent_dir_for_lookup(candidate);
+    }
 }
 
 fn lowest_common_parent_path(paths: &[PathBuf]) -> Option<PathBuf> {
@@ -1706,19 +1727,18 @@ fn lowest_common_parent_path(paths: &[PathBuf]) -> Option<PathBuf> {
     })
 }
 
-fn is_scan_top_level(path: &Path, scan_roots: &[PathBuf]) -> bool {
-    if path.components().count() == 1 {
+fn is_scan_top_level(
+    path: &str,
+    scan_roots: &HashSet<String>,
+    scan_root_ancestors: &HashSet<String>,
+) -> bool {
+    if !path.contains('/') {
         return true;
     }
 
-    scan_roots.iter().any(|root| {
-        path == root
-            || root.starts_with(path)
-            || path
-                .strip_prefix(root)
-                .ok()
-                .is_some_and(|relative| relative.components().count() == 1)
-    })
+    scan_roots.contains(path)
+        || scan_root_ancestors.contains(path)
+        || scan_roots.contains(parent_dir(path))
 }
 
 fn build_package_file_reference_map(files: &[FileInfo]) -> HashMap<String, HashSet<String>> {

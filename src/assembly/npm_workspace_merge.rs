@@ -27,6 +27,7 @@ use std::path::{Path, PathBuf};
 use log::warn;
 
 use crate::models::{DatasourceId, FileInfo, Package, PackageData, TopLevelDependency};
+use crate::utils::path::{parent_dir, parent_dir_for_lookup};
 
 /// Assemble npm/pnpm workspace packages from already-assembled packages.
 ///
@@ -729,18 +730,6 @@ fn strip_root_prefix<'a>(path: &'a str, root: &str) -> Option<&'a str> {
 
     path.strip_prefix(root)
         .and_then(|suffix| suffix.strip_prefix('/'))
-}
-
-fn parent_dir(path: &str) -> &str {
-    path.rsplit_once('/').map_or("", |(parent, _)| parent)
-}
-
-fn parent_dir_for_lookup(path: &str) -> Option<&str> {
-    if path.is_empty() {
-        return None;
-    }
-
-    path.rsplit_once('/').map(|(parent, _)| parent).or(Some(""))
 }
 
 /// Resolve workspace: version references in all dependencies
