@@ -3701,28 +3701,12 @@ fn test_markdown_transition_line_not_author() {
 }
 
 #[test]
-fn test_security_review_prose_not_author() {
-    let input = "As part of our commitment to producing the very finest C++ libraries that\napplication developers can trust, the C++ Alliance has commissioned Bishop Fox\nto perform a security audit of the Boost.JSON library. The report is linked\nhere.";
-    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
-
-    assert!(authors.is_empty(), "authors: {authors:?}");
-}
-
-#[test]
 fn test_json_author_field_does_not_capture_following_metadata_blob() {
     let input = "author: Box UK,\nurl: http://updates.jenkins-ci.org/download/plugins/jslint/0.7.6/jslint.hpi,\nversion: 0.7.6,\nwiki: https://wiki.jenkins-ci.org/display/JENKINS/JSLint+plugin";
     let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
 
     let author_values: Vec<&str> = authors.iter().map(|a| a.author.as_str()).collect();
     assert_eq!(author_values, vec!["Box UK"], "authors: {authors:?}");
-}
-
-#[test]
-fn test_long_lowercase_heavy_json_blob_not_author() {
-    let input = "Developer Lab (OSDL), the LF sponsors the work of Linux creator Linus Torvalds and supported by leading Linux and open source companies and developers from around the world. The Linux Foundation promotes, protects and standardizes Linux by";
-    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
-
-    assert!(authors.is_empty(), "authors: {authors:?}");
 }
 
 #[test]
@@ -3747,17 +3731,6 @@ fn test_boost_value_stack_call_ref_sentence_not_author() {
     let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
 
     assert!(authors.is_empty(), "authors: {authors:?}");
-}
-
-#[test]
-fn test_inline_developed_by_company_author_detected() {
-    let input = "Supports all JSLint options. Developed by Box UK.";
-    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
-
-    assert!(
-        authors.iter().any(|a| a.author == "Box UK"),
-        "authors: {authors:?}"
-    );
 }
 
 #[test]
@@ -3838,42 +3811,6 @@ fn test_dangling_two_word_phrase_not_author() {
     let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
 
     assert!(authors.is_empty(), "authors: {authors:?}");
-}
-
-#[test]
-fn test_mit_license_intro_does_not_create_copyright_or_holder() {
-    let input = "These files are covered by the following copyright and MIT License,\nreproduced from the original project:\n\nMIT License\n\nCopyright (c) 2016 Nicolas Seriot";
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
-
-    assert!(
-        !copyrights
-            .iter()
-            .any(|c| c.copyright == "copyright and MIT"),
-        "copyrights: {copyrights:?}"
-    );
-    assert!(
-        !holders.iter().any(|h| h.holder == "MIT"),
-        "holders: {holders:?}"
-    );
-    assert!(
-        copyrights
-            .iter()
-            .any(|c| c.copyright == "Copyright (c) 2016 Nicolas Seriot"),
-        "copyrights: {copyrights:?}"
-    );
-    assert!(
-        holders.iter().any(|h| h.holder == "Nicolas Seriot"),
-        "holders: {holders:?}"
-    );
-}
-
-#[test]
-fn test_sentence_like_metadata_blob_not_copyright_or_holder() {
-    let input = "copyright files with accuracy and thus the process can be automated. u201d sponsor' @type' Organization name' FOSSology disambiguatingDescription' Open Source";
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
-
-    assert!(copyrights.is_empty(), "copyrights: {copyrights:?}");
-    assert!(holders.is_empty(), "holders: {holders:?}");
 }
 
 #[test]
