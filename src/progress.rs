@@ -570,16 +570,12 @@ pub fn format_size(bytes: u64) -> String {
 
 fn num_cpus_for_display() -> usize {
     let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
-    if cpus > 1 {
-        cpus - 1
-    } else {
-        1
-    }
+    if cpus > 1 { cpus - 1 } else { 1 }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{build_summary_messages, format_size, ScanStats};
+    use super::{ScanStats, build_summary_messages, format_size};
 
     #[test]
     fn format_size_matches_expected_shape() {
