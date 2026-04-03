@@ -99,6 +99,18 @@ struct OutputIndexes {
     key_file_indices_by_package_uid: HashMap<String, Vec<usize>>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OutputIndexMode {
+    KeyFilesOnly,
+    Full,
+}
+
+impl OutputIndexMode {
+    fn includes_path_index(self) -> bool {
+        matches!(self, Self::Full)
+    }
+}
+
 #[derive(Clone, Copy)]
 struct FileClassification {
     is_legal: bool,
@@ -167,10 +179,18 @@ pub(crate) fn create_output(
     if needs_classification && let Some(classification_context) = classification_context.as_ref() {
         apply_file_classification(&mut files, classification_context);
     }
+    let output_index_mode = if context.options.include_summary
+        || context.options.include_license_clarity_score
+    {
+        OutputIndexMode::Full
+    } else {
+        OutputIndexMode::KeyFilesOnly
+    };
     let output_indexes = build_output_indexes(
         &files,
         classification_context.as_ref(),
         !needs_classification,
+        output_index_mode,
     );
 
     promote_package_metadata_from_key_files(&files, &mut packages, &output_indexes);
@@ -1526,14 +1546,17 @@ fn build_output_indexes(
     files: &[FileInfo],
     classification_context: Option<&ClassificationContext>,
     use_fallback_key_classification: bool,
+    mode: OutputIndexMode,
 ) -> OutputIndexes {
     let mut indexes = OutputIndexes::default();
 
     for (idx, file) in files.iter().enumerate() {
-        indexes
-            .first_file_index_by_path
-            .entry(file.path.clone())
-            .or_insert(idx);
+        if mode.includes_path_index() {
+            indexes
+                .first_file_index_by_path
+                .entry(file.path.clone())
+                .or_insert(idx);
+        }
 
         let is_key_file = if use_fallback_key_classification {
             classification_context.is_some_and(|context| classify_file(file, context).is_key_file)
@@ -1976,7 +1999,7 @@ fn promote_package_metadata_from_key_files(
 
 #[cfg(test)]
 fn compute_summary(files: &[FileInfo], packages: &[Package]) -> Option<Summary> {
-    let indexes = build_output_indexes(files, None, false);
+    let indexes = build_output_indexes(files, None, false, OutputIndexMode::Full);
     compute_summary_with_options(files, packages, &indexes, true, true)
 }
 
