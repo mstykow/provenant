@@ -48,7 +48,7 @@ regex = { workspace = true }
 rmp-serde = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.10.9"
+sha2 = "0.11.0"
 url = { workspace = true }
 yaml_serde = "0.10.4"
 zstd = { workspace = true }
