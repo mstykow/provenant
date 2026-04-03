@@ -23,6 +23,7 @@ pub fn refine_author(s: &str) -> Option<String> {
     a = strip_trailing_comma_year_after_angle_email(&a);
     a = strip_trailing_comma_month_year(&a);
     a = strip_trailing_comma_email_matching_name(&a);
+    a = truncate_json_metadata_tail(&a);
     a = normalize_slash_spacing(&a);
     a = normalize_slash_author_pairs(&a);
     a = strip_trailing_status_works(&a);
@@ -55,6 +56,25 @@ pub fn refine_author(s: &str) -> Option<String> {
 fn normalize_slash_spacing(s: &str) -> String {
     static SLASH_SPACING_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\s*/\s*").unwrap());
     SLASH_SPACING_RE.replace_all(s, "/").into_owned()
+}
+
+fn truncate_json_metadata_tail(s: &str) -> String {
+    let trimmed = s.trim();
+    static JSON_METADATA_TAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r#"(?i)^(?P<prefix>.+?)(?:,\s*['"]?(?:gav|labels|name|previoustimestamp|previousversion|releasetimestamp|requiredcore|scm)\b.*)$"#,
+        )
+        .unwrap()
+    });
+
+    if let Some(cap) = JSON_METADATA_TAIL_RE.captures(trimmed) {
+        let prefix = cap.name("prefix").map(|m| m.as_str()).unwrap_or("").trim();
+        let prefix = prefix.trim_end_matches(&[',', ';', '.'][..]).trim();
+        if !prefix.is_empty() {
+            return prefix.to_string();
+        }
+    }
+    s.to_string()
 }
 
 fn strip_trailing_comma_year_after_angle_email(s: &str) -> String {

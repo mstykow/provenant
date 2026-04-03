@@ -2188,6 +2188,19 @@ fn test_detect_author() {
 }
 
 #[test]
+fn test_detect_author_from_xml_author_attribute() {
+    let text = r#"<note author="Vinnie Falco">C++11 is the minimum requirement.</note>"#;
+    let (c, h, a) = detect_copyrights_from_text(text);
+
+    assert!(c.is_empty(), "Should not detect copyright");
+    assert!(h.is_empty(), "Should not detect holder");
+    assert_eq!(a.len(), 1, "Should detect one author, got: {:?}", a);
+    assert_eq!(a[0].author, "Vinnie Falco");
+    assert_eq!(a[0].start_line, 1);
+    assert_eq!(a[0].end_line, 1);
+}
+
+#[test]
 fn test_detect_junk_filtered() {
     let (c, _h, _a) = detect_copyrights_from_text("Copyright (c)");
     // "Copyright (c)" alone is junk.
@@ -3686,6 +3699,250 @@ fn test_markdown_transition_line_not_author() {
         "authors: {authors:?}"
     );
 }
+
+#[test]
+fn test_security_review_prose_not_author() {
+    let input = "As part of our commitment to producing the very finest C++ libraries that\napplication developers can trust, the C++ Alliance has commissioned Bishop Fox\nto perform a security audit of the Boost.JSON library. The report is linked\nhere.";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_json_author_field_does_not_capture_following_metadata_blob() {
+    let input = "author: Box UK,\nurl: http://updates.jenkins-ci.org/download/plugins/jslint/0.7.6/jslint.hpi,\nversion: 0.7.6,\nwiki: https://wiki.jenkins-ci.org/display/JENKINS/JSLint+plugin";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    let author_values: Vec<&str> = authors.iter().map(|a| a.author.as_str()).collect();
+    assert_eq!(author_values, vec!["Box UK"], "authors: {authors:?}");
+}
+
+#[test]
+fn test_long_lowercase_heavy_json_blob_not_author() {
+    let input = "Developer Lab (OSDL), the LF sponsors the work of Linux creator Linus Torvalds and supported by leading Linux and open source companies and developers from around the world. The Linux Foundation promotes, protects and standardizes Linux by";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_sentence_fragment_not_author() {
+    let input = "with key equal to unescaped token";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_call_ref_fragment_not_author() {
+    let input = "call @ref";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_boost_value_stack_call_ref_sentence_not_author() {
+    let input = "Then to build a @ref value, first call @ref reset and optionally specify the boost::container::pmr::memory_resource.";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_inline_developed_by_company_author_detected() {
+    let input = "Supports all JSLint options. Developed by Box UK.";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.iter().any(|a| a.author == "Box UK"),
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_json_excerpt_developed_by_company_author_detected() {
+    let input = r#"mes/0.2/jsgames.hpi","version":"0.2","wiki":"https://wiki.jenkins-ci.org/display/JENKINS/JSGames+Plugin"},"jslint":{"buildDate":"Jan 03, 2013","dependencies":[],"developers":[{"developerId":"gavd","email":"gavin.davies@boxuk.com","name":"Gavin Davies"}],"excerpt":"Lint JavaScript files, outputting to checkstyle format. Supports all JSLint options. Developed by Box UK.","gav":"org.jenkins-ci.plugins:jslint:0.7.6","labels":["misc"],"name":"jslint","previousTimestamp":"2013-01-03T20:22:38.00Z","previousVersion":"0.7.5","releaseTimestamp":"2013-01-03T20:29:06.00Z","requiredCore":"1.474","scm":"github.com""#;
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.iter().any(|a| a.author == "Box UK"),
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_gsoc_javascript_language_phrase_not_author() {
+    let input = "My proposal is based on getting full support for JavaScript within the RoboComp framework. For this, the current state of generation of written components in the JavaScript language must be improved.";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        !authors
+            .iter()
+            .any(|a| a.author == "components in the JavaScript language"),
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_apostrophized_person_name_metadata_not_author() {
+    let input = "type' Person name' AadityaNair";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_language_fragment_not_author() {
+    let input = "in PHP";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_single_word_stopword_not_author() {
+    let input = "In";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_short_comma_metadata_phrase_not_author() {
+    let input = "GENIVI, several standard";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_short_url_suffix_phrase_not_author() {
+    let input = "J.L.Blanco (https://github.com/jlblancoc)";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_lowercase_starting_multiword_fragment_not_author() {
+    let input = "around the world. It";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_dangling_two_word_phrase_not_author() {
+    let input = "Sandcastle and";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_mit_license_intro_does_not_create_copyright_or_holder() {
+    let input = "These files are covered by the following copyright and MIT License,\nreproduced from the original project:\n\nMIT License\n\nCopyright (c) 2016 Nicolas Seriot";
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        !copyrights
+            .iter()
+            .any(|c| c.copyright == "copyright and MIT"),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        !holders.iter().any(|h| h.holder == "MIT"),
+        "holders: {holders:?}"
+    );
+    assert!(
+        copyrights
+            .iter()
+            .any(|c| c.copyright == "Copyright (c) 2016 Nicolas Seriot"),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        holders.iter().any(|h| h.holder == "Nicolas Seriot"),
+        "holders: {holders:?}"
+    );
+}
+
+#[test]
+fn test_sentence_like_metadata_blob_not_copyright_or_holder() {
+    let input = "copyright files with accuracy and thus the process can be automated. u201d sponsor' @type' Organization name' FOSSology disambiguatingDescription' Open Source";
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(copyrights.is_empty(), "copyrights: {copyrights:?}");
+    assert!(holders.is_empty(), "holders: {holders:?}");
+}
+
+#[test]
+fn test_gsoc_spdx_sentence_not_copyright_or_holder() {
+    let input = "Software Package Data Exchange (SPDX) is a set of standards for communicating the components, licenses, and copyrights associated with software.";
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(copyrights.is_empty(), "copyrights: {copyrights:?}");
+    assert!(holders.is_empty(), "holders: {holders:?}");
+}
+
+#[test]
+fn test_rest_api_description_not_holder_or_copyright() {
+    let input = "We provide developers, researchers, and students the ability to access any model using a simple REST API call. The REST API description.";
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(copyrights.is_empty(), "copyrights: {copyrights:?}");
+    assert!(holders.is_empty(), "holders: {holders:?}");
+}
+
+#[test]
+fn test_bare_rest_marker_not_copyright() {
+    let input = "(c) REST";
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(copyrights.is_empty(), "copyrights: {copyrights:?}");
+    assert!(holders.is_empty(), "holders: {holders:?}");
+}
+
+#[test]
+fn test_semicolon_joined_copyright_list_does_not_keep_combined_variant() {
+    let input =
+        "(C) 2019--2020 Vinnie Falco; (C) 2020 Krystian Stasiowski; (C) 2022 Dmitry Arkhipov";
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        !copyrights.iter().any(|c| {
+            c
+            .copyright
+            == "(c) 2019-2020 Vinnie Falco; (c) 2020 Krystian Stasiowski; (c) 2022 Dmitry Arkhipov"
+        }),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        copyrights
+            .iter()
+            .any(|c| c.copyright == "(c) 2019-2020 Vinnie Falco"),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        copyrights
+            .iter()
+            .any(|c| c.copyright == "(c) 2020 Krystian Stasiowski"),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        copyrights
+            .iter()
+            .any(|c| c.copyright == "(c) 2022 Dmitry Arkhipov"),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        holders.iter().any(|h| h.holder == "Vinnie Falco")
+            && holders.iter().any(|h| h.holder == "Krystian Stasiowski")
+            && holders.iter().any(|h| h.holder == "Dmitry Arkhipov"),
+        "holders: {holders:?}"
+    );
+}
+
 #[test]
 fn test_normalize_company_suffix_period_holder_variants() {
     let input = "Copyright (c) 2020 Foo, Inc\nCopyright (c) 2021 Foo, Inc.";

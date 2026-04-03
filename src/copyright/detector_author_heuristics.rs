@@ -169,6 +169,45 @@ pub(super) fn extract_multiline_written_by_author_blocks(
     }
 }
 
+pub(super) fn extract_json_excerpt_developed_by_authors(
+    content: &str,
+    authors: &mut Vec<AuthorDetection>,
+) {
+    if content.is_empty() {
+        return;
+    }
+
+    static JSON_DEVELOPED_BY_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r#"(?is)"(?:excerpt|description)"\s*:\s*"[^"\n]{0,800}?\bdeveloped\s+by\s+(?P<who>[A-Z][A-Za-z0-9.&+'-]*(?:\s+[A-Z][A-Za-z0-9.&+'-]*){0,4})(?:[.,;]|\")"#,
+        )
+        .unwrap()
+    });
+
+    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+    for cap in JSON_DEVELOPED_BY_RE.captures_iter(content) {
+        let who = cap
+            .name("who")
+            .map(|m| m.as_str())
+            .unwrap_or("")
+            .trim()
+            .trim_end_matches(&['.', ';', ','][..]);
+        if who.is_empty() {
+            continue;
+        }
+        let Some(author) = refine_author(who) else {
+            continue;
+        };
+        if seen.insert(author.clone()) {
+            authors.push(AuthorDetection {
+                author,
+                start_line: 1,
+                end_line: 1,
+            });
+        }
+    }
+}
+
 pub(super) fn extract_module_author_macros(
     content: &str,
     copyrights: &[CopyrightDetection],
@@ -380,6 +419,10 @@ pub(super) fn extract_author_colon_blocks(
             i += 1;
             continue;
         }
+        let Some(initial_tail) = sanitize_author_colon_tail(tail) else {
+            i += 1;
+            continue;
+        };
 
         let label_raw = line.split(':').next().unwrap_or("").trim();
         let label_is_all_caps = !label_raw.is_empty()
@@ -390,7 +433,7 @@ pub(super) fn extract_author_colon_blocks(
             continue;
         }
 
-        let mut segments: Vec<String> = vec![tail.to_string()];
+        let mut segments: Vec<String> = vec![initial_tail];
         let mut j = i + 1;
         let mut added = 0usize;
         while j < prepared_cache.len() {
@@ -402,6 +445,9 @@ pub(super) fn extract_author_colon_blocks(
                 break;
             }
             let next_lower = next_line.to_ascii_lowercase();
+            if is_author_metadata_line(next_line) {
+                break;
+            }
             if next_lower.starts_with("copyright") {
                 break;
             }
@@ -486,6 +532,72 @@ pub(super) fn extract_author_colon_blocks(
 
         i = j;
     }
+}
+
+fn sanitize_author_colon_tail(tail: &str) -> Option<String> {
+    let trimmed = tail.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    static JSON_NAME_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r#"(?i)(?:^|[\s,{])(?:['"]?name['"]?\s*[:=]\s*|name'\s+)(?P<name>[A-Z][A-Za-z0-9_.-]*(?:\s+[A-Z][A-Za-z0-9_.-]*){0,5})"#,
+        )
+        .unwrap()
+    });
+    static METADATA_SPLIT_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r#"(?i),(?:\s*['"]?(?:url|version|wiki|gav|labels|developerid|email|name|previoustimestamp|previousversion|releasetimestamp|requiredcore|scm)\b.*)$"#,
+        )
+        .unwrap()
+    });
+
+    let lower = trimmed.to_ascii_lowercase();
+    let object_like = lower.contains("@type")
+        || lower.contains("type'")
+        || lower.contains("type ")
+        || lower.contains("disambiguatingdescription")
+        || lower.contains("sponsor'")
+        || lower.contains("logo");
+
+    if object_like {
+        if let Some(cap) = JSON_NAME_RE.captures(trimmed) {
+            let name = cap.name("name").map(|m| m.as_str()).unwrap_or("").trim();
+            if !name.is_empty() {
+                return Some(name.to_string());
+            }
+        }
+        return None;
+    }
+
+    if let Some(mat) = METADATA_SPLIT_RE.find(trimmed) {
+        let prefix = trimmed[..mat.start()].trim().trim_end_matches(',').trim();
+        if !prefix.is_empty() {
+            return Some(prefix.to_string());
+        }
+        return None;
+    }
+
+    Some(trimmed.to_string())
+}
+
+fn is_author_metadata_line(line: &str) -> bool {
+    let lower = line.trim().to_ascii_lowercase();
+    lower.starts_with("url:")
+        || lower.starts_with("version:")
+        || lower.starts_with("wiki:")
+        || lower.starts_with("gav:")
+        || lower.starts_with("labels:")
+        || lower.starts_with("developerid:")
+        || lower.starts_with("email:")
+        || lower.starts_with("name:")
+        || lower.starts_with("previoustimestamp:")
+        || lower.starts_with("previousversion:")
+        || lower.starts_with("releasetimestamp:")
+        || lower.starts_with("requiredcore:")
+        || lower.starts_with("scm:")
+        || lower.starts_with("disambiguatingdescription")
 }
 
 pub(super) fn extract_code_written_by_author_blocks(
@@ -1349,6 +1461,10 @@ pub(super) fn drop_shadowed_prefix_authors(authors: &mut Vec<AuthorDetection>) {
         }
     }
     *authors = kept;
+}
+
+pub(super) fn drop_ref_markup_authors(authors: &mut Vec<AuthorDetection>) {
+    authors.retain(|author| !author.author.contains("@ref"));
 }
 
 pub(super) fn drop_comedi_ds_status_devices_authors(

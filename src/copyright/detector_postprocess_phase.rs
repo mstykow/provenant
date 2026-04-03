@@ -43,6 +43,7 @@ pub(super) fn run_phase_postprocess(
         authors,
     );
     super::author_heuristics::extract_multiline_written_by_author_blocks(prepared_cache, authors);
+    super::author_heuristics::extract_json_excerpt_developed_by_authors(content, authors);
     super::author_heuristics::extract_was_developed_by_author_blocks(prepared_cache, authors);
     super::author_heuristics::extract_developed_by_sentence_authors(prepared_cache, authors);
     super::author_heuristics::extract_developed_by_phrase_authors(prepared_cache, authors);
@@ -73,6 +74,7 @@ pub(super) fn run_phase_postprocess(
         prepared_cache,
         authors,
     );
+    super::author_heuristics::drop_ref_markup_authors(authors);
 
     super::extract_following_authors_holders(raw_lines, prepared_cache, holders);
 
@@ -131,6 +133,7 @@ pub(super) fn run_phase_postprocess(
     super::drop_shadowed_multiline_prefix_holders(holders);
 
     super::drop_shadowed_prefix_copyrights(copyrights);
+    super::drop_combined_semicolon_shadowed_copyrights(copyrights);
 
     super::drop_shadowed_for_clause_holders_with_email_copyrights(copyrights, holders);
 

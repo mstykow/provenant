@@ -788,6 +788,32 @@ fn add_found_at_short_variants(
     holders.extend(new_h);
 }
 
+fn drop_combined_semicolon_shadowed_copyrights(copyrights: &mut Vec<CopyrightDetection>) {
+    if copyrights.len() < 2 {
+        return;
+    }
+
+    let all = copyrights.clone();
+    copyrights.retain(|candidate| {
+        if !candidate.copyright.contains(';') {
+            return true;
+        }
+
+        let same_span_matches = all
+            .iter()
+            .filter(|other| {
+                other.start_line == candidate.start_line
+                    && other.end_line == candidate.end_line
+                    && other.copyright != candidate.copyright
+                    && !other.copyright.contains(';')
+                    && candidate.copyright.contains(&other.copyright)
+            })
+            .count();
+
+        same_span_matches < 2
+    });
+}
+
 fn drop_shadowed_linux_foundation_holder_copyrights_same_line(
     copyrights: &mut Vec<CopyrightDetection>,
 ) {
@@ -2296,7 +2322,13 @@ fn drop_copyright_like_holders(holders: &mut Vec<HolderDetection>) {
     }
     static BAD_HOLDER_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)^copyright\s+\d{4}(?:\s*[-–]\s*\d{4})?$").unwrap());
-    holders.retain(|h| !BAD_HOLDER_RE.is_match(h.holder.trim()));
+    holders.retain(|h| {
+        let lower = h.holder.trim().to_ascii_lowercase();
+        !BAD_HOLDER_RE.is_match(h.holder.trim())
+            && !lower.contains("api description")
+            && !lower.contains("associated with software")
+            && lower != "rest"
+    });
 }
 
 fn restore_url_slash_before_closing_paren_from_raw_lines(
@@ -10304,11 +10336,14 @@ fn drop_non_copyright_like_copyrights(copyrights: &mut Vec<CopyrightDetection>) 
             return false;
         }
         let lower = s.to_ascii_lowercase();
-        lower.contains("copyright")
+        (lower.contains("copyright")
             || lower.starts_with("(c)")
             || lower.contains("(c)")
             || lower.contains("copr")
-            || lower.contains("holder is")
+            || lower.contains("holder is"))
+            && !lower.contains("associated with software")
+            && !lower.contains("api description")
+            && lower != "(c) rest"
     });
 }
 
