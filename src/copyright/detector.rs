@@ -4082,6 +4082,7 @@ fn extend_multiline_copyright_c_year_holder_continuations(
 
         let mut end_ln = *start_ln;
         let mut did_extend = false;
+        let mut invalid_continuation = false;
         for (ln, cont_raw) in group.iter().skip(i + 1) {
             if *ln != end_ln + 1 {
                 break;
@@ -4104,13 +4105,18 @@ fn extend_multiline_copyright_c_year_holder_continuations(
                 break;
             }
 
+            if did_extend || cont.trim_end().ends_with(',') {
+                invalid_continuation = true;
+                break;
+            }
+
             tail.push(' ');
             tail.push_str(cont);
             end_ln = *ln;
             did_extend = true;
         }
 
-        if !did_extend {
+        if !did_extend || invalid_continuation {
             continue;
         }
 

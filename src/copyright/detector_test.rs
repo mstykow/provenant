@@ -3750,6 +3750,31 @@ fn test_boost_style_multiline_holder_continuation_after_year_first_line() {
 }
 
 #[test]
+fn test_year_first_multiline_holder_repair_does_not_absorb_multiline_holder_lists() {
+    let input = "Copyright (c) 1995, 1996, 1997 Francis.Dupont@inria.fr, INRIA Rocquencourt,\n\
+Alain.Durand@imag.fr, IMAG,\n\
+Jean-Luc.Richier@imag.fr, IMAG-LSR.\n";
+
+    let (copyrights, _holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        copyrights.iter().any(|c| {
+            c.start_line == 1
+                && c.end_line == 1
+                && c.copyright == "Copyright (c) 1995, 1996, 1997 Francis.Dupont@inria.fr, INRIA"
+        }),
+        "copyrights: {copyrights:?}"
+    );
+
+    assert!(
+        !copyrights
+            .iter()
+            .any(|c| c.copyright.contains("Rocquencourt") || c.copyright.contains("Alain.Durand")),
+        "copyrights: {copyrights:?}"
+    );
+}
+
+#[test]
 fn test_extend_copyright_with_following_all_rights_reserved_line() {
     let input = "Copyright 2010-2015 Mike Bostock\nAll rights reserved.";
     let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
