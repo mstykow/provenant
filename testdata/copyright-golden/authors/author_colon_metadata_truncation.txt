@@ -1,0 +1,4 @@
+author: Box UK,
+url: http://updates.jenkins-ci.org/download/plugins/jslint/0.7.6/jslint.hpi,
+version: 0.7.6,
+wiki: https://wiki.jenkins-ci.org/display/JENKINS/JSLint+plugin
