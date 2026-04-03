@@ -81,7 +81,7 @@ pub(crate) fn populate_detection_from_group(
 
     let log_category = analyze_detection(&group.matches, false);
 
-    let matches_for_expression = select_matches_for_expression(&group.matches, log_category);
+    let matches_for_expression = select_matches_for_expression(&group.matches, log_category, false);
 
     detection.matches = group.matches.clone();
     detection.file_regions = collect_file_regions_from_matches(&detection.matches);
@@ -285,10 +285,11 @@ fn attach_aggregated_file_regions(detections: &mut [LicenseDetection]) {
 pub(crate) fn select_matches_for_expression(
     matches: &[crate::license_detection::models::LicenseMatch],
     log_category: &str,
+    post_scan: bool,
 ) -> Vec<crate::license_detection::models::LicenseMatch> {
     let filtered = if log_category == DETECTION_LOG_UNKNOWN_INTRO_FOLLOWED_BY_MATCH {
         filter_license_intros(matches)
-    } else if log_category == DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE {
+    } else if post_scan && log_category == DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE {
         filter_license_intros_and_references(matches)
     } else {
         matches.to_vec()
@@ -548,6 +549,48 @@ mod tests {
         m.match_coverage = 100.0;
         m.score = 100.0;
         m
+    }
+
+    #[test]
+    fn select_matches_for_expression_keeps_local_file_references_in_main_detection() {
+        let mut referenced = create_test_match(1, 3, "3-seq", "apache-2.0_910.RULE");
+        referenced.license_expression = "apache-2.0".to_string();
+        referenced.license_expression_spdx = Some("Apache-2.0".to_string());
+        referenced.referenced_filenames = Some(vec!["LICENSE-APACHE".to_string()]);
+
+        let mut disclaimer = create_test_match(4, 6, "3-seq", "warranty-disclaimer_18.RULE");
+        disclaimer.license_expression = "warranty-disclaimer".to_string();
+        disclaimer.license_expression_spdx =
+            Some("LicenseRef-scancode-warranty-disclaimer".to_string());
+
+        let selected = select_matches_for_expression(
+            &[referenced.clone(), disclaimer.clone()],
+            DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE,
+            false,
+        );
+
+        assert_eq!(selected, vec![referenced, disclaimer]);
+    }
+
+    #[test]
+    fn select_matches_for_expression_filters_local_file_references_during_post_scan() {
+        let mut referenced = create_test_match(1, 3, "3-seq", "apache-2.0_910.RULE");
+        referenced.license_expression = "apache-2.0".to_string();
+        referenced.license_expression_spdx = Some("Apache-2.0".to_string());
+        referenced.referenced_filenames = Some(vec!["LICENSE-APACHE".to_string()]);
+
+        let mut disclaimer = create_test_match(4, 6, "3-seq", "warranty-disclaimer_18.RULE");
+        disclaimer.license_expression = "warranty-disclaimer".to_string();
+        disclaimer.license_expression_spdx =
+            Some("LicenseRef-scancode-warranty-disclaimer".to_string());
+
+        let selected = select_matches_for_expression(
+            &[referenced, disclaimer.clone()],
+            DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE,
+            true,
+        );
+
+        assert_eq!(selected, vec![disclaimer]);
     }
 
     fn create_test_license() -> License {

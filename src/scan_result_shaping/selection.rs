@@ -113,10 +113,20 @@ pub(crate) fn apply_cli_path_selection_filter(
 }
 
 pub(crate) fn normalize_scan_relative_path(path: &Path, scan_root: &Path) -> String {
-    path.strip_prefix(scan_root)
+    let normalized = path
+        .strip_prefix(scan_root)
         .unwrap_or(path)
         .to_string_lossy()
-        .replace('\\', "/")
+        .replace('\\', "/");
+
+    if normalized.is_empty() && path == scan_root {
+        scan_root
+            .file_name()
+            .map(|name| name.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_default()
+    } else {
+        normalized
+    }
 }
 
 pub(crate) fn is_included_path(

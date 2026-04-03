@@ -81,6 +81,38 @@ fn apply_user_path_filters_to_collected_filters_files_without_pruning_directorie
 }
 
 #[test]
+fn normalize_scan_relative_path_uses_filename_for_single_file_root() {
+    let scan_root = PathBuf::from("/scan/d2s.ipp");
+
+    assert_eq!(
+        normalize_scan_relative_path(&scan_root, &scan_root),
+        "d2s.ipp"
+    );
+}
+
+#[test]
+fn apply_user_path_filters_to_collected_keeps_single_file_root_input() {
+    let scan_root = PathBuf::from("/scan/d2s.ipp");
+    let placeholder_metadata = fs::metadata(std::env::temp_dir()).expect("temp dir metadata");
+    let mut collected = crate::scanner::CollectedPaths {
+        files: vec![(scan_root.clone(), placeholder_metadata)],
+        directories: Vec::new(),
+        excluded_count: 0,
+        total_file_bytes: 0,
+        collection_errors: Vec::new(),
+    };
+
+    let removed = apply_user_path_filters_to_collected(&mut collected, &scan_root, &[], &[]);
+
+    assert_eq!(removed, 0);
+    assert_eq!(collected.files.len(), 1);
+    assert_eq!(
+        normalize_scan_relative_path(&collected.files[0].0, &scan_root),
+        "d2s.ipp"
+    );
+}
+
+#[test]
 fn is_included_path_treats_directory_include_patterns_recursively() {
     assert!(is_included_path(
         "src/foo/bar/baz.txt",

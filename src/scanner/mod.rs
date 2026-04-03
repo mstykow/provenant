@@ -115,6 +115,7 @@ mod tests {
 
     use tempfile::TempDir;
 
+    use crate::license_detection::LicenseDetectionEngine;
     use crate::models::FileType;
     use crate::progress::{ProgressMode, ScanProgress};
 
@@ -327,6 +328,60 @@ mod tests {
         );
         assert!(scanned.copyrights.is_empty());
         assert!(scanned.holders.is_empty());
+    }
+
+    #[test]
+    fn scanner_preserves_local_license_references_in_detected_expression() {
+        let fixture =
+            include_str!("../../testdata/license-golden/datadriven/external/boost-json-d2s.ipp");
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let file_path = temp_dir.path().join("d2s.ipp");
+        fs::write(&file_path, fixture).expect("write fixture");
+
+        let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+        let engine =
+            Arc::new(LicenseDetectionEngine::from_embedded().expect("initialize license engine"));
+        let result = process_collected(
+            &collected,
+            progress,
+            Some(engine),
+            LicenseScanOptions::default(),
+            &TextDetectionOptions::default(),
+        );
+        let scanned = result
+            .files
+            .into_iter()
+            .find(|entry| {
+                entry.file_type == FileType::File && entry.path == file_path.to_string_lossy()
+            })
+            .expect("scanned file entry");
+
+        assert_eq!(
+            scanned.license_expression.as_deref(),
+            Some("Apache-2.0 AND BSL-1.0")
+        );
+        assert!(
+            scanned.license_clues.is_empty(),
+            "license clues: {:#?}",
+            scanned.license_clues
+        );
+        assert_eq!(
+            scanned.license_detections.len(),
+            1,
+            "detections: {:#?}",
+            scanned.license_detections
+        );
+
+        let detection = &scanned.license_detections[0];
+        assert_eq!(detection.license_expression_spdx, "Apache-2.0 AND BSL-1.0");
+
+        let match_expressions: Vec<_> = detection
+            .matches
+            .iter()
+            .map(|m| m.license_expression_spdx.as_str())
+            .collect();
+        assert_eq!(match_expressions, vec!["Apache-2.0", "BSL-1.0"]);
     }
 
     #[test]

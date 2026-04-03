@@ -869,6 +869,7 @@ fn apply_resolved_reference_targets(
     let matches_for_expression = select_matches_for_expression(
         &internal_detection.matches,
         DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE,
+        true,
     );
     internal_detection.license_expression =
         determine_license_expression(&matches_for_expression).ok();
