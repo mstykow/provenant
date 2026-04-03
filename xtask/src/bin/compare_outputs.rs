@@ -3,16 +3,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use serde::Serialize;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use sha2::Digest;
 
 use provenant_xtask::common::{
-    ScanProfile, derive_repo_name_from_url, ensure_release_binary, now_run_id, project_root,
-    realpath, render_tsv_table, run_and_capture, sanitize_label, shell_join, write_pretty_json,
-    write_tsv,
+    derive_repo_name_from_url, ensure_release_binary, now_run_id, project_root, realpath,
+    render_tsv_table, resolve_scan_args, run_and_capture, sanitize_label, shell_join,
+    write_pretty_json, write_tsv, ScanProfile,
 };
 use provenant_xtask::manifests::{
     CommandInvocation, CommandsManifest, CompareArtifactsManifest, CompareRunManifest,
@@ -62,6 +62,13 @@ struct ContextState {
     scancode_json: PathBuf,
     scancode_stdout: PathBuf,
     scancode_image: String,
+    scancode_runtime_revision: String,
+    scancode_runtime_dirty: bool,
+    scancode_runtime_diff_hash: Option<String>,
+    scancode_cache_root: PathBuf,
+    scancode_cache_dir: Option<PathBuf>,
+    scancode_cache_key: Option<String>,
+    scancode_cache_hit: bool,
 }
 
 struct CheckoutGuard {
@@ -102,9 +109,30 @@ struct ValueDifferenceEntry {
     extra_in_provenant: Vec<ValueCountEntry>,
 }
 
+#[derive(Debug, Serialize)]
+struct ScancodeCacheEntryManifest {
+    cache_key: String,
+    target_label: String,
+    target_revision: String,
+    repo_url: Option<String>,
+    scan_args: Vec<String>,
+    scancode_image: String,
+    scancode_runtime_revision: String,
+    scancode_runtime_dirty: bool,
+    scancode_runtime_diff_hash: Option<String>,
+    scancode_json: PathBuf,
+    scancode_stdout: PathBuf,
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
-    let scan_args = resolve_scan_args(args.profile, args.scan_args.clone())?;
+    let profile = args.profile.clone();
+    let explicit_scan_args = args.scan_args.clone();
+    let scan_args = resolve_scan_args(
+        profile,
+        explicit_scan_args,
+        "pass --profile <common|licenses|packages> or explicit shared scan flags after --",
+    )?;
     let mut context = prepare_context(&args, scan_args)?;
 
     println!("==========================================");
@@ -123,8 +151,18 @@ fn main() -> Result<()> {
     ensure_release_binary(&context.project_root, &context.provenant_bin, "provenant")?;
     println!();
 
-    println!("[4/6] Ensuring ScanCode Docker runtime...");
-    ensure_scancode_runtime(&mut context)?;
+    println!("[4/6] Preparing ScanCode runtime/cache...");
+    resolve_scancode_runtime_identity(&mut context)?;
+    prepare_scancode_cache(&mut context)?;
+    if context.scancode_cache_hit {
+        println!(
+            "Reusing cached ScanCode result: {}",
+            context.scancode_cache_dir.as_ref().unwrap().display()
+        );
+        println!("Skipping Docker runtime preparation on cache hit");
+    } else {
+        ensure_scancode_runtime(&context)?;
+    }
     println!();
 
     println!("Configuration:");
@@ -144,9 +182,22 @@ fn main() -> Result<()> {
         println!("  Profile:       {profile_name}");
     }
     println!("  Scan args:     {}\n", context.scan_args.join(" "));
+    if let Some(cache_dir) = &context.scancode_cache_dir {
+        println!(
+            "  ScanCode cache: {} ({})",
+            cache_dir.display(),
+            if context.scancode_cache_hit {
+                "hit"
+            } else {
+                "miss"
+            }
+        );
+    } else {
+        println!("  ScanCode cache: disabled for local target paths\n");
+    }
 
     println!("[5/6] Running both scanners...");
-    run_scancode(&context)?;
+    run_scancode(&mut context)?;
     run_provenant(&context)?;
     println!("[6/6] Generating reduced comparison artifacts...");
     generate_comparison_artifacts(&context)?;
@@ -184,23 +235,6 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn resolve_scan_args(profile: Option<ScanProfile>, scan_args: Vec<String>) -> Result<Vec<String>> {
-    if profile.is_some() && !scan_args.is_empty() {
-        bail!("use either --profile or explicit scan flags after --, not both");
-    }
-    if let Some(profile) = profile {
-        return Ok(profile
-            .args()
-            .iter()
-            .map(|value| (*value).to_string())
-            .collect());
-    }
-    if scan_args.is_empty() {
-        bail!("pass --profile <common|licenses|packages> or explicit shared scan flags after --");
-    }
-    Ok(scan_args)
-}
-
 fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> {
     if args.repo_url.is_some() == args.target_path.is_some() {
         bail!("specify exactly one of --repo-url or --target-path");
@@ -214,6 +248,7 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
 
     let project_root = project_root();
     let artifact_root = project_root.join(".provenant/compare-runs");
+    let scancode_cache_root = project_root.join(".provenant/scancode-cache");
     let scancode_submodule_dir = project_root.join("reference/scancode-toolkit");
     if !scancode_submodule_dir.exists() {
         bail!(
@@ -293,6 +328,13 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
         scancode_json: raw_dir.join("scancode.json"),
         scancode_stdout: raw_dir.join("scancode-stdout.txt"),
         scancode_image: String::new(),
+        scancode_runtime_revision: String::new(),
+        scancode_runtime_dirty: false,
+        scancode_runtime_diff_hash: None,
+        scancode_cache_root,
+        scancode_cache_dir: None,
+        scancode_cache_key: None,
+        scancode_cache_hit: false,
     })
 }
 
@@ -337,16 +379,7 @@ fn prepare_target(context: &mut ContextState, args: &Args) -> Result<CheckoutGua
     })
 }
 
-fn ensure_scancode_runtime(context: &mut ContextState) -> Result<()> {
-    if Command::new("docker")
-        .arg("--version")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-    {
-    } else {
-        bail!("docker is required for compare-outputs");
-    }
+fn resolve_scancode_runtime_identity(context: &mut ContextState) -> Result<()> {
     let commit = current_git_revision(&context.scancode_submodule_dir)
         .context("failed to resolve ScanCode submodule revision")?;
     let short_commit: String = commit.chars().take(10).collect();
@@ -357,46 +390,101 @@ fn ensure_scancode_runtime(context: &mut ContextState) -> Result<()> {
         .context("failed to inspect ScanCode worktree")?;
     let dirty = !String::from_utf8_lossy(&status.stdout).trim().is_empty();
     let mut image = format!("provenant-scancode-local:{short_commit}");
+    let mut diff_hash = None;
     if dirty {
         let diff = Command::new("git")
             .current_dir(&context.scancode_submodule_dir)
             .args(["diff", "--no-ext-diff", "--binary", "HEAD"])
             .output()?;
-        let mut hasher = sha2::Sha256::new();
+        let mut hasher = sha2::Sha256::default();
         hasher.update(&diff.stdout);
-        let dirty_hash: String = hasher
-            .finalize()
-            .iter()
-            .map(|byte| format!("{:02x}", byte))
-            .collect();
-        image = format!("provenant-scancode-local:{short_commit}-dirty-{dirty_hash}",);
+        let digest = format!("{:x}", hasher.finalize());
+        diff_hash = Some(digest.clone());
+        image = format!("provenant-scancode-local:{short_commit}-dirty-{digest}");
         image.truncate(128);
     }
-    context.scancode_image = image.clone();
+    context.scancode_runtime_revision = commit;
+    context.scancode_runtime_dirty = dirty;
+    context.scancode_runtime_diff_hash = diff_hash;
+    context.scancode_image = image;
+    Ok(())
+}
+
+fn prepare_scancode_cache(context: &mut ContextState) -> Result<()> {
+    if context.repo_manifest.resolved_sha.is_none() {
+        return Ok(());
+    }
+    fs::create_dir_all(&context.scancode_cache_root).with_context(|| {
+        format!(
+            "failed to create ScanCode cache root {}",
+            context.scancode_cache_root.display()
+        )
+    })?;
+    let key = build_scancode_cache_key(context)?;
+    let cache_dir = context.scancode_cache_root.join(&key);
+    context.scancode_cache_key = Some(key);
+    context.scancode_cache_hit = scancode_cache_complete(&cache_dir);
+    context.scancode_cache_dir = Some(cache_dir);
+    Ok(())
+}
+
+fn ensure_scancode_runtime(context: &ContextState) -> Result<()> {
+    if Command::new("docker")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
+    } else {
+        bail!("docker is required for compare-outputs");
+    }
     let inspect = Command::new("docker")
-        .args(["image", "inspect", &image])
+        .args(["image", "inspect", &context.scancode_image])
         .output()?;
     if !inspect.status.success() {
-        println!("Building ScanCode Docker image: {image}");
+        println!("Building ScanCode Docker image: {}", context.scancode_image);
         let status = Command::new("docker")
             .current_dir(&context.scancode_submodule_dir)
-            .args(["build", "--platform", "linux/amd64", "-t", &image, "."])
+            .args([
+                "build",
+                "--platform",
+                "linux/amd64",
+                "-t",
+                &context.scancode_image,
+                ".",
+            ])
             .status()
             .context("failed to build ScanCode Docker image")?;
         if !status.success() {
             bail!("docker build failed for ScanCode image");
         }
     } else {
-        println!("Reusing ScanCode Docker image: {image}");
+        println!("Reusing ScanCode Docker image: {}", context.scancode_image);
     }
     Ok(())
 }
 
-fn run_scancode(context: &ContextState) -> Result<()> {
+fn run_scancode(context: &mut ContextState) -> Result<()> {
     println!("------------------------------------------");
     println!("Running ScanCode");
     println!("------------------------------------------");
-    let args = build_scancode_args(context);
+    if context.scancode_cache_hit {
+        if let Err(error) = materialize_scancode_cache_hit(context) {
+            println!("  Cached ScanCode result unusable, rerunning: {error}");
+            if let Some(cache_dir) = &context.scancode_cache_dir {
+                let _ = fs::remove_dir_all(cache_dir);
+            }
+            context.scancode_cache_hit = false;
+        } else {
+            println!(
+                "  Reusing cached ScanCode artifacts from {}",
+                context.scancode_cache_dir.as_ref().unwrap().display()
+            );
+            println!();
+            return Ok(());
+        }
+    }
+    let args = build_scancode_docker_args(context);
     println!(
         "  {}",
         shell_join(
@@ -409,6 +497,7 @@ fn run_scancode(context: &ContextState) -> Result<()> {
     for line in combined.lines() {
         println!("  {line}");
     }
+    persist_scancode_cache_entry(context)?;
     println!();
     Ok(())
 }
@@ -635,12 +724,12 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
             "paths where normalized values exist only in Provenant output",
         ));
     }
-    let dependency_differences = dependency_differences(&scancode, &provenant);
-    let dependency_missing = dependency_differences
+    let dependency_value_differences = dependency_differences(&scancode, &provenant);
+    let dependency_missing = dependency_value_differences
         .iter()
         .filter(|entry| !entry.missing_in_provenant.is_empty())
         .count();
-    let dependency_extra = dependency_differences
+    let dependency_extra = dependency_value_differences
         .iter()
         .filter(|entry| !entry.extra_in_provenant.is_empty())
         .count();
@@ -725,7 +814,7 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
     write_pretty_json(&sample_paths[3].1, &higher_counts)?;
     write_pretty_json(&sample_paths[4].1, &value_differences)?;
     write_pretty_json(&sample_paths[5].1, &license_deltas)?;
-    write_pretty_json(&sample_paths[6].1, &dependency_differences)?;
+    write_pretty_json(&sample_paths[6].1, &dependency_value_differences)?;
 
     let summary = json!({
         "comparison_status": comparison_status,
@@ -1128,7 +1217,7 @@ fn tsv_row(metric: &str, scancode: i64, provenant: i64, delta: i64, notes: &str)
 }
 
 fn write_manifest(context: &ContextState) -> Result<()> {
-    let scancode_args = build_scancode_args(context);
+    let scancode_args = build_scancode_docker_args(context);
     let provenant_args = build_provenant_args(context);
     let manifest = CompareRunManifest {
         run_id: context.run_id.clone(),
@@ -1146,6 +1235,7 @@ fn write_manifest(context: &ContextState) -> Result<()> {
         ),
         repo: context.repo_manifest.clone(),
         scan_profile: context.profile_name.clone(),
+        scan_args: context.scan_args.clone(),
         artifacts: CompareArtifactsManifest {
             raw_dir: context.raw_dir.clone(),
             comparison_dir: context.comparison_dir.clone(),
@@ -1171,13 +1261,32 @@ fn write_manifest(context: &ContextState) -> Result<()> {
         scancode: ScancodeManifest {
             image: context.scancode_image.clone(),
             submodule_path: context.scancode_submodule_dir.clone(),
+            runtime_revision: context.scancode_runtime_revision.clone(),
+            runtime_dirty: context.scancode_runtime_dirty,
+            runtime_diff_hash: context.scancode_runtime_diff_hash.clone(),
+            cache_key: context.scancode_cache_key.clone(),
+            cache_dir: context.scancode_cache_dir.clone(),
+            cache_hit: context.scancode_cache_hit,
         },
     };
     write_pretty_json(&context.run_manifest, &manifest)?;
     Ok(())
 }
 
-fn build_scancode_args(context: &ContextState) -> Vec<String> {
+fn build_scancode_cli_args(context: &ContextState) -> Vec<String> {
+    let mut args = vec!["--json-pp".to_string(), "/out/scancode.json".to_string()];
+    args.extend(context.scan_args.clone());
+    args.extend([
+        "--ignore".to_string(),
+        "*.git*".to_string(),
+        "--ignore".to_string(),
+        "target/*".to_string(),
+        "/input".to_string(),
+    ]);
+    args
+}
+
+fn build_scancode_docker_args(context: &ContextState) -> Vec<String> {
     let mut args = vec![
         "run".to_string(),
         "--rm".to_string(),
@@ -1188,17 +1297,8 @@ fn build_scancode_args(context: &ContextState) -> Vec<String> {
         "-v".to_string(),
         format!("{}:/out", context.raw_dir.display()),
         context.scancode_image.clone(),
-        "--json-pp".to_string(),
-        "/out/scancode.json".to_string(),
     ];
-    args.extend(context.scan_args.clone());
-    args.extend([
-        "--ignore".to_string(),
-        "*.git*".to_string(),
-        "--ignore".to_string(),
-        "target/*".to_string(),
-        "/input".to_string(),
-    ]);
+    args.extend(build_scancode_cli_args(context));
     args
 }
 
@@ -1222,4 +1322,110 @@ fn print_summary_table(path: &Path) -> Result<()> {
     let labels = ["Metric", "ScanCode", "Provenant", "Delta", "Notes"];
     let _ = render_tsv_table(path, &labels)?;
     Ok(())
+}
+
+fn build_scancode_cache_key(context: &ContextState) -> Result<String> {
+    let repo_url = context
+        .repo_manifest
+        .url
+        .as_deref()
+        .unwrap_or(&context.target_label);
+    let key_input = json!({
+        "repo_url": repo_url,
+        "target_revision": context.target_revision,
+        "scancode_image": context.scancode_image,
+        "scancode_runtime_revision": context.scancode_runtime_revision,
+        "scancode_runtime_dirty": context.scancode_runtime_dirty,
+        "scancode_runtime_diff_hash": context.scancode_runtime_diff_hash,
+        "scancode_cli_args": build_scancode_cli_args(context),
+    });
+    let mut hasher = sha2::Sha256::default();
+    hasher.update(serde_json::to_vec(&key_input)?);
+    let digest = format!("{:x}", hasher.finalize());
+    Ok(format!(
+        "{}-{}",
+        sanitize_label(&derive_repo_name_from_url(repo_url, "scancode"), "scancode"),
+        &digest[..16]
+    ))
+}
+
+fn scancode_cache_complete(cache_dir: &Path) -> bool {
+    cache_json_path(cache_dir).is_file()
+        && cache_stdout_path(cache_dir).is_file()
+        && cache_manifest_path(cache_dir).is_file()
+}
+
+fn cache_json_path(cache_dir: &Path) -> PathBuf {
+    cache_dir.join("scancode.json")
+}
+
+fn cache_stdout_path(cache_dir: &Path) -> PathBuf {
+    cache_dir.join("scancode-stdout.txt")
+}
+
+fn cache_manifest_path(cache_dir: &Path) -> PathBuf {
+    cache_dir.join("manifest.json")
+}
+
+fn materialize_scancode_cache_hit(context: &ContextState) -> Result<()> {
+    let cache_dir = context
+        .scancode_cache_dir
+        .as_ref()
+        .context("ScanCode cache dir missing on cache hit")?;
+    materialize_file(&cache_json_path(cache_dir), &context.scancode_json)?;
+    materialize_file(&cache_stdout_path(cache_dir), &context.scancode_stdout)?;
+    Ok(())
+}
+
+fn persist_scancode_cache_entry(context: &ContextState) -> Result<()> {
+    let Some(cache_dir) = &context.scancode_cache_dir else {
+        return Ok(());
+    };
+    fs::create_dir_all(cache_dir).with_context(|| {
+        format!(
+            "failed to create ScanCode cache dir {}",
+            cache_dir.display()
+        )
+    })?;
+    materialize_file(&context.scancode_json, &cache_json_path(cache_dir))?;
+    materialize_file(&context.scancode_stdout, &cache_stdout_path(cache_dir))?;
+    let manifest = ScancodeCacheEntryManifest {
+        cache_key: context.scancode_cache_key.clone().unwrap_or_default(),
+        target_label: context.target_label.clone(),
+        target_revision: context.target_revision.clone(),
+        repo_url: context.repo_manifest.url.clone(),
+        scan_args: build_scancode_cli_args(context),
+        scancode_image: context.scancode_image.clone(),
+        scancode_runtime_revision: context.scancode_runtime_revision.clone(),
+        scancode_runtime_dirty: context.scancode_runtime_dirty,
+        scancode_runtime_diff_hash: context.scancode_runtime_diff_hash.clone(),
+        scancode_json: cache_json_path(cache_dir),
+        scancode_stdout: cache_stdout_path(cache_dir),
+    };
+    write_pretty_json(&cache_manifest_path(cache_dir), &manifest)?;
+    Ok(())
+}
+
+fn materialize_file(src: &Path, dst: &Path) -> Result<()> {
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create parent directory {}", parent.display()))?;
+    }
+    if dst.exists() {
+        fs::remove_file(dst)
+            .with_context(|| format!("failed to remove existing file {}", dst.display()))?;
+    }
+    match fs::hard_link(src, dst) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            fs::copy(src, dst).with_context(|| {
+                format!(
+                    "failed to copy cached artifact {} -> {}",
+                    src.display(),
+                    dst.display()
+                )
+            })?;
+            Ok(())
+        }
+    }
 }
