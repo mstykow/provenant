@@ -457,6 +457,39 @@ mod tests {
     }
 
     #[test]
+    fn test_fixture_boost_json_sse2() {
+        let yaml_path =
+            PathBuf::from("testdata/copyright-golden/copyrights/boost_json_sse2.hpp.yml");
+        assert!(yaml_path.is_file(), "Missing fixture YAML: {yaml_path:?}");
+
+        let yaml_content = fs::read_to_string(&yaml_path).expect("read YAML");
+        let expected: ExpectedOutput = yaml_serde::from_str(&yaml_content).expect("parse YAML");
+
+        let input_path = input_path_from_yaml(&yaml_path);
+        assert!(
+            input_path.is_file(),
+            "Missing fixture input: {input_path:?}"
+        );
+        let content = read_input_content(&input_path).expect("read input");
+
+        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let actual_copyrights: Vec<String> =
+            copyrights.iter().map(|c| c.copyright.clone()).collect();
+        let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
+
+        let expected_copyrights = expected.copyrights.as_deref().unwrap_or(&[]);
+        let expected_holders = expected.holders.as_deref().unwrap_or(&[]);
+
+        let cr_diff = compare_field("copyrights", expected_copyrights, &actual_copyrights);
+        let h_diff = compare_field("holders", expected_holders, &actual_holders);
+
+        assert!(
+            cr_diff.is_match() && h_diff.is_match(),
+            "Fixture mismatch: boost_json_sse2\n{cr_diff}\n{h_diff}"
+        );
+    }
+
+    #[test]
     fn test_fixture_essential_smoke_ibm_c() {
         let yaml_path =
             PathBuf::from("testdata/copyright-golden/copyrights/essential_smoke-ibm_c.c.yml");

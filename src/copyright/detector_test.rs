@@ -3721,6 +3721,35 @@ fn test_split_multiline_holder_list_with_emails() {
 }
 
 #[test]
+fn test_boost_style_multiline_holder_continuation_after_year_first_line() {
+    let input = "// Copyright (c) 2019 Peter Dimov (pdimov at gmail dot com),\n\
+//                    Vinnie Falco (vinnie.falco@gmail.com)\n\
+// Copyright (c) 2020 Krystian Stasiowski (sdkrystian@gmail.com)\n";
+
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        copyrights.iter().any(|c| {
+            c.start_line == 1
+                && c.end_line == 2
+                && c.copyright.contains("Peter Dimov")
+                && c.copyright.contains("Vinnie Falco")
+        }),
+        "copyrights: {copyrights:?}"
+    );
+
+    assert!(
+        holders.iter().any(|h| {
+            h.start_line == 1
+                && h.end_line == 2
+                && h.holder.contains("Peter Dimov")
+                && h.holder.contains("Vinnie Falco")
+        }),
+        "holders: {holders:?}"
+    );
+}
+
+#[test]
 fn test_extend_copyright_with_following_all_rights_reserved_line() {
     let input = "Copyright 2010-2015 Mike Bostock\nAll rights reserved.";
     let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
