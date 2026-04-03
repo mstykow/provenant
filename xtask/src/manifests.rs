@@ -78,6 +78,12 @@ pub struct CommandsManifest {
 pub struct ScancodeManifest {
     pub image: String,
     pub submodule_path: PathBuf,
+    pub runtime_revision: String,
+    pub runtime_dirty: bool,
+    pub runtime_diff_hash: Option<String>,
+    pub cache_key: Option<String>,
+    pub cache_dir: Option<PathBuf>,
+    pub cache_hit: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -86,6 +92,7 @@ pub struct CompareRunManifest {
     pub target: TargetManifest,
     pub repo: RepoManifest,
     pub scan_profile: Option<String>,
+    pub scan_args: Vec<String>,
     pub artifacts: CompareArtifactsManifest,
     pub commands: CommandsManifest,
     pub scancode: ScancodeManifest,

@@ -99,10 +99,10 @@ artifacts for later manual or agent review.
 
 ### Requirements
 
-- Docker is required.
+- Docker is required on ScanCode cache misses.
 - The command builds a local ScanCode Docker image from the bundled
   `reference/scancode-toolkit` submodule automatically when the matching image
-  is missing.
+  is missing and a ScanCode run is required.
 
 ### Usage
 
@@ -133,8 +133,8 @@ CLI arguments:
 2. Either scans the local directory in place or resolves `--repo-url` + `--repo-ref` through a shared repo cache.
 3. Builds Provenant in release mode.
 4. Updates or creates a shared cached mirror under `.provenant/repo-cache/`, resolves the requested ref to a full commit SHA, and materializes a detached checkout for the run.
-5. Ensures a local Docker-backed ScanCode runtime exists, building the image from `reference/scancode-toolkit` if needed.
-6. Runs ScanCode and Provenant with the same shared scan profile.
+5. Resolves the ScanCode runtime identity and, on cache misses, ensures a local Docker-backed ScanCode runtime exists by building the image from `reference/scancode-toolkit` if needed.
+6. Reuses cached ScanCode raw artifacts when available, otherwise runs ScanCode alongside Provenant with the same shared scan profile.
 7. Saves raw outputs and logs under `raw/`.
 8. Produces reduced comparison artifacts under `comparison/` and prints the absolute artifact paths at the end.
 
@@ -162,6 +162,8 @@ Important files:
 - ScanCode currently runs via Docker on all platforms for this workflow because that is the reproducible runtime path verified in this repository.
 - `--repo-url` mode requires `--repo-ref`; the command records both the requested ref and the resolved full commit SHA in `run-manifest.json`.
 - Repo URL runs reuse cached git objects from `.provenant/repo-cache/`, and the temporary detached checkout is removed after the run so compare artifacts do not retain duplicate full repository trees.
+- Repo URL runs also reuse cached raw ScanCode artifacts from `.provenant/scancode-cache/` when the resolved target commit, ScanCode runtime identity, and effective ScanCode scan args are unchanged.
+- Local `--target-path` runs currently always rerun ScanCode; the shared ScanCode cache is only enabled for ref-pinned repo URL targets where the snapshot identity is explicit.
 - The command always adds shared ignore rules for `*.git*` and `target/*` to both scanners so repository metadata and build output do not dominate the comparison artifacts.
 
 ## `update-parser-golden`
