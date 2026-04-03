@@ -669,8 +669,8 @@ fn assign_for_packages(
     let workspace_root_str = workspace_root.root_dir.to_string_lossy().into_owned();
     let mut member_dirs: HashMap<String, String> = HashMap::new();
     for (&idx, uid) in member_indices.iter().zip(member_uids.iter()) {
-        if let Some(parent) = Path::new(&files[idx].path).parent() {
-            member_dirs.insert(parent.to_string_lossy().into_owned(), uid.clone());
+        if let Some(relative_path) = strip_root_prefix(&files[idx].path, &workspace_root_str) {
+            member_dirs.insert(parent_dir(relative_path).to_string(), uid.clone());
         }
     }
 
@@ -683,8 +683,7 @@ fn assign_for_packages(
         file.for_packages.clear();
 
         // Check if file is under a member's subdirectory
-        let relative_dir = parent_dir(relative_path);
-        if let Some(member_uid) = find_nearest_member_dir(relative_dir, &member_dirs) {
+        if let Some(member_uid) = find_nearest_member_dir(relative_path, &member_dirs) {
             file.for_packages.push(member_uid);
             continue;
         }
