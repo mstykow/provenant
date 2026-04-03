@@ -255,6 +255,11 @@ pub fn detect_copyrights_from_text_with_deadline(
         fix_truncated_contributors_authors(&tree, &mut authors);
         extract_holder_is_name(&tree, &mut copyrights, &mut holders);
         apply_written_by_for_markers(group, &mut copyrights, &mut holders);
+        extend_multiline_copyright_c_year_holder_continuations(
+            group,
+            &mut copyrights,
+            &mut holders,
+        );
         extend_multiline_copyright_c_no_year_names(group, &mut copyrights[..], &mut holders[..]);
         extend_authors_see_url_copyrights(group, &mut copyrights[..], &mut holders[..]);
         extend_leading_dash_suffixes(group, &mut copyrights[..], &mut holders[..]);
@@ -317,6 +322,7 @@ pub fn detect_copyrights_from_text_with_deadline(
         extend_dash_obfuscated_email_suffixes(&raw_lines, group, &mut copyrights[..], &holders[..]);
     }
     restore_linux_foundation_copyrights_from_raw_lines(&raw_lines, &mut copyrights);
+    sync_multiline_holders_with_copyrights(&copyrights, &mut holders);
 
     add_missing_holders_for_bare_c_name_year_suffixes(&copyrights, &mut holders);
 
@@ -4019,6 +4025,181 @@ fn extend_multiline_copyright_c_no_year_names(
                 h.holder = refined_holder.clone();
                 h.end_line = end_ln;
             }
+        }
+    }
+}
+
+fn extend_multiline_copyright_c_year_holder_continuations(
+    group: &[(usize, String)],
+    copyrights: &mut Vec<CopyrightDetection>,
+    holders: &mut Vec<HolderDetection>,
+) {
+    static LEADING_COPY_C_YEARS_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)^copyright\s*\(c\)\s*(?P<years>(?:19\d{2}|20\d{2})(?:\s*[-–]\s*(?:19\d{2}|20\d{2}|\d{2}))?(?:\s*,\s*(?:19\d{2}|20\d{2}))*?)\s+(?P<tail>.+)$",
+        )
+        .expect("valid multiline copyright (c) years regex")
+    });
+    static ACRONYM_PARENS_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\([A-Z0-9]{2,}\)").expect("valid acronym parens regex"));
+
+    fn looks_like_holder_continuation(line: &str) -> bool {
+        let starts_upper = line.chars().next().is_some_and(|c| c.is_ascii_uppercase());
+        if !starts_upper {
+            return false;
+        }
+
+        let upper_words = line
+            .split_whitespace()
+            .filter(|word| word.chars().next().is_some_and(|c| c.is_ascii_uppercase()))
+            .count();
+        upper_words >= 2
+            || line.contains('@')
+            || line.to_ascii_lowercase().contains(" at ")
+            || ACRONYM_PARENS_RE.is_match(line)
+    }
+
+    for i in 0..group.len() {
+        let (start_ln, raw_line) = &group[i];
+        let line = raw_line.trim().trim_start_matches('*').trim();
+        let Some(cap) = LEADING_COPY_C_YEARS_RE.captures(line) else {
+            continue;
+        };
+
+        let years = cap.name("years").map(|m| m.as_str()).unwrap_or("").trim();
+        let mut tail = cap
+            .name("tail")
+            .map(|m| m.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if years.is_empty() || tail.is_empty() || !tail.trim_end().ends_with(',') {
+            continue;
+        }
+
+        let mut end_ln = *start_ln;
+        let mut did_extend = false;
+        for (ln, cont_raw) in group.iter().skip(i + 1) {
+            if *ln != end_ln + 1 {
+                break;
+            }
+
+            let cont = cont_raw.trim().trim_start_matches('*').trim();
+            if cont.is_empty() {
+                break;
+            }
+
+            let lower = cont.to_ascii_lowercase();
+            if lower.contains("copyright")
+                || lower.starts_with("all rights")
+                || lower.starts_with("reserved")
+            {
+                break;
+            }
+
+            if !looks_like_holder_continuation(cont) {
+                break;
+            }
+
+            tail.push(' ');
+            tail.push_str(cont);
+            end_ln = *ln;
+            did_extend = true;
+        }
+
+        if !did_extend {
+            continue;
+        }
+
+        let raw = format!("Copyright (c) {years} {tail}");
+        let Some(refined) = refine_copyright(&raw) else {
+            continue;
+        };
+
+        let mut updated_copyright = false;
+        for c in copyrights.iter_mut().filter(|c| c.start_line == *start_ln) {
+            if refined.len() > c.copyright.len() && refined.starts_with(&c.copyright) {
+                c.copyright = refined.clone();
+                c.end_line = end_ln;
+                updated_copyright = true;
+            }
+        }
+        if !updated_copyright
+            && !copyrights.iter().any(|c| {
+                c.start_line == *start_ln && c.end_line == end_ln && c.copyright == refined
+            })
+        {
+            copyrights.push(CopyrightDetection {
+                copyright: refined.clone(),
+                start_line: *start_ln,
+                end_line: end_ln,
+            });
+        }
+
+        let Some(refined_holder) = derive_holder_from_simple_copyright_string(&refined) else {
+            continue;
+        };
+
+        let mut updated_holder = false;
+        for h in holders.iter_mut().filter(|h| h.start_line == *start_ln) {
+            if refined_holder.len() > h.holder.len() && refined_holder.starts_with(&h.holder) {
+                h.holder = refined_holder.clone();
+                h.end_line = end_ln;
+                updated_holder = true;
+            }
+        }
+        if !updated_holder
+            && !holders.iter().any(|h| {
+                h.start_line == *start_ln && h.end_line == end_ln && h.holder == refined_holder
+            })
+        {
+            holders.push(HolderDetection {
+                holder: refined_holder,
+                start_line: *start_ln,
+                end_line: end_ln,
+            });
+        }
+    }
+}
+
+fn sync_multiline_holders_with_copyrights(
+    copyrights: &[CopyrightDetection],
+    holders: &mut Vec<HolderDetection>,
+) {
+    for c in copyrights.iter().filter(|c| c.end_line > c.start_line) {
+        let same_span_holders: Vec<&HolderDetection> = holders
+            .iter()
+            .filter(|h| h.start_line == c.start_line && h.end_line == c.end_line)
+            .collect();
+        if same_span_holders.len() >= 2 {
+            continue;
+        }
+
+        let Some(derived_holder) = derive_holder_from_simple_copyright_string(&c.copyright) else {
+            continue;
+        };
+
+        let mut updated_holder = false;
+        for h in holders.iter_mut().filter(|h| h.start_line == c.start_line) {
+            if derived_holder.len() > h.holder.len() && derived_holder.starts_with(&h.holder) {
+                h.holder = derived_holder.clone();
+                h.end_line = c.end_line;
+                updated_holder = true;
+            }
+        }
+
+        if !updated_holder
+            && !holders.iter().any(|h| {
+                h.start_line == c.start_line
+                    && h.end_line == c.end_line
+                    && h.holder == derived_holder
+            })
+        {
+            holders.push(HolderDetection {
+                holder: derived_holder,
+                start_line: c.start_line,
+                end_line: c.end_line,
+            });
         }
     }
 }
