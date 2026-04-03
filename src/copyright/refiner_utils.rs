@@ -279,7 +279,7 @@ pub fn strip_solo_quotes(s: &str) -> String {
         .replace("',", ",")
 }
 
-/// Strip trailing URL from a string (e.g., "Acme Corp, http://acme.com" → "Acme Corp").
+/// Strip trailing URL from a string (e.g., "Acme Corp, https://example.com" → "Acme Corp").
 pub(super) fn strip_trailing_url(s: &str) -> String {
     static URL_TOKEN_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\bhttps?://\S+").unwrap());
