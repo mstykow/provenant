@@ -665,40 +665,34 @@ fn assign_for_packages(
     member_uids: &[String],
     root_package_uid: Option<&str>,
 ) {
-    let mut member_dirs: Vec<PathBuf> = Vec::new();
-    for &idx in member_indices {
+    let workspace_root_str = workspace_root.root_dir.to_string_lossy().into_owned();
+    let mut member_dirs: HashMap<String, String> = HashMap::new();
+    for (&idx, uid) in member_indices.iter().zip(member_uids.iter()) {
         if let Some(parent) = Path::new(&files[idx].path).parent() {
-            member_dirs.push(parent.to_path_buf());
+            member_dirs.insert(parent.to_string_lossy().into_owned(), uid.clone());
         }
     }
 
     for file in files.iter_mut() {
-        let path = Path::new(&file.path);
-        if !path.starts_with(&workspace_root.root_dir) {
+        let Some(relative_path) = strip_root_prefix(&file.path, &workspace_root_str) else {
             continue;
-        }
+        };
 
         // Clear stale for_packages assignments from sibling merge
         file.for_packages.clear();
 
         // Check if file is under a member's subdirectory
-        let mut assigned = false;
-        for (i, member_dir) in member_dirs.iter().enumerate() {
-            if path.starts_with(member_dir) {
-                file.for_packages.push(member_uids[i].clone());
-                assigned = true;
-                break;
-            }
-        }
-
-        if assigned {
+        let relative_dir = parent_dir(relative_path);
+        if let Some(member_uid) = find_nearest_member_dir(relative_dir, &member_dirs) {
+            file.for_packages.push(member_uid);
             continue;
         }
 
         // Skip node_modules at workspace root level
-        if let Ok(rel) = path.strip_prefix(&workspace_root.root_dir)
-            && let Some(first_component) = rel.components().next()
-            && first_component.as_os_str() == "node_modules"
+        if relative_path
+            .split('/')
+            .next()
+            .is_some_and(|component| component == "node_modules")
         {
             continue;
         }
@@ -712,6 +706,41 @@ fn assign_for_packages(
             }
         }
     }
+}
+
+fn find_nearest_member_dir(path: &str, member_dirs: &HashMap<String, String>) -> Option<String> {
+    let mut current = Some(path);
+
+    while let Some(candidate) = current {
+        if let Some(uid) = member_dirs.get(candidate) {
+            return Some(uid.clone());
+        }
+
+        current = parent_dir_for_lookup(candidate);
+    }
+
+    None
+}
+
+fn strip_root_prefix<'a>(path: &'a str, root: &str) -> Option<&'a str> {
+    if path == root {
+        return Some("");
+    }
+
+    path.strip_prefix(root)
+        .and_then(|suffix| suffix.strip_prefix('/'))
+}
+
+fn parent_dir(path: &str) -> &str {
+    path.rsplit_once('/').map_or("", |(parent, _)| parent)
+}
+
+fn parent_dir_for_lookup(path: &str) -> Option<&str> {
+    if path.is_empty() {
+        return None;
+    }
+
+    path.rsplit_once('/').map(|(parent, _)| parent).or(Some(""))
 }
 
 /// Resolve workspace: version references in all dependencies
