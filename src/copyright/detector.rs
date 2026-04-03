@@ -322,7 +322,6 @@ pub fn detect_copyrights_from_text_with_deadline(
         extend_dash_obfuscated_email_suffixes(&raw_lines, group, &mut copyrights[..], &holders[..]);
     }
     restore_linux_foundation_copyrights_from_raw_lines(&raw_lines, &mut copyrights);
-    sync_multiline_holders_with_copyrights(&copyrights, &mut holders);
 
     add_missing_holders_for_bare_c_name_year_suffixes(&copyrights, &mut holders);
 
@@ -4073,7 +4072,11 @@ fn extend_multiline_copyright_c_year_holder_continuations(
             .unwrap_or("")
             .trim()
             .to_string();
-        if years.is_empty() || tail.is_empty() || !tail.trim_end().ends_with(',') {
+        if years.is_empty()
+            || tail.is_empty()
+            || !tail.trim_end().ends_with(',')
+            || tail.to_ascii_lowercase().contains("copyright")
+        {
             continue;
         }
 
@@ -4157,48 +4160,6 @@ fn extend_multiline_copyright_c_year_holder_continuations(
                 holder: refined_holder,
                 start_line: *start_ln,
                 end_line: end_ln,
-            });
-        }
-    }
-}
-
-fn sync_multiline_holders_with_copyrights(
-    copyrights: &[CopyrightDetection],
-    holders: &mut Vec<HolderDetection>,
-) {
-    for c in copyrights.iter().filter(|c| c.end_line > c.start_line) {
-        let same_span_holders: Vec<&HolderDetection> = holders
-            .iter()
-            .filter(|h| h.start_line == c.start_line && h.end_line == c.end_line)
-            .collect();
-        if same_span_holders.len() >= 2 {
-            continue;
-        }
-
-        let Some(derived_holder) = derive_holder_from_simple_copyright_string(&c.copyright) else {
-            continue;
-        };
-
-        let mut updated_holder = false;
-        for h in holders.iter_mut().filter(|h| h.start_line == c.start_line) {
-            if derived_holder.len() > h.holder.len() && derived_holder.starts_with(&h.holder) {
-                h.holder = derived_holder.clone();
-                h.end_line = c.end_line;
-                updated_holder = true;
-            }
-        }
-
-        if !updated_holder
-            && !holders.iter().any(|h| {
-                h.start_line == c.start_line
-                    && h.end_line == c.end_line
-                    && h.holder == derived_holder
-            })
-        {
-            holders.push(HolderDetection {
-                holder: derived_holder,
-                start_line: c.start_line,
-                end_line: c.end_line,
             });
         }
     }
