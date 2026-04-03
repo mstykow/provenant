@@ -14,7 +14,11 @@ pub fn repo_cache_root(project_root: &Path) -> PathBuf {
 pub fn repo_cache_path(project_root: &Path, repo_url: &str) -> PathBuf {
     let mut hasher = Sha256::new();
     hasher.update(repo_url.as_bytes());
-    let digest = format!("{:x}", hasher.finalize());
+    let digest: String = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect();
     repo_cache_root(project_root).join(format!(
         "{}-{}.git",
         sanitize_label(&derive_repo_name_from_url(repo_url, "repo"), "repo"),

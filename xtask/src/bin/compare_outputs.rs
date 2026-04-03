@@ -364,10 +364,12 @@ fn ensure_scancode_runtime(context: &mut ContextState) -> Result<()> {
             .output()?;
         let mut hasher = sha2::Sha256::new();
         hasher.update(&diff.stdout);
-        image = format!(
-            "provenant-scancode-local:{short_commit}-dirty-{:x}",
-            hasher.finalize()
-        );
+        let dirty_hash: String = hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{:02x}", byte))
+            .collect();
+        image = format!("provenant-scancode-local:{short_commit}-dirty-{dirty_hash}",);
         image.truncate(128);
     }
     context.scancode_image = image.clone();
