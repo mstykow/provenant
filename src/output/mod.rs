@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{self, Write};
+use std::io::{self, BufWriter, Write};
 
 use crate::models::Output;
 
@@ -13,6 +13,7 @@ mod template;
 
 pub(crate) const EMPTY_SHA1: &str = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
 pub(crate) const SPDX_DOCUMENT_NOTICE: &str = "Generated with Provenant and provided on an \"AS IS\" BASIS, WITHOUT WARRANTIES\nOR CONDITIONS OF ANY KIND, either express or implied. No content created from\nProvenant should be considered or used as legal advice. Consult an attorney\nfor legal advice.\nProvenant is a free software code scanning tool.\nVisit https://github.com/mstykow/provenant/ for support and download.\nSPDX License List: 3.27";
+const OUTPUT_BUFFER_SIZE: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OutputFormat {
@@ -90,12 +91,16 @@ pub fn write_output_file(
 ) -> io::Result<()> {
     if output_file == "-" {
         let stdout = io::stdout();
-        let mut handle = stdout.lock();
-        return writer_for_format(config.format).write(output, &mut handle, config);
+        let handle = stdout.lock();
+        let mut writer = BufWriter::with_capacity(OUTPUT_BUFFER_SIZE, handle);
+        writer_for_format(config.format).write(output, &mut writer, config)?;
+        return writer.flush();
     }
 
-    let mut file = File::create(output_file)?;
-    writer_for_format(config.format).write(output, &mut file, config)
+    let file = File::create(output_file)?;
+    let mut writer = BufWriter::with_capacity(OUTPUT_BUFFER_SIZE, file);
+    writer_for_format(config.format).write(output, &mut writer, config)?;
+    writer.flush()
 }
 
 fn write_yaml(output: &Output, writer: &mut dyn Write) -> io::Result<()> {
