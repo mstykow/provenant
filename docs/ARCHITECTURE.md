@@ -393,7 +393,7 @@ The codebase follows a modular architecture:
 
 ### Benchmarks
 
-For broad performance-sensitive changes, maintainers use `./scripts/benchmark.sh` with an explicit target (`--repo-url` or `--target-path`) to measure scanner behavior. Smaller changes usually rely on targeted regression suites plus normal scan-time profiling during development.
+For broad performance-sensitive changes, maintainers use `cargo run --manifest-path xtask/Cargo.toml --bin benchmark-target -- ...` with an explicit target (`--repo-url` or `--target-path`) to measure scanner behavior. Smaller changes usually rely on targeted regression suites plus normal scan-time profiling during development.
 
 ### Optimization Strategies
 
@@ -591,7 +591,7 @@ Module location: `src/progress.rs`
 Quality verification in this area is currently centered on:
 
 - fixture-backed golden and integration suites
-- targeted benchmark runs via `./scripts/benchmark.sh` when broad performance could change
+- targeted benchmark runs via `cargo run --manifest-path xtask/Cargo.toml --bin benchmark-target -- ...` when broad performance could change
 - explicit parity-gap tracking in evergreen docs and completed rollout records where behavior intentionally differs from Python
 
 ## License Data Architecture

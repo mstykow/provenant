@@ -241,7 +241,7 @@ Use the parser-golden maintenance tool to generate expected output:
 cargo run --manifest-path xtask/Cargo.toml --bin update-parser-golden -- --list
 ```
 
-Then generate the exact expected files you need. See [`scripts/README.md`](../scripts/README.md)
+Then generate the exact expected files you need. See [`../xtask/README.md`](../xtask/README.md)
 and [`TESTING_STRATEGY.md`](TESTING_STRATEGY.md) for the current command patterns and golden-test
 feature-gating.
 

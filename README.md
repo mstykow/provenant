@@ -68,7 +68,7 @@ cargo build --release
 
 Cargo places the compiled binary under `target/release/`.
 
-> **Note**: The binary includes a built-in compact license index. The `reference/scancode-toolkit/` submodule is only needed for developers updating the embedded license data, working with helper scripts that depend on it, or using custom license rules.
+> **Note**: The binary includes a built-in compact license index. The `reference/scancode-toolkit/` submodule is only needed for developers updating the embedded license data, using maintainer commands that depend on it, or working with custom license rules.
 
 ## Usage
 

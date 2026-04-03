@@ -34,6 +34,8 @@ dist/
 # Development artifacts
 output.json
 *.log
+.provenant/
+.provenant/**
 
 # SQLite WAL journal files (created when tests open .sqlite fixtures)
 *.sqlite-shm

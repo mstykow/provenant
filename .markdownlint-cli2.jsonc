@@ -33,6 +33,7 @@
     "resources/scancode-licenses/**",
     "testdata/**",
     "target/**",
+    ".provenant/**",
     ".sisyphus/**",
     "docs/archived/**",
     "docs/license-detection",

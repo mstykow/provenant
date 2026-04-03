@@ -29,6 +29,14 @@ path = "src/bin/update_license_golden.rs"
 name = "generate-index-artifact"
 path = "src/bin/generate_index_artifact.rs"
 
+[[bin]]
+name = "benchmark-target"
+path = "src/bin/benchmark_target.rs"
+
+[[bin]]
+name = "compare-outputs"
+path = "src/bin/compare_outputs.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
@@ -40,6 +48,7 @@ regex = { workspace = true }
 rmp-serde = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = "0.10.9"
 url = { workspace = true }
 yaml_serde = "0.10.4"
 zstd = { workspace = true }

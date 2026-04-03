@@ -372,7 +372,7 @@ Prefer the narrowest owning test target:
 
 Use distinct commands for the two golden fixture domains:
 
-Use the dedicated `xtask` commands or wrapper scripts documented in [`scripts/README.md`](../scripts/README.md) for fixture maintenance. Keep the test strategy doc focused on when to update fixtures and which fixture family you are touching rather than mirroring the full CLI of those maintenance tools.
+Use the dedicated `xtask` commands documented in [`../xtask/README.md`](../xtask/README.md) for fixture maintenance. Keep the test strategy doc focused on when to update fixtures and which fixture family you are touching rather than mirroring the full CLI of those maintenance tools.
 
 For copyright golden fixtures, this repository's YAML files are treated as Rust-owned expectations. During updates, `update-copyright-golden` strips legacy `expected_failures` keys so Python reference sync does not reintroduce Python-only xfail metadata.
 
@@ -387,7 +387,7 @@ Recommended maintenance flow for copyright fixtures:
 
 Parser golden snapshot maintenance is separate: `update-parser-golden` does not sync from Python reference; it always writes expected JSON from current Rust parser output.
 
-For canonical script purpose and full CLI argument reference, see [`scripts/README.md`](../scripts/README.md).
+For canonical xtask purpose and full CLI argument reference, see [`../xtask/README.md`](../xtask/README.md).
 
 ### Single Test
 

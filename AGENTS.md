@@ -80,7 +80,7 @@ For test-layer definitions, fixture-maintenance workflows, and broader testing g
 
 Only run golden tests locally when the change directly affects golden-test-covered behavior, and then run the narrowest possible golden test target. Always use `--release` unless explicitly instructed otherwise. Debug golden test runs are far too slow for normal agent work.
 
-Running golden tests is expensive, so keep them narrowly targeted, prefer the dedicated helper scripts in `scripts/` when fixture maintenance is required, and use file-based caching for more complex incremental analysis.
+Running golden tests is expensive, so keep them narrowly targeted, prefer the dedicated `xtask` commands documented in `xtask/README.md` when fixture maintenance is required, and use file-based caching for more complex incremental analysis.
 
 ## Project Architecture
 
@@ -266,7 +266,7 @@ Canonical hook and CI definitions live in [`lefthook.yml`](lefthook.yml), [`pack
 - **Early filtering**: Exclusion patterns applied early during traversal
 - **Atomic progress**: Progress bar updates use atomic operations
 - **Release optimizations**: Release builds use additional optimization settings; consult the Cargo configuration and architecture docs for current details
-- **Benchmarking**: Run `./scripts/benchmark.sh --repo-url <url>` or `./scripts/benchmark.sh --target-path <path>` to measure performance on an explicit benchmark target. Use this after changes that could affect general performance. When committing performance-related changes, include the timing data in the commit message.
+- **Benchmarking**: Run `cargo run --manifest-path xtask/Cargo.toml --bin benchmark-target -- --repo-url <url> --repo-ref <ref>` or `cargo run --manifest-path xtask/Cargo.toml --bin benchmark-target -- --target-path <path>` to measure performance on an explicit benchmark target. Use this after changes that could affect general performance. When committing performance-related changes, include the timing data in the commit message.
 
 ## Common Pitfalls
 
