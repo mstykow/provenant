@@ -23,16 +23,27 @@ pub(super) struct GoWorkspaceDomain {
     root_dir_file_indices: Vec<usize>,
 }
 
+pub(super) struct PixiRootHint {
+    root_dir: PathBuf,
+}
+
+pub(super) struct PixiDomain {
+    root_dir: PathBuf,
+    root_dir_file_indices: Vec<usize>,
+}
+
 pub(super) enum TopologyHint {
     CargoWorkspaceRoot(CargoWorkspaceRootHint),
     GoWorkspaceRoot(GoWorkspaceRootHint),
     NpmWorkspaceRoot(NpmWorkspaceRootHint),
+    PixiRoot(PixiRootHint),
 }
 
 pub(super) enum TopologyDomain {
     CargoWorkspace(CargoWorkspaceDomain),
     GoWorkspace(GoWorkspaceDomain),
     NpmWorkspace(NpmWorkspaceDomain),
+    Pixi(PixiDomain),
 }
 
 pub(super) struct TopologyPlan {
@@ -40,6 +51,7 @@ pub(super) struct TopologyPlan {
     claimed_cargo_dirs: HashSet<PathBuf>,
     claimed_go_dirs: HashSet<PathBuf>,
     claimed_npm_dirs: HashSet<PathBuf>,
+    claimed_pixi_dirs: HashSet<PathBuf>,
 }
 
 impl TopologyPlan {
@@ -60,11 +72,17 @@ impl TopologyPlan {
                 .into_iter()
                 .map(TopologyHint::NpmWorkspaceRoot),
         );
+        hints.extend(
+            collect_pixi_root_hints(files)
+                .into_iter()
+                .map(TopologyHint::PixiRoot),
+        );
 
         let mut domains = Vec::new();
         let mut claimed_cargo_dirs = HashSet::new();
         let mut claimed_go_dirs = HashSet::new();
         let mut claimed_npm_dirs = HashSet::new();
+        let mut claimed_pixi_dirs = HashSet::new();
 
         let cargo_workspace_hints: Vec<_> = hints
             .iter()
@@ -72,6 +90,7 @@ impl TopologyPlan {
                 TopologyHint::CargoWorkspaceRoot(hint) => Some(hint),
                 TopologyHint::GoWorkspaceRoot(_) => None,
                 TopologyHint::NpmWorkspaceRoot(_) => None,
+                TopologyHint::PixiRoot(_) => None,
             })
             .collect();
 
@@ -87,6 +106,7 @@ impl TopologyPlan {
                 TopologyHint::CargoWorkspaceRoot(_) => None,
                 TopologyHint::GoWorkspaceRoot(hint) => Some(hint),
                 TopologyHint::NpmWorkspaceRoot(_) => None,
+                TopologyHint::PixiRoot(_) => None,
             })
             .collect();
 
@@ -101,6 +121,7 @@ impl TopologyPlan {
                 TopologyHint::CargoWorkspaceRoot(_) => None,
                 TopologyHint::GoWorkspaceRoot(_) => None,
                 TopologyHint::NpmWorkspaceRoot(hint) => Some(hint),
+                TopologyHint::PixiRoot(_) => None,
             })
             .collect();
 
@@ -110,11 +131,27 @@ impl TopologyPlan {
             domains.push(TopologyDomain::NpmWorkspace(domain));
         }
 
+        let pixi_root_hints: Vec<_> = hints
+            .iter()
+            .filter_map(|hint| match hint {
+                TopologyHint::CargoWorkspaceRoot(_) => None,
+                TopologyHint::GoWorkspaceRoot(_) => None,
+                TopologyHint::NpmWorkspaceRoot(_) => None,
+                TopologyHint::PixiRoot(hint) => Some(hint),
+            })
+            .collect();
+
+        for domain in plan_pixi_domains(dir_files, &pixi_root_hints) {
+            claimed_pixi_dirs.insert(domain.root_dir.clone());
+            domains.push(TopologyDomain::Pixi(domain));
+        }
+
         Self {
             domains,
             claimed_cargo_dirs,
             claimed_go_dirs,
             claimed_npm_dirs,
+            claimed_pixi_dirs,
         }
     }
 
@@ -137,6 +174,10 @@ impl TopologyPlan {
 
         if config.datasource_ids.contains(&DatasourceId::GoWork) {
             return self.claimed_go_dirs.contains(parent_dir);
+        }
+
+        if config.datasource_ids.contains(&DatasourceId::PixiToml) {
+            return self.claimed_pixi_dirs.contains(parent_dir);
         }
 
         if !config
@@ -168,6 +209,17 @@ impl TopologyPlan {
 
                     apply_directory_merge_result(files, packages, dependencies, result);
                 }
+                TopologyDomain::Pixi(domain) => {
+                    let Some(result) = sibling_merge::assemble_siblings(
+                        pixi_assembler_config(),
+                        files,
+                        &domain.root_dir_file_indices,
+                    ) else {
+                        continue;
+                    };
+
+                    apply_directory_merge_result(files, packages, dependencies, result);
+                }
                 TopologyDomain::CargoWorkspace(_) | TopologyDomain::NpmWorkspace(_) => {}
             }
         }
@@ -184,7 +236,9 @@ impl TopologyPlan {
                 TopologyDomain::CargoWorkspace(domain) => {
                     apply_cargo_workspace_domain(domain, files, packages, dependencies);
                 }
-                TopologyDomain::GoWorkspace(_) | TopologyDomain::NpmWorkspace(_) => {}
+                TopologyDomain::GoWorkspace(_)
+                | TopologyDomain::NpmWorkspace(_)
+                | TopologyDomain::Pixi(_) => {}
             }
         }
     }
@@ -197,7 +251,9 @@ impl TopologyPlan {
     ) {
         for domain in &self.domains {
             match domain {
-                TopologyDomain::CargoWorkspace(_) | TopologyDomain::GoWorkspace(_) => {}
+                TopologyDomain::CargoWorkspace(_)
+                | TopologyDomain::GoWorkspace(_)
+                | TopologyDomain::Pixi(_) => {}
                 TopologyDomain::NpmWorkspace(domain) => {
                     apply_npm_workspace_domain(domain, files, packages, dependencies);
                 }
@@ -237,6 +293,37 @@ fn collect_go_workspace_hints(files: &[FileInfo]) -> Vec<GoWorkspaceRootHint> {
     hints
 }
 
+fn collect_pixi_root_hints(files: &[FileInfo]) -> Vec<PixiRootHint> {
+    let mut seen = HashSet::new();
+    let mut hints = Vec::new();
+
+    for file in files {
+        let path = Path::new(&file.path);
+        if path.file_name().and_then(|name| name.to_str()) != Some("pixi.toml") {
+            continue;
+        }
+
+        let has_pixi_manifest = file
+            .package_data
+            .iter()
+            .any(|pkg_data| pkg_data.datasource_id == Some(DatasourceId::PixiToml));
+        if !has_pixi_manifest {
+            continue;
+        }
+
+        let Some(parent) = path.parent() else {
+            continue;
+        };
+        let root_dir = parent.to_path_buf();
+        if seen.insert(root_dir.clone()) {
+            hints.push(PixiRootHint { root_dir });
+        }
+    }
+
+    hints.sort_by(|left, right| left.root_dir.cmp(&right.root_dir));
+    hints
+}
+
 fn plan_go_workspace_domains(
     dir_files: &HashMap<PathBuf, Vec<usize>>,
     workspace_hints: &[&GoWorkspaceRootHint],
@@ -250,6 +337,28 @@ fn plan_go_workspace_domains(
         }
 
         domains.push(GoWorkspaceDomain {
+            root_dir: hint.root_dir.clone(),
+            root_dir_file_indices,
+        });
+    }
+
+    domains.sort_by(|left, right| left.root_dir.cmp(&right.root_dir));
+    domains
+}
+
+fn plan_pixi_domains(
+    dir_files: &HashMap<PathBuf, Vec<usize>>,
+    workspace_hints: &[&PixiRootHint],
+) -> Vec<PixiDomain> {
+    let mut domains = Vec::new();
+
+    for hint in workspace_hints {
+        let root_dir_file_indices = dir_files.get(&hint.root_dir).cloned().unwrap_or_default();
+        if root_dir_file_indices.is_empty() {
+            continue;
+        }
+
+        domains.push(PixiDomain {
             root_dir: hint.root_dir.clone(),
             root_dir_file_indices,
         });
@@ -284,4 +393,11 @@ fn go_assembler_config() -> &'static AssemblerConfig {
         .iter()
         .find(|config| config.datasource_ids.contains(&DatasourceId::GoWork))
         .expect("Go assembler config must exist")
+}
+
+fn pixi_assembler_config() -> &'static AssemblerConfig {
+    ASSEMBLERS
+        .iter()
+        .find(|config| config.datasource_ids.contains(&DatasourceId::PixiToml))
+        .expect("Pixi assembler config must exist")
 }
