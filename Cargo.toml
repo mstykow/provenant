@@ -4,9 +4,10 @@ version = "0.0.9"
 edition = "2024"
 repository = "https://github.com/mstykow/provenant"
 homepage = "https://github.com/mstykow/provenant"
-description = "Provenant is a high-performance Rust scanner for licenses, packages, and source provenance."
+documentation = "https://github.com/mstykow/provenant/blob/main/docs/DOCUMENTATION_INDEX.md"
+description = "Rust-based ScanCode-compatible scanner for licenses, package metadata, SBOMs, and provenance data."
 license = "Apache-2.0"
-keywords = ["provenance", "license", "analysis", "rust"]
+keywords = ["scancode", "sbom", "license", "provenance", "compliance"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
 authors = ["Maxim Stykow", "Adrian Braemer"]
@@ -23,8 +24,10 @@ include = [
     "/Cargo.toml",
     "/Cargo.lock",
     "/README.md",
+    "/CITATION.cff",
     "/LICENSE",
     "/NOTICE",
+    "/SECURITY.md",
 ]
 
 [package.metadata.cargo-machete]
@@ -37,6 +40,9 @@ sign-tag = true
 push = true
 # Commit message template
 pre-release-commit-message = "chore: release v{{version}}"
+pre-release-replacements = [
+    { file = "CITATION.cff", search = '^version: ".*"$', replace = 'version: "{{version}}"' },
+]
 pre-release-hook = ["cargo", "generate-lockfile"]
 # Tag message template
 tag-message = "Release v{{version}}"

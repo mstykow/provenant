@@ -32,7 +32,6 @@ dist/
 *.exe
 
 # Development artifacts
-output.json
 *.log
 .provenant/
 .provenant/**

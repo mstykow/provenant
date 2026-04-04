@@ -47,7 +47,7 @@ cargo test --lib --release --verbose _scan_test::
 cargo test --test scanner_integration --release --verbose
 cargo test --test output_format_golden --release --verbose
 cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin generate-supported-formats -- --check
-./scripts/check_xtask_lockfile_sync.sh
+./scripts/check_release_version_sync.sh
 ```
 
 The GitHub `Quality Checks` workflow is the authoritative release gate. It also verifies the embedded license index, crate size, manifest sorting, unused dependencies, golden-test shards, Windows build smoke, and the split integration-test matrix defined in `.github/workflows/check.yml`. It is best to start from a branch and commit state where that workflow is already green.
@@ -86,7 +86,8 @@ On every release attempt, the script:
 The repository is configured so `cargo release`:
 
 - Creates the release commit as `chore: release vX.Y.Z`
-- Regenerates `xtask/Cargo.lock` after bumping the crate version and before creating the release commit
+- Rewrites `CITATION.cff` so its `version` field matches the release version
+- Regenerates the workspace `Cargo.lock` after bumping the crate version and before creating the release commit
 - Creates a GPG-signed tag `vX.Y.Z`
 - Publishes the crate to crates.io
 - Pushes the commit and tag to GitHub

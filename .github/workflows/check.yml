@@ -53,8 +53,8 @@ jobs:
       - name: Set up Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Check xtask lockfile sync
-        run: ./scripts/check_xtask_lockfile_sync.sh
+      - name: Check release version sync
+        run: ./scripts/check_release_version_sync.sh
 
       - name: Check xtask lockfile sync and supported formats
         run: cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin generate-supported-formats -- --check

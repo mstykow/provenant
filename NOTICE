@@ -3,7 +3,7 @@ Provenant Notices
 
 Copyright (c) 2026 Provenant contributors.
 
-Provenant is an independent Rust rewrite of ScanCode Toolkit.
+Provenant is an independent Rust implementation inspired by ScanCode Toolkit.
 
 This file preserves attribution notices for upstream ScanCode Toolkit material
 that is present in this repository, including the `reference/scancode-toolkit`
@@ -35,10 +35,10 @@ See https://aboutcode.org for more information about nexB OSS projects
 ScanCode data attribution
 =========================
 
-ScanCode includes datasets (e.g. for license detection) that are licensed under
-CC-BY-4.0
+ScanCode includes datasets (for example, license-detection data) that are licensed under
+CC-BY-4.0.
 
-The preferred attribution for use of ScanCode data is::
+The preferred attribution for use of ScanCode data is:
 
     Copyright (c) nexB Inc. and others. All rights reserved.
     ScanCode is a trademark of nexB Inc.

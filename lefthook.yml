@@ -28,12 +28,13 @@ pre-commit:
         - "xtask/**/*.rs"
       run: cargo clippy --manifest-path xtask/Cargo.toml --all-targets -- -D warnings
 
-    check-xtask-lockfile-sync:
+    check-release-version-sync:
       glob:
         - Cargo.toml
+        - CITATION.cff
         - xtask/Cargo.toml
         - release.sh
-      run: ./scripts/check_xtask_lockfile_sync.sh
+      run: ./scripts/check_release_version_sync.sh
 
     generate-supported-formats:
       glob: src/parsers/*.rs

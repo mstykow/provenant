@@ -40,13 +40,13 @@ Example:
 ./scripts/check_crate_size.sh
 ```
 
-## `check_xtask_lockfile_sync.sh`
+## `check_release_version_sync.sh`
 
-Verify that the xtask lockfile view of `provenant-cli` matches the root crate
-version in `Cargo.toml`.
+Verify that the crate version in `Cargo.toml`, the packaged `provenant-cli`
+entry in the lockfile, and `CITATION.cff` all stay aligned for releases.
 
 Example:
 
 ```bash
-./scripts/check_xtask_lockfile_sync.sh
+./scripts/check_release_version_sync.sh
 ```

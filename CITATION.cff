@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use Provenant in research, tooling comparisons, or publications, please cite it using the metadata below."
+title: "Provenant"
+version: "0.0.9"
+type: software
+license: Apache-2.0
+repository-code: "https://github.com/mstykow/provenant"
+url: "https://github.com/mstykow/provenant"
+authors:
+  - family-names: Stykow
+    given-names: Maxim
+  - family-names: Braemer
+    given-names: Adrian
+abstract: >-
+  Rust-based ScanCode-compatible scanner for licenses, package metadata, SBOMs,
+  and provenance data.
+keywords:
+  - scancode
+  - sbom
+  - license-compliance
+  - provenance
+  - rust
