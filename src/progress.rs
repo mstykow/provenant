@@ -498,15 +498,29 @@ fn build_summary_messages(stats: &ScanStats, scan_start: &str, scan_end: &str) -
 
     for (name, value) in &stats.top_level_timings {
         lines.push(format!("  {name}: {value:.2}s"));
-        lines.extend(
-            stats
-                .detail_timings
-                .iter()
-                .filter(|(detail_name, _)| detail_parent_phase(detail_name) == Some(name.as_str()))
-                .map(|(detail_name, detail_value)| {
-                    format!("    {detail_name}: {detail_value:.2}s")
-                }),
-        );
+
+        let detail_timings = stats
+            .detail_timings
+            .iter()
+            .filter(|(detail_name, _)| detail_parent_phase(detail_name) == Some(name.as_str()));
+
+        if name == "scan" {
+            let scan_breakdown: Vec<_> = detail_timings.collect();
+            if !scan_breakdown.is_empty() {
+                lines.push("  scan breakdown (cumulative worker time):".to_string());
+                lines.extend(
+                    scan_breakdown
+                        .into_iter()
+                        .map(|(detail_name, detail_value)| {
+                            format!("    {detail_name}: {detail_value:.2}s")
+                        }),
+                );
+            }
+        } else {
+            lines.extend(detail_timings.map(|(detail_name, detail_value)| {
+                format!("    {detail_name}: {detail_value:.2}s")
+            }));
+        }
     }
     lines.push(format!("  total: {total:.2}s"));
 
@@ -615,11 +629,18 @@ mod tests {
 
         assert!(lines.contains(&"  total: 28.00s".to_string()));
         assert!(lines.contains(&"    setup_scan:licenses: 0.50s".to_string()));
+        assert!(lines.contains(&"  scan breakdown (cumulative worker time):".to_string()));
         assert!(lines.contains(&"    scan:packages: 1.25s".to_string()));
         assert!(lines.contains(&"    output-filter:only-findings: 1.50s".to_string()));
         assert!(lines.contains(&"    finalize:output-prepare: 2.00s".to_string()));
         assert!(line_index("  setup: 1.00s") < line_index("    setup_scan:licenses: 0.50s"));
-        assert!(line_index("  scan: 3.00s") < line_index("    scan:packages: 1.25s"));
+        assert!(
+            line_index("  scan: 3.00s") < line_index("  scan breakdown (cumulative worker time):")
+        );
+        assert!(
+            line_index("  scan breakdown (cumulative worker time):")
+                < line_index("    scan:packages: 1.25s")
+        );
         assert!(
             line_index("  post-scan: 4.00s") < line_index("    output-filter:only-findings: 1.50s")
         );
