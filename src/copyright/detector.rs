@@ -2331,6 +2331,74 @@ fn drop_copyright_like_holders(holders: &mut Vec<HolderDetection>) {
     });
 }
 
+fn drop_json_description_metadata_copyrights_and_holders(
+    raw_lines: &[&str],
+    copyrights: &mut Vec<CopyrightDetection>,
+    holders: &mut Vec<HolderDetection>,
+) {
+    static JSON_COPYRIGHT_KEY_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(?i)"copyrights?"\s*:"#).unwrap());
+
+    let mut retained_spans: HashSet<(usize, usize)> = HashSet::new();
+    copyrights.retain(|copyright| {
+        let Some(window) =
+            json_window_for_span(raw_lines, copyright.start_line, copyright.end_line)
+        else {
+            retained_spans.insert((copyright.start_line, copyright.end_line));
+            return true;
+        };
+
+        let lower = window.to_ascii_lowercase();
+        let description_like = lower.contains("\"description\"")
+            || lower.contains("\"disambiguatingdescription\"")
+            || lower.contains("\"sponsor\"")
+            || lower.contains("\"logo\"")
+            || lower.contains("\"url\"");
+        let keep = !description_like || JSON_COPYRIGHT_KEY_RE.is_match(&window);
+        if keep {
+            retained_spans.insert((copyright.start_line, copyright.end_line));
+        }
+        keep
+    });
+
+    holders.retain(|holder| {
+        if retained_spans.contains(&(holder.start_line, holder.end_line)) {
+            return true;
+        }
+        let Some(window) = json_window_for_span(raw_lines, holder.start_line, holder.end_line)
+        else {
+            return true;
+        };
+        let lower = window.to_ascii_lowercase();
+        let description_like = lower.contains("\"description\"")
+            || lower.contains("\"disambiguatingdescription\"")
+            || lower.contains("\"sponsor\"")
+            || lower.contains("\"logo\"")
+            || lower.contains("\"url\"");
+        !description_like || JSON_COPYRIGHT_KEY_RE.is_match(&window)
+    });
+}
+
+fn json_window_for_span(raw_lines: &[&str], start_line: usize, end_line: usize) -> Option<String> {
+    if start_line == 0
+        || end_line == 0
+        || start_line > raw_lines.len()
+        || end_line > raw_lines.len()
+    {
+        return None;
+    }
+    let start = start_line.saturating_sub(2).max(1);
+    let end = (end_line + 2).min(raw_lines.len());
+    let lines = &raw_lines[start - 1..end];
+    if !lines
+        .iter()
+        .any(|line| line.contains("\":") && (line.contains('{') || line.contains('"')))
+    {
+        return None;
+    }
+    Some(lines.join(" "))
+}
+
 fn restore_url_slash_before_closing_paren_from_raw_lines(
     raw_lines: &[&str],
     copyrights: &mut [CopyrightDetection],
@@ -12530,6 +12598,9 @@ fn try_extract_date_by_author(tree: &[ParseNode], idx: usize) -> Option<(AuthorD
     }
 
     let det = build_author_from_tokens(&author_tokens)?;
+    if looks_like_bad_generic_author_candidate(&det.author) {
+        return None;
+    }
     Some((det, consumed))
 }
 
@@ -13207,7 +13278,9 @@ fn extract_from_spans(
                     .copied()
                     .filter(|t| !NON_AUTHOR_POS_TAGS.contains(&t.tag))
                     .collect();
-                if let Some(det) = build_author_from_tokens(&author_tokens) {
+                if let Some(det) = build_author_from_tokens(&author_tokens)
+                    && !looks_like_bad_generic_author_candidate(&det.author)
+                {
                     authors.push(det);
                 }
             }
@@ -13821,6 +13894,70 @@ fn build_author_from_tokens(tokens: &[&Token]) -> Option<AuthorDetection> {
         start_line: tokens.first().map(|t| t.start_line).unwrap_or(0),
         end_line: tokens.last().map(|t| t.start_line).unwrap_or(0),
     })
+}
+
+fn looks_like_bad_generic_author_candidate(s: &str) -> bool {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.contains("@ref")
+        || lower.contains("developerid")
+        || lower.contains("disambiguatingdescription")
+        || lower.contains("releasetimestamp")
+        || lower.contains("requiredcore")
+        || lower.contains("previoustimestamp")
+        || lower.contains("previousversion")
+        || lower.contains("builddate")
+        || lower.contains("dependencies")
+        || lower.contains("labels")
+        || lower.contains("sha1")
+        || lower.contains("scm")
+        || lower.contains("@type")
+        || lower.contains("type'")
+        || lower.contains("sponsor'")
+        || lower.contains("logo")
+        || lower.contains("url'")
+        || lower.contains("wiki:")
+        || lower.contains("gav:")
+        || lower.contains("u201")
+        || lower.contains("nil attrs")
+        || lower.contains("ptr parameter")
+        || lower.contains("satisfy the request")
+        || lower.contains("with key equal")
+        || lower.contains("may wish to provide")
+        || lower.contains("developers can trust")
+    {
+        return true;
+    }
+
+    if trimmed.contains('@') {
+        return false;
+    }
+
+    let words: Vec<&str> = trimmed.split_whitespace().collect();
+    if words.len() == 1 {
+        return matches!(
+            lower.as_str(),
+            "admin"
+                | "developers"
+                | "developer"
+                | "based"
+                | "working"
+                | "features"
+                | "components"
+                | "ensure"
+                | "in"
+                | "on"
+                | "for"
+                | "from"
+                | "by"
+        );
+    }
+
+    false
 }
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────

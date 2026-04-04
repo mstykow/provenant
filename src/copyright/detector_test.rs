@@ -3745,6 +3745,54 @@ fn test_json_excerpt_developed_by_company_author_detected() {
 }
 
 #[test]
+fn test_plain_json_author_string_preserved() {
+    let input = r#""author": "Google's Web DevRel Team","#;
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert_eq!(
+        authors
+            .iter()
+            .map(|a| a.author.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Google's Web DevRel Team"],
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_json_author_object_name_preferred_over_url_tail() {
+    let input =
+        "\"author\": { \"name\": \"Chen Fengyuan\", \"url\": \"https://chenfengyuan.com/\" }";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert_eq!(
+        authors
+            .iter()
+            .map(|a| a.author.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Chen Fengyuan"],
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_readme_security_review_prose_not_author() {
+    let input = "application developers can trust, the C++ Alliance has commissioned Bishop Fox to perform a security audit of the Boost.JSON library. The report linked here";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_update_center_metadata_blob_not_multiple_authors() {
+    let input = "author: Box UK, url: http://updates.jenkins-ci.org/download/plugins/jslint/0.7.6/jslint.hpi, version: 0.7.6, wiki: https://wiki.jenkins-ci.org/display/JENKINS/JSLint+plugin, title: JSLint plugin, buildDate: Jan 03, 2013, developerId: gavd";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    let values: Vec<&str> = authors.iter().map(|a| a.author.as_str()).collect();
+    assert_eq!(values, vec!["Box UK"], "authors: {authors:?}");
+}
+
+#[test]
 fn test_gsoc_javascript_language_phrase_not_author() {
     let input = "My proposal is based on getting full support for JavaScript within the RoboComp framework. For this, the current state of generation of written components in the JavaScript language must be improved.";
     let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
@@ -3820,6 +3868,32 @@ fn test_gsoc_spdx_sentence_not_copyright_or_holder() {
 
     assert!(copyrights.is_empty(), "copyrights: {copyrights:?}");
     assert!(holders.is_empty(), "holders: {holders:?}");
+}
+
+#[test]
+fn test_json_description_and_sponsor_not_copyright_or_holder() {
+    let input = r#""description": "Software Package Data Exchange (SPDX) is a set of standards for communicating the components, licenses, and copyrights associated with software.", "sponsor": { "@type": "Organization", "name": "FOSSology", "disambiguatingDescription": "Open Source License Compliance by Open Source Software", "url": "http://example.com/logo" }"#;
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(copyrights.is_empty(), "copyrights: {copyrights:?}");
+    assert!(holders.is_empty(), "holders: {holders:?}");
+}
+
+#[test]
+fn test_mit_intro_not_copyright_or_holder() {
+    let input = "These files are covered by the following copyright and MIT License, reproduced from the original project:";
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        !copyrights
+            .iter()
+            .any(|c| c.copyright == "copyright and MIT"),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        !holders.iter().any(|h| h.holder == "MIT"),
+        "holders: {holders:?}"
+    );
 }
 
 #[test]

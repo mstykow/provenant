@@ -62,7 +62,7 @@ fn truncate_json_metadata_tail(s: &str) -> String {
     let trimmed = s.trim();
     static JSON_METADATA_TAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
-            r#"(?i)^(?P<prefix>.+?)(?:,\s*['"]?(?:gav|labels|name|previoustimestamp|previousversion|releasetimestamp|requiredcore|scm)\b.*)$"#,
+            r#"(?i)^(?P<prefix>.+?)(?:,\s*['"]?(?:gav|labels|name|previoustimestamp|previousversion|releasetimestamp|requiredcore|scm|url|version|wiki|title|builddate|dependencies|developerid|email|sha1)\b.*)$"#,
         )
         .unwrap()
     });

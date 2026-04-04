@@ -3,16 +3,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use serde::Serialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::Digest;
 
 use provenant_xtask::common::{
-    derive_repo_name_from_url, ensure_release_binary, now_run_id, project_root, realpath,
-    render_tsv_table, resolve_scan_args, run_and_capture, sanitize_label, shell_join,
-    write_pretty_json, write_tsv, ScanProfile,
+    ScanProfile, derive_repo_name_from_url, ensure_release_binary, now_run_id, project_root,
+    realpath, render_tsv_table, resolve_scan_args, run_and_capture, sanitize_label, shell_join,
+    write_pretty_json, write_tsv,
 };
 use provenant_xtask::manifests::{
     CommandInvocation, CommandsManifest, CompareArtifactsManifest, CompareRunManifest,
@@ -126,7 +126,7 @@ struct ScancodeCacheEntryManifest {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let profile = args.profile.clone();
+    let profile = args.profile;
     let explicit_scan_args = args.scan_args.clone();
     let scan_args = resolve_scan_args(
         profile,
@@ -398,7 +398,11 @@ fn resolve_scancode_runtime_identity(context: &mut ContextState) -> Result<()> {
             .output()?;
         let mut hasher = sha2::Sha256::default();
         hasher.update(&diff.stdout);
-        let digest = format!("{:x}", hasher.finalize());
+        let digest: String = hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{:02x}", byte))
+            .collect();
         diff_hash = Some(digest.clone());
         image = format!("provenant-scancode-local:{short_commit}-dirty-{digest}");
         image.truncate(128);
@@ -1341,7 +1345,11 @@ fn build_scancode_cache_key(context: &ContextState) -> Result<String> {
     });
     let mut hasher = sha2::Sha256::default();
     hasher.update(serde_json::to_vec(&key_input)?);
-    let digest = format!("{:x}", hasher.finalize());
+    let digest: String = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect();
     Ok(format!(
         "{}-{}",
         sanitize_label(&derive_repo_name_from_url(repo_url, "scancode"), "scancode"),

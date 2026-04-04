@@ -548,7 +548,7 @@ fn sanitize_author_colon_tail(tail: &str) -> Option<String> {
     });
     static METADATA_SPLIT_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
-            r#"(?i),(?:\s*['"]?(?:url|version|wiki|gav|labels|developerid|email|name|previoustimestamp|previousversion|releasetimestamp|requiredcore|scm)\b.*)$"#,
+            r#"(?i),(?:\s*['"]?(?:url|version|wiki|gav|labels|developerid|email|name|previoustimestamp|previousversion|releasetimestamp|requiredcore|scm|title|builddate|dependencies|sha1)\b.*)$"#,
         )
         .unwrap()
     });
@@ -589,6 +589,10 @@ fn is_author_metadata_line(line: &str) -> bool {
         || lower.starts_with("wiki:")
         || lower.starts_with("gav:")
         || lower.starts_with("labels:")
+        || lower.starts_with("title:")
+        || lower.starts_with("builddate:")
+        || lower.starts_with("dependencies:")
+        || lower.starts_with("sha1:")
         || lower.starts_with("developerid:")
         || lower.starts_with("email:")
         || lower.starts_with("name:")
@@ -1465,6 +1469,84 @@ pub(super) fn drop_shadowed_prefix_authors(authors: &mut Vec<AuthorDetection>) {
 
 pub(super) fn drop_ref_markup_authors(authors: &mut Vec<AuthorDetection>) {
     authors.retain(|author| !author.author.contains("@ref"));
+}
+
+pub(super) fn normalize_json_blob_authors(raw_lines: &[&str], authors: &mut Vec<AuthorDetection>) {
+    let mut normalized: Vec<AuthorDetection> = Vec::with_capacity(authors.len());
+    let mut seen: HashSet<(usize, usize, String)> = HashSet::new();
+
+    for author in authors.iter() {
+        let Some(window) = json_author_window(raw_lines, author.start_line, author.end_line) else {
+            let key = (author.start_line, author.end_line, author.author.clone());
+            if seen.insert(key) {
+                normalized.push(author.clone());
+            }
+            continue;
+        };
+
+        let replacement = if let Some(name) = extract_author_name_from_json_window(&window) {
+            refine_author(&name)
+        } else if json_window_contains_developed_by(&window, &author.author) {
+            refine_author(&author.author)
+        } else {
+            None
+        };
+
+        let author_name = replacement.unwrap_or_else(|| author.author.clone());
+
+        let key = (author.start_line, author.end_line, author_name.clone());
+        if seen.insert(key) {
+            normalized.push(AuthorDetection {
+                author: author_name,
+                start_line: author.start_line,
+                end_line: author.end_line,
+            });
+        }
+    }
+
+    *authors = normalized;
+}
+
+fn is_json_like_line(line: &str) -> bool {
+    static JSON_FIELD_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"^\s*\{?\s*"[^"]+"\s*:\s*(?:"[^"]*"|\{|\[|true|false|null|-?\d)"#).unwrap()
+    });
+
+    JSON_FIELD_RE.is_match(line) || line.trim() == "{" || line.trim() == "}" || line.trim() == "},"
+}
+
+fn json_author_window(raw_lines: &[&str], start_line: usize, end_line: usize) -> Option<String> {
+    if start_line == 0
+        || end_line == 0
+        || start_line > raw_lines.len()
+        || end_line > raw_lines.len()
+    {
+        return None;
+    }
+    let start = start_line.saturating_sub(2).max(1);
+    let end = (end_line + 2).min(raw_lines.len());
+    let lines = &raw_lines[start - 1..end];
+    if !lines.iter().any(|line| is_json_like_line(line)) {
+        return None;
+    }
+    Some(lines.join(" "))
+}
+
+fn extract_author_name_from_json_window(window: &str) -> Option<String> {
+    static JSON_AUTHOR_NAME_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"(?is)"author"\s*:\s*\{[^{}]*?"name"\s*:\s*"(?P<name>[^"]+)""#).unwrap()
+    });
+
+    JSON_AUTHOR_NAME_RE
+        .captures(window)
+        .and_then(|cap| cap.name("name"))
+        .map(|m| m.as_str().trim().to_string())
+        .filter(|name| !name.is_empty())
+}
+
+fn json_window_contains_developed_by(window: &str, author: &str) -> bool {
+    let needle = format!("developed by {}", author.trim().to_ascii_lowercase());
+    window.to_ascii_lowercase().contains(&needle)
 }
 
 pub(super) fn drop_comedi_ds_status_devices_authors(

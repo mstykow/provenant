@@ -75,6 +75,7 @@ pub(super) fn run_phase_postprocess(
         authors,
     );
     super::author_heuristics::drop_ref_markup_authors(authors);
+    super::author_heuristics::normalize_json_blob_authors(raw_lines, authors);
 
     super::extract_following_authors_holders(raw_lines, prepared_cache, holders);
 
@@ -180,5 +181,6 @@ pub(super) fn run_phase_postprocess(
 
     super::drop_shadowed_acronym_location_suffix_copyrights_same_span(copyrights);
     super::split_multiline_holder_lists_from_copyright_email_sequences(copyrights, holders);
+    super::drop_json_description_metadata_copyrights_and_holders(raw_lines, copyrights, holders);
     super::drop_copyright_like_holders(holders);
 }

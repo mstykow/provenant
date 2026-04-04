@@ -1110,6 +1110,7 @@ static COPYRIGHTS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^copyright \d+ trademark\b",
         r"(?i)^copyright 60$",
         r"(?i)^copyright ACM and IEEE\b",
+        r"(?i)^copyright and mit$",
         r"(?i)^copyright and placed into\b",
         r"(?i)^copyright and to distribute\b",
         r"(?i)^copyright as follows\b",
@@ -1995,7 +1996,7 @@ fn is_junk_c_sign_path_fragment(s: &str) -> bool {
 
 /// Return true if `s` matches any known junk holder pattern.
 pub(crate) fn is_junk_holder(s: &str) -> bool {
-    HOLDERS_JUNK_PATTERNS.iter().any(|re| re.is_match(s))
+    HOLDERS_JUNK_PATTERNS.iter().any(|re| re.is_match(s)) || s.eq_ignore_ascii_case("MIT")
 }
 
 pub(crate) fn is_path_like_code_fragment(s: &str) -> bool {
