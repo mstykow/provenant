@@ -50,7 +50,7 @@ cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin generate-suppo
 ./scripts/check_release_version_sync.sh
 ```
 
-The GitHub `Quality Checks` workflow is the authoritative release gate. It also verifies the embedded license index, crate size, manifest sorting, unused dependencies, golden-test shards, Windows build smoke, and the split integration-test matrix defined in `.github/workflows/check.yml`. It is best to start from a branch and commit state where that workflow is already green.
+The GitHub `Quality Checks` workflow is the authoritative release gate. It also verifies the embedded license index, crate size, manifest sorting, unused dependencies, golden-test shards, Windows and Intel macOS build smoke, and the split integration-test matrix defined in `.github/workflows/check.yml`. It is best to start from a branch and commit state where that workflow is already green.
 
 ## Release Commands
 
@@ -101,6 +101,7 @@ That workflow:
 - Builds release binaries for:
   - `x86_64-unknown-linux-gnu`
   - `aarch64-unknown-linux-gnu`
+  - `x86_64-apple-darwin`
   - `aarch64-apple-darwin`
   - `x86_64-pc-windows-msvc`
 - Separately verifies the embedded license index before building release artifacts
@@ -118,7 +119,7 @@ Verify:
 
 - The crates.io publish step succeeded
 - The tag and release commit are present on the remote
-- The GitHub Release contains all expected platform archives and checksum files
+- The GitHub Release contains all expected Linux, macOS (Intel and Apple Silicon), and Windows archives and checksum files
 
 ## Common Failure Points
 

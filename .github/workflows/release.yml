@@ -53,8 +53,10 @@ jobs:
             archive_format: tar.gz
             packages: pkg-config libsqlite3-dev
 
-          # x86_64-apple-darwin removed: macos-15-large requires paid plan
-          # Intel Mac users can use Rosetta 2 to run ARM builds
+          - target: x86_64-apple-darwin
+            os: macos-15-intel
+            archive_format: tar.gz
+            packages: ""
 
           - target: aarch64-apple-darwin
             os: macos-latest
