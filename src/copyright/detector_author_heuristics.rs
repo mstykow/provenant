@@ -1492,7 +1492,9 @@ pub(super) fn normalize_json_blob_authors(raw_lines: &[&str], authors: &mut Vec<
             None
         };
 
-        let author_name = replacement.unwrap_or_else(|| author.author.clone());
+        let Some(author_name) = replacement else {
+            continue;
+        };
 
         let key = (author.start_line, author.end_line, author_name.clone());
         if seen.insert(key) {
@@ -1533,12 +1535,15 @@ fn json_author_window(raw_lines: &[&str], start_line: usize, end_line: usize) ->
 }
 
 fn extract_author_name_from_json_window(window: &str) -> Option<String> {
-    static JSON_AUTHOR_NAME_RE: LazyLock<Regex> = LazyLock::new(|| {
+    static JSON_AUTHOR_OBJECT_NAME_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r#"(?is)"author"\s*:\s*\{[^{}]*?"name"\s*:\s*"(?P<name>[^"]+)""#).unwrap()
     });
+    static JSON_AUTHOR_STRING_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(?is)"author"\s*:\s*"(?P<name>[^"]+)""#).unwrap());
 
-    JSON_AUTHOR_NAME_RE
+    JSON_AUTHOR_OBJECT_NAME_RE
         .captures(window)
+        .or_else(|| JSON_AUTHOR_STRING_RE.captures(window))
         .and_then(|cap| cap.name("name"))
         .map(|m| m.as_str().trim().to_string())
         .filter(|name| !name.is_empty())

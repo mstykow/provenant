@@ -36,7 +36,7 @@ const JUNK_EXACT_DOMAIN_NAMES: &[&str] = &[
     "other.com",
 ];
 
-const JUNK_DOMAIN_SUFFIXES: &[&str] = &[".png", ".jpg", ".gif", ".jpeg"];
+const JUNK_DOMAIN_SUFFIXES: &[&str] = &[".png", ".jpg", ".gif", ".jpeg", ".local"];
 
 const JUNK_URLS: &[&str] = &[
     "http://www.adobe.com/2006/mxml",
