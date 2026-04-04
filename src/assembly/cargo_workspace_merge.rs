@@ -5,35 +5,31 @@ use log::warn;
 
 use crate::models::{DatasourceId, FileInfo, Package, PackageData, TopLevelDependency};
 
-pub fn assemble_cargo_workspaces(
-    files: &mut [FileInfo],
-    packages: &mut Vec<Package>,
-    dependencies: &mut Vec<TopLevelDependency>,
-) {
-    let workspace_roots = find_workspace_roots(files);
-
-    if workspace_roots.is_empty() {
-        return;
-    }
-
-    for workspace_root in workspace_roots {
-        process_workspace(files, packages, dependencies, &workspace_root);
-    }
+pub(super) struct CargoWorkspaceRootHint {
+    pub(super) root_dir: PathBuf,
+    pub(super) root_cargo_toml_idx: usize,
+    pub(super) members: Vec<String>,
+    pub(super) workspace_data: WorkspaceData,
 }
 
-struct WorkspaceRoot {
-    root_dir: PathBuf,
-    root_cargo_toml_idx: usize,
-    members: Vec<String>,
-    workspace_data: WorkspaceData,
+pub(super) struct CargoWorkspaceMemberDomain {
+    pub(super) manifest_idx: usize,
+    pub(super) dir_path: PathBuf,
 }
 
-struct WorkspaceData {
+pub(super) struct CargoWorkspaceDomain {
+    pub(super) root_dir: PathBuf,
+    pub(super) root_cargo_toml_idx: usize,
+    pub(super) members: Vec<CargoWorkspaceMemberDomain>,
+    pub(super) workspace_data: WorkspaceData,
+}
+
+pub(super) struct WorkspaceData {
     package: HashMap<String, serde_json::Value>,
     dependencies: HashMap<String, serde_json::Value>,
 }
 
-fn find_workspace_roots(files: &[FileInfo]) -> Vec<WorkspaceRoot> {
+pub(super) fn collect_cargo_workspace_hints(files: &[FileInfo]) -> Vec<CargoWorkspaceRootHint> {
     let mut roots = Vec::new();
 
     for (idx, file) in files.iter().enumerate() {
@@ -56,7 +52,7 @@ fn find_workspace_roots(files: &[FileInfo]) -> Vec<WorkspaceRoot> {
             if let Some(workspace_info) = extract_workspace_info(pkg_data)
                 && let Some(parent) = path.parent()
             {
-                roots.push(WorkspaceRoot {
+                roots.push(CargoWorkspaceRootHint {
                     root_dir: parent.to_path_buf(),
                     root_cargo_toml_idx: idx,
                     members: workspace_info.members,
@@ -67,6 +63,54 @@ fn find_workspace_roots(files: &[FileInfo]) -> Vec<WorkspaceRoot> {
     }
 
     roots
+}
+
+pub(super) fn plan_cargo_workspace_domains(
+    files: &[FileInfo],
+    _dir_files: &HashMap<PathBuf, Vec<usize>>,
+    workspace_hints: &[&CargoWorkspaceRootHint],
+) -> Vec<CargoWorkspaceDomain> {
+    let mut domains = Vec::new();
+
+    for workspace_hint in workspace_hints {
+        let member_indices = discover_members(files, workspace_hint);
+
+        if member_indices.is_empty() {
+            warn!(
+                "No workspace members found for patterns {:?} in {:?}",
+                workspace_hint.members, workspace_hint.root_dir
+            );
+            continue;
+        }
+
+        let members = member_indices
+            .into_iter()
+            .map(|manifest_idx| {
+                let dir_path = Path::new(&files[manifest_idx].path)
+                    .parent()
+                    .expect("cargo workspace member manifest must have a parent directory")
+                    .to_path_buf();
+
+                CargoWorkspaceMemberDomain {
+                    manifest_idx,
+                    dir_path,
+                }
+            })
+            .collect();
+
+        domains.push(CargoWorkspaceDomain {
+            root_dir: workspace_hint.root_dir.clone(),
+            root_cargo_toml_idx: workspace_hint.root_cargo_toml_idx,
+            members,
+            workspace_data: WorkspaceData {
+                package: workspace_hint.workspace_data.package.clone(),
+                dependencies: workspace_hint.workspace_data.dependencies.clone(),
+            },
+        });
+    }
+
+    domains.sort_by(|left, right| left.root_dir.cmp(&right.root_dir));
+    domains
 }
 
 struct WorkspaceInfo {
@@ -119,32 +163,34 @@ fn extract_workspace_info(pkg_data: &PackageData) -> Option<WorkspaceInfo> {
     })
 }
 
-fn process_workspace(
+pub(super) fn apply_cargo_workspace_domain(
+    workspace_root: &CargoWorkspaceDomain,
     files: &mut [FileInfo],
     packages: &mut Vec<Package>,
     dependencies: &mut Vec<TopLevelDependency>,
-    workspace_root: &WorkspaceRoot,
 ) {
-    let member_indices = discover_members(files, workspace_root);
-
-    if member_indices.is_empty() {
-        warn!(
-            "No workspace members found for patterns {:?} in {:?}",
-            workspace_root.members, workspace_root.root_dir
-        );
-        return;
-    }
-
     remove_root_package(
         files,
         workspace_root.root_cargo_toml_idx,
         packages,
         dependencies,
     );
-    remove_member_packages(files, &member_indices, packages, dependencies);
+    remove_member_packages(
+        files,
+        &workspace_root
+            .members
+            .iter()
+            .map(|member| member.manifest_idx)
+            .collect::<Vec<_>>(),
+        packages,
+        dependencies,
+    );
 
-    let member_packages =
-        create_member_packages(files, &member_indices, &workspace_root.workspace_data);
+    let member_packages = create_member_packages(
+        files,
+        &workspace_root.members,
+        &workspace_root.workspace_data,
+    );
 
     let member_uids: Vec<String> = member_packages
         .iter()
@@ -156,10 +202,10 @@ fn process_workspace(
         dependencies.extend(deps);
     }
 
-    assign_for_packages(files, workspace_root, &member_indices, &member_uids);
+    assign_for_packages(files, workspace_root, &member_uids);
 }
 
-fn discover_members(files: &[FileInfo], workspace_root: &WorkspaceRoot) -> Vec<usize> {
+fn discover_members(files: &[FileInfo], workspace_root: &CargoWorkspaceRootHint) -> Vec<usize> {
     let mut member_indices = Vec::new();
 
     for (idx, file) in files.iter().enumerate() {
@@ -292,13 +338,13 @@ fn remove_member_packages(
 
 fn create_member_packages(
     files: &[FileInfo],
-    member_indices: &[usize],
+    members: &[CargoWorkspaceMemberDomain],
     workspace_data: &WorkspaceData,
 ) -> Vec<(Package, Vec<TopLevelDependency>)> {
     let mut results = Vec::new();
 
-    for &idx in member_indices {
-        let file = &files[idx];
+    for member in members {
+        let file = &files[member.manifest_idx];
 
         let pkg_data =
             if let Some(pkg) = file.package_data.iter().find(|pkg| {
@@ -491,16 +537,16 @@ fn extract_cargo_dep_name(purl: &str) -> Option<String> {
 
 fn assign_for_packages(
     files: &mut [FileInfo],
-    workspace_root: &WorkspaceRoot,
-    member_indices: &[usize],
+    workspace_root: &CargoWorkspaceDomain,
     member_uids: &[String],
 ) {
     let mut member_dirs: Vec<PathBuf> = Vec::new();
-    for &idx in member_indices {
-        if let Some(parent) = Path::new(&files[idx].path).parent() {
-            member_dirs.push(parent.to_path_buf());
-        }
-    }
+    member_dirs.extend(
+        workspace_root
+            .members
+            .iter()
+            .map(|member| member.dir_path.clone()),
+    );
 
     for file in files.iter_mut() {
         let path = Path::new(&file.path);

@@ -6,9 +6,9 @@ use strum::EnumIter;
 
 use super::{
     AssemblerConfig, AssemblyMode, DirectoryMergeOutput, cargo_resource_assign,
-    cargo_workspace_merge, composer_resource_assign, conda_rootfs_merge, file_ref_resolve,
-    hackage_merge, npm_resource_assign, nuget_cpm_resolve, python_requirements_assign,
-    ruby_resource_assign, swift_merge, topology,
+    composer_resource_assign, conda_rootfs_merge, file_ref_resolve, hackage_merge,
+    npm_resource_assign, nuget_cpm_resolve, python_requirements_assign, ruby_resource_assign,
+    swift_merge, topology,
 };
 
 #[derive(Clone, Copy)]
@@ -248,7 +248,7 @@ impl PostAssemblyPassKind {
                 topology_plan.apply_npm_workspace_domains(files, packages, dependencies)
             }
             Self::CargoWorkspaceMerge => {
-                cargo_workspace_merge::assemble_cargo_workspaces(files, packages, dependencies)
+                topology_plan.apply_cargo_workspace_domains(files, packages, dependencies)
             }
             Self::NugetCpmResolve => {
                 nuget_cpm_resolve::resolve_nuget_cpm_versions(files, dependencies)
