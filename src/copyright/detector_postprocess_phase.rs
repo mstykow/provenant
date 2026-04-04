@@ -33,6 +33,7 @@ pub(super) fn run_phase_postprocess(
     super::drop_url_embedded_c_symbol_false_positive_holders(content, holders);
     super::recover_template_literal_year_range_copyrights(content, copyrights, holders);
 
+    super::author_heuristics::extract_markup_authors(content, authors);
     super::author_heuristics::merge_metadata_author_and_email_lines(prepared_cache, authors);
     super::author_heuristics::extract_debian_maintainer_authors(prepared_cache, authors);
     super::author_heuristics::extract_maintained_by_authors(prepared_cache, authors);

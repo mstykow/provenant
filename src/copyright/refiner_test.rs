@@ -1283,3 +1283,32 @@ fn test_refine_author_drops_d3_transition_markdown_link_fragment() {
         None
     );
 }
+
+#[test]
+fn test_refine_author_drops_path_like_fragment() {
+    assert_eq!(refine_author("from/authors/alphabetic"), None);
+}
+
+#[test]
+fn test_refine_author_drops_the_current_user_phrase() {
+    assert_eq!(refine_author("the current user"), None);
+}
+
+#[test]
+fn test_refine_author_drops_point_to_the_phrase() {
+    assert_eq!(refine_author("point to the"), None);
+}
+
+#[test]
+fn test_refine_copyright_drops_css_footer_noise() {
+    assert!(is_junk_copyright("Copyright footer"));
+    assert!(is_junk_copyright("Copyright, Legal Notice"));
+    assert!(is_junk_copyright("copyright color 666666"));
+}
+
+#[test]
+fn test_refine_holder_drops_css_selector_noise() {
+    assert_eq!(refine_holder("footer"), None);
+    assert_eq!(refine_holder("Legal Notice"), None);
+    assert_eq!(refine_holder("color 666666"), None);
+}

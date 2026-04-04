@@ -5,8 +5,148 @@ use regex::Regex;
 
 use super::normalize_whitespace;
 use crate::copyright::line_tracking::PreparedLineCache;
+use crate::copyright::prepare::prepare_text_line;
 use crate::copyright::refiner::refine_author;
 use crate::copyright::types::{AuthorDetection, CopyrightDetection, HolderDetection};
+
+fn line_number_for_offset(content: &str, offset: usize) -> usize {
+    content[..offset].bytes().filter(|b| *b == b'\n').count() + 1
+}
+
+fn decode_markup_entities(value: &str) -> String {
+    static DECIMAL_ENTITY_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"&#(?P<code>\d+);?").unwrap());
+    static HEX_ENTITY_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"&#x(?P<code>[0-9a-fA-F]+);?").unwrap());
+
+    let mut out = value
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&#38;", "&")
+        .replace("&#34;", "\"")
+        .replace("&#39;", "'")
+        .replace("&#60;", "<")
+        .replace("&#62;", ">");
+
+    out = HEX_ENTITY_RE
+        .replace_all(&out, |caps: &regex::Captures| {
+            caps.name("code")
+                .and_then(|m| u32::from_str_radix(m.as_str(), 16).ok())
+                .and_then(char::from_u32)
+                .map(|ch| ch.to_string())
+                .unwrap_or_else(|| caps.get(0).map(|m| m.as_str()).unwrap_or("").to_string())
+        })
+        .into_owned();
+
+    out = DECIMAL_ENTITY_RE
+        .replace_all(&out, |caps: &regex::Captures| {
+            caps.name("code")
+                .and_then(|m| m.as_str().parse::<u32>().ok())
+                .and_then(char::from_u32)
+                .map(|ch| ch.to_string())
+                .unwrap_or_else(|| caps.get(0).map(|m| m.as_str()).unwrap_or("").to_string())
+        })
+        .into_owned();
+
+    out
+}
+
+fn repair_latin1_mojibake(value: &str) -> String {
+    let likely_mojibake = value.contains('Ã')
+        || value.contains('Â')
+        || value.contains('Ð')
+        || value.contains('Ñ')
+        || value.contains('â');
+    if !likely_mojibake {
+        return value.to_string();
+    }
+
+    let mut bytes = Vec::with_capacity(value.len());
+    for ch in value.chars() {
+        let code = ch as u32;
+        if code > 0xFF {
+            return value.to_string();
+        }
+        bytes.push(code as u8);
+    }
+
+    String::from_utf8(bytes).unwrap_or_else(|_| value.to_string())
+}
+
+fn normalize_markup_author_value(value: &str) -> String {
+    let decoded = decode_markup_entities(value);
+    let repaired = repair_latin1_mojibake(&decoded);
+    let prepared = prepare_text_line(&repaired);
+    normalize_whitespace(&prepared)
+}
+
+pub(super) fn extract_markup_authors(content: &str, authors: &mut Vec<AuthorDetection>) {
+    if content.is_empty() {
+        return;
+    }
+
+    static AUTHOR_ATTR_DQ_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(?is)<[^>]*\bauthor\s*=\s*\"([^\"]+)\"[^>]*>"#).unwrap());
+    static AUTHOR_ATTR_SQ_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(?is)<[^>]*\bauthor\s*=\s*'([^']+)'[^>]*>"#).unwrap());
+    static DOCBOOK_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r#"(?is)<div[^>]*class\s*=\s*(?:\"[^\"]*\bauthor\b[^\"]*\"|'[^']*\bauthor\b[^']*')[^>]*>.*?<span[^>]*class\s*=\s*(?:\"[^\"]*firstname[^\"]*\"|'[^']*firstname[^']*')[^>]*>\s*(?P<first>[^<]+?)\s*</span>\s*<span[^>]*class\s*=\s*(?:\"[^\"]*surname[^\"]*\"|'[^']*surname[^']*')[^>]*>\s*(?P<last>[^<]+?)\s*</span>.*?</div>"#,
+        )
+        .unwrap()
+    });
+
+    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+
+    for captures in [
+        AUTHOR_ATTR_DQ_RE.captures_iter(content).collect::<Vec<_>>(),
+        AUTHOR_ATTR_SQ_RE.captures_iter(content).collect::<Vec<_>>(),
+    ] {
+        for cap in captures {
+            let Some(full) = cap.get(0) else {
+                continue;
+            };
+            let value = cap.get(1).map(|m| m.as_str()).unwrap_or("").trim();
+            let normalized = normalize_markup_author_value(value);
+            let Some(author) = refine_author(&normalized) else {
+                continue;
+            };
+            if seen.insert(author.clone()) {
+                let line = line_number_for_offset(content, full.start());
+                authors.push(AuthorDetection {
+                    author,
+                    start_line: line,
+                    end_line: line,
+                });
+            }
+        }
+    }
+
+    for cap in DOCBOOK_AUTHOR_RE.captures_iter(content) {
+        let Some(full) = cap.get(0) else {
+            continue;
+        };
+        let first = cap.name("first").map(|m| m.as_str()).unwrap_or("").trim();
+        let last = cap.name("last").map(|m| m.as_str()).unwrap_or("").trim();
+        if first.is_empty() || last.is_empty() {
+            continue;
+        }
+        let Some(author) = refine_author(&format!("{first} {last}")) else {
+            continue;
+        };
+        if seen.insert(author.clone()) {
+            let line = line_number_for_offset(content, full.start());
+            authors.push(AuthorDetection {
+                author,
+                start_line: line,
+                end_line: line,
+            });
+        }
+    }
+}
 
 pub(super) fn extract_multiline_written_by_author_blocks(
     prepared_cache: &mut PreparedLineCache<'_>,

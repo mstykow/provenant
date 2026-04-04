@@ -113,12 +113,6 @@ static TAG_VALUE_ATTR_DQ_RE: LazyLock<Regex> =
 static TAG_VALUE_ATTR_SQ_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?is)\bvalue\s*=\s*'([^']+)'").unwrap());
 
-static AUTHOR_ATTR_DQ_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"(?is)<[^>]*\bauthor\s*=\s*\"([^\"]+)\"[^>]*>"#).unwrap());
-
-static AUTHOR_ATTR_SQ_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?is)<[^>]*\bauthor\s*=\s*'([^']+)'[^>]*>").unwrap());
-
 static MAILTO_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"(?i)mailto:([^\s\"'>]+)"#).unwrap());
 
@@ -509,26 +503,6 @@ pub fn prepare_text_line(line: &str) -> String {
         }
     }
 
-    if s.to_ascii_lowercase().contains("author=") {
-        let mut extracted: Vec<String> = Vec::new();
-        for cap in AUTHOR_ATTR_DQ_RE.captures_iter(&s) {
-            let value = cap.get(1).map(|m| m.as_str().trim()).unwrap_or("");
-            if !value.is_empty() {
-                extracted.push(format!("Written by {value}"));
-            }
-        }
-        for cap in AUTHOR_ATTR_SQ_RE.captures_iter(&s) {
-            let value = cap.get(1).map(|m| m.as_str().trim()).unwrap_or("");
-            if !value.is_empty() {
-                extracted.push(format!("Written by {value}"));
-            }
-        }
-        if !extracted.is_empty() {
-            s.push(' ');
-            s.push_str(&extracted.join(" "));
-        }
-    }
-
     // ── HTML tag stripping (copyright/author/legal-aware) ──
     const PROTECT_LT: char = '\u{E000}';
     const PROTECT_GT: char = '\u{E001}';
@@ -743,11 +717,11 @@ mod tests {
     }
 
     #[test]
-    fn test_prepare_preserves_author_attribute_value_as_author_text() {
+    fn test_prepare_strips_author_attribute_without_promoting_text() {
         let prepared =
             prepare_text_line(r#"<note author="Vinnie Falco">C++11 is required.</note>"#);
         assert!(
-            prepared.contains("Written by Vinnie Falco"),
+            !prepared.contains("Written by Vinnie Falco"),
             "got: {prepared:?}"
         );
         assert!(!prepared.contains("author="), "got: {prepared:?}");

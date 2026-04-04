@@ -42,6 +42,10 @@ pub fn refine_author(s: &str) -> Option<String> {
     a = a.trim().to_string();
     a = a.trim_matches(&['+', '-'][..]).to_string();
 
+    if is_path_like_code_fragment(&a) {
+        return None;
+    }
+
     if !a.is_empty()
         && !AUTHORS_JUNK.contains(a.to_lowercase().as_str())
         && !a.starts_with(AUTHORS_JUNK_PREFIX)

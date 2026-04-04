@@ -2201,6 +2201,50 @@ fn test_detect_author_from_xml_author_attribute() {
 }
 
 #[test]
+fn test_detect_author_from_xml_author_attribute_without_note_body_noise() {
+    let text = r#"<note author="Chris Kohlhoff">
+This compiler does not support enable_if, which is needed by the library.
+</note>"#;
+    let (_c, _h, a) = detect_copyrights_from_text(text);
+
+    assert_eq!(a.len(), 1, "Should detect one author, got: {:?}", a);
+    assert_eq!(a[0].author, "Chris Kohlhoff");
+}
+
+#[test]
+fn test_detect_author_from_xml_author_attribute_decodes_entities() {
+    let text = r#"<note author="Joaqu&#237;n M L&#243;pez Mu&#241;oz">Compiler bug.</note>"#;
+    let (_c, _h, a) = detect_copyrights_from_text(text);
+
+    assert_eq!(a.len(), 1, "Should detect one author, got: {:?}", a);
+    assert_eq!(a[0].author, "Joaquín M López Muñoz");
+}
+
+#[test]
+fn test_detect_docbook_html_authorgroup_authors() {
+    let text = r#"<div class="authorgroup">
+<div class="author"><h3 class="author"><span class="firstname">John</span> <span class="surname">Maddock</span></h3></div>
+<div class="author"><h3 class="author"><span class="firstname">Joel</span> <span class="surname">de Guzman</span></h3></div>
+<div class="author"><h3 class="author"><span class="firstname">Eric</span> <span class="surname">Niebler</span></h3></div>
+<div class="author"><h3 class="author"><span class="firstname">Matias</span> <span class="surname">Capeletto</span></h3></div>
+</div>"#;
+    let (_c, _h, a) = detect_copyrights_from_text(text);
+    let names: Vec<&str> = a.iter().map(|d| d.author.as_str()).collect();
+
+    assert!(names.contains(&"John Maddock"), "authors: {names:?}");
+    assert!(names.contains(&"Joel de Guzman"), "authors: {names:?}");
+    assert!(names.contains(&"Eric Niebler"), "authors: {names:?}");
+    assert!(names.contains(&"Matias Capeletto"), "authors: {names:?}");
+}
+
+#[test]
+fn test_detect_created_by_current_user_comment_is_not_author() {
+    let text = "Get the IDs of pipelines created by the current user on the same branch.";
+    let (_c, _h, a) = detect_copyrights_from_text(text);
+    assert!(a.is_empty(), "authors: {a:?}");
+}
+
+#[test]
 fn test_detect_junk_filtered() {
     let (c, _h, _a) = detect_copyrights_from_text("Copyright (c)");
     // "Copyright (c)" alone is junk.
