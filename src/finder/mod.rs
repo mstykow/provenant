@@ -54,4 +54,14 @@ mod tests {
         assert_eq!(urls[0].url, "http://a.com/");
         assert_eq!(urls[1].url, "http://b.com/");
     }
+
+    #[test]
+    fn test_find_emails_filters_local_machine_domains() {
+        let text = "admin@rust-lang.org\ngeisse@shopgates-mac-mini-3.local\n";
+        let config = DetectionConfig::default();
+        let emails = find_emails(text, &config);
+
+        assert_eq!(emails.len(), 1);
+        assert_eq!(emails[0].email, "admin@rust-lang.org");
+    }
 }

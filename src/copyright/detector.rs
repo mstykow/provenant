@@ -13929,6 +13929,7 @@ fn looks_like_bad_generic_author_candidate(s: &str) -> bool {
         || lower.contains("with key equal")
         || lower.contains("may wish to provide")
         || lower.contains("developers can trust")
+        || (lower.contains("inspired by") && lower.contains("proposal"))
     {
         return true;
     }

@@ -3776,6 +3776,29 @@ fn test_json_author_object_name_preferred_over_url_tail() {
 }
 
 #[test]
+fn test_json_sponsor_description_does_not_create_authors() {
+    let input = r#"{
+  "description": "A useful plugin",
+  "sponsor": {
+    "@type": "Organization",
+    "name": "Example Org",
+    "description": "Developer as a service Plugin in the cloud when a workflow runs."
+  }
+}"#;
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_fast_path_proposal_phrase_not_author() {
+    let input = "Clinger's fast path, inspired by Jakub Jelínek's proposal";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
 fn test_readme_security_review_prose_not_author() {
     let input = "application developers can trust, the C++ Alliance has commissioned Bishop Fox to perform a security audit of the Boost.JSON library. The report linked here";
     let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
