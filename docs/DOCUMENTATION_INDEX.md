@@ -95,7 +95,7 @@ docs/
 → [improvements/README.md](improvements/README.md)
 
 **...track implementation quality and behavior**
-→ [TESTING_STRATEGY.md](TESTING_STRATEGY.md) for testing philosophy, plus [implementation-plans/package-detection/PARSER_VERIFICATION_SCORECARD.md](implementation-plans/package-detection/PARSER_VERIFICATION_SCORECARD.md) for parser-family compare targets and verification tracking
+→ [TESTING_STRATEGY.md](TESTING_STRATEGY.md) for testing philosophy, plus [BENCHMARKS.md](BENCHMARKS.md) for the canonical package-detection verification record, compare-run timing references, and maintained Provenant-vs-ScanCode outcomes
 
 **...cut a release**
 → [RELEASING.md](RELEASING.md)

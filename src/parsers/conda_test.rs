@@ -283,6 +283,33 @@ dependencies:
         assert_eq!(ray.scope.as_deref(), Some("dependencies"));
     }
 
+    #[test]
+    fn test_environment_yaml_without_conda_structure_returns_no_packages() {
+        let temp_dir = TempDir::new().unwrap();
+        let env_path = temp_dir.path().join("pod-with-api-env.yaml");
+        fs::write(
+            &env_path,
+            r#"
+apiVersion: v1
+kind: Pod
+metadata:
+  name: env-test-pod
+spec:
+  containers:
+    - name: test-container
+      image: registry.k8s.io/busybox
+      env:
+        - name: TEST_CMD_1
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+"#,
+        )
+        .unwrap();
+
+        assert!(CondaEnvironmentYmlParser::extract_packages(&env_path).is_empty());
+    }
+
     // ==================== extract_first_package() Tests ====================
 
     #[test]

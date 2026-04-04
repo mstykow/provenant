@@ -587,6 +587,106 @@ fn apply_local_file_reference_following_requires_exact_filename_match() {
 }
 
 #[test]
+fn apply_local_file_reference_following_drops_unknown_intro_from_resolved_target() {
+    let mut license = file("project/LICENSE");
+    license.license_expression = Some("apache-2.0".to_string());
+    license.license_detections = vec![
+        crate::models::LicenseDetection {
+            license_expression: "unknown-license-reference".to_string(),
+            license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
+            matches: vec![Match {
+                license_expression: "unknown-license-reference".to_string(),
+                license_expression_spdx: "LicenseRef-scancode-unknown-license-reference"
+                    .to_string(),
+                from_file: Some("project/LICENSE".to_string()),
+                start_line: 2,
+                end_line: 2,
+                matcher: Some("2-aho".to_string()),
+                score: 50.0,
+                matched_length: Some(2),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(50),
+                rule_identifier: Some("license-intro_2.RULE".to_string()),
+                rule_url: None,
+                matched_text: Some("Apache License".to_string()),
+                referenced_filenames: None,
+                matched_text_diagnostics: None,
+            }],
+            detection_log: vec![],
+            identifier: Some("license-intro".to_string()),
+        },
+        crate::models::LicenseDetection {
+            license_expression: "apache-2.0".to_string(),
+            license_expression_spdx: "Apache-2.0".to_string(),
+            matches: vec![Match {
+                license_expression: "apache-2.0".to_string(),
+                license_expression_spdx: "Apache-2.0".to_string(),
+                from_file: Some("project/LICENSE".to_string()),
+                start_line: 5,
+                end_line: 205,
+                matcher: Some("1-hash".to_string()),
+                score: 100.0,
+                matched_length: Some(1584),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: Some("apache-2.0.LICENSE".to_string()),
+                rule_url: None,
+                matched_text: None,
+                referenced_filenames: None,
+                matched_text_diagnostics: None,
+            }],
+            detection_log: vec![],
+            identifier: Some("apache-license".to_string()),
+        },
+    ];
+
+    let mut notice = file("project/src/notice.js");
+    notice.license_expression = Some("unknown-license-reference".to_string());
+    notice.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "unknown-license-reference".to_string(),
+        license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
+        matches: vec![Match {
+            license_expression: "unknown-license-reference".to_string(),
+            license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
+            from_file: Some("project/src/notice.js".to_string()),
+            start_line: 2,
+            end_line: 2,
+            matcher: Some("2-aho".to_string()),
+            score: 100.0,
+            matched_length: Some(2),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("unknown-license-reference_see-license_1.RULE".to_string()),
+            rule_url: None,
+            matched_text: Some("See LICENSE".to_string()),
+            referenced_filenames: Some(vec!["LICENSE".to_string()]),
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("unknown-ref".to_string()),
+    }];
+
+    let mut files = vec![dir("project"), license, notice];
+    let mut packages = Vec::new();
+    apply_package_reference_following(&mut files, &mut packages);
+
+    let notice = files
+        .iter()
+        .find(|file| file.path == "project/src/notice.js")
+        .expect("notice file should exist");
+    assert_eq!(notice.license_expression.as_deref(), Some("apache-2.0"));
+    assert_eq!(
+        notice.license_detections[0].detection_log,
+        vec!["unknown-reference-to-local-file"]
+    );
+    assert_eq!(notice.license_detections[0].matches.len(), 2);
+    assert!(notice.license_detections[0].matches.iter().all(|m| {
+        m.license_expression != "unknown-license-reference"
+            || m.from_file.as_deref() != Some("project/LICENSE")
+    }));
+}
+
+#[test]
 fn apply_local_file_reference_following_resolves_files_beside_manifest() {
     let package_uid = "pkg:pypi/demo?uuid=test".to_string();
     let mut package = super::test_utils::package(&package_uid, "project/demo.dist-info/METADATA");

@@ -8,6 +8,7 @@ use std::time::Instant;
 use env_logger::Env;
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use indicatif_log_bridge::LogWrapper;
+use log::LevelFilter;
 
 use crate::models::{FileInfo, FileType};
 
@@ -110,8 +111,7 @@ impl ScanProgress {
             return;
         }
 
-        let logger =
-            env_logger::Builder::from_env(Env::default().default_filter_or("warn")).build();
+        let logger = build_env_logger();
         let level = logger.filter();
         if LogWrapper::new(self.multi.clone(), logger)
             .try_init()
@@ -408,6 +408,31 @@ impl ScanProgress {
     }
 }
 
+fn build_env_logger() -> env_logger::Logger {
+    let mut builder = env_logger::Builder::from_env(Env::default().default_filter_or("warn"));
+    apply_default_log_filters(&mut builder);
+    builder.build()
+}
+
+fn apply_default_log_filters(builder: &mut env_logger::Builder) {
+    if let Some(level) = pdf_oxide_font_log_filter() {
+        builder.filter_module("pdf_oxide::fonts::font_dict", level);
+    }
+}
+
+fn pdf_oxide_font_log_filter() -> Option<LevelFilter> {
+    should_filter_pdf_oxide_font_warnings().then_some(LevelFilter::Error)
+}
+
+fn should_filter_pdf_oxide_font_warnings() -> bool {
+    let rust_log = env::var("RUST_LOG").ok();
+    should_filter_pdf_oxide_font_warnings_from(rust_log.as_deref())
+}
+
+fn should_filter_pdf_oxide_font_warnings_from(rust_log: Option<&str>) -> bool {
+    rust_log.is_none_or(|value| !value.contains("pdf_oxide"))
+}
+
 fn accumulate_timing(timings: &mut Vec<(String, f64)>, name: String, duration: f64) {
     if let Some((_, existing)) = timings
         .iter_mut()
@@ -575,7 +600,12 @@ fn num_cpus_for_display() -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{ScanStats, build_summary_messages, format_size};
+    use super::{
+        ScanStats, build_summary_messages, format_size, pdf_oxide_font_log_filter,
+        should_filter_pdf_oxide_font_warnings_from,
+    };
+
+    use log::LevelFilter;
 
     #[test]
     fn format_size_matches_expected_shape() {
@@ -659,5 +689,18 @@ mod tests {
         let lines = build_summary_messages(&stats, "start", "end");
 
         assert!(lines.contains(&"Scan Speed:     5.00 files/sec. 512 Bytes/sec.".to_string()));
+    }
+
+    #[test]
+    fn default_pdf_oxide_font_warnings_are_suppressed() {
+        assert_eq!(pdf_oxide_font_log_filter(), Some(LevelFilter::Error));
+        assert!(should_filter_pdf_oxide_font_warnings_from(None));
+    }
+
+    #[test]
+    fn explicit_pdf_oxide_rust_log_override_disables_default_filter() {
+        assert!(!should_filter_pdf_oxide_font_warnings_from(Some(
+            "pdf_oxide::fonts::font_dict=warn"
+        )));
     }
 }
