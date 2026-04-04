@@ -32,7 +32,7 @@ Before you write code, answer these questions:
 - Is this one datasource or several distinct datasources handled by one parser?
 - Does the format carry package identity, dependencies, declared-license metadata, or file
   references?
-- Does the ecosystem need sibling/workspace assembly, or is it intentionally unassembled?
+- Does the ecosystem fit the default sibling/nested assembly path, or does it declare project topology that should be formalized for topology-driven assembly?
 - If the Python ScanCode parser exists, what behavior and edge cases must be preserved?
 
 If the ecosystem exists under `reference/scancode-toolkit/src/packagedcode/`, use the Python
@@ -89,6 +89,19 @@ impl PackageParser for MyParser {
     }
 }
 ```
+
+### Assembly and topology hints
+
+- Parsers remain file-local extractors: they should emit package facts for the current file, not
+  perform repository-wide assembly.
+- If a format declares project structure such as workspace members, root/member roles, or other
+  non-local ownership boundaries, preserve that structural intent in parser output so the
+  topology-planning layer can consume it consistently.
+- Today that structural intent may still be stored in parser `extra_data` for some ecosystems, but
+  new parser work should treat topology-aware assembly as a first-class downstream consumer rather
+  than assuming every ecosystem fits plain sibling merge.
+- If the format has no cross-file topology, prefer the default local assembly path and do not add
+  topology-specific wiring without a concrete need.
 
 ### Parser invariants that matter here
 
@@ -254,7 +267,7 @@ intentionally scanner-gated.
 ### Parser-adjacent scan tests
 
 Add `src/parsers/<ecosystem>_scan_test.rs` when parser correctness depends on scanner wiring,
-assembly, or file/package linkage rather than single-file extraction alone.
+assembly, topology planning, or file/package linkage rather than single-file extraction alone.
 
 Treat a scan test as effectively required when the parser emits meaningful downstream contract data,
 including:

@@ -235,21 +235,23 @@ The scanner uses `rayon` to process files in parallel. At a high level, each wor
 
 After scanning, the assembly system merges related manifests into logical packages using `DatasourceId`-based matching.
 
-**Four assembly passes:**
+**Assembly layers:**
 
 - **SiblingMerge**: Combines sibling files in the same directory (e.g., `package.json` + `package-lock.json` → single npm package)
 - **NestedMerge**: Combines parent/child manifests across directories (e.g., Maven parent POM + module POMs)
+- **TopologyPlan**: Claims directories or multi-directory domains whose package boundaries are defined by project structure instead of plain sibling files (e.g., npm/pnpm workspaces, Cargo workspaces, `go.work`, `pixi.toml`, Hackage project roots)
 - **FileRefResolve**: Resolves `file_references` from package database entries (RPM/Alpine/Debian) against scanned files, sets `for_packages` on matched files, tracks missing references, and resolves RPM namespace from os-release
-- **WorkspaceMerge**: Post-processing pass for monorepo workspaces (e.g., npm/pnpm/Cargo workspaces → separate Package per workspace member with shared resource assignment and `workspace:*` version resolution)
+- **Post-assembly passes**: Final targeted repair or enrichment steps that still need whole-scan context (for example file-reference resolution and the remaining workspace-specific finalization hooks)
 
 **How it works:**
 
-1. Each `AssemblerConfig` declares which `DatasourceId` variants belong together and which file patterns to look for
-2. After scanning, the assembler groups packages by directory
-3. Packages whose `datasource_id` values match the same config are merged into a single logical package
-4. Combined packages aggregate `datafile_paths` and `datasource_ids` from all contributing files
-5. File reference resolution matches installed-package database entries to files on disk (e.g., Alpine `installed` DB lists files belonging to each package)
-6. Workspace assembly runs as a final pass: detects workspace roots (npm/pnpm/Cargo), discovers members via glob patterns, creates per-member packages with full metadata inheritance (Cargo `[workspace.package]` and `workspace = true` resolution), hoists dependencies, and resolves `workspace:*` version references
+1. Each `AssemblerConfig` declares which `DatasourceId` variants belong together and which file patterns to look for.
+2. After scanning, assembly groups package-bearing files by directory.
+3. A topology-planning phase inspects parser-emitted structural hints and claims directories or multi-directory domains whose package boundaries are project-defined instead of purely sibling-defined.
+4. Unclaimed directories continue through the default sibling or nested assembly paths, and combined packages aggregate `datafile_paths` and `datasource_ids` from all contributing files.
+5. Claimed topology domains execute with the existing ecosystem-specific assemblers or mergers, but they do so from an explicit plan instead of first creating packages in the generic path and then repairing them later.
+6. File reference resolution matches installed-package database entries to files on disk (e.g., Alpine `installed` DB lists files belonging to each package).
+7. Post-assembly passes handle the remaining whole-scan cases that still need them. npm/pnpm and Cargo still finalize workspace-specific dependency/resource behavior there, but their roots and members are now planned before the generic directory loop runs.
 
 Assembly is configurable via the `--no-assemble` CLI flag. See `src/assembly/` for implementation details.
 

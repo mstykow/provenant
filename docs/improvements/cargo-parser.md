@@ -24,6 +24,7 @@ The Python reference covers the main Cargo surfaces, but package-wide file owner
 ### Workspace member ownership
 
 - Cargo workspace member files like `crates/cli/LICENSE` and `crates/core/README.md` now stay attached to their member packages, not just to `Cargo.toml`.
+- Cargo workspace roots and member directories are now claimed by topology planning before the generic directory loop runs, so member packages are built from an explicit workspace plan instead of being created by the local path and repaired afterward.
 
 ### Parser parity fixes
 

@@ -12,7 +12,7 @@ Python ScanCode currently has only an open attempt at `go.work` support. Provena
 - `use` workspace member paths,
 - local workspace member module identities by reading the referenced `go.mod` files,
 - `replace` directives with old/new module or local-path metadata,
-- sibling assembly between a root `go.mod` and `go.work` when both exist in the same directory.
+- topology-planned root project assembly between a root `go.mod` and `go.work` when both exist in the same directory.
 
 ## Reference limitation
 
@@ -20,7 +20,7 @@ The Python reference does not currently provide merged `go.work` support, so Go 
 
 ## Rust behavior
 
-Rust parses `go.work` directly, recovers module identities from `use` entries, and assembles workspace-level metadata with a sibling root `go.mod` when both are present.
+Rust parses `go.work` directly, recovers module identities from `use` entries, and routes the root directory through topology planning so the existing Go sibling assembler can build the final package state once per claimed root.
 
 ## Impact
 

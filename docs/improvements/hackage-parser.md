@@ -8,7 +8,7 @@ Rust now parses the three highest-value Haskell project surfaces directly:
 - `cabal.project`
 - `stack.yaml`
 
-This adds Hackage package detection, project-level dependency visibility, and sibling assembly for mixed Cabal/Stack repositories without invoking Cabal, Stack, or any project code.
+This adds Hackage package detection, project-level dependency visibility, and topology-planned project-root assembly for mixed Cabal/Stack repositories without invoking Cabal, Stack, or any project code.
 
 ## Upstream / Reference Context
 
@@ -52,9 +52,9 @@ Rust now parses Stack project manifests for:
 
 Other Stack configuration, such as `flags`, `drop-packages`, and `ghc-options`, is preserved in `extra_data` for provenance and follow-on analysis.
 
-### 4. Hackage sibling assembly
+### 4. Hackage project-root topology assembly
 
-Rust now assembles `*.cabal`, `cabal.project`, and `stack.yaml` when they appear together in the same project directory.
+Rust now routes directories rooted by `cabal.project` or `stack.yaml` through topology planning and then assembles `*.cabal`, `cabal.project`, and `stack.yaml` with the existing Hackage merger.
 
 That means the assembled package can combine:
 
@@ -81,4 +81,4 @@ This improvement is covered by:
 - unit tests for `cabal.project` surface parsing and config preservation
 - unit tests for `stack.yaml` dependency/config parsing
 - parser golden tests for all three surfaces
-- an assembly golden fixture covering sibling merge across all three Hackage datasource IDs
+- an assembly golden fixture covering topology-planned project-root merge across all three Hackage datasource IDs
