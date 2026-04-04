@@ -2,7 +2,7 @@
 
 > **Updated**: April 3, 2026
 > **Status**: 🟢 Planned production parser/recognizer coverage is implemented; current GitHub-driven follow-up opportunities are tracked below.
-> **Current verification checklist**: [`PARSER_VERIFICATION_SCORECARD.md`](PARSER_VERIFICATION_SCORECARD.md) owns maintained compare-target selection and parser-family verification tracking.
+> **Current verification reference**: [`../../BENCHMARKS.md`](../../BENCHMARKS.md) records maintained package-detection compare runs, timing snapshots, and verification outcomes.
 
 ## Current State
 

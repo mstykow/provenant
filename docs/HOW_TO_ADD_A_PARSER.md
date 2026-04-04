@@ -343,9 +343,8 @@ If a Python ScanCode parser exists, compare behavior against it. Validate at lea
 If no Python reference exists, validate against the authoritative format spec and real-world
 fixtures from that ecosystem.
 
-For implemented parser families, keep the current end-to-end compare target shortlist and recorded
-`compare-outputs` references in
-[`docs/implementation-plans/package-detection/PARSER_VERIFICATION_SCORECARD.md`](implementation-plans/package-detection/PARSER_VERIFICATION_SCORECARD.md).
+For implemented parser families, record representative end-to-end `compare-outputs` references in
+[`docs/BENCHMARKS.md`](BENCHMARKS.md).
 
 If the Rust parser intentionally improves on the Python behavior, document the improvement briefly in
 `docs/improvements/<ecosystem>-parser.md`. Keep that doc focused on the behavior difference, not as

@@ -290,6 +290,87 @@ mod tests {
     }
 
     #[test]
+    fn scanner_keeps_source_headers_when_pem_blocks_are_embedded() {
+        let options = TextDetectionOptions {
+            collect_info: false,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: true,
+            detect_generated: false,
+            detect_emails: false,
+            detect_urls: true,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+        };
+        let fixture = concat!(
+            "/*\n",
+            "Copyright 2022 The Kubernetes Authors.\n\n",
+            "Licensed under the Apache License, Version 2.0 (the \"License\");\n",
+            "you may not use this file except in compliance with the License.\n",
+            "You may obtain a copy of the License at\n\n",
+            "    http://www.apache.org/licenses/LICENSE-2.0\n",
+            "*/\n\n",
+            "package storage\n\n",
+            "const validCert = `\n",
+            "-----BEGIN CERTIFICATE-----\n",
+            "MIIDmTCCAoGgAwIBAgIUWQ==\n",
+            "-----END CERTIFICATE-----\n",
+            "`\n",
+        );
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let file_path = temp_dir.path().join("storage_test.go");
+        fs::write(&file_path, fixture).expect("write fixture");
+
+        let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+        let engine =
+            Arc::new(LicenseDetectionEngine::from_embedded().expect("initialize license engine"));
+        let result = process_collected(
+            &collected,
+            progress,
+            Some(engine),
+            LicenseScanOptions::default(),
+            &options,
+        );
+        let scanned = result
+            .files
+            .into_iter()
+            .find(|entry| {
+                entry.file_type == FileType::File && entry.path == file_path.to_string_lossy()
+            })
+            .expect("scanned file entry");
+
+        assert!(
+            scanned
+                .copyrights
+                .iter()
+                .any(|c| c.copyright == "Copyright 2022 The Kubernetes Authors"),
+            "copyrights: {:#?}",
+            scanned.copyrights
+        );
+        assert!(
+            scanned
+                .holders
+                .iter()
+                .any(|h| h.holder == "The Kubernetes Authors"),
+            "holders: {:#?}",
+            scanned.holders
+        );
+        assert!(
+            scanned
+                .urls
+                .iter()
+                .any(|u| u.url == "http://www.apache.org/licenses/LICENSE-2.0"),
+            "urls: {:#?}",
+            scanned.urls
+        );
+        assert_eq!(scanned.license_expression.as_deref(), Some("Apache-2.0"));
+    }
+
+    #[test]
     fn scanner_detects_structured_credits_authors() {
         let options = TextDetectionOptions {
             collect_info: false,

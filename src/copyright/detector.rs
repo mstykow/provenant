@@ -3281,7 +3281,7 @@ fn extend_year_only_copyrights_with_trailing_text(
     });
     static TRAILING_TAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
-            r"(?i)^copyright\s*(?:\(c\)\s*)?(?P<years>(?:19\d{2}|20\d{2})(?:\s*,\s*(?:19\d{2}|20\d{2}))*)\s+(?P<tail>.+)$",
+            r"(?i)^copyright\s*(?:\(c\)\s*)?(?P<years>(?:19\d{2}|20\d{2})(?:\s*[-–]\s*(?:19\d{2}|20\d{2}|\d{2}))?(?:\s*,\s*(?:19\d{2}|20\d{2})(?:\s*[-–]\s*(?:19\d{2}|20\d{2}|\d{2}))?)*)\s+(?P<tail>.+)$",
         )
         .unwrap()
     });

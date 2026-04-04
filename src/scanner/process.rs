@@ -990,10 +990,13 @@ fn is_pem_certificate_file(_path: &Path, buffer: &[u8]) -> bool {
         .take(64)
         .collect();
 
-    PEM_CERTIFICATE_HEADERS.iter().any(|(begin, end)| {
-        trimmed_lines.iter().any(|line| line == begin)
-            && trimmed_lines.iter().any(|line| line == end)
-    })
+    let Some(first_line) = trimmed_lines.first().copied() else {
+        return false;
+    };
+
+    PEM_CERTIFICATE_HEADERS
+        .iter()
+        .any(|(begin, end)| first_line == *begin && trimmed_lines.iter().any(|line| line == end))
 }
 
 fn process_directory(

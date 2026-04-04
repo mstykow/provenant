@@ -860,6 +860,13 @@ fn apply_resolved_reference_targets(
     referenced_targets: Vec<ResolvedReferenceTarget>,
     detection_log: &str,
 ) -> bool {
+    let referenced_targets: Vec<_> = referenced_targets
+        .into_iter()
+        .map(|mut target| {
+            target.detections = filter_unknown_reference_detections(&target.detections);
+            target
+        })
+        .collect();
     let referenced_license_expression =
         combine_license_expressions(referenced_targets.iter().flat_map(|target| {
             target
@@ -905,6 +912,44 @@ fn apply_resolved_reference_targets(
     );
     *detection = public_detection;
     true
+}
+
+fn filter_unknown_reference_detections(detections: &[LicenseDetection]) -> Vec<LicenseDetection> {
+    let has_concrete_detection = detections.iter().any(|detection| {
+        detection.license_expression != "unknown-license-reference"
+            && detection.license_expression != "free-unknown"
+    });
+    if !has_concrete_detection {
+        return detections.to_vec();
+    }
+
+    detections
+        .iter()
+        .filter(|detection| {
+            detection.license_expression != "unknown-license-reference"
+                && detection.license_expression != "free-unknown"
+        })
+        .map(strip_unknown_reference_matches_from_detection)
+        .collect()
+}
+
+fn strip_unknown_reference_matches_from_detection(
+    detection: &LicenseDetection,
+) -> LicenseDetection {
+    let has_concrete_match = detection.matches.iter().any(|match_item| {
+        match_item.license_expression != "unknown-license-reference"
+            && match_item.license_expression != "free-unknown"
+    });
+    if !has_concrete_match {
+        return detection.clone();
+    }
+
+    let mut filtered = detection.clone();
+    filtered.matches.retain(|match_item| {
+        match_item.license_expression != "unknown-license-reference"
+            && match_item.license_expression != "free-unknown"
+    });
+    filtered
 }
 
 fn referenced_filenames_from_detection(detection: &LicenseDetection) -> Vec<String> {

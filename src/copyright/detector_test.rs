@@ -3053,7 +3053,7 @@ fn test_drop_shadowed_c_sign_variants_unit() {
 #[test]
 fn test_linux_foundation_line_prefers_holder_variant_over_bare_years() {
     let content = "* Copyright (c) 2007, 2010 Linux Foundation";
-    let (c, _h, _a) = detect_copyrights_from_text(content);
+    let (c, h, _a) = detect_copyrights_from_text(content);
     assert!(
         c.iter()
             .any(|cr| cr.copyright == "Copyright (c) 2007, 2010 Linux Foundation"),
@@ -3065,6 +3065,28 @@ fn test_linux_foundation_line_prefers_holder_variant_over_bare_years() {
             .any(|cr| cr.copyright == "Copyright (c) 2007, 2010"),
         "copyrights: {:?}",
         c
+    );
+    assert!(
+        h.iter().any(|holder| holder.holder == "Linux Foundation"),
+        "holders: {:?}",
+        h
+    );
+}
+
+#[test]
+fn test_holder_extracted_from_year_range_with_the_prefix() {
+    let content = "// Copyright 2016-2022 The Linux Foundation\n// Copyright 2016-2017 The New York Times Company";
+    let (_c, h, _a) = detect_copyrights_from_text(content);
+    let holders: Vec<_> = h.iter().map(|holder| holder.holder.as_str()).collect();
+    assert!(
+        holders.contains(&"The Linux Foundation"),
+        "holders: {:?}",
+        h
+    );
+    assert!(
+        holders.contains(&"The New York Times Company"),
+        "holders: {:?}",
+        h
     );
 }
 

@@ -47,13 +47,13 @@ Choose Provenant when you want:
 
 ## Compatibility and Verification Evidence
 
-Provenant does not treat "compatible" as a vague marketing claim. Public verification work and maintained scorecards live in:
+Provenant does not treat "compatible" as a vague marketing claim. Public verification work and maintained references live in:
 
 - [Output Format Parity Scorecard](implementation-plans/output/PARITY_SCORECARD.md)
-- [Package Parser Verification Scorecard](implementation-plans/package-detection/PARSER_VERIFICATION_SCORECARD.md)
+- [Package Detection Verification Benchmarks](BENCHMARKS.md)
 - [xtask compare-outputs workflow](../xtask/README.md)
 
-Those documents track what has already been compared against ScanCode, where parity is already strong, and where partial gaps are still being closed.
+Those documents track what has already been compared against ScanCode, provide the maintained package-detection verification record, and point to the saved verification artifacts used to review remaining gaps.
 
 ## Related Docs
 

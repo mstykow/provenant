@@ -327,6 +327,10 @@ impl PackageParser for CondaEnvironmentYmlParser {
             }
         };
 
+        if !looks_like_conda_environment_yaml(&yaml) {
+            return Vec::new();
+        }
+
         let name = yaml.get("name").and_then(|v| v.as_str()).map(String::from);
 
         let dependencies = extract_environment_dependencies(&yaml);
@@ -356,6 +360,23 @@ impl PackageParser for CondaEnvironmentYmlParser {
         }
         vec![pkg]
     }
+}
+
+fn looks_like_conda_environment_yaml(yaml: &Value) -> bool {
+    let has_dependencies = yaml
+        .get("dependencies")
+        .and_then(|value| value.as_sequence())
+        .is_some_and(|items| !items.is_empty());
+    let has_channels = yaml
+        .get("channels")
+        .and_then(|value| value.as_sequence())
+        .is_some_and(|items| !items.is_empty());
+    let has_prefix = yaml
+        .get("prefix")
+        .and_then(|value| value.as_str())
+        .is_some_and(|value| !value.trim().is_empty());
+
+    has_dependencies || has_channels || has_prefix
 }
 
 /// Extract Jinja2-style variables from a Conda meta.yaml
