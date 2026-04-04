@@ -139,7 +139,7 @@ toml = "1.0.6"
 url = { workspace = true }
 uuid = { version = "1.23.0", features = ["v4"] }
 yaml_serde = "0.10.4"
-zip = "8.4.0"
+zip = "8.5.0"
 zstd = { workspace = true }
 
 [dev-dependencies]
