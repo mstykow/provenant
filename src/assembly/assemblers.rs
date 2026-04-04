@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+
+use crate::models::PackageType;
 use crate::models::{DatasourceId, FileInfo, Package, TopLevelDependency};
 use strum::EnumIter;
 
@@ -55,13 +58,116 @@ pub(super) static POST_ASSEMBLY_PASSES: &[PostAssemblyPassKind] = &[
     PostAssemblyPassKind::RubyResourceAssign,
 ];
 
+const SWIFT_POST_ASSEMBLY_DATASOURCE_IDS: &[DatasourceId] = &[
+    DatasourceId::SwiftPackageManifestJson,
+    DatasourceId::SwiftPackageResolved,
+    DatasourceId::SwiftPackageShowDependencies,
+];
+
+const CONDA_ROOTFS_POST_ASSEMBLY_DATASOURCE_IDS: &[DatasourceId] =
+    &[DatasourceId::CondaMetaJson, DatasourceId::CondaMetaYaml];
+
+const RPM_INSTALLED_DATABASE_DATASOURCE_IDS: &[DatasourceId] = &[
+    DatasourceId::RpmInstalledDatabaseBdb,
+    DatasourceId::RpmInstalledDatabaseNdb,
+    DatasourceId::RpmInstalledDatabaseSqlite,
+];
+
+const NUGET_CPM_CONFIG_DATASOURCE_IDS: &[DatasourceId] = &[
+    DatasourceId::NugetDirectoryBuildProps,
+    DatasourceId::NugetDirectoryPackagesProps,
+];
+
+const NUGET_CPM_PROJECT_DATASOURCE_IDS: &[DatasourceId] = &[
+    DatasourceId::NugetCsproj,
+    DatasourceId::NugetFsproj,
+    DatasourceId::NugetVbproj,
+];
+
+#[derive(Default)]
+struct PostAssemblyInputs {
+    package_types: HashSet<PackageType>,
+    file_datasource_ids: HashSet<DatasourceId>,
+    has_npm_workspace_markers: bool,
+    has_cargo_workspace_markers: bool,
+}
+
 pub(super) fn run_post_assembly_passes(
     files: &mut [FileInfo],
     packages: &mut Vec<Package>,
     dependencies: &mut Vec<TopLevelDependency>,
 ) {
+    let inputs = PostAssemblyInputs::collect(files, packages);
+
     for pass in POST_ASSEMBLY_PASSES {
+        if !pass.should_run(&inputs) {
+            continue;
+        }
+
         pass.run(files, packages, dependencies);
+    }
+}
+
+impl PostAssemblyInputs {
+    fn collect(files: &[FileInfo], packages: &[Package]) -> Self {
+        let mut inputs = Self {
+            package_types: packages
+                .iter()
+                .filter_map(|package| package.package_type)
+                .collect(),
+            ..Self::default()
+        };
+
+        for file in files {
+            for package_data in &file.package_data {
+                let Some(datasource_id) = package_data.datasource_id else {
+                    continue;
+                };
+
+                inputs.file_datasource_ids.insert(datasource_id);
+
+                if matches!(
+                    datasource_id,
+                    DatasourceId::NpmPackageJson | DatasourceId::PnpmWorkspaceYaml
+                ) && package_data
+                    .extra_data
+                    .as_ref()
+                    .is_some_and(|extra_data| extra_data.contains_key("workspaces"))
+                {
+                    inputs.has_npm_workspace_markers = true;
+                }
+
+                if datasource_id == DatasourceId::CargoToml
+                    && package_data
+                        .extra_data
+                        .as_ref()
+                        .and_then(|extra_data| extra_data.get("workspace"))
+                        .and_then(|workspace| workspace.get("members"))
+                        .and_then(|members| members.as_array())
+                        .is_some_and(|members| !members.is_empty())
+                {
+                    inputs.has_cargo_workspace_markers = true;
+                }
+            }
+        }
+
+        inputs
+    }
+
+    fn has_package_type(&self, package_type: PackageType) -> bool {
+        self.package_types.contains(&package_type)
+    }
+
+    fn has_any_file_datasource(&self, datasource_ids: &[DatasourceId]) -> bool {
+        datasource_ids
+            .iter()
+            .any(|datasource_id| self.file_datasource_ids.contains(datasource_id))
+    }
+
+    fn has_all_file_datasources(&self, datasource_ids: &[DatasourceId]) -> bool {
+        datasource_ids
+            .iter()
+            .all(|datasource_id| self.file_datasource_ids.contains(datasource_id))
     }
 }
 
@@ -79,6 +185,38 @@ impl SpecialDirectoryMergerKind {
 }
 
 impl PostAssemblyPassKind {
+    fn should_run(self, inputs: &PostAssemblyInputs) -> bool {
+        match self {
+            Self::SwiftMerge => inputs.has_any_file_datasource(SWIFT_POST_ASSEMBLY_DATASOURCE_IDS),
+            Self::CondaRootfsMerge => {
+                inputs.has_all_file_datasources(CONDA_ROOTFS_POST_ASSEMBLY_DATASOURCE_IDS)
+            }
+            Self::NpmResourceAssign => inputs.has_package_type(PackageType::Npm),
+            Self::PythonRequirementsAssign => {
+                inputs.has_package_type(PackageType::Pypi)
+                    && inputs.has_any_file_datasource(&[DatasourceId::PipRequirements])
+            }
+            Self::FileReferenceResolve => {
+                file_ref_resolve::has_relevant_file_reference_datasource_ids(
+                    &inputs.file_datasource_ids,
+                )
+            }
+            Self::RpmYumdbMerge => {
+                inputs.has_any_file_datasource(&[DatasourceId::RpmYumdb])
+                    && inputs.has_any_file_datasource(RPM_INSTALLED_DATABASE_DATASOURCE_IDS)
+            }
+            Self::NpmWorkspaceMerge => inputs.has_npm_workspace_markers,
+            Self::CargoWorkspaceMerge => inputs.has_cargo_workspace_markers,
+            Self::NugetCpmResolve => {
+                inputs.has_any_file_datasource(NUGET_CPM_CONFIG_DATASOURCE_IDS)
+                    && inputs.has_any_file_datasource(NUGET_CPM_PROJECT_DATASOURCE_IDS)
+            }
+            Self::CargoResourceAssign => inputs.has_package_type(PackageType::Cargo),
+            Self::ComposerResourceAssign => inputs.has_package_type(PackageType::Composer),
+            Self::RubyResourceAssign => inputs.has_package_type(PackageType::Gem),
+        }
+    }
+
     fn run(
         self,
         files: &mut [FileInfo],
@@ -751,5 +889,58 @@ mod tests {
                 "Post-assembly pass {pass:?} should be registered exactly once"
             );
         }
+    }
+
+    #[test]
+    fn test_post_assembly_passes_skip_irrelevant_inputs() {
+        let inputs = PostAssemblyInputs::default();
+
+        for pass in PostAssemblyPassKind::iter() {
+            assert!(
+                !pass.should_run(&inputs),
+                "{pass:?} should skip when no relevant inputs are present"
+            );
+        }
+    }
+
+    #[test]
+    fn test_npm_workspace_inputs_only_run_npm_passes() {
+        let inputs = PostAssemblyInputs {
+            package_types: HashSet::from([PackageType::Npm]),
+            file_datasource_ids: HashSet::from([DatasourceId::NpmPackageJson]),
+            has_npm_workspace_markers: true,
+            has_cargo_workspace_markers: false,
+        };
+
+        let runnable: HashSet<_> = PostAssemblyPassKind::iter()
+            .filter(|pass| pass.should_run(&inputs))
+            .collect();
+
+        assert_eq!(
+            runnable,
+            HashSet::from([
+                PostAssemblyPassKind::NpmResourceAssign,
+                PostAssemblyPassKind::NpmWorkspaceMerge,
+            ])
+        );
+    }
+
+    #[test]
+    fn test_cargo_workspace_merge_requires_workspace_markers() {
+        let without_markers = PostAssemblyInputs {
+            package_types: HashSet::from([PackageType::Cargo]),
+            file_datasource_ids: HashSet::from([DatasourceId::CargoToml]),
+            has_npm_workspace_markers: false,
+            has_cargo_workspace_markers: false,
+        };
+
+        assert!(!PostAssemblyPassKind::CargoWorkspaceMerge.should_run(&without_markers));
+
+        let with_markers = PostAssemblyInputs {
+            has_cargo_workspace_markers: true,
+            ..without_markers
+        };
+
+        assert!(PostAssemblyPassKind::CargoWorkspaceMerge.should_run(&with_markers));
     }
 }

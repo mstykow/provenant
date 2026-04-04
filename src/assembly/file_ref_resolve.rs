@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -123,6 +123,10 @@ pub fn resolve_file_references(
     packages: &mut [Package],
     dependencies: &mut [TopLevelDependency],
 ) {
+    if packages.is_empty() || !has_relevant_file_reference_inputs(files) {
+        return;
+    }
+
     let path_index = build_path_index(&*files);
 
     for package in packages.iter_mut() {
@@ -162,6 +166,30 @@ pub fn resolve_file_references(
             }
         }
     }
+}
+
+pub(super) fn has_relevant_file_reference_datasource_ids(
+    file_datasource_ids: &HashSet<DatasourceId>,
+) -> bool {
+    FILE_REFERENCE_RESOLVER_CONFIGS.iter().any(|config| {
+        config
+            .datasource_ids
+            .iter()
+            .any(|datasource_id| file_datasource_ids.contains(datasource_id))
+    })
+}
+
+fn has_relevant_file_reference_inputs(files: &[FileInfo]) -> bool {
+    let file_datasource_ids: HashSet<DatasourceId> = files
+        .iter()
+        .flat_map(|file| {
+            file.package_data
+                .iter()
+                .filter_map(|package_data| package_data.datasource_id)
+        })
+        .collect();
+
+    has_relevant_file_reference_datasource_ids(&file_datasource_ids)
 }
 
 fn resolve_relative_to_datafile_parent(

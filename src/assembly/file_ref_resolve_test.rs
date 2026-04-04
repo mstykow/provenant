@@ -51,6 +51,27 @@ fn test_file_reference_resolver_datasource_ids_are_unique() {
 }
 
 #[test]
+fn test_has_relevant_file_reference_datasource_ids_detects_registered_inputs() {
+    let registered: std::collections::HashSet<_> = FILE_REFERENCE_RESOLVER_CONFIGS
+        .iter()
+        .flat_map(|config| config.datasource_ids.iter().copied())
+        .collect();
+
+    assert!(has_relevant_file_reference_datasource_ids(&registered));
+
+    for datasource_id in &registered {
+        let singleton = std::collections::HashSet::from([*datasource_id]);
+        assert!(
+            has_relevant_file_reference_datasource_ids(&singleton),
+            "expected {datasource_id:?} to mark file-reference resolution as relevant"
+        );
+    }
+
+    let unrelated = std::collections::HashSet::from([DatasourceId::NpmPackageJson]);
+    assert!(!has_relevant_file_reference_datasource_ids(&unrelated));
+}
+
+#[test]
 fn test_find_root_from_path() {
     assert_eq!(
         compute_root("rootfs/lib/apk/db/installed", "lib/apk/db/installed"),
