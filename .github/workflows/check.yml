@@ -130,6 +130,28 @@ jobs:
       - name: Check Windows compilation
         run: cargo check --all --verbose
 
+  intel-macos-build-smoke:
+    name: Intel macOS Build Smoke Test
+    runs-on: macos-15-intel
+    if: |
+      !(github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/'))
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        with:
+          submodules: false
+          lfs: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.94.0
+
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: intel-macos-build-smoke
+
+      - name: Build and run Intel macOS CLI smoke check
+        run: cargo run --quiet --locked --bin provenant -- --show-attribution > /dev/null
+
   rust-scan-integration-tests:
     name: Scan and Integration Tests (${{ matrix.shard }})
     runs-on: ubuntu-latest
