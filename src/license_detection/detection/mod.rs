@@ -74,6 +74,7 @@ pub const DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE: &str = "unknown-referen
 pub(crate) fn populate_detection_from_group(
     detection: &mut LicenseDetection,
     group: &DetectionGroup,
+    source_text: Option<&str>,
 ) {
     if group.matches.is_empty() {
         return;
@@ -89,11 +90,11 @@ pub(crate) fn populate_detection_from_group(
     let _score = compute_detection_score(&detection.matches);
 
     if should_compute_public_expression(log_category)
-        && let Ok(expr) = determine_license_expression(&matches_for_expression)
+        && let Ok(expr) = determine_license_expression(&matches_for_expression, source_text)
     {
         detection.license_expression = Some(expr.clone());
 
-        if let Ok(spdx_expr) = determine_spdx_expression(&matches_for_expression) {
+        if let Ok(spdx_expr) = determine_spdx_expression(&matches_for_expression, source_text) {
             detection.license_expression_spdx = Some(spdx_expr);
         }
     }
@@ -137,8 +138,9 @@ pub(crate) fn populate_detection_from_group_with_spdx(
     detection: &mut LicenseDetection,
     group: &DetectionGroup,
     spdx_mapping: &SpdxMapping,
+    source_text: Option<&str>,
 ) {
-    populate_detection_from_group(detection, group);
+    populate_detection_from_group(detection, group, source_text);
 
     for match_item in &mut detection.matches {
         if match_item.license_expression_spdx.is_none()
@@ -185,7 +187,7 @@ fn create_detection_from_group(group: &DetectionGroup) -> LicenseDetection {
         return detection;
     }
 
-    populate_detection_from_group(&mut detection, group);
+    populate_detection_from_group(&mut detection, group, None);
 
     detection
 }
@@ -468,7 +470,8 @@ fn promote_non_clue_no_expression_detections(
                 .all(|key| detected_license_keys.contains(key))
         {
             detection.license_expression = Some(license_expression.clone());
-            detection.license_expression_spdx = determine_spdx_expression(&detection.matches).ok();
+            detection.license_expression_spdx =
+                determine_spdx_expression(&detection.matches, None).ok();
             detection
                 .detection_log
                 .push(DETECTION_LOG_NOT_LICENSE_CLUES_AS_MORE_DETECTIONS_PRESENT.to_string());
@@ -657,7 +660,7 @@ mod tests {
             identifier: None,
             file_regions: Vec::new(),
         };
-        populate_detection_from_group(&mut detection, &group);
+        populate_detection_from_group(&mut detection, &group, None);
         assert_eq!(detection.matches.len(), 1);
         assert!(detection.license_expression.is_some());
         assert!(
@@ -677,7 +680,7 @@ mod tests {
             identifier: None,
             file_regions: Vec::new(),
         };
-        populate_detection_from_group(&mut detection, &group);
+        populate_detection_from_group(&mut detection, &group, None);
         assert!(detection.matches.is_empty());
         assert!(detection.license_expression.is_none());
     }
@@ -698,7 +701,7 @@ mod tests {
             identifier: None,
             file_regions: Vec::new(),
         };
-        populate_detection_from_group(&mut detection, &group);
+        populate_detection_from_group(&mut detection, &group, None);
         assert!(
             detection
                 .detection_log
@@ -722,7 +725,7 @@ mod tests {
             file_regions: Vec::new(),
         };
 
-        populate_detection_from_group(&mut detection, &group);
+        populate_detection_from_group(&mut detection, &group, None);
 
         assert!(
             detection
@@ -749,7 +752,7 @@ mod tests {
             file_regions: Vec::new(),
         };
 
-        populate_detection_from_group(&mut detection, &group);
+        populate_detection_from_group(&mut detection, &group, None);
 
         assert!(
             detection
@@ -777,7 +780,7 @@ mod tests {
             identifier: None,
             file_regions: Vec::new(),
         };
-        populate_detection_from_group_with_spdx(&mut detection, &group, &spdx_mapping);
+        populate_detection_from_group_with_spdx(&mut detection, &group, &spdx_mapping, None);
         assert!(detection.license_expression_spdx.is_some());
     }
 
@@ -794,7 +797,7 @@ mod tests {
             identifier: None,
             file_regions: Vec::new(),
         };
-        populate_detection_from_group_with_spdx(&mut detection, &group, &spdx_mapping);
+        populate_detection_from_group_with_spdx(&mut detection, &group, &spdx_mapping, None);
         assert!(detection.matches.is_empty());
     }
 
@@ -1301,7 +1304,7 @@ mod tests {
             identifier: None,
             file_regions: Vec::new(),
         };
-        populate_detection_from_group_with_spdx(&mut detection, &group, &spdx_mapping);
+        populate_detection_from_group_with_spdx(&mut detection, &group, &spdx_mapping, None);
         assert!(detection.license_expression_spdx.is_some());
     }
 
@@ -1323,7 +1326,7 @@ mod tests {
             identifier: None,
             file_regions: Vec::new(),
         };
-        populate_detection_from_group_with_spdx(&mut detection, &group, &spdx_mapping);
+        populate_detection_from_group_with_spdx(&mut detection, &group, &spdx_mapping, None);
         assert!(detection.license_expression.is_some());
     }
 
@@ -1343,7 +1346,7 @@ mod tests {
             identifier: None,
             file_regions: Vec::new(),
         };
-        populate_detection_from_group_with_spdx(&mut detection, &group, &spdx_mapping);
+        populate_detection_from_group_with_spdx(&mut detection, &group, &spdx_mapping, None);
         assert!(detection.license_expression.is_some());
     }
 

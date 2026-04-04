@@ -1,3 +1,5 @@
 license_expressions:
   - apache-2.0
   - boost-1.0
+detected_license_expressions:
+  - apache-2.0 OR boost-1.0

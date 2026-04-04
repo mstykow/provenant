@@ -2,9 +2,11 @@
 
 use super::types::LicenseDetection;
 use super::*;
-use crate::license_detection::expression::combine_expressions_and;
+use crate::license_detection::expression::{combine_expressions_and, combine_expressions_or};
 use crate::license_detection::models::{LicenseMatch, MatcherKind};
-use crate::utils::spdx::combine_license_expressions;
+use crate::utils::spdx::{
+    ExpressionRelation, combine_license_expressions, combine_license_expressions_with_relation,
+};
 
 /// Coverage value below which detections are not perfect.
 /// Any value < 100 means detection is imperfect.
@@ -405,9 +407,16 @@ pub fn compute_detection_score(matches: &[LicenseMatch]) -> f32 {
 /// Combines license expressions from all matches using AND/OR relationships.
 ///
 /// Based on Python: determine_license_expression() at detection.py:1611-1635
-pub fn determine_license_expression(matches: &[LicenseMatch]) -> Result<String, String> {
+pub fn determine_license_expression(
+    matches: &[LicenseMatch],
+    source_text: Option<&str>,
+) -> Result<String, String> {
     if matches.is_empty() {
         return Err("No matches to determine expression from".to_string());
+    }
+
+    if let Some(expr) = determine_alternative_notice_expression(matches, source_text)? {
+        return Ok(expr);
     }
 
     let expressions: Vec<&str> = matches
@@ -424,9 +433,16 @@ pub fn determine_license_expression(matches: &[LicenseMatch]) -> Result<String, 
 /// Converts license expressions to SPDX identifiers.
 ///
 /// Based on Python: determine_spdx_expression() at detection.py:1638-1671
-pub fn determine_spdx_expression(matches: &[LicenseMatch]) -> Result<String, String> {
+pub fn determine_spdx_expression(
+    matches: &[LicenseMatch],
+    source_text: Option<&str>,
+) -> Result<String, String> {
     if matches.is_empty() {
         return Err("No matches to determine SPDX expression from".to_string());
+    }
+
+    if let Some(expr) = determine_alternative_notice_spdx_expression(matches, source_text)? {
+        return Ok(expr);
     }
 
     let expressions: Option<Vec<&str>> = matches
@@ -439,6 +455,114 @@ pub fn determine_spdx_expression(matches: &[LicenseMatch]) -> Result<String, Str
 
     combine_license_expressions(expressions.into_iter().map(str::to_string))
         .ok_or_else(|| "Failed to combine SPDX expressions".to_string())
+}
+
+fn determine_alternative_notice_expression(
+    matches: &[LicenseMatch],
+    source_text: Option<&str>,
+) -> Result<Option<String>, String> {
+    if !has_alternative_license_notice(matches, source_text) {
+        return Ok(None);
+    }
+
+    let (substantive, supplemental): (Vec<&LicenseMatch>, Vec<&LicenseMatch>) = matches
+        .iter()
+        .partition(|m| !is_supplemental_alternative_match(m.license_expression.as_str()));
+
+    if substantive.len() < 2 {
+        return Ok(None);
+    }
+
+    let alternative_expressions: Vec<&str> = substantive
+        .iter()
+        .map(|m| m.license_expression.as_str())
+        .collect();
+    let alternative_expression = combine_expressions_or(&alternative_expressions, true)
+        .map_err(|e| format!("Failed to combine alternative expressions: {}", e))?;
+
+    let mut parts = vec![alternative_expression];
+    parts.extend(
+        supplemental
+            .iter()
+            .map(|m| m.license_expression.clone())
+            .collect::<Vec<_>>(),
+    );
+
+    let part_refs: Vec<&str> = parts.iter().map(String::as_str).collect();
+    combine_expressions_and(&part_refs, true)
+        .map(Some)
+        .map_err(|e| format!("Failed to combine alternative expression parts: {}", e))
+}
+
+fn determine_alternative_notice_spdx_expression(
+    matches: &[LicenseMatch],
+    source_text: Option<&str>,
+) -> Result<Option<String>, String> {
+    if !has_alternative_license_notice(matches, source_text) {
+        return Ok(None);
+    }
+
+    let (substantive, supplemental): (Vec<&LicenseMatch>, Vec<&LicenseMatch>) = matches
+        .iter()
+        .partition(|m| !is_supplemental_alternative_match(m.license_expression.as_str()));
+
+    if substantive.len() < 2 {
+        return Ok(None);
+    }
+
+    let alternative_expressions: Option<Vec<String>> = substantive
+        .iter()
+        .map(|m| m.license_expression_spdx.clone())
+        .collect();
+    let alternative_expressions = alternative_expressions.ok_or_else(|| {
+        "Missing SPDX expressions for one or more alternative-license matches".to_string()
+    })?;
+    let alternative_expression =
+        combine_license_expressions_with_relation(alternative_expressions, ExpressionRelation::Or)
+            .ok_or_else(|| "Failed to combine alternative SPDX expressions".to_string())?;
+
+    let mut parts = vec![alternative_expression];
+    let supplemental_expressions: Option<Vec<String>> = supplemental
+        .iter()
+        .map(|m| m.license_expression_spdx.clone())
+        .collect();
+    parts.extend(supplemental_expressions.ok_or_else(|| {
+        "Missing SPDX expressions for one or more supplemental matches".to_string()
+    })?);
+
+    combine_license_expressions_with_relation(parts, ExpressionRelation::And)
+        .ok_or_else(|| "Failed to combine alternative SPDX expression parts".to_string())
+        .map(Some)
+}
+
+fn has_alternative_license_notice(matches: &[LicenseMatch], source_text: Option<&str>) -> bool {
+    if matches.len() < 2 {
+        return false;
+    }
+
+    let Some(source_text) = source_text else {
+        return false;
+    };
+
+    let start_line = matches.iter().map(|m| m.start_line).min().unwrap_or(0);
+    let end_line = matches.iter().map(|m| m.end_line).max().unwrap_or(0);
+    if start_line == 0 || end_line < start_line {
+        return false;
+    }
+
+    let region = source_text
+        .lines()
+        .skip(start_line.saturating_sub(1))
+        .take(end_line - start_line + 1)
+        .collect::<Vec<_>>()
+        .join("\n")
+        .to_ascii_lowercase();
+
+    region.contains("alternatively") && region.contains("may be used under the terms of")
+}
+
+fn is_supplemental_alternative_match(expression: &str) -> bool {
+    expression.contains("warranty-disclaimer")
 }
 
 /// Determine SPDX expression from ScanCode license keys.
@@ -1170,7 +1294,7 @@ mod tests {
     #[test]
     fn test_determine_license_expression_single() {
         let matches = vec![create_test_match(95.0, "mit.LICENSE")];
-        let result = determine_license_expression(&matches);
+        let result = determine_license_expression(&matches, None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "mit");
     }
@@ -1203,7 +1327,7 @@ mod tests {
         );
         m2.license_expression = "apache-2.0".to_string();
         let matches = vec![m1, m2];
-        let result = determine_license_expression(&matches);
+        let result = determine_license_expression(&matches, None);
         assert!(result.is_ok());
         let expr = result.unwrap();
         assert!(expr.contains("mit"));
@@ -1242,7 +1366,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let result = determine_license_expression(&matches);
+        let result = determine_license_expression(&matches, None);
 
         assert_eq!(
             result.as_deref(),
@@ -1280,7 +1404,7 @@ mod tests {
         );
         m2.license_expression = "mit OR apache-2.0".to_string();
 
-        let result = determine_license_expression(&[m1, m2]);
+        let result = determine_license_expression(&[m1, m2], None);
 
         assert_eq!(result.as_deref(), Ok("mit"));
     }
@@ -1288,8 +1412,103 @@ mod tests {
     #[test]
     fn test_determine_license_expression_empty() {
         let matches: Vec<LicenseMatch> = vec![];
-        let result = determine_license_expression(&matches);
+        let result = determine_license_expression(&matches, None);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_determine_license_expression_uses_or_for_alternative_notice() {
+        let mut apache = create_test_match_full(
+            "apache-2.0",
+            "3-seq",
+            3,
+            7,
+            93.75,
+            15,
+            16,
+            93.75,
+            100,
+            "apache-2.0_910.RULE",
+        );
+        apache.license_expression = "apache-2.0".to_string();
+
+        let mut boost = create_test_match_full(
+            "boost-1.0",
+            "3-seq",
+            10,
+            12,
+            51.43,
+            18,
+            35,
+            51.43,
+            100,
+            "boost-1.0_60.RULE",
+        );
+        boost.license_expression = "boost-1.0".to_string();
+
+        let fixture =
+            include_str!("../../../testdata/license-golden/datadriven/external/boost-json-d2s.ipp");
+        let result = determine_license_expression(&[apache, boost], Some(fixture));
+
+        assert_eq!(result.as_deref(), Ok("apache-2.0 OR boost-1.0"));
+    }
+
+    #[test]
+    fn test_determine_spdx_expression_uses_or_for_alternative_notice_with_disclaimer() {
+        let mut apache = create_test_match_full(
+            "apache-2.0",
+            "3-seq",
+            3,
+            7,
+            93.75,
+            15,
+            16,
+            93.75,
+            100,
+            "apache-2.0_910.RULE",
+        );
+        apache.license_expression = "apache-2.0".to_string();
+        apache.license_expression_spdx = Some("Apache-2.0".to_string());
+
+        let mut boost = create_test_match_full(
+            "boost-1.0",
+            "3-seq",
+            10,
+            12,
+            51.43,
+            18,
+            35,
+            51.43,
+            100,
+            "boost-1.0_60.RULE",
+        );
+        boost.license_expression = "boost-1.0".to_string();
+        boost.license_expression_spdx = Some("BSL-1.0".to_string());
+
+        let mut disclaimer = create_test_match_full(
+            "warranty-disclaimer",
+            "3-seq",
+            14,
+            16,
+            57.45,
+            27,
+            47,
+            57.45,
+            100,
+            "warranty-disclaimer_18.RULE",
+        );
+        disclaimer.license_expression = "warranty-disclaimer".to_string();
+        disclaimer.license_expression_spdx =
+            Some("LicenseRef-scancode-warranty-disclaimer".to_string());
+
+        let fixture =
+            include_str!("../../../testdata/license-golden/datadriven/external/boost-json-d2s.ipp");
+        let result = determine_spdx_expression(&[apache, boost, disclaimer], Some(fixture));
+
+        assert_eq!(
+            result.as_deref(),
+            Ok("(Apache-2.0 OR BSL-1.0) AND LicenseRef-scancode-warranty-disclaimer")
+        );
     }
 
     #[test]
@@ -1434,7 +1653,7 @@ mod tests {
     #[test]
     fn test_determine_spdx_expression_single() {
         let matches = vec![create_test_match(95.0, "mit.LICENSE")];
-        let result = determine_spdx_expression(&matches);
+        let result = determine_spdx_expression(&matches, None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "MIT");
     }
@@ -1467,7 +1686,7 @@ mod tests {
         );
         m2.license_expression_spdx = Some("Apache-2.0".to_string());
         let matches = vec![m1, m2];
-        let result = determine_spdx_expression(&matches);
+        let result = determine_spdx_expression(&matches, None);
         assert!(result.is_ok());
     }
 
@@ -1501,7 +1720,7 @@ mod tests {
         );
         m2.license_expression_spdx = Some("MIT OR Apache-2.0".to_string());
 
-        let result = determine_spdx_expression(&[m1, m2]);
+        let result = determine_spdx_expression(&[m1, m2], None);
 
         assert_eq!(result.as_deref(), Ok("MIT"));
     }
@@ -1509,7 +1728,7 @@ mod tests {
     #[test]
     fn test_determine_spdx_expression_empty() {
         let matches: Vec<LicenseMatch> = vec![];
-        let result = determine_spdx_expression(&matches);
+        let result = determine_spdx_expression(&matches, None);
         assert!(result.is_err());
     }
 

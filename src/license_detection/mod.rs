@@ -533,6 +533,7 @@ impl LicenseDetectionEngine {
                             &mut detection,
                             group,
                             &self.spdx_mapping,
+                            Some(content),
                         );
                         detection
                     })
@@ -633,7 +634,12 @@ impl LicenseDetectionEngine {
             .iter()
             .map(|group| {
                 let mut detection = empty_detection();
-                populate_detection_from_group_with_spdx(&mut detection, group, &self.spdx_mapping);
+                populate_detection_from_group_with_spdx(
+                    &mut detection,
+                    group,
+                    &self.spdx_mapping,
+                    Some(content),
+                );
                 detection
             })
             .collect();

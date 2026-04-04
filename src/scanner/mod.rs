@@ -412,7 +412,7 @@ mod tests {
     }
 
     #[test]
-    fn scanner_preserves_local_license_references_in_detected_expression() {
+    fn scanner_uses_or_for_alternative_license_header() {
         let fixture =
             include_str!("../../testdata/license-golden/datadriven/external/boost-json-d2s.ipp");
         let temp_dir = TempDir::new().expect("create temp dir");
@@ -440,7 +440,7 @@ mod tests {
 
         assert_eq!(
             scanned.license_expression.as_deref(),
-            Some("Apache-2.0 AND BSL-1.0")
+            Some("Apache-2.0 OR BSL-1.0")
         );
         assert!(
             scanned.license_clues.is_empty(),
@@ -455,7 +455,7 @@ mod tests {
         );
 
         let detection = &scanned.license_detections[0];
-        assert_eq!(detection.license_expression_spdx, "Apache-2.0 AND BSL-1.0");
+        assert_eq!(detection.license_expression_spdx, "Apache-2.0 OR BSL-1.0");
 
         let match_expressions: Vec<_> = detection
             .matches

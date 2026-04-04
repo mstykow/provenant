@@ -62,3 +62,27 @@ pub fn detect_license_expressions_for_golden(
             .collect(),
     )
 }
+
+#[cfg(all(test, feature = "golden-tests"))]
+pub fn detect_detection_expressions_for_golden(
+    engine: &LicenseDetectionEngine,
+    test_file: &Path,
+    unknown_licenses: bool,
+) -> Result<Vec<String>> {
+    let Some((text, text_kind)) = read_golden_input_content(test_file)? else {
+        return Ok(Vec::new());
+    };
+
+    let detections = engine
+        .detect_with_kind(
+            &text,
+            unknown_licenses,
+            matches!(text_kind, ExtractedTextKind::BinaryStrings),
+        )
+        .with_context(|| format!("Detection failed for {}", test_file.display()))?;
+
+    Ok(detections
+        .into_iter()
+        .filter_map(|detection| detection.license_expression)
+        .collect())
+}

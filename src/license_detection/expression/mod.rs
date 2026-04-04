@@ -14,7 +14,8 @@ mod simplify;
 
 pub use parse::parse_expression;
 pub use simplify::{
-    combine_expressions_and, expression_to_string, licensing_contains, simplify_expression,
+    combine_expressions_and, combine_expressions_or, expression_to_string, licensing_contains,
+    simplify_expression,
 };
 
 /// Error type for license expression parsing.

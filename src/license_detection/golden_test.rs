@@ -30,7 +30,9 @@
 #[cfg(all(test, feature = "golden-tests"))]
 mod golden_tests {
     use crate::license_detection::LicenseDetectionEngine;
-    use crate::license_detection::golden_utils::detect_license_expressions_for_golden;
+    use crate::license_detection::golden_utils::{
+        detect_detection_expressions_for_golden, detect_license_expressions_for_golden,
+    };
     use once_cell::sync::Lazy;
     use serde::Deserialize;
     use std::fs;
@@ -67,6 +69,9 @@ mod golden_tests {
     struct LicenseTestYaml {
         #[serde(default)]
         license_expressions: Vec<String>,
+
+        #[serde(default)]
+        detected_license_expressions: Vec<String>,
     }
 
     /// A single golden test case
@@ -128,6 +133,35 @@ mod golden_tests {
                     "license_expressions mismatch for {}:  Expected: {:?}  Actual:   {:?}",
                     self.name, expected, actual
                 ));
+            }
+
+            if !self.yaml.detected_license_expressions.is_empty() {
+                let actual_detected = detect_detection_expressions_for_golden(
+                    engine,
+                    &self.test_file,
+                    unknown_licenses,
+                )
+                .map_err(|e| {
+                    format!(
+                        "Top-level detection failed for {}: {e:?}",
+                        self.test_file.display()
+                    )
+                })?;
+                let actual_detected: Vec<&str> =
+                    actual_detected.iter().map(|s| s.as_str()).collect();
+                let expected_detected: Vec<&str> = self
+                    .yaml
+                    .detected_license_expressions
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect();
+
+                if actual_detected != expected_detected {
+                    return Err(format!(
+                        "detected_license_expressions mismatch for {}:  Expected: {:?}  Actual:   {:?}",
+                        self.name, expected_detected, actual_detected
+                    ));
+                }
             }
 
             Ok(())

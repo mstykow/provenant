@@ -371,13 +371,13 @@ pub(crate) fn collect_top_level_license_detections(
                         .license_expression
                         .clone()
                         .filter(|expression| !expression.is_empty())
-                        .or_else(|| determine_license_expression(&detection.matches).ok())
+                        .or_else(|| determine_license_expression(&detection.matches, None).ok())
                         .unwrap_or_default();
                     let license_expression_spdx = detection
                         .license_expression_spdx
                         .clone()
                         .filter(|expression| !expression.is_empty())
-                        .or_else(|| determine_spdx_expression(&detection.matches).ok())
+                        .or_else(|| determine_spdx_expression(&detection.matches, None).ok())
                         .unwrap_or_default();
 
                     TopLevelLicenseDetection {
@@ -900,9 +900,9 @@ fn apply_resolved_reference_targets(
         true,
     );
     internal_detection.license_expression =
-        determine_license_expression(&matches_for_expression).ok();
+        determine_license_expression(&matches_for_expression, None).ok();
     internal_detection.license_expression_spdx =
-        determine_spdx_expression(&matches_for_expression).ok();
+        determine_spdx_expression(&matches_for_expression, None).ok();
     internal_detection.detection_log = vec![detection_log.to_string()];
     let mut public_detection = internal_detection_to_public(internal_detection);
     public_detection.identifier = None;
