@@ -64,4 +64,23 @@ mod tests {
         assert_eq!(emails.len(), 1);
         assert_eq!(emails[0].email, "admin@rust-lang.org");
     }
+
+    #[test]
+    fn test_find_urls_ignores_email_like_ftp_token() {
+        let text = "See ftp.mtuci@gmail.com for details.";
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        assert!(urls.is_empty(), "urls: {urls:#?}");
+    }
+
+    #[test]
+    fn test_find_urls_keeps_plain_ftp_hostname() {
+        let text = "Mirror: ftp.gnu.org/gnu/tar/";
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        assert_eq!(urls.len(), 1, "urls: {urls:#?}");
+        assert_eq!(urls[0].url, "http://ftp.gnu.org/gnu/tar/");
+    }
 }

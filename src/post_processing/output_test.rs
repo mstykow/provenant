@@ -847,6 +847,110 @@ fn apply_package_reference_following_resolves_manifest_origin_local_file() {
 }
 
 #[test]
+fn apply_package_reference_following_resolves_absolute_rootfs_license_reference() {
+    let mut common_license = file("usr/share/common-licenses/GPL-2");
+    common_license.license_expression = Some("gpl-2.0".to_string());
+    common_license.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "gpl-2.0".to_string(),
+        license_expression_spdx: "GPL-2.0-only".to_string(),
+        matches: vec![Match {
+            license_expression: "gpl-2.0".to_string(),
+            license_expression_spdx: "GPL-2.0-only".to_string(),
+            from_file: Some("usr/share/common-licenses/GPL-2".to_string()),
+            start_line: 1,
+            end_line: 339,
+            matcher: Some("1-hash".to_string()),
+            score: 100.0,
+            matched_length: Some(2931),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("gpl-2.0.LICENSE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("gpl-root".to_string()),
+    }];
+
+    let mut service = file("usr/sbin/service");
+    service.license_expression = Some("gpl-2.0-plus".to_string());
+    service.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "gpl-2.0-plus".to_string(),
+        license_expression_spdx: "GPL-2.0-or-later".to_string(),
+        matches: vec![Match {
+            license_expression: "gpl-2.0-plus".to_string(),
+            license_expression_spdx: "GPL-2.0-or-later".to_string(),
+            from_file: Some("usr/sbin/service".to_string()),
+            start_line: 16,
+            end_line: 31,
+            matcher: Some("2-aho".to_string()),
+            score: 100.0,
+            matched_length: Some(139),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("gpl-2.0-plus_233.RULE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: Some(vec!["/usr/share/common-licenses/GPL-2".to_string()]),
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("service-gpl".to_string()),
+    }];
+
+    let mut files = vec![
+        dir("usr"),
+        dir("usr/sbin"),
+        dir("usr/share"),
+        dir("usr/share/common-licenses"),
+        common_license,
+        service,
+    ];
+    let mut packages = Vec::new();
+    let snapshot = super::build_reference_follow_snapshot(&files, &packages);
+    let resolved = super::resolve_referenced_resource(
+        "/usr/share/common-licenses/GPL-2",
+        "usr/sbin/service",
+        &[],
+        &snapshot,
+    )
+    .expect("absolute rootfs reference should resolve");
+    assert_eq!(resolved.path, "usr/share/common-licenses/GPL-2");
+    assert!(super::use_referenced_license_expression(
+        Some("gpl-2.0"),
+        &files[5].license_detections[0],
+    ));
+
+    apply_package_reference_following(&mut files, &mut packages);
+
+    let service = files
+        .iter()
+        .find(|file| file.path == "usr/sbin/service")
+        .expect("service file should exist");
+    assert_eq!(
+        service.license_expression.as_deref(),
+        Some("gpl-2.0-plus AND gpl-2.0")
+    );
+    assert_eq!(
+        service.license_detections[0].license_expression_spdx,
+        "GPL-2.0-or-later AND GPL-2.0-only"
+    );
+    assert_eq!(service.license_detections[0].matches.len(), 2);
+    assert_eq!(
+        service.license_detections[0].matches[1]
+            .from_file
+            .as_deref(),
+        Some("usr/share/common-licenses/GPL-2")
+    );
+    assert_eq!(
+        service.license_detections[0].matches[1].license_expression_spdx,
+        "GPL-2.0-only"
+    );
+}
+
+#[test]
 fn apply_package_reference_following_falls_back_to_root_when_package_missing() {
     let mut root_copying = file("project/COPYING");
     root_copying.license_expression = Some("gpl-3.0".to_string());

@@ -635,6 +635,18 @@ mod tests {
     }
 
     #[test]
+    fn test_simplify_and_keeps_gpl_or_later_with_only() {
+        let expr =
+            super::super::parse::parse_expression("gpl-2.0-or-later AND gpl-2.0-only").unwrap();
+        let simplified = simplify_expression(&expr);
+
+        assert_eq!(
+            expression_to_string(&simplified),
+            "gpl-2.0-or-later AND gpl-2.0-only"
+        );
+    }
+
+    #[test]
     fn test_expression_to_string_simple() {
         let expr = LicenseExpression::License("mit".to_string());
         assert_eq!(expression_to_string(&expr), "mit");

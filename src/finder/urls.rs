@@ -69,7 +69,7 @@ fn end_of_url_cleaner(url: &str) -> String {
 }
 
 fn add_fake_scheme(url: &str) -> String {
-    if is_filterable(url) && !url.contains("://") {
+    if is_filterable(url) && !url.contains("://") && !url.contains('@') {
         format!("http://{url}")
     } else {
         url.to_string()

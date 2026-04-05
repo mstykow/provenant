@@ -1040,6 +1040,85 @@ fn test_refine_holder_strips_trailing_comma_software() {
 }
 
 #[test]
+fn test_refine_author_drops_config_and_legal_junk_fragments() {
+    assert_eq!(refine_author("with the mode of 000"), None);
+    assert_eq!(
+        refine_author("kernel afs. skip AFS metadata and ACLs"),
+        None
+    );
+    assert_eq!(refine_author("with a FSF"), None);
+    assert_eq!(refine_author("with a DCO"), None);
+    assert_eq!(refine_author("gives unlimited"), None);
+    assert_eq!(
+        refine_author(
+            "Word Assigns past and future changes. new src/libgcrypt.pc.in, src/Makefile.am, src/secmem.c"
+        ),
+        None
+    );
+}
+
+#[test]
+fn test_refine_author_truncates_bug_reports_tail() {
+    assert_eq!(
+        refine_author(
+            "Werner Koch <wk@gnupg.org> Bug reports https://bugs.gnupg.org Security related bug reports <security@gnupg.org> End-of-life TBD"
+        ),
+        Some("Werner Koch <wk@gnupg.org>".to_string())
+    );
+}
+
+#[test]
+fn test_refine_author_strips_trailing_comma_and() {
+    assert_eq!(
+        refine_author("Philip Hazel, and"),
+        Some("Philip Hazel".to_string())
+    );
+}
+
+#[test]
+fn test_refine_author_drops_glibc_prose_fragments() {
+    assert_eq!(
+        refine_author(
+            "Maintainers <debian-glibc@lists.debian.org> from https://sourceware.org/git/glibc.git"
+        ),
+        None
+    );
+    assert_eq!(refine_author("versions, and"), None);
+    assert_eq!(refine_author("makes"), None);
+    assert_eq!(refine_author("grants irrevocable"), None);
+    assert_eq!(refine_author("version information"), None);
+    assert_eq!(
+        refine_author("not responsible for the consequences of use of"),
+        None
+    );
+    assert_eq!(
+        refine_author("at SunPro, a Sun Microsystems, Inc. business"),
+        None
+    );
+}
+
+#[test]
+fn test_refine_holder_drops_cc0_and_libgcrypt_junk_fragments() {
+    assert_eq!(
+        refine_holder("Related Rights (defined below) upon the creator and subsequent"),
+        None
+    );
+    assert_eq!(refine_holder("Related"), None);
+    assert_eq!(refine_holder("related or neighboring"), None);
+    assert_eq!(refine_holder("was owned solely by FSF"), None);
+    assert_eq!(refine_holder("years may be listed"), None);
+}
+
+#[test]
+fn test_is_junk_copyright_drops_cc0_and_libgcrypt_junk_fragments() {
+    assert!(is_junk_copyright(
+        "copyright and related or neighboring rights"
+    ));
+    assert!(is_junk_copyright("copyright was owned solely by FSF"));
+    assert!(is_junk_copyright("copyright years may be listed"));
+}
+
+#[test]
 fn test_refine_holder_strips_trailing_et_al() {
     let result = refine_holder("Daniel Stenberg, et al");
     assert_eq!(result, Some("Daniel Stenberg".to_string()));
