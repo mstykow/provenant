@@ -1573,15 +1573,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "inflate"
-version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1cdb29978cc5797bd8dcc8e5bf7de604891df2a8dc576973d71a281e916db2ff"
-dependencies = [
- "adler32",
-]
-
-[[package]]
 name = "inout"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2405,9 +2396,9 @@ dependencies = [
 
 [[package]]
 name = "pdf_oxide"
-version = "0.3.17"
+version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0049db48b94d4cbae10b04b73124ae606b2e81681924d22906b6633756f39845"
+checksum = "33a653f0648bf735e0eab2635396cd60915da3b53b9653da43c125473b8f5812"
 dependencies = [
  "aes",
  "base64",
@@ -2423,7 +2414,6 @@ dependencies = [
  "flate2",
  "image 0.24.9",
  "indexmap",
- "inflate",
  "lazy_static",
  "libflate",
  "log",
