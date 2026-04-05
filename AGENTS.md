@@ -32,6 +32,8 @@ The primary goal is functional parity users can trust. When implementing feature
 
 Use the reference submodule as a behavioral specification: study the original implementation, tests, outputs, and known bugs to understand what must be preserved. Do **not** port it line by line. Use it to learn **what** the Rust implementation must do, not **how** it should be written. For deeper contributor guidance, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/HOW_TO_ADD_A_PARSER.md`](docs/HOW_TO_ADD_A_PARSER.md).
 
+When an upstream test fixture is needed for Provenant tests, copy it into Provenant-owned `testdata/` and reference that local copy. Do **not** make tests or golden fixtures depend directly on paths under `reference/scancode-toolkit/`.
+
 ## Quick Start
 
 ```bash
@@ -71,6 +73,13 @@ cargo run -- --json-pp output.json <dir> --ignore "*.git*" --ignore "target/*"
 - **Behavior comparison**: `compare-outputs` runs Provenant and ScanCode on the same target, keeps raw outputs, and writes reduced comparison artifacts under `.provenant/compare-runs/`. Use this when validating parity or investigating output differences.
 - **Golden-fixture maintenance**: `update-parser-golden`, `update-copyright-golden`, and `update-license-golden` maintain parser, copyright, and license expectations. Follow the targeted workflows in [`xtask/README.md`](xtask/README.md) and [`docs/TESTING_STRATEGY.md`](docs/TESTING_STRATEGY.md).
 - **Generated artifacts and validation**: `generate-supported-formats`, `generate-index-artifact`, and `validate-urls` handle generated documentation, embedded license-index refreshes, and documentation/docstring URL validation.
+
+## Dependency Management
+
+- Use `cargo` to manage Rust dependencies instead of editing `Cargo.toml` by hand. Prefer `cargo add`, `cargo remove`, and targeted `cargo update` commands so `Cargo.toml` and `Cargo.lock` stay in sync.
+- Always use the latest available dependency version unless there is a documented repository-specific reason not to.
+- Do not add dependencies lightly. Before adding a new dependency, confirm that it clearly earns its weight in maintenance and complexity cost.
+- Before adding a new dependency, always check its maintenance status (recent releases, active maintenance, ecosystem health/reputation, and any obvious long-term support concerns).
 
 ## Running Single Tests
 

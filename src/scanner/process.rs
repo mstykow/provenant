@@ -730,23 +730,30 @@ fn extract_named_author_from_binary_line(line: &str) -> Option<String> {
 
     let lower_line = line.to_ascii_lowercase();
     let email_start = lower_line.find(email)?;
-    let prefix = line[..email_start]
-        .trim_end_matches(['<', '(', '[', ' ', ':', '-'])
-        .trim();
-    let prefix = take_suffix_after_last_author_marker(prefix)?;
+    let raw_prefix = &line[..email_start];
+    let has_author_marker = contains_binary_author_marker(raw_prefix);
+    let prefix = take_suffix_after_last_author_marker(raw_prefix)?;
     let prefix = prefix
         .trim_start_matches(['*', '-', ':', ';', ',', '.', ' '])
+        .trim_end_matches(['<', '(', '[', ' ', ':', '-'])
         .trim();
 
     let (name, _) = split_name_email(prefix);
-    let name = name
-        .or_else(|| {
-            let trimmed =
-                prefix.trim_matches(|c: char| c == '<' || c == '(' || c == '[' || c == ' ');
-            (!trimmed.is_empty()).then(|| trimmed.to_string())
-        })?
-        .trim()
-        .to_string();
+    let name = name.or_else(|| {
+        let trimmed = prefix.trim_matches(|c: char| c == '<' || c == '(' || c == '[' || c == ' ');
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    });
+
+    let Some(name) = name.map(|name| name.trim().to_string()) else {
+        if has_author_marker {
+            return Some(email.to_string());
+        }
+        return None;
+    };
+
+    if name.is_empty() && has_author_marker {
+        return Some(email.to_string());
+    }
 
     if !has_binary_name_like_shape(&name) {
         return None;
@@ -785,6 +792,10 @@ fn take_suffix_after_last_author_marker(text: &str) -> Option<&str> {
         .iter()
         .filter_map(|marker| take_suffix_after_last_ascii_marker(text, marker))
         .next()
+}
+
+fn contains_binary_author_marker(text: &str) -> bool {
+    take_suffix_after_last_author_marker(text).is_some()
 }
 
 fn has_binary_name_like_shape(text: &str) -> bool {
@@ -1832,6 +1843,16 @@ mod tests {
                 "Rob Crittenden <rcritten@redhat.com> - 3.11.7-9"
             ),
             None
+        );
+    }
+
+    #[test]
+    fn test_extract_named_author_from_binary_line_keeps_email_only_review_author() {
+        assert_eq!(
+            extract_named_author_from_binary_line(
+                "Changes as per initial review by panemade@gmail.com"
+            ),
+            Some("panemade@gmail.com".to_string())
         );
     }
 
