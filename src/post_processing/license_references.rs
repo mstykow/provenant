@@ -1,4 +1,6 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
+
+use rayon::prelude::*;
 
 use crate::license_detection::expression::parse_expression;
 use crate::license_detection::index::LicenseIndex;
@@ -20,39 +22,77 @@ pub(crate) fn collect_top_level_license_references(
 ) -> (Vec<LicenseReference>, Vec<LicenseRuleReference>) {
     let licenses: Vec<_> = license_index.licenses_by_key.values().cloned().collect();
     let spdx_mapping = build_spdx_mapping(&licenses);
-    let mut license_keys = BTreeSet::new();
-    let mut rule_identifiers = BTreeSet::new();
+    let (mut license_keys, mut rule_identifiers) = files
+        .par_iter()
+        .map(|file| {
+            let mut license_keys = HashSet::new();
+            let mut rule_identifiers = HashSet::new();
 
-    for file in files {
-        collect_license_keys_from_expression(file.license_expression.as_deref(), &mut license_keys);
-        collect_rule_identifiers_from_detections(&file.license_detections, &mut rule_identifiers);
-        collect_rule_identifiers_from_matches(&file.license_clues, &mut rule_identifiers);
+            collect_license_keys_from_expression(
+                file.license_expression.as_deref(),
+                &mut license_keys,
+            );
+            collect_rule_identifiers_from_detections(
+                &file.license_detections,
+                &mut rule_identifiers,
+            );
+            collect_rule_identifiers_from_matches(&file.license_clues, &mut rule_identifiers);
+            for package_data in &file.package_data {
+                collect_license_keys_from_package_data(package_data, &mut license_keys);
+            }
 
-        for package_data in &file.package_data {
-            collect_license_keys_from_package_data(package_data, &mut license_keys);
-        }
-    }
+            (license_keys, rule_identifiers)
+        })
+        .reduce(
+            || (HashSet::new(), HashSet::new()),
+            |mut left, right| {
+                left.0.extend(right.0);
+                left.1.extend(right.1);
+                left
+            },
+        );
 
-    for package in packages {
-        collect_license_keys_from_expression(
-            package.declared_license_expression.as_deref(),
-            &mut license_keys,
+    let (package_license_keys, package_rule_identifiers) = packages
+        .par_iter()
+        .map(|package| {
+            let mut license_keys = HashSet::new();
+            let mut rule_identifiers = HashSet::new();
+
+            collect_license_keys_from_expression(
+                package.declared_license_expression.as_deref(),
+                &mut license_keys,
+            );
+            collect_license_keys_from_expression(
+                package.other_license_expression.as_deref(),
+                &mut license_keys,
+            );
+            collect_license_keys_from_detections(&package.license_detections, &mut license_keys);
+            collect_license_keys_from_detections(
+                &package.other_license_detections,
+                &mut license_keys,
+            );
+            collect_rule_identifiers_from_detections(
+                &package.license_detections,
+                &mut rule_identifiers,
+            );
+            collect_rule_identifiers_from_detections(
+                &package.other_license_detections,
+                &mut rule_identifiers,
+            );
+
+            (license_keys, rule_identifiers)
+        })
+        .reduce(
+            || (HashSet::new(), HashSet::new()),
+            |mut left, right| {
+                left.0.extend(right.0);
+                left.1.extend(right.1);
+                left
+            },
         );
-        collect_license_keys_from_expression(
-            package.other_license_expression.as_deref(),
-            &mut license_keys,
-        );
-        collect_license_keys_from_detections(&package.license_detections, &mut license_keys);
-        collect_license_keys_from_detections(&package.other_license_detections, &mut license_keys);
-        collect_rule_identifiers_from_detections(
-            &package.license_detections,
-            &mut rule_identifiers,
-        );
-        collect_rule_identifiers_from_detections(
-            &package.other_license_detections,
-            &mut rule_identifiers,
-        );
-    }
+
+    license_keys.extend(package_license_keys);
+    rule_identifiers.extend(package_rule_identifiers);
 
     let rules_by_identifier: HashMap<&str, &Rule> = license_index
         .rules_by_rid
@@ -65,6 +105,9 @@ pub(crate) fn collect_top_level_license_references(
             collect_license_keys_from_expression(Some(&rule.license_expression), &mut license_keys);
         }
     }
+
+    let license_keys: BTreeSet<_> = license_keys.into_iter().collect();
+    let rule_identifiers: BTreeSet<_> = rule_identifiers.into_iter().collect();
 
     let license_references = license_keys
         .into_iter()
@@ -178,7 +221,7 @@ fn format_license_reference_url(template: &str, license_key: &str) -> String {
 
 fn collect_license_keys_from_package_data(
     package_data: &PackageData,
-    license_keys: &mut BTreeSet<String>,
+    license_keys: &mut std::collections::HashSet<String>,
 ) {
     collect_license_keys_from_expression(
         package_data.declared_license_expression.as_deref(),
@@ -194,7 +237,7 @@ fn collect_license_keys_from_package_data(
 
 fn collect_license_keys_from_detections(
     detections: &[LicenseDetection],
-    license_keys: &mut BTreeSet<String>,
+    license_keys: &mut std::collections::HashSet<String>,
 ) {
     for detection in detections {
         collect_license_keys_from_expression(Some(&detection.license_expression), license_keys);
@@ -203,7 +246,7 @@ fn collect_license_keys_from_detections(
 
 fn collect_license_keys_from_expression(
     expression: Option<&str>,
-    license_keys: &mut BTreeSet<String>,
+    license_keys: &mut std::collections::HashSet<String>,
 ) {
     let Some(expression) = expression else {
         return;
@@ -218,7 +261,7 @@ fn collect_license_keys_from_expression(
 
 fn collect_rule_identifiers_from_detections(
     detections: &[LicenseDetection],
-    rule_identifiers: &mut BTreeSet<String>,
+    rule_identifiers: &mut HashSet<String>,
 ) {
     for detection in detections {
         collect_rule_identifiers_from_matches(&detection.matches, rule_identifiers);
@@ -227,7 +270,7 @@ fn collect_rule_identifiers_from_detections(
 
 fn collect_rule_identifiers_from_matches(
     matches: &[Match],
-    rule_identifiers: &mut BTreeSet<String>,
+    rule_identifiers: &mut HashSet<String>,
 ) {
     for license_match in matches {
         if let Some(rule_identifier) = license_match.rule_identifier.as_ref() {

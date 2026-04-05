@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use rayon::prelude::*;
+
 use crate::license_detection::detection::identifier::compute_detection_identifier;
 use crate::license_detection::detection::{
     FileRegion as InternalFileRegion, determine_license_expression, determine_spdx_expression,
@@ -42,16 +44,11 @@ pub(crate) fn apply_package_reference_following(files: &mut [FileInfo], packages
     for _ in 0..5 {
         let snapshot = build_reference_follow_snapshot(files, packages);
         let package_file_index = PackageFileIndex::build(files, packages);
-        let mut modified = false;
-
-        for file in files
-            .iter_mut()
+        let mut modified = files
+            .par_iter_mut()
             .filter(|file| file.file_type == FileType::File)
-        {
-            if follow_references_for_file(file, &snapshot) {
-                modified = true;
-            }
-        }
+            .map(|file| follow_references_for_file(file, &snapshot))
+            .reduce(|| false, |left, right| left || right);
 
         if sync_packages_from_followed_package_data(files, packages, &package_file_index) {
             modified = true;
@@ -66,19 +63,32 @@ pub(crate) fn apply_package_reference_following(files: &mut [FileInfo], packages
 pub(crate) fn collect_top_level_license_detections(
     files: &[FileInfo],
 ) -> Vec<TopLevelLicenseDetection> {
-    let mut internal_detections = Vec::new();
-
-    for file in files {
-        let mut file_detections = file.license_detections.iter().collect::<Vec<_>>();
-        for package_data in &file.package_data {
-            file_detections.extend(package_data.license_detections.iter());
-            file_detections.extend(package_data.other_license_detections.iter());
-        }
-
-        for detection in file_detections {
-            internal_detections.push(public_detection_to_internal(detection, &file.path));
-        }
-    }
+    let internal_detections: Vec<_> = files
+        .par_iter()
+        .flat_map_iter(|file| {
+            let mut detections = Vec::new();
+            detections.extend(
+                file.license_detections
+                    .iter()
+                    .map(|detection| public_detection_to_internal(detection, &file.path)),
+            );
+            for package_data in &file.package_data {
+                detections.extend(
+                    package_data
+                        .license_detections
+                        .iter()
+                        .map(|detection| public_detection_to_internal(detection, &file.path)),
+                );
+                detections.extend(
+                    package_data
+                        .other_license_detections
+                        .iter()
+                        .map(|detection| public_detection_to_internal(detection, &file.path)),
+                );
+            }
+            detections.into_iter()
+        })
+        .collect();
 
     let representative_detections: HashMap<_, _> =
         internal_detections

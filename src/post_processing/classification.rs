@@ -1,3 +1,5 @@
+use rayon::prelude::*;
+
 use crate::models::FileInfo;
 #[cfg(test)]
 use crate::models::Package;
@@ -71,9 +73,13 @@ pub(crate) fn apply_file_classification(
     files: &mut [FileInfo],
     package_file_index: &PackageFileIndex,
 ) {
-    for idx in 0..files.len() {
-        let classification = package_file_index.classify_file(files, FileIx(idx));
-        let file = &mut files[idx];
+    let classifications: Vec<_> = files
+        .par_iter()
+        .enumerate()
+        .map(|(idx, _)| package_file_index.classify_file(files, FileIx(idx)))
+        .collect();
+
+    for (file, classification) in files.iter_mut().zip(classifications) {
         file.is_legal = classification.is_legal;
         file.is_manifest = classification.is_manifest;
         file.is_readme = classification.is_readme;

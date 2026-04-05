@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, anyhow};
 use chrono::Utc;
 use glob::Pattern;
+use rayon::prelude::*;
 
 use self::classification::apply_file_classification;
 pub(crate) use self::license_references::collect_top_level_license_references;
@@ -434,10 +435,10 @@ fn assign_facets(files: &mut [FileInfo], facet_rules: &[FacetRule]) {
         return;
     }
 
-    for file in files.iter_mut() {
+    files.par_iter_mut().for_each(|file| {
         if file.file_type != FileType::File {
             file.facets.clear();
-            continue;
+            return;
         }
 
         const FACET_SORT_ORDER: [usize; FACETS.len()] = [0, 4, 1, 3, 5, 2];
@@ -466,20 +467,20 @@ fn assign_facets(files: &mut [FileInfo], facet_rules: &[FacetRule]) {
         } else {
             facets
         };
-    }
+    });
 }
 
 fn materialize_generated_flags(files: &mut [FileInfo]) {
-    for file in files.iter_mut() {
+    files.par_iter_mut().for_each(|file| {
         if file.file_type != FileType::File {
             file.is_generated = Some(false);
-            continue;
+            return;
         }
 
         if file.is_generated.is_none() {
             file.is_generated = Some(false);
         }
-    }
+    });
 }
 
 #[cfg(test)]
@@ -498,15 +499,15 @@ fn mark_generated_files(files: &mut [FileInfo], scanned_root: Option<&Path>) {
 }
 
 fn clear_generated_flags(files: &mut [FileInfo]) {
-    for file in files {
+    files.par_iter_mut().for_each(|file| {
         file.is_generated = None;
-    }
+    });
 }
 
 fn clear_resource_tallies(files: &mut [FileInfo]) {
-    for file in files {
+    files.par_iter_mut().for_each(|file| {
         file.tallies = None;
-    }
+    });
 }
 
 #[cfg(test)]

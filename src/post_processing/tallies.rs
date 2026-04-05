@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use rayon::prelude::*;
+
 use crate::models::{FacetTallies, FileInfo, FileType, Tallies, TallyEntry};
 
 use super::FACETS;
@@ -63,38 +65,46 @@ pub(crate) fn compute_key_file_tallies(files: &[FileInfo]) -> Option<Tallies> {
 }
 
 pub(crate) fn compute_tallies_by_facet(files: &[FileInfo]) -> Option<Vec<FacetTallies>> {
-    let mut buckets: HashMap<&'static str, TallyAccumulator> = FACETS
-        .iter()
-        .map(|facet| (*facet, TallyAccumulator::default()))
-        .collect();
+    let mut buckets = files
+        .par_iter()
+        .filter(|file| file.file_type == FileType::File)
+        .fold(facet_buckets, |mut buckets, file| {
+            if file.facets.is_empty() {
+                return buckets;
+            }
 
-    for file in files.iter().filter(|file| file.file_type == FileType::File) {
-        if file.facets.is_empty() {
-            continue;
-        }
-
-        let Some(file_tallies) = file.tallies.as_ref() else {
-            continue;
-        };
-
-        for facet in &file.facets {
-            let Some(bucket) = buckets.get_mut(facet.as_str()) else {
-                continue;
+            let Some(file_tallies) = file.tallies.as_ref() else {
+                return buckets;
             };
-            bucket.merge_license_expressions(&file_tallies.detected_license_expression);
-            bucket.merge_copyrights(&file_tallies.copyrights);
-            bucket.merge_holders(&file_tallies.holders);
-            bucket.merge_authors(&file_tallies.authors);
-            bucket.merge_programming_languages(&file_tallies.programming_language);
-        }
-    }
+
+            for facet in &file.facets {
+                let Some(index) = facet_index(facet) else {
+                    continue;
+                };
+                let bucket = &mut buckets[index];
+                bucket.merge_license_expressions(&file_tallies.detected_license_expression);
+                bucket.merge_copyrights(&file_tallies.copyrights);
+                bucket.merge_holders(&file_tallies.holders);
+                bucket.merge_authors(&file_tallies.authors);
+                bucket.merge_programming_languages(&file_tallies.programming_language);
+            }
+
+            buckets
+        })
+        .reduce(facet_buckets, |mut left, right| {
+            for (left_bucket, right_bucket) in left.iter_mut().zip(right) {
+                left_bucket.merge_from(right_bucket);
+            }
+            left
+        });
 
     Some(
         FACETS
             .iter()
-            .map(|facet| FacetTallies {
+            .enumerate()
+            .map(|(idx, facet)| FacetTallies {
                 facet: (*facet).to_string(),
-                tallies: buckets.remove(facet).unwrap_or_default().into_tallies(),
+                tallies: std::mem::take(&mut buckets[idx]).into_tallies(),
             })
             .collect(),
     )
@@ -133,13 +143,13 @@ pub(crate) fn compute_detailed_tallies(files: &mut [FileInfo]) {
 }
 
 pub(crate) fn compute_file_tallies(files: &mut [FileInfo]) {
-    for file in files.iter_mut() {
+    files.par_iter_mut().for_each(|file| {
         if file.file_type == FileType::File {
             file.tallies = Some(compute_direct_file_tallies(file));
         } else {
             file.tallies = None;
         }
-    }
+    });
 }
 
 pub(super) fn author_values(file: &FileInfo) -> Vec<String> {
@@ -224,7 +234,7 @@ pub(super) fn tally_file_values<F>(
     count_missing_files: bool,
 ) -> Vec<TallyEntry>
 where
-    F: Fn(&FileInfo) -> Vec<String>,
+    F: Fn(&FileInfo) -> Vec<String> + Sync + Send,
 {
     tally_file_values_filtered(files, |_| true, values_for_file, count_missing_files)
 }
@@ -236,27 +246,31 @@ pub(super) fn tally_file_values_filtered<P, F>(
     count_missing_files: bool,
 ) -> Vec<TallyEntry>
 where
-    P: Fn(&FileInfo) -> bool,
-    F: Fn(&FileInfo) -> Vec<String>,
+    P: Fn(&FileInfo) -> bool + Sync + Send,
+    F: Fn(&FileInfo) -> Vec<String> + Sync + Send,
 {
-    let mut counts: HashMap<Option<String>, usize> = HashMap::new();
-
-    for file in files
-        .iter()
+    let counts = files
+        .par_iter()
         .filter(|file| file.file_type == FileType::File && predicate(file))
-    {
-        let values = values_for_file(file);
-        if values.is_empty() {
-            if count_missing_files {
-                *counts.entry(None).or_insert(0) += 1;
+        .fold(HashMap::new, |mut counts, file| {
+            let values = values_for_file(file);
+            if values.is_empty() {
+                if count_missing_files {
+                    *counts.entry(None).or_insert(0) += 1;
+                }
+                return counts;
             }
-            continue;
-        }
 
-        for value in values {
-            *counts.entry(Some(value)).or_insert(0) += 1;
-        }
-    }
+            for value in values {
+                *counts.entry(Some(value)).or_insert(0) += 1;
+            }
+
+            counts
+        })
+        .reduce(HashMap::new, |mut left, right| {
+            merge_count_maps(&mut left, right);
+            left
+        });
 
     build_tally_entries(counts)
 }
@@ -314,6 +328,36 @@ impl TallyAccumulator {
             authors: build_tally_entries(self.authors),
             programming_language: build_tally_entries(self.programming_language),
         }
+    }
+
+    fn merge_from(&mut self, other: Self) {
+        merge_count_maps(
+            &mut self.detected_license_expression,
+            other.detected_license_expression,
+        );
+        merge_count_maps(&mut self.copyrights, other.copyrights);
+        merge_count_maps(&mut self.holders, other.holders);
+        merge_count_maps(&mut self.authors, other.authors);
+        merge_count_maps(&mut self.programming_language, other.programming_language);
+    }
+}
+
+fn facet_buckets() -> Vec<TallyAccumulator> {
+    (0..FACETS.len())
+        .map(|_| TallyAccumulator::default())
+        .collect()
+}
+
+fn facet_index(facet: &str) -> Option<usize> {
+    FACETS.iter().position(|candidate| *candidate == facet)
+}
+
+fn merge_count_maps(
+    destination: &mut HashMap<Option<String>, usize>,
+    source: HashMap<Option<String>, usize>,
+) {
+    for (key, count) in source {
+        *destination.entry(key).or_insert(0) += count;
     }
 }
 
