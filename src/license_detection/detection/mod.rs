@@ -286,18 +286,44 @@ pub(crate) fn select_matches_for_expression(
     log_category: &str,
     post_scan: bool,
 ) -> Vec<crate::license_detection::models::LicenseMatch> {
-    let _ = post_scan;
-    let filtered = if log_category == DETECTION_LOG_UNKNOWN_INTRO_FOLLOWED_BY_MATCH {
+    let mut filtered = if log_category == DETECTION_LOG_UNKNOWN_INTRO_FOLLOWED_BY_MATCH {
         filter_license_intros(matches)
     } else {
         matches.to_vec()
     };
+
+    if post_scan && is_unknown_reference_follow_log(log_category) {
+        let has_concrete_match = filtered
+            .iter()
+            .any(|match_item| !is_unknown_reference_like_match(match_item));
+        if has_concrete_match {
+            filtered.retain(|match_item| !is_unknown_reference_like_match(match_item));
+        }
+    }
 
     if filtered.is_empty() {
         matches.to_vec()
     } else {
         filtered
     }
+}
+
+fn is_unknown_reference_follow_log(log_category: &str) -> bool {
+    matches!(
+        log_category,
+        "unknown-reference-to-local-file"
+            | "unknown-reference-in-file-to-package"
+            | "unknown-reference-in-file-to-nonexistent-package"
+    )
+}
+
+fn is_unknown_reference_like_match(
+    match_item: &crate::license_detection::models::LicenseMatch,
+) -> bool {
+    matches!(
+        match_item.license_expression.as_str(),
+        "unknown-license-reference" | "free-unknown"
+    )
 }
 
 /// Filter detections by minimum score threshold.
@@ -590,6 +616,56 @@ mod tests {
         );
 
         assert_eq!(selected, vec![referenced, disclaimer]);
+    }
+
+    #[test]
+    fn select_matches_for_expression_drops_unknown_reference_placeholders_during_post_scan() {
+        let mut unknown_reference = create_test_match(
+            1,
+            1,
+            "2-aho",
+            "unknown-license-reference_see_license_1.RULE",
+        );
+        unknown_reference.license_expression = "unknown-license-reference".to_string();
+        unknown_reference.license_expression_spdx =
+            Some("LicenseRef-scancode-unknown-license-reference".to_string());
+        unknown_reference.referenced_filenames = Some(vec!["LICENSE".to_string()]);
+
+        let mut referenced = create_test_match(2, 20, "1-hash", "mit.LICENSE");
+        referenced.license_expression = "mit".to_string();
+        referenced.license_expression_spdx = Some("MIT".to_string());
+        referenced.from_file = Some("LICENSE".to_string());
+
+        let selected = select_matches_for_expression(
+            &[unknown_reference, referenced.clone()],
+            "unknown-reference-to-local-file",
+            true,
+        );
+
+        assert_eq!(selected, vec![referenced]);
+    }
+
+    #[test]
+    fn select_matches_for_expression_drops_free_unknown_package_placeholder_during_post_scan() {
+        let mut unknown_reference = create_test_match(1, 1, "2-aho", "free-unknown-package_1.RULE");
+        unknown_reference.license_expression = "free-unknown".to_string();
+        unknown_reference.license_expression_spdx =
+            Some("LicenseRef-scancode-free-unknown".to_string());
+        unknown_reference.referenced_filenames =
+            Some(vec!["INHERIT_LICENSE_FROM_PACKAGE".to_string()]);
+
+        let mut referenced = create_test_match(2, 2, "1-hash", "bsd-new_195.RULE");
+        referenced.license_expression = "bsd-new".to_string();
+        referenced.license_expression_spdx = Some("BSD-3-Clause".to_string());
+        referenced.from_file = Some("PKG-INFO".to_string());
+
+        let selected = select_matches_for_expression(
+            &[unknown_reference, referenced.clone()],
+            "unknown-reference-in-file-to-package",
+            true,
+        );
+
+        assert_eq!(selected, vec![referenced]);
     }
 
     fn create_test_license() -> License {

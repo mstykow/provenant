@@ -286,6 +286,45 @@ pub(super) fn extract_multiline_written_by_author_blocks(
         let start_line = block_lines.first().map(|(l, _)| *l).unwrap_or(ln);
         let end_line = block_lines.last().map(|(l, _)| *l).unwrap_or(ln);
 
+        let prefer_combined_block = block_lines.iter().skip(1).any(|(_, raw_line)| {
+            let lower = raw_line.trim().to_ascii_lowercase();
+            lower.starts_with("overhauled by ")
+                || lower.starts_with("ported ")
+                || lower.starts_with("updated ")
+                || lower.starts_with("kernel ")
+                || lower.starts_with("extensive ")
+                || lower.starts_with("revised ")
+                || lower.starts_with("implemented ")
+                || lower.starts_with("copied from ")
+        });
+
+        if prefer_combined_block {
+            let combined_raw = block_lines
+                .iter()
+                .map(|(_, raw_line)| raw_line.trim())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let combined_candidate = WRITTEN_BY_PREFIX_RE
+                .captures(&combined_raw)
+                .or_else(|| MAINTAINED_BY_PREFIX_RE.captures(&combined_raw))
+                .and_then(|cap| cap.name("who").map(|m| m.as_str().trim()))
+                .unwrap_or(combined_raw.as_str())
+                .trim_end_matches('.')
+                .trim();
+            if let Some(combined) = refine_author(combined_candidate)
+                && seen.insert(combined.clone())
+            {
+                authors.retain(|a| a.start_line < start_line || a.end_line > end_line);
+                authors.push(AuthorDetection {
+                    author: combined,
+                    start_line,
+                    end_line,
+                });
+                i = j;
+                continue;
+            }
+        }
+
         let mut extracted_any = false;
         for (_l, raw_line) in &block_lines {
             let candidate = raw_line.trim();
@@ -319,7 +358,14 @@ pub(super) fn extract_multiline_written_by_author_blocks(
                 .map(|(_, raw_line)| raw_line.trim())
                 .collect::<Vec<_>>()
                 .join(" ");
-            if let Some(combined) = refine_author(&combined_raw)
+            let combined_candidate = WRITTEN_BY_PREFIX_RE
+                .captures(&combined_raw)
+                .or_else(|| MAINTAINED_BY_PREFIX_RE.captures(&combined_raw))
+                .and_then(|cap| cap.name("who").map(|m| m.as_str().trim()))
+                .unwrap_or(combined_raw.as_str())
+                .trim_end_matches('.')
+                .trim();
+            if let Some(combined) = refine_author(combined_candidate)
                 && seen.insert(combined.clone())
             {
                 authors.retain(|a| a.start_line < start_line || a.end_line > end_line);
