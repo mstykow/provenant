@@ -1402,11 +1402,23 @@ fn merge_pdf_first_page_text(
         return pipeline_text.to_string();
     };
 
-    if pipeline.contains(&prefix) {
+    if pdf_text_contains_heading_prefix(pipeline, &prefix) {
         pipeline_text.to_string()
     } else {
         format!("{prefix}\n\n{pipeline}")
     }
+}
+
+fn pdf_text_contains_heading_prefix(text: &str, prefix: &str) -> bool {
+    normalize_pdf_heading_comparison_text(text)
+        .contains(&normalize_pdf_heading_comparison_text(prefix))
+}
+
+fn normalize_pdf_heading_comparison_text(text: &str) -> String {
+    text.split_whitespace()
+        .map(|part| part.to_ascii_lowercase())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn pdf_first_page_heading_prefix(markdown_text: &str) -> Option<String> {
@@ -1524,6 +1536,7 @@ mod tests {
 
     use super::{
         ExtractedTextKind, classify_file_info, extract_text_for_detection, normalize_mime_type,
+        normalize_pdf_heading_comparison_text,
     };
 
     #[test]
@@ -1561,6 +1574,22 @@ mod tests {
         assert_eq!(kind, ExtractedTextKind::Pdf);
         assert!(text.contains("SUN INDUSTRY STANDARDS SOURCE LICENSE"));
         assert!(!text.contains("DISCLAIMER OF WARRANTY"));
+    }
+
+    #[test]
+    fn test_extract_text_for_detection_does_not_duplicate_pdf_heading_prefix() {
+        let path =
+            Path::new("testdata/license-golden/datadriven/lic4/should_detect_something_5.pdf");
+        let bytes = std::fs::read(path).expect("failed to read pdf fixture");
+
+        let (text, kind) = extract_text_for_detection(path, &bytes);
+
+        assert_eq!(kind, ExtractedTextKind::Pdf);
+
+        let normalized = normalize_pdf_heading_comparison_text(&text);
+        let heading =
+            normalize_pdf_heading_comparison_text("SUN INDUSTRY STANDARDS SOURCE LICENSE");
+        assert_eq!(normalized.matches(&heading).count(), 1);
     }
 
     #[test]
