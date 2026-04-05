@@ -893,11 +893,8 @@ fn apply_resolved_reference_targets(
             internal_detection.matches.extend(internal.matches);
         }
     }
-    let matches_for_expression = select_matches_for_expression(
-        &internal_detection.matches,
-        "unknown-reference-to-local-file",
-        true,
-    );
+    let matches_for_expression =
+        select_matches_for_expression(&internal_detection.matches, detection_log, true);
     internal_detection.license_expression =
         determine_license_expression(&matches_for_expression, None).ok();
     internal_detection.license_expression_spdx =

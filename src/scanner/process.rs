@@ -797,7 +797,38 @@ fn is_binary_string_url_candidate(url: &str) -> bool {
         return false;
     };
 
-    has_strong_binary_host_shape(host)
+    has_strong_binary_host_shape(host) && has_meaningful_binary_url_context(&parsed)
+}
+
+fn has_meaningful_binary_url_context(parsed: &url::Url) -> bool {
+    if parsed.path() != "/"
+        && parsed
+            .path()
+            .split('/')
+            .any(|segment| segment.chars().any(|c| c.is_ascii_alphabetic()) && segment.len() >= 3)
+    {
+        return true;
+    }
+
+    if parsed.query().is_some() || parsed.fragment().is_some() {
+        return true;
+    }
+
+    let Some(host) = parsed.host_str() else {
+        return false;
+    };
+
+    let labels: Vec<&str> = host.split('.').collect();
+    if matches!(labels.first(), Some(&"www")) {
+        return true;
+    }
+
+    labels
+        .iter()
+        .take(labels.len().saturating_sub(1))
+        .any(|label| {
+            label.contains('-') && label.chars().filter(|c| c.is_ascii_alphabetic()).count() >= 4
+        })
 }
 
 fn has_strong_binary_local_part(local: &str) -> bool {
@@ -1493,6 +1524,11 @@ mod tests {
         assert!(is_binary_string_url_candidate(
             "https://www.gnu.org/software/coreutils/"
         ));
+    }
+
+    #[test]
+    fn test_binary_string_url_candidate_rejects_bare_root_domain() {
+        assert!(!is_binary_string_url_candidate("http://gmail.com/"));
     }
 
     #[test]

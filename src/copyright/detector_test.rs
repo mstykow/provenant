@@ -690,10 +690,7 @@ fn test_multilines_fixture_detects_split_copyright_by_holder() {
     );
 
     let as_: Vec<String> = authors.into_iter().map(|a| a.author).collect();
-    assert!(
-        as_.iter().any(|a| a == "Philip Hazel, and"),
-        "authors: {as_:#?}"
-    );
+    assert!(as_.iter().any(|a| a == "Philip Hazel"), "authors: {as_:#?}");
 }
 
 #[test]
