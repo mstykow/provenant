@@ -123,6 +123,7 @@ struct IgnorableSpan {
     start_line: usize,
     end_line: usize,
     values: Vec<String>,
+    allow_substring: bool,
 }
 
 pub(crate) fn build_clue_rule_lookup(index: &LicenseIndex) -> ClueRuleLookup {
@@ -217,6 +218,7 @@ fn filter_license_aware_clues(file: &mut FileInfo, clue_rule_lookup: Option<&Clu
             start_line: copyright.start_line,
             end_line: copyright.end_line,
             values: vec![copyright.copyright.clone()],
+            allow_substring: true,
         })
         .collect::<Vec<_>>();
     let holders_as_ignorable = file
@@ -226,6 +228,7 @@ fn filter_license_aware_clues(file: &mut FileInfo, clue_rule_lookup: Option<&Clu
             start_line: holder.start_line,
             end_line: holder.end_line,
             values: vec![holder.holder.clone()],
+            allow_substring: true,
         })
         .collect::<Vec<_>>();
     let authors_as_ignorable = file
@@ -235,6 +238,7 @@ fn filter_license_aware_clues(file: &mut FileInfo, clue_rule_lookup: Option<&Clu
             start_line: author.start_line,
             end_line: author.end_line,
             values: vec![author.author.clone()],
+            allow_substring: true,
         })
         .collect::<Vec<_>>();
 
@@ -409,6 +413,7 @@ fn push_ignorable_values(
         start_line,
         end_line,
         values: normalized_values,
+        allow_substring: false,
     });
 }
 
@@ -424,10 +429,10 @@ fn matches_ignorable(
     ignorables.iter().any(|ignorable| {
         ((start_line >= ignorable.start_line && start_line <= ignorable.end_line)
             || (end_line >= ignorable.start_line && end_line <= ignorable.end_line))
-            && ignorable
-                .values
-                .iter()
-                .any(|candidate| candidate == &normalized_value)
+            && ignorable.values.iter().any(|candidate| {
+                candidate == &normalized_value
+                    || (ignorable.allow_substring && candidate.contains(&normalized_value))
+            })
     })
 }
 

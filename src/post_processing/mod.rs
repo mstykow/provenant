@@ -13,6 +13,10 @@ use self::package_metadata_promotion::promote_package_metadata_from_key_files;
 pub(crate) use self::reference_following::apply_package_reference_following;
 pub(crate) use self::reference_following::collect_top_level_license_detections;
 #[cfg(test)]
+pub(crate) use self::reference_following::{
+    build_reference_follow_snapshot, resolve_referenced_resource, use_referenced_license_expression,
+};
+#[cfg(test)]
 pub(crate) use self::summary::compute_summary;
 use self::summary::compute_summary_with_options;
 #[cfg(test)]

@@ -1,6 +1,5 @@
 //! Detection identifier computation.
 
-#[cfg(test)]
 use super::types::LicenseDetection;
 use crate::license_detection::models::LicenseMatch;
 use crate::license_detection::tokenize::tokenize_without_stopwords;
@@ -114,8 +113,7 @@ fn python_token_tuple_repr(tokens: &[String]) -> String {
 
 /// Compute a unique identifier for a detection.
 ///
-#[cfg(test)]
-pub fn compute_detection_identifier(detection: &LicenseDetection) -> String {
+pub(crate) fn compute_detection_identifier(detection: &LicenseDetection) -> String {
     let expression = detection
         .license_expression
         .as_ref()

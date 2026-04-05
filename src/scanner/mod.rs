@@ -1025,6 +1025,14 @@ mod tests {
 
     #[test]
     fn scanner_only_parses_compiled_packages_when_package_in_compiled_is_enabled() {
+        if std::process::Command::new("go")
+            .arg("version")
+            .status()
+            .is_err()
+        {
+            return;
+        }
+
         let temp_dir = TempDir::new().expect("create temp dir");
         fs::write(
             temp_dir.path().join("go.mod"),
