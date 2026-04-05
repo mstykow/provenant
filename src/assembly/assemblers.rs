@@ -6,9 +6,9 @@ use strum::EnumIter;
 
 use super::{
     AssemblerConfig, AssemblyMode, DirectoryMergeOutput, cargo_resource_assign,
-    cargo_workspace_merge, composer_resource_assign, conda_rootfs_merge, file_ref_resolve,
-    hackage_merge, npm_resource_assign, npm_workspace_merge, nuget_cpm_resolve,
-    python_requirements_assign, ruby_resource_assign, swift_merge,
+    composer_resource_assign, conda_rootfs_merge, file_ref_resolve, hackage_merge,
+    npm_resource_assign, nuget_cpm_resolve, python_requirements_assign, ruby_resource_assign,
+    swift_merge, topology,
 };
 
 #[derive(Clone, Copy)]
@@ -96,6 +96,7 @@ pub(super) fn run_post_assembly_passes(
     files: &mut [FileInfo],
     packages: &mut Vec<Package>,
     dependencies: &mut Vec<TopLevelDependency>,
+    topology_plan: &topology::TopologyPlan,
 ) {
     let inputs = PostAssemblyInputs::collect(files, packages);
 
@@ -104,7 +105,7 @@ pub(super) fn run_post_assembly_passes(
             continue;
         }
 
-        pass.run(files, packages, dependencies);
+        pass.run(files, packages, dependencies, topology_plan);
     }
 }
 
@@ -222,6 +223,7 @@ impl PostAssemblyPassKind {
         files: &mut [FileInfo],
         packages: &mut Vec<Package>,
         dependencies: &mut Vec<TopLevelDependency>,
+        topology_plan: &topology::TopologyPlan,
     ) {
         match self {
             Self::SwiftMerge => swift_merge::assemble_swift_packages(files, packages, dependencies),
@@ -243,10 +245,10 @@ impl PostAssemblyPassKind {
             }
             Self::RpmYumdbMerge => file_ref_resolve::merge_rpm_yumdb_metadata(files, packages),
             Self::NpmWorkspaceMerge => {
-                npm_workspace_merge::assemble_npm_workspaces(files, packages, dependencies)
+                topology_plan.apply_npm_workspace_domains(files, packages, dependencies)
             }
             Self::CargoWorkspaceMerge => {
-                cargo_workspace_merge::assemble_cargo_workspaces(files, packages, dependencies)
+                topology_plan.apply_cargo_workspace_domains(files, packages, dependencies)
             }
             Self::NugetCpmResolve => {
                 nuget_cpm_resolve::resolve_nuget_cpm_versions(files, dependencies)

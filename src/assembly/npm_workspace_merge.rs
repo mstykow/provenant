@@ -26,54 +26,39 @@ use std::path::{Path, PathBuf};
 
 use log::warn;
 
+use super::{ASSEMBLERS, AssemblerConfig, sibling_merge};
 use crate::models::{DatasourceId, FileInfo, Package, PackageData, TopLevelDependency};
 use crate::utils::path::{parent_dir, parent_dir_for_lookup};
 
-/// Assemble npm/pnpm workspace packages from already-assembled packages.
-///
-/// This is a post-processing pass that runs after the per-directory assembly loop.
-/// It detects workspace roots, removes incorrectly-created root packages, discovers
-/// workspace members, and creates proper Package structures for each member.
-///
-/// # Arguments
-///
-/// * `files` - Mutable slice of all scanned files
-/// * `packages` - Mutable vector of assembled packages (will be modified)
-/// * `dependencies` - Mutable vector of top-level dependencies (will be modified)
-pub fn assemble_npm_workspaces(
-    files: &mut [FileInfo],
-    packages: &mut Vec<Package>,
-    dependencies: &mut Vec<TopLevelDependency>,
-) {
-    // Step 1: Find all workspace roots
-    let workspace_roots = find_workspace_roots(files);
-
-    if workspace_roots.is_empty() {
-        return;
-    }
-
-    // Process each workspace root independently
-    for workspace_root in workspace_roots {
-        process_workspace(files, packages, dependencies, &workspace_root);
-    }
-}
-
-/// Information about a detected workspace root
-struct WorkspaceRoot {
+/// File-local topology hint emitted by npm-family workspace root files.
+pub(super) struct NpmWorkspaceRootHint {
     /// Directory path of the workspace root
-    root_dir: PathBuf,
+    pub(super) root_dir: PathBuf,
     /// File index of the root package.json (if exists)
-    root_package_json_idx: Option<usize>,
+    pub(super) root_package_json_idx: Option<usize>,
     /// File index of pnpm-workspace.yaml (if exists)
-    pnpm_workspace_yaml_idx: Option<usize>,
+    pub(super) pnpm_workspace_yaml_idx: Option<usize>,
     /// Workspace glob patterns
-    patterns: Vec<String>,
+    pub(super) patterns: Vec<String>,
 }
 
-/// Find all workspace roots in the scanned files
-fn find_workspace_roots(files: &[FileInfo]) -> Vec<WorkspaceRoot> {
+pub(super) struct NpmWorkspaceMemberDomain {
+    pub(super) manifest_idx: usize,
+    pub(super) dir_path: PathBuf,
+}
+
+pub(super) struct NpmWorkspaceDomain {
+    pub(super) root_dir: PathBuf,
+    pub(super) root_package_json_idx: Option<usize>,
+    pub(super) root_dir_file_indices: Vec<usize>,
+    pub(super) members: Vec<NpmWorkspaceMemberDomain>,
+    pub(super) is_pnpm_with_root_package: bool,
+}
+
+/// Collect npm-family workspace hints from parser output.
+pub(super) fn collect_npm_workspace_hints(files: &[FileInfo]) -> Vec<NpmWorkspaceRootHint> {
     let mut roots = Vec::new();
-    let mut seen_roots: HashMap<PathBuf, WorkspaceRoot> = HashMap::new();
+    let mut seen_roots: HashMap<PathBuf, NpmWorkspaceRootHint> = HashMap::new();
 
     // First pass: find package.json files with workspaces
     for (idx, file) in files.iter().enumerate() {
@@ -100,7 +85,7 @@ fn find_workspace_roots(files: &[FileInfo]) -> Vec<WorkspaceRoot> {
                 let root_dir = parent.to_path_buf();
                 seen_roots.insert(
                     root_dir.clone(),
-                    WorkspaceRoot {
+                    NpmWorkspaceRootHint {
                         root_dir,
                         root_package_json_idx: Some(idx),
                         pnpm_workspace_yaml_idx: None,
@@ -148,7 +133,7 @@ fn find_workspace_roots(files: &[FileInfo]) -> Vec<WorkspaceRoot> {
                 } else {
                     seen_roots.insert(
                         root_dir.clone(),
-                        WorkspaceRoot {
+                        NpmWorkspaceRootHint {
                             root_dir,
                             root_package_json_idx,
                             pnpm_workspace_yaml_idx: Some(idx),
@@ -163,6 +148,64 @@ fn find_workspace_roots(files: &[FileInfo]) -> Vec<WorkspaceRoot> {
     roots.extend(seen_roots.into_values());
     roots.sort_by(|left, right| left.root_dir.cmp(&right.root_dir));
     roots
+}
+
+pub(super) fn plan_npm_workspace_domains(
+    files: &[FileInfo],
+    dir_files: &HashMap<PathBuf, Vec<usize>>,
+    workspace_hints: &[&NpmWorkspaceRootHint],
+) -> Vec<NpmWorkspaceDomain> {
+    let mut domains = Vec::new();
+
+    for workspace_hint in workspace_hints {
+        let member_indices = discover_members(files, workspace_hint);
+
+        if member_indices.is_empty() {
+            warn!(
+                "No workspace members found for patterns {:?} in {:?}",
+                workspace_hint.patterns, workspace_hint.root_dir
+            );
+            continue;
+        }
+
+        let members = member_indices
+            .iter()
+            .map(|&manifest_idx| {
+                let dir_path = Path::new(&files[manifest_idx].path)
+                    .parent()
+                    .expect("workspace member manifest must have a parent directory")
+                    .to_path_buf();
+
+                NpmWorkspaceMemberDomain {
+                    manifest_idx,
+                    dir_path,
+                }
+            })
+            .collect();
+
+        let is_pnpm_with_root_package = workspace_hint.pnpm_workspace_yaml_idx.is_some()
+            && workspace_hint.root_package_json_idx.is_some_and(|idx| {
+                files[idx].package_data.iter().any(|pkg| {
+                    pkg.datasource_id == Some(DatasourceId::NpmPackageJson)
+                        && pkg.purl.is_some()
+                        && !pkg.is_private
+                })
+            });
+
+        domains.push(NpmWorkspaceDomain {
+            root_dir: workspace_hint.root_dir.clone(),
+            root_package_json_idx: workspace_hint.root_package_json_idx,
+            root_dir_file_indices: dir_files
+                .get(&workspace_hint.root_dir)
+                .cloned()
+                .unwrap_or_default(),
+            members,
+            is_pnpm_with_root_package,
+        });
+    }
+
+    domains.sort_by(|left, right| left.root_dir.cmp(&right.root_dir));
+    domains
 }
 
 fn find_root_package_json_index(files: &[FileInfo], root_dir: &Path) -> Option<usize> {
@@ -202,64 +245,49 @@ fn extract_workspace_patterns(value: &serde_json::Value) -> Option<Vec<String>> 
     }
 }
 
-/// Process a single workspace root
-fn process_workspace(
+/// Apply a planned npm workspace domain to the assembled package graph.
+pub(super) fn apply_npm_workspace_domain(
+    workspace_domain: &NpmWorkspaceDomain,
     files: &mut [FileInfo],
     packages: &mut Vec<Package>,
     dependencies: &mut Vec<TopLevelDependency>,
-    workspace_root: &WorkspaceRoot,
 ) {
-    // Step 2: Discover workspace members
-    let member_indices = discover_members(files, workspace_root);
+    // Step 1: Remove stale root/member packages from earlier assembly domains.
+    let root_package_uid = if workspace_domain.is_pnpm_with_root_package {
+        if let Some(idx) = workspace_domain.root_package_json_idx {
+            remove_root_package(&files[idx], packages, dependencies);
+        }
 
-    if member_indices.is_empty() {
-        warn!(
-            "No workspace members found for patterns {:?} in {:?}",
-            workspace_root.patterns, workspace_root.root_dir
-        );
-        return;
-    }
+        let Some((root_package, root_dependencies)) =
+            create_root_package(files, &workspace_domain.root_dir_file_indices)
+        else {
+            return;
+        };
 
-    // Determine if this is a pnpm workspace with a publishable root package.
-    // pnpm workspaces with a non-private root package keep the root as a separate Package
-    // and assign shared files to the root only (not to all members).
-    let is_pnpm_with_root_package = workspace_root.pnpm_workspace_yaml_idx.is_some()
-        && workspace_root.root_package_json_idx.is_some_and(|idx| {
-            files[idx].package_data.iter().any(|pkg| {
-                pkg.datasource_id == Some(DatasourceId::NpmPackageJson)
-                    && pkg.purl.is_some()
-                    && !pkg.is_private
-            })
-        });
-
-    // Step 3: Remove incorrectly-created root Package (unless pnpm with root package)
-    let root_package_uid = if is_pnpm_with_root_package {
-        // For pnpm with a root package, find the root package UID but keep it in `packages`
-        packages.iter().find_map(|pkg| {
-            if let Some(idx) = workspace_root.root_package_json_idx
-                && pkg.datafile_paths.contains(&files[idx].path)
-            {
-                Some(pkg.package_uid.clone())
-            } else {
-                None
-            }
-        })
-    } else if let Some(idx) = workspace_root.root_package_json_idx {
-        // For npm/yarn, remove the root package (root is typically private with no purl)
+        let root_package_uid = root_package.package_uid.clone();
+        packages.push(root_package);
+        dependencies.extend(root_dependencies);
+        Some(root_package_uid)
+    } else if let Some(idx) = workspace_domain.root_package_json_idx {
         remove_root_package(&files[idx], packages, dependencies);
         None
     } else {
         None
     };
 
-    // Step 3b: Remove sibling-merged packages for workspace members.
-    // The per-directory assembly loop already created Package objects for each member's
-    // package.json. We need to remove those so workspace_merge can recreate them with
-    // proper workspace-level associations and version resolution.
-    remove_member_packages(files, &member_indices, packages, dependencies);
+    remove_member_packages(
+        files,
+        &workspace_domain
+            .members
+            .iter()
+            .map(|member| member.manifest_idx)
+            .collect::<Vec<_>>(),
+        packages,
+        dependencies,
+    );
 
     // Step 4: Create member Packages
-    let member_packages = create_member_packages(files, &member_indices);
+    let member_packages = create_member_packages(files, &workspace_domain.members);
 
     // Build a map of member package names to versions for workspace: resolution
     let mut member_versions: HashMap<String, String> = HashMap::new();
@@ -276,14 +304,14 @@ fn process_workspace(
         .collect();
 
     // Step 5: Handle root dependencies (hoist to workspace level)
-    if let Some(idx) = workspace_root.root_package_json_idx
-        && !is_pnpm_with_root_package
+    if let Some(idx) = workspace_domain.root_package_json_idx
+        && !workspace_domain.is_pnpm_with_root_package
     {
-        remove_root_level_dependencies(dependencies, &workspace_root.root_dir);
+        remove_root_level_dependencies(dependencies, &workspace_domain.root_dir);
         hoist_root_dependencies(
             files,
             idx,
-            &workspace_root.root_dir,
+            &workspace_domain.root_dir,
             dependencies,
             &member_versions,
             None,
@@ -299,8 +327,7 @@ fn process_workspace(
     // Step 6: Assign for_packages
     assign_for_packages(
         files,
-        workspace_root,
-        &member_indices,
+        workspace_domain,
         &member_uids,
         root_package_uid.as_deref(),
     );
@@ -310,7 +337,7 @@ fn process_workspace(
 }
 
 /// Discover workspace member package.json files matching the patterns
-fn discover_members(files: &[FileInfo], workspace_root: &WorkspaceRoot) -> Vec<usize> {
+fn discover_members(files: &[FileInfo], workspace_root: &NpmWorkspaceRootHint) -> Vec<usize> {
     let mut member_indices = Vec::new();
     let mut excluded_paths = Vec::new();
 
@@ -499,15 +526,25 @@ fn remove_root_level_dependencies(dependencies: &mut Vec<TopLevelDependency>, ro
     });
 }
 
+fn create_root_package(
+    files: &[FileInfo],
+    root_file_indices: &[usize],
+) -> Option<(Package, Vec<TopLevelDependency>)> {
+    let (package, dependencies, _) =
+        sibling_merge::assemble_siblings(npm_family_assembler_config(), files, root_file_indices)?;
+
+    package.map(|package| (package, dependencies))
+}
+
 /// Create Package instances for each workspace member
 fn create_member_packages(
     files: &[FileInfo],
-    member_indices: &[usize],
+    members: &[NpmWorkspaceMemberDomain],
 ) -> Vec<(Package, Vec<TopLevelDependency>)> {
     let mut results = Vec::new();
 
-    for &idx in member_indices {
-        let file = &files[idx];
+    for member in members {
+        let file = &files[member.manifest_idx];
 
         // Find the first valid PackageData
         let pkg_data = if let Some(pkg) = file.package_data.iter().find(|pkg| {
@@ -661,15 +698,16 @@ fn hoist_root_dependencies(
 /// For npm/yarn workspaces, shared files are assigned to all member packages.
 fn assign_for_packages(
     files: &mut [FileInfo],
-    workspace_root: &WorkspaceRoot,
-    member_indices: &[usize],
+    workspace_root: &NpmWorkspaceDomain,
     member_uids: &[String],
     root_package_uid: Option<&str>,
 ) {
     let workspace_root_str = workspace_root.root_dir.to_string_lossy().into_owned();
     let mut member_dirs: HashMap<String, String> = HashMap::new();
-    for (&idx, uid) in member_indices.iter().zip(member_uids.iter()) {
-        if let Some(relative_path) = strip_root_prefix(&files[idx].path, &workspace_root_str) {
+    for (member, uid) in workspace_root.members.iter().zip(member_uids.iter()) {
+        if let Some(relative_path) =
+            strip_root_prefix(&files[member.manifest_idx].path, &workspace_root_str)
+        {
             member_dirs.insert(parent_dir(relative_path).to_string(), uid.clone());
         }
     }
@@ -733,6 +771,17 @@ fn strip_root_prefix<'a>(path: &'a str, root: &str) -> Option<&'a str> {
 
     path.strip_prefix(root)
         .and_then(|suffix| suffix.strip_prefix('/'))
+}
+
+fn npm_family_assembler_config() -> &'static AssemblerConfig {
+    ASSEMBLERS
+        .iter()
+        .find(|config| {
+            config
+                .datasource_ids
+                .contains(&DatasourceId::NpmPackageJson)
+        })
+        .expect("npm family assembler config must exist")
 }
 
 /// Resolve workspace: version references in all dependencies

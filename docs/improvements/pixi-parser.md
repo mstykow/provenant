@@ -31,9 +31,9 @@ The supported surface focuses on the highest-value official Pixi metadata: works
 - It preserves lock environment metadata, channels, indexes, and package-reference placement from the lockfile.
 - Locked Conda and PyPI packages are emitted as pinned dependencies with preserved source and checksum metadata.
 
-### Sibling assembly
+### Topology-planned root assembly
 
-- Sibling assembly merges `pixi.toml` identity data with `pixi.lock` dependency state.
+- Topology planning now claims `pixi.toml` root directories before the generic directory loop runs, then reuses the existing Pixi sibling assembler to merge `pixi.toml` identity data with `pixi.lock` dependency state.
 - The assembled package keeps both the direct dependency view from the manifest and the pinned lockfile view, while preserving manifest `environments` metadata separately from richer lock-environment/package-placement metadata.
 
 ## Guardrails
@@ -44,7 +44,7 @@ The supported surface focuses on the highest-value official Pixi metadata: works
 
 ## Coverage
 
-Coverage spans `pixi.toml`, supported `pixi.lock` variants, mixed Conda and PyPI dependency extraction, and sibling assembly behavior.
+Coverage spans `pixi.toml`, supported `pixi.lock` variants, mixed Conda and PyPI dependency extraction, and topology-planned root assembly behavior.
 
 ## References
 

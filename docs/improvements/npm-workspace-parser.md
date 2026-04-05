@@ -5,7 +5,7 @@
 Provenant improves on the Python reference in two durable ways:
 
 - ✨ **New Feature: pnpm-workspace.yaml metadata extraction** — Python recognizes the file but extracts no metadata (NonAssemblable handler)
-- ✨ **Improved Assembly: Workspace assembly with per-member packages** — Python has basic workspace assembly; Rust adds exclusion patterns, sibling-merge cleanup, and more robust member discovery
+- ✨ **Improved Assembly: topology-planned workspace assembly with per-member packages** — Python has basic workspace assembly; Rust adds exclusion patterns, topology-aware pre-claiming, and more robust member discovery
 
 ## Parser improvement: `pnpm-workspace.yaml` metadata extraction
 
@@ -98,7 +98,7 @@ Rust preserves the same core workspace behavior while adding several user-visibl
 ### Concrete user-visible differences
 
 1. **Exclusion patterns**: Rust respects `!pattern` entries in workspace globs, so excluded packages do not leak into the workspace package set.
-2. **Duplicate-package cleanup**: Rust removes duplicate packages created by earlier sibling-merge phases before workspace assembly.
+2. **Topology-aware directory claiming**: Rust now plans workspace roots and members before the generic directory loop runs, so member directories skip the default local assembly path instead of being created and repaired later.
 3. **Workspace-version fidelity**: Rust resolves workspace versions only once all member versions are known, so `workspace:*`, `workspace:^`, and `workspace:~` references stay grounded in the actual workspace state.
 4. **Root-package cleanup**: Rust drops private root packages once all content is reassigned to workspace members, avoiding redundant root-only package entries.
 5. **Member validation**: Rust verifies that discovered members actually contain `package.json` files before creating package records.
