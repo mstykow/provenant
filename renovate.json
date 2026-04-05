@@ -71,6 +71,11 @@
       "enabled": false
     },
     {
+      "description": "Pin Cargo dependency updates to exact versions to avoid artifact drift",
+      "matchManagers": ["cargo"],
+      "rangeStrategy": "pin"
+    },
+    {
       "description": "Automerge non-major updates after release age",
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
