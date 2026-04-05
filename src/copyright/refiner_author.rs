@@ -23,6 +23,8 @@ pub fn refine_author(s: &str) -> Option<String> {
     a = strip_trailing_comma_year_after_angle_email(&a);
     a = strip_trailing_comma_month_year(&a);
     a = strip_trailing_comma_email_matching_name(&a);
+    a = strip_trailing_comma_and(&a);
+    a = truncate_bug_reports_clause(&a);
     a = truncate_json_metadata_tail(&a);
     a = normalize_slash_spacing(&a);
     a = normalize_slash_author_pairs(&a);
@@ -31,6 +33,7 @@ pub fn refine_author(s: &str) -> Option<String> {
     a = strip_trailing_gnu_project_file_suffix(&a);
     a = normalize_comma_spacing(&a);
     a = normalize_angle_bracket_comma_spacing(&a);
+    a = strip_trailing_comma_and(&a);
     a = refine_names(&a, &AUTHORS_PREFIXES);
     a = a.trim().to_string();
     a = strip_trailing_period(&a);
@@ -74,6 +77,35 @@ fn truncate_json_metadata_tail(s: &str) -> String {
     if let Some(cap) = JSON_METADATA_TAIL_RE.captures(trimmed) {
         let prefix = cap.name("prefix").map(|m| m.as_str()).unwrap_or("").trim();
         let prefix = prefix.trim_end_matches(&[',', ';', '.'][..]).trim();
+        if !prefix.is_empty() {
+            return prefix.to_string();
+        }
+    }
+    s.to_string()
+}
+
+fn truncate_bug_reports_clause(s: &str) -> String {
+    static BUG_REPORTS_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)^(?P<prefix>.+?<[^>\s]*@[^>\s]*>)\s+Bug reports\b.*$").unwrap()
+    });
+
+    let trimmed = s.trim();
+    if let Some(cap) = BUG_REPORTS_RE.captures(trimmed) {
+        let prefix = cap.name("prefix").map(|m| m.as_str()).unwrap_or("").trim();
+        if !prefix.is_empty() {
+            return prefix.to_string();
+        }
+    }
+
+    s.to_string()
+}
+
+fn strip_trailing_comma_and(s: &str) -> String {
+    static TRAILING_COMMA_AND_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^(?P<prefix>.+?),\s+and\s*$").unwrap());
+    let trimmed = s.trim();
+    if let Some(cap) = TRAILING_COMMA_AND_RE.captures(trimmed) {
+        let prefix = cap.name("prefix").map(|m| m.as_str()).unwrap_or("").trim();
         if !prefix.is_empty() {
             return prefix.to_string();
         }

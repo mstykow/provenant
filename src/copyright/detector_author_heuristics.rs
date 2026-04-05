@@ -166,15 +166,21 @@ pub(super) fn extract_multiline_written_by_author_blocks(
         )
         .unwrap()
     });
+    static MAINTAINED_BY_PREFIX_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)^(?:(?:it|this\s+package)\s+is\s+)?maintained(?:\s+for\s+debian)?\s+by\s+(?P<who>.+)$",
+        )
+        .unwrap()
+    });
 
     let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
+        let Some(raw_line) = prepared_cache.raw_by_index(idx) else {
             continue;
         };
-        let line = prepared.trim();
+        let line = raw_line.trim();
         if line.is_empty() {
             continue;
         }
@@ -280,29 +286,49 @@ pub(super) fn extract_multiline_written_by_author_blocks(
         let start_line = block_lines.first().map(|(l, _)| *l).unwrap_or(ln);
         let end_line = block_lines.last().map(|(l, _)| *l).unwrap_or(ln);
 
-        let mut segments: Vec<String> = Vec::new();
+        let mut extracted_any = false;
         for (_l, raw_line) in &block_lines {
             let candidate = raw_line.trim();
-            if let Some(cap) = WRITTEN_BY_PREFIX_RE.captures(candidate) {
+            if let Some(cap) = WRITTEN_BY_PREFIX_RE
+                .captures(candidate)
+                .or_else(|| MAINTAINED_BY_PREFIX_RE.captures(candidate))
+            {
                 let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
                 if !who.is_empty() {
-                    segments.push(who.to_string());
+                    let who = who.trim_end_matches('.').trim();
+                    if !who.to_ascii_lowercase().starts_with("the ") {
+                        if let Some(author) = refine_author(who)
+                            && seen.insert(author.clone())
+                        {
+                            authors.push(AuthorDetection {
+                                author,
+                                start_line,
+                                end_line,
+                            });
+                        }
+                        extracted_any = true;
+                    }
                     continue;
                 }
             }
-            segments.push(candidate.to_string());
         }
 
-        let combined_raw = segments.join(" ");
-        if let Some(combined) = refine_author(&combined_raw)
-            && seen.insert(combined.clone())
-        {
-            authors.retain(|a| a.start_line < start_line || a.end_line > end_line);
-            authors.push(AuthorDetection {
-                author: combined,
-                start_line,
-                end_line,
-            });
+        if !extracted_any {
+            let combined_raw = block_lines
+                .iter()
+                .map(|(_, raw_line)| raw_line.trim())
+                .collect::<Vec<_>>()
+                .join(" ");
+            if let Some(combined) = refine_author(&combined_raw)
+                && seen.insert(combined.clone())
+            {
+                authors.retain(|a| a.start_line < start_line || a.end_line > end_line);
+                authors.push(AuthorDetection {
+                    author: combined,
+                    start_line,
+                    end_line,
+                });
+            }
         }
 
         i = j;
@@ -1221,7 +1247,9 @@ pub(super) fn extract_written_by_comma_and_copyright_authors(
         if who.is_empty() {
             continue;
         }
-        let author = format!("{who}, and");
+        let Some(author) = refine_author(who) else {
+            continue;
+        };
         if seen.insert(author.clone()) {
             authors.retain(|a| !(a.start_line == ln && a.end_line == ln));
             authors.push(AuthorDetection {
@@ -1229,6 +1257,63 @@ pub(super) fn extract_written_by_comma_and_copyright_authors(
                 start_line: ln,
                 end_line: ln,
             });
+        }
+    }
+}
+
+pub(super) fn extract_package_comment_named_authors(
+    prepared_cache: &mut PreparedLineCache<'_>,
+    authors: &mut Vec<AuthorDetection>,
+) {
+    if prepared_cache.is_empty() {
+        return;
+    }
+
+    static COMMENT_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)\b(?:was originally written by|it is now maintained by|this package is maintained for debian by)\s+(?P<who>.+?)(?:\.(?:\s|$)|$)",
+        )
+        .unwrap()
+    });
+    static RAW_ANGLE_EMAIL_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"^(?P<name>[A-Z][^<>@]+?)\s*<(?P<email>[^>\s]+@[^>\s]+)>$").unwrap()
+    });
+
+    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+
+    for idx in 0..prepared_cache.len() {
+        let ln = idx + 1;
+        let Some(prepared) = prepared_cache.get_by_index(idx) else {
+            continue;
+        };
+        let line = prepared.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        for cap in COMMENT_AUTHOR_RE.captures_iter(line) {
+            let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
+            if who.is_empty() || who.to_ascii_lowercase().starts_with("the ") {
+                continue;
+            }
+
+            let author = if let Some(cap) = RAW_ANGLE_EMAIL_AUTHOR_RE.captures(who) {
+                let name = cap.name("name").map(|m| m.as_str()).unwrap_or("").trim();
+                let email = cap.name("email").map(|m| m.as_str()).unwrap_or("").trim();
+                (!name.is_empty() && !email.is_empty()).then(|| format!("{name} <{email}>"))
+            } else {
+                refine_author(who)
+            };
+
+            if let Some(author) = author
+                && seen.insert(author.clone())
+            {
+                authors.push(AuthorDetection {
+                    author,
+                    start_line: ln,
+                    end_line: ln,
+                });
+            }
         }
     }
 }

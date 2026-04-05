@@ -446,7 +446,12 @@ fn extract_information_from_content(
             from_binary_strings,
         );
     }
-    extract_email_url_information(file_info_builder, &text_content, text_options);
+    extract_email_url_information(
+        file_info_builder,
+        &text_content,
+        text_options,
+        from_binary_strings,
+    );
 
     if is_timeout_exceeded(started, text_options.timeout_seconds) {
         return Err(Error::msg(format!(
@@ -635,22 +640,31 @@ fn ranges_overlap(a_start: usize, a_end: usize, b_start: usize, b_end: usize) ->
 }
 
 fn is_binary_string_copyright_candidate(text: &str) -> bool {
-    if has_explicit_copyright_marker(text) || contains_year(text) {
+    if contains_year(text) {
         return true;
     }
 
     let lower = text.to_ascii_lowercase();
-    let Some(tail) = lower.strip_prefix("copyright") else {
-        return true;
+    let tail = if let Some(tail) = lower.strip_prefix("copyright") {
+        tail.trim()
+    } else {
+        lower.trim()
     };
-    let tail = tail.trim();
+
+    if tail.is_empty() || !has_sufficient_alphabetic_content(tail) || has_excessive_at_noise(tail) {
+        return false;
+    }
+
     let alpha_tokens: Vec<&str> = tail
         .split_whitespace()
         .filter(|token| token.chars().any(|c| c.is_alphabetic()))
         .collect();
 
     if alpha_tokens.len() <= 1 {
-        return true;
+        return has_explicit_copyright_marker(text)
+            && alpha_tokens.iter().any(|token| {
+                is_company_like_suffix(token.trim_matches(|c: char| !c.is_alphanumeric()))
+            });
     }
 
     if tail.contains(',') || tail.contains(" and ") || tail.contains('&') {
@@ -660,6 +674,25 @@ fn is_binary_string_copyright_candidate(text: &str) -> bool {
     alpha_tokens
         .iter()
         .any(|token| is_company_like_suffix(token.trim_matches(|c: char| !c.is_alphanumeric())))
+        || alpha_tokens
+            .iter()
+            .filter(|token| token.chars().filter(|c| c.is_alphabetic()).count() >= 3)
+            .count()
+            >= 2
+}
+
+fn has_sufficient_alphabetic_content(text: &str) -> bool {
+    let alnum_count = text.chars().filter(|c| c.is_ascii_alphanumeric()).count();
+    if alnum_count == 0 {
+        return false;
+    }
+
+    let alpha_count = text.chars().filter(|c| c.is_ascii_alphabetic()).count();
+    alpha_count * 2 >= alnum_count
+}
+
+fn has_excessive_at_noise(text: &str) -> bool {
+    text.chars().filter(|c| *c == '@').count() >= 3
 }
 
 fn has_explicit_copyright_marker(text: &str) -> bool {
@@ -700,6 +733,7 @@ fn extract_email_url_information(
     file_info_builder: &mut FileInfoBuilder,
     text_content: &str,
     text_options: &TextDetectionOptions,
+    from_binary_strings: bool,
 ) {
     if !text_options.detect_emails && !text_options.detect_urls {
         return;
@@ -713,6 +747,7 @@ fn extract_email_url_information(
         };
         let emails = finder::find_emails(text_content, &config)
             .into_iter()
+            .filter(|d| !from_binary_strings || is_binary_string_email_candidate(&d.email))
             .map(|d| OutputEmail {
                 email: d.email,
                 start_line: d.start_line,
@@ -730,6 +765,7 @@ fn extract_email_url_information(
         };
         let urls = finder::find_urls(text_content, &config)
             .into_iter()
+            .filter(|d| !from_binary_strings || is_binary_string_url_candidate(&d.url))
             .map(|d| OutputURL {
                 url: d.url,
                 start_line: d.start_line,
@@ -738,6 +774,57 @@ fn extract_email_url_information(
             .collect::<Vec<_>>();
         file_info_builder.urls(urls);
     }
+}
+
+fn is_binary_string_email_candidate(email: &str) -> bool {
+    let Some((local, domain)) = email.rsplit_once('@') else {
+        return false;
+    };
+
+    if !has_strong_binary_local_part(local) {
+        return false;
+    }
+
+    has_strong_binary_host_shape(domain)
+}
+
+fn is_binary_string_url_candidate(url: &str) -> bool {
+    let parsed = url::Url::parse(url).ok();
+    let Some(parsed) = parsed else {
+        return false;
+    };
+    let Some(host) = parsed.host_str() else {
+        return false;
+    };
+
+    has_strong_binary_host_shape(host)
+}
+
+fn has_strong_binary_local_part(local: &str) -> bool {
+    local
+        .split(|c: char| !c.is_ascii_alphabetic())
+        .any(|segment| segment.len() >= 3)
+}
+
+fn has_strong_binary_host_shape(host: &str) -> bool {
+    let labels: Vec<&str> = host.split('.').collect();
+    if labels.len() < 2 {
+        return false;
+    }
+
+    let relevant = if matches!(labels.first(), Some(&"www" | &"ftp")) {
+        &labels[1..]
+    } else {
+        &labels[..]
+    };
+
+    if relevant.len() < 2 {
+        return false;
+    }
+
+    relevant[..relevant.len() - 1].iter().any(|label| {
+        label.len() >= 3 && label.chars().filter(|c| c.is_ascii_alphabetic()).count() >= 3
+    })
 }
 
 fn extract_license_information(
@@ -1065,7 +1152,10 @@ fn process_directory(
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_percentage_of_license_text, convert_detection_to_model, is_go_non_production_source,
+        compute_percentage_of_license_text, convert_detection_to_model,
+        extract_email_url_information, is_binary_string_copyright_candidate,
+        is_binary_string_email_candidate, is_binary_string_url_candidate,
+        is_go_non_production_source,
     };
     use crate::license_detection::LicenseDetection as InternalLicenseDetection;
     use crate::license_detection::index::LicenseIndex;
@@ -1073,8 +1163,9 @@ mod tests {
     use crate::license_detection::models::position_span::PositionSpan;
     use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind, RuleKind};
     use crate::license_detection::query::Query;
-    use crate::scanner::LicenseScanOptions;
+    use crate::models::{FileInfoBuilder, FileType};
     use crate::scanner::scan_options_fingerprint;
+    use crate::scanner::{LicenseScanOptions, TextDetectionOptions};
     use std::fs;
     use tempfile::tempdir;
 
@@ -1288,6 +1379,120 @@ mod tests {
         assert!(diagnostics.contains('['));
         assert!(diagnostics.contains(']'));
         assert_ne!(diagnostics, text.trim_end());
+    }
+
+    #[test]
+    fn test_extract_email_url_information_skips_binary_string_text() {
+        let mut builder = FileInfoBuilder::default();
+        let options = TextDetectionOptions {
+            collect_info: false,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: true,
+            detect_urls: true,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+        };
+
+        extract_email_url_information(
+            &mut builder,
+            "contact 6h@fo.lwft and visit http://gmail.com/",
+            &options,
+            true,
+        );
+
+        let file = builder
+            .name("binary.bin".to_string())
+            .base_name("binary".to_string())
+            .extension(".bin".to_string())
+            .path("binary.bin".to_string())
+            .file_type(FileType::File)
+            .size(1)
+            .build()
+            .expect("builder should produce file info");
+
+        assert!(file.emails.is_empty(), "emails: {:?}", file.emails);
+        assert!(file.urls.is_empty(), "urls: {:?}", file.urls);
+    }
+
+    #[test]
+    fn test_extract_email_url_information_keeps_good_binary_contacts() {
+        let mut builder = FileInfoBuilder::default();
+        let options = TextDetectionOptions {
+            collect_info: false,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: true,
+            detect_urls: true,
+            max_emails: 50,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+        };
+
+        extract_email_url_information(
+            &mut builder,
+            "report bugs to bug-coreutils@gnu.org and see https://www.gnu.org/software/coreutils/",
+            &options,
+            true,
+        );
+
+        let file = builder
+            .name("binary.bin".to_string())
+            .base_name("binary".to_string())
+            .extension(".bin".to_string())
+            .path("binary.bin".to_string())
+            .file_type(FileType::File)
+            .size(1)
+            .build()
+            .expect("builder should produce file info");
+
+        assert_eq!(file.emails.len(), 1, "emails: {:?}", file.emails);
+        assert_eq!(file.emails[0].email, "bug-coreutils@gnu.org");
+        assert_eq!(file.urls.len(), 1, "urls: {:?}", file.urls);
+        assert_eq!(file.urls[0].url, "https://www.gnu.org/software/coreutils/");
+    }
+
+    #[test]
+    fn test_binary_string_copyright_candidate_rejects_gibberish_holder_text() {
+        let gibberish = "(c) S8@9 K @9 D @9 I,@9N(@ F@@9L,@ HD@9) M0@9s J'@y DH@9Ih@y";
+        assert!(!is_binary_string_copyright_candidate(gibberish));
+    }
+
+    #[test]
+    fn test_binary_string_copyright_candidate_keeps_real_notice() {
+        let notice = "Copyright nexB and others (c) 2012";
+        assert!(is_binary_string_copyright_candidate(notice));
+    }
+
+    #[test]
+    fn test_binary_string_email_candidate_rejects_gibberish() {
+        assert!(!is_binary_string_email_candidate("6h@fo.lwft"));
+    }
+
+    #[test]
+    fn test_binary_string_email_candidate_keeps_gnu_bug_address() {
+        assert!(is_binary_string_email_candidate("bug-coreutils@gnu.org"));
+    }
+
+    #[test]
+    fn test_binary_string_url_candidate_rejects_short_fake_host() {
+        assert!(!is_binary_string_url_candidate("http://ftp.so/"));
+    }
+
+    #[test]
+    fn test_binary_string_url_candidate_keeps_gnu_help_url() {
+        assert!(is_binary_string_url_candidate(
+            "https://www.gnu.org/software/coreutils/"
+        ));
     }
 
     #[test]

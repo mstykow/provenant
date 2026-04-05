@@ -295,17 +295,6 @@ pub(super) fn filter_license_references(matches: &[LicenseMatch]) -> Vec<License
         .collect()
 }
 
-/// Filter out both license intros and local file references.
-///
-/// Based on Python: filter_license_intros_and_references() at detection.py:1422-1440
-pub(super) fn filter_license_intros_and_references(matches: &[LicenseMatch]) -> Vec<LicenseMatch> {
-    matches
-        .iter()
-        .filter(|m| !is_license_intro(m) && !is_license_reference_local_file(m))
-        .cloned()
-        .collect()
-}
-
 /// Check if any matches reference local files.
 fn has_references_to_local_files(matches: &[LicenseMatch]) -> bool {
     matches.iter().any(is_license_reference_local_file)
@@ -1953,14 +1942,14 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_license_intros_and_references_filters_both() {
+    fn test_filter_license_references_filters_local_file_references() {
         let mut m1 = create_test_match(100.0, "mit.LICENSE");
         m1.rule_kind = crate::license_detection::models::RuleKind::Intro;
         m1.matcher = MatcherKind::Aho;
         m1.match_coverage = 100.0;
         m1.referenced_filenames = Some(vec!["LICENSE".to_string()]);
         let m2 = create_test_match(100.0, "mit.RULE");
-        let filtered = filter_license_intros_and_references(&[m1, m2]);
+        let filtered = filter_license_references(&[m1, m2]);
         assert_eq!(filtered.len(), 1);
     }
 

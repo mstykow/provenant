@@ -19,7 +19,7 @@ use crate::license_detection::expression::parse_expression;
 use analysis::{
     analyze_detection, classify_detection, compute_detection_score,
     determine_spdx_expression_from_scancode, filter_license_intros,
-    filter_license_intros_and_references, has_correct_license_clue_matches,
+    has_correct_license_clue_matches,
 };
 pub(crate) use analysis::{determine_license_expression, determine_spdx_expression};
 #[cfg(test)]
@@ -58,9 +58,6 @@ pub const DETECTION_LOG_UNDETECTED_LICENSE: &str = "undetected-license";
 
 /// Unknown intro followed by match - license intro followed by proper detection.
 pub const DETECTION_LOG_UNKNOWN_INTRO_FOLLOWED_BY_MATCH: &str = "unknown-intro-followed-by-match";
-
-/// Unknown reference to local file - match references another file (e.g., "see LICENSE").
-pub const DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE: &str = "unknown-reference-to-local-file";
 
 /// Populate LicenseDetection from a DetectionGroup.
 ///
@@ -289,10 +286,9 @@ pub(crate) fn select_matches_for_expression(
     log_category: &str,
     post_scan: bool,
 ) -> Vec<crate::license_detection::models::LicenseMatch> {
+    let _ = post_scan;
     let filtered = if log_category == DETECTION_LOG_UNKNOWN_INTRO_FOLLOWED_BY_MATCH {
         filter_license_intros(matches)
-    } else if post_scan && log_category == DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE {
-        filter_license_intros_and_references(matches)
     } else {
         matches.to_vec()
     };
@@ -568,7 +564,7 @@ mod tests {
 
         let selected = select_matches_for_expression(
             &[referenced.clone(), disclaimer.clone()],
-            DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE,
+            "unknown-reference-to-local-file",
             false,
         );
 
@@ -576,7 +572,7 @@ mod tests {
     }
 
     #[test]
-    fn select_matches_for_expression_filters_local_file_references_during_post_scan() {
+    fn select_matches_for_expression_keeps_local_file_references_during_post_scan() {
         let mut referenced = create_test_match(1, 3, "3-seq", "apache-2.0_910.RULE");
         referenced.license_expression = "apache-2.0".to_string();
         referenced.license_expression_spdx = Some("Apache-2.0".to_string());
@@ -588,12 +584,12 @@ mod tests {
             Some("LicenseRef-scancode-warranty-disclaimer".to_string());
 
         let selected = select_matches_for_expression(
-            &[referenced, disclaimer.clone()],
-            DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE,
+            &[referenced.clone(), disclaimer.clone()],
+            "unknown-reference-to-local-file",
             true,
         );
 
-        assert_eq!(selected, vec![disclaimer]);
+        assert_eq!(selected, vec![referenced, disclaimer]);
     }
 
     fn create_test_license() -> License {

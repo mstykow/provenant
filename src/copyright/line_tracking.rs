@@ -41,6 +41,10 @@ impl<'a> PreparedLineCache<'a> {
         self.prepared[idx].as_deref()
     }
 
+    pub(super) fn raw_by_index(&self, idx: usize) -> Option<&str> {
+        self.raw_lines.get(idx).copied()
+    }
+
     pub(super) fn contains_ci(&self, pattern: &str) -> bool {
         let pattern_bytes = pattern.as_bytes();
         if pattern_bytes.is_empty() {

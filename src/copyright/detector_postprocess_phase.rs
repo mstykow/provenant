@@ -37,6 +37,7 @@ pub(super) fn run_phase_postprocess(
     super::author_heuristics::merge_metadata_author_and_email_lines(prepared_cache, authors);
     super::author_heuristics::extract_debian_maintainer_authors(prepared_cache, authors);
     super::author_heuristics::extract_maintained_by_authors(prepared_cache, authors);
+    super::author_heuristics::extract_package_comment_named_authors(prepared_cache, authors);
     super::author_heuristics::extract_created_by_project_author(prepared_cache, authors);
     super::author_heuristics::extract_created_by_authors(prepared_cache, authors);
     super::author_heuristics::extract_written_by_comma_and_copyright_authors(

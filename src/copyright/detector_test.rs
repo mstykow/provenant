@@ -856,6 +856,40 @@ fn test_device_tree_fixture_extracts_authors_block() {
 }
 
 #[test]
+fn test_multiline_written_and_maintained_by_block_extracts_individual_authors() {
+    let input = concat!(
+        "GNU tar, heavily based on John Gilmore's public domain version of tar,\n",
+        "was originally written by Graham Todd.\n",
+        "It is now maintained by Sergey Poznyakoff.\n",
+        "This package is maintained for Debian by Janos Lenart <ocsi@debian.org>.\n",
+    );
+
+    let (_c, _h, authors) = detect_copyrights_from_text(input);
+    let authors: Vec<String> = authors.into_iter().map(|a| a.author).collect();
+
+    assert!(
+        authors.iter().any(|a| a == "Graham Todd"),
+        "authors: {authors:#?}"
+    );
+    assert!(
+        authors.iter().any(|a| a == "Sergey Poznyakoff"),
+        "authors: {authors:#?}"
+    );
+    assert!(
+        authors
+            .iter()
+            .any(|a| a == "Janos Lenart <ocsi@debian.org>"),
+        "authors: {authors:#?}"
+    );
+    assert!(
+        !authors
+            .iter()
+            .any(|a| a.contains("GNU tar, heavily based on")),
+        "authors: {authors:#?}"
+    );
+}
+
+#[test]
 fn test_pata_ali_fixture_preserves_maintainer_suffix() {
     let path = PathBuf::from(
         "testdata/copyright-golden/copyrights/misco4/linux-copyrights/drivers/ata/pata_ali.c",

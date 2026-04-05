@@ -8,9 +8,8 @@ use glob::Pattern;
 
 use crate::assembly;
 use crate::license_detection::detection::{
-    DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE, FileRegion as InternalFileRegion,
-    determine_license_expression, determine_spdx_expression, get_unique_detections,
-    select_matches_for_expression,
+    FileRegion as InternalFileRegion, determine_license_expression, determine_spdx_expression,
+    get_unique_detections, select_matches_for_expression,
 };
 use crate::license_detection::expression::{
     LicenseExpression, combine_expressions_and, expression_to_string, parse_expression,
@@ -837,7 +836,7 @@ fn apply_reference_following_to_detection(
             detection,
             current_path,
             referenced_targets,
-            DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE,
+            "unknown-reference-to-local-file",
         );
     }
 
@@ -896,7 +895,7 @@ fn apply_resolved_reference_targets(
     }
     let matches_for_expression = select_matches_for_expression(
         &internal_detection.matches,
-        DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE,
+        "unknown-reference-to-local-file",
         true,
     );
     internal_detection.license_expression =
@@ -993,13 +992,20 @@ fn has_resolved_referenced_file(detection: &LicenseDetection, current_path: &str
 }
 
 fn normalize_referenced_filename(name: &str) -> String {
-    name.trim()
+    let normalized = name
+        .trim()
         .trim_matches('"')
         .trim_matches('\'')
         .replace('\\', "/")
         .trim_start_matches("./")
-        .trim_matches('/')
-        .to_string()
+        .trim_end_matches('/')
+        .to_string();
+
+    if normalized.starts_with('/') {
+        format!("/{}", normalized.trim_start_matches('/'))
+    } else {
+        normalized.trim_start_matches('/').to_string()
+    }
 }
 
 fn resolve_referenced_resource(
@@ -1008,12 +1014,17 @@ fn resolve_referenced_resource(
     package_uids: &[String],
     snapshot: &ReferenceFollowSnapshot,
 ) -> Option<ResolvedReferenceTarget> {
+    let absolute_reference = Path::new(referenced_filename).is_absolute();
     let referenced_filename = normalize_referenced_filename(referenced_filename);
     if referenced_filename.is_empty() {
         return None;
     }
 
     let mut candidates = Vec::new();
+    if absolute_reference {
+        candidates.push(referenced_filename.trim_start_matches('/').to_string());
+    }
+
     if let Some(parent) = Path::new(current_path).parent() {
         let parent = parent.to_string_lossy();
         candidates.push(join_reference_candidate(

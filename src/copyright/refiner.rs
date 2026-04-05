@@ -237,6 +237,21 @@ static AUTHORS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^did not confirm that$",
         r"(?i)^could not find a direct reference to$",
         r"(?i)^developers aware of the problem and plan to fix it$",
+        r"(?i)^with the mode of \d{3,4}$",
+        r"(?i)^kernel afs\.\s+skip afs metadata and acls$",
+        r"(?i)^with a (?:fsf|dco)$",
+        r"(?i)^gives unlimited$",
+        r"(?i)^word assigns past and future changes\b",
+        r"(?i)^maintainers\s*<[^>]+>\s+from\s+https?://\S+$",
+        r"(?i)^versions,\s+and$",
+        r"(?i)^versions$",
+        r"(?i)^makes$",
+        r"(?i)^grants irrevocable$",
+        r"(?i)^version information$",
+        r"(?i)^not responsible for the consequences of use of$",
+        r"(?i)^at sunpro, a sun microsystems, inc\. business$",
+        r"(?i)^debian by .+\bupstream-contact\b.*$",
+        r"(?i)^was originally written by .+\bit is now maintained by\b.*$",
     ];
     patterns.iter().filter_map(|p| Regex::new(p).ok()).collect()
 });
@@ -484,6 +499,7 @@ static HOLDERS_JUNK: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
         "duplicated in",
         "mjander",
         "3dfx",
+        "related",
     ]
     .into_iter()
     .collect()
@@ -1286,6 +1302,10 @@ static COPYRIGHTS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^copyrights?,\s*patents?\b",
         r"(?i)^copyright\s*,\s*(?:version|etc)\b",
         r"(?i)^not\s+copyrighted\s*[-–]\s*provided\s+to\s+the\s+public\s+domain\b",
+        r"(?i)^copyright\s+and\s+related\s+rights\b",
+        r"(?i)^copyright\s+and\s+related\s+or\s+neighboring\s+rights$",
+        r"(?i)^copyright\s+was\s+owned\s+solely\s+by\s+fsf$",
+        r"(?i)^copyright\s+years\s+may\s+be\s+listed$",
     ];
     patterns.iter().filter_map(|p| Regex::new(p).ok()).collect()
 });
@@ -1447,6 +1467,10 @@ static HOLDERS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^proprietary$",
         r"(?i)^not limited to\b",
         r"(?i)\bprocurement of substitute goods or services\b",
+        r"(?i)^related rights\b",
+        r"(?i)^related or neighboring\b",
+        r"(?i)^was owned solely by fsf$",
+        r"(?i)^years may be listed$",
         r"(?i)^notice\s*,\s*license\s+and\s+disclaimer\.?$",
         r"(?i)^trademarks?\s*,\s*trade\s+secrets?\b",
         r"(?i)^the\s+standard$",
