@@ -127,8 +127,8 @@ jobs:
         with:
           shared-key: windows-build-smoke
 
-      - name: Check Windows compilation
-        run: cargo check --all --verbose
+      - name: Build and run Windows CLI smoke check
+        run: cargo run --quiet --locked --bin provenant -- --show-attribution | Out-Null
 
   intel-macos-build-smoke:
     name: Intel macOS Build Smoke Test
