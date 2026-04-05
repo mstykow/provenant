@@ -120,10 +120,14 @@ pub(crate) fn normalize_scan_relative_path(path: &Path, scan_root: &Path) -> Str
         .replace('\\', "/");
 
     if normalized.is_empty() && path == scan_root {
-        scan_root
-            .file_name()
-            .map(|name| name.to_string_lossy().replace('\\', "/"))
-            .unwrap_or_default()
+        if scan_root.is_file() || (!scan_root.exists() && scan_root.extension().is_some()) {
+            scan_root
+                .file_name()
+                .map(|name| name.to_string_lossy().replace('\\', "/"))
+                .unwrap_or_default()
+        } else {
+            String::new()
+        }
     } else {
         normalized
     }

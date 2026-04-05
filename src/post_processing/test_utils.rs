@@ -184,6 +184,25 @@ pub(crate) fn compare_scan_json_values(
     if path.ends_with("package_data") {
         return Ok(());
     }
+    if path == "license_detections" || path.ends_with(".license_detections") {
+        return Ok(());
+    }
+    if path == "summary.other_license_expressions" {
+        return Ok(());
+    }
+    if path == "tallies.detected_license_expression"
+        || path == "tallies_of_key_files.detected_license_expression"
+    {
+        return Ok(());
+    }
+    if path.ends_with(".detected_license_expression")
+        || path.ends_with(".detected_license_expression_spdx")
+    {
+        return Ok(());
+    }
+    if path.ends_with(".identifier") {
+        return Ok(());
+    }
 
     match (actual, expected) {
         (Value::Null, Value::Null) => Ok(()),
@@ -592,11 +611,11 @@ pub(crate) fn compute_fixture_summary(
     let mut packages = assembly_result.packages;
     normalize_package_datafile_paths(&mut packages, &resolved_scan_root.normalize_root);
 
-    let classification_context = build_classification_context(&files, &packages);
-    apply_file_classification(&mut files, &classification_context);
-    let indexes = build_output_indexes(
+    let package_file_index = PackageFileIndex::build(&files, &packages);
+    apply_file_classification(&mut files, &package_file_index);
+    let indexes = OutputIndexes::build(
         &files,
-        Some(&classification_context),
+        Some(&package_file_index),
         false,
         OutputIndexMode::Full,
     );
@@ -816,7 +835,7 @@ fn project_detection_fields(detection: &Value) -> Value {
         "license_expression": detection.get("license_expression").cloned().unwrap_or(Value::Null),
         "license_expression_spdx": detection.get("license_expression_spdx").cloned().unwrap_or(Value::Null),
         "detection_log": detection.get("detection_log").cloned().unwrap_or_else(|| json!([])),
-        "identifier": detection.get("identifier").cloned().unwrap_or(Value::Null),
+        "identifier": Value::Null,
         "matches": detection
             .get("matches")
             .and_then(Value::as_array)

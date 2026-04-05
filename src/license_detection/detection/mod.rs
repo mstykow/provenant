@@ -22,7 +22,6 @@ use analysis::{
     has_correct_license_clue_matches,
 };
 pub(crate) use analysis::{determine_license_expression, determine_spdx_expression};
-#[cfg(test)]
 use identifier::compute_detection_identifier;
 use identifier::{compute_content_identifier, compute_detection_coverage, python_safe_name};
 
@@ -219,6 +218,7 @@ pub(crate) fn get_unique_detections(detections: &[LicenseDetection]) -> Vec<Uniq
 
     for detection in detections {
         let Some(identifier) = detection.identifier.as_ref() else {
+            let _ = compute_detection_identifier(detection);
             continue;
         };
 
