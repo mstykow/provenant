@@ -27,6 +27,7 @@ use crate::models::{DatasourceId, PackageData, PackageType};
 use crate::models::{Dependency, FileReference};
 
 use super::PackageParser;
+use super::rpm_db_native::{InstalledRpmDbKind, InstalledRpmPackage, read_installed_rpm_packages};
 use super::rpm_parser::infer_rpm_namespace;
 use super::rpm_parser::infer_rpm_namespace_from_filename;
 
@@ -158,16 +159,67 @@ fn parse_rpm_database(
     path: &Path,
     datasource_id: DatasourceId,
 ) -> Result<Vec<PackageData>, String> {
-    let rpmdb_dir = path
-        .parent()
-        .ok_or_else(|| format!("RPM database path {:?} has no parent directory", path))?;
-
-    query_rpm_database(rpmdb_dir).map(|packages| {
-        packages
+    let native_kind = native_kind_for_datasource(datasource_id);
+    match read_installed_rpm_packages(path, native_kind) {
+        Ok(packages) => Ok(packages
             .into_iter()
+            .map(native_package_to_query_package)
             .map(|pkg| build_package_data(pkg, datasource_id))
-            .collect()
-    })
+            .collect()),
+        Err(native_error) if !rpm_command_available() => Err(format!(
+            "native installed RPM reader failed for {:?}: {}",
+            path, native_error
+        )),
+        Err(native_error) => {
+            let rpmdb_dir = path
+                .parent()
+                .ok_or_else(|| format!("RPM database path {:?} has no parent directory", path))?;
+
+            query_rpm_database(rpmdb_dir)
+                .map(|packages| {
+                    packages
+                        .into_iter()
+                        .map(|pkg| build_package_data(pkg, datasource_id))
+                        .collect()
+                })
+                .map_err(|fallback_error| {
+                    format!(
+                        "native installed RPM reader failed for {:?}: {}; rpm CLI fallback failed: {}",
+                        path, native_error, fallback_error
+                    )
+                })
+        }
+    }
+}
+
+fn native_kind_for_datasource(datasource_id: DatasourceId) -> InstalledRpmDbKind {
+    match datasource_id {
+        DatasourceId::RpmInstalledDatabaseBdb => InstalledRpmDbKind::Bdb,
+        DatasourceId::RpmInstalledDatabaseNdb => InstalledRpmDbKind::Ndb,
+        DatasourceId::RpmInstalledDatabaseSqlite => InstalledRpmDbKind::Sqlite,
+        other => panic!("unexpected datasource for installed RPM DB: {other:?}"),
+    }
+}
+
+fn native_package_to_query_package(package: InstalledRpmPackage) -> RpmQueryPackage {
+    RpmQueryPackage {
+        name: normalize_optional_string(Some(package.name)),
+        epoch: Some(package.epoch.to_string()),
+        version: normalize_optional_string(Some(package.version)),
+        release: normalize_optional_string(Some(package.release)),
+        vendor: normalize_optional_string(Some(package.vendor)),
+        distribution: normalize_optional_string(Some(package.distribution)),
+        arch: normalize_optional_string(Some(package.arch)),
+        platform: normalize_optional_string(Some(package.platform)),
+        size: (package.size > 0).then_some(package.size as u64),
+        license: normalize_optional_string(Some(package.license)),
+        source_rpm: normalize_optional_string(Some(package.source_rpm)),
+        requires: package.requires,
+        file_names: package.file_names.into_iter().map(Some).collect(),
+        dir_indexes: package.dir_indexes,
+        base_names: package.base_names.into_iter().map(Some).collect(),
+        dir_names: package.dir_names,
+    }
 }
 
 fn build_evr_version(epoch: i32, version: &str, release: &str) -> Option<String> {
@@ -278,6 +330,10 @@ fn query_rpm_database(rpmdb_dir: &Path) -> Result<Vec<RpmQueryPackage>, String> 
         .map_err(|e| format!("rpm output for {:?} was not valid UTF-8: {}", rpmdb_dir, e))?;
 
     parse_rpm_query_output(&stdout)
+}
+
+fn rpm_command_available() -> bool {
+    Command::new("rpm").arg("--version").output().is_ok()
 }
 
 fn parse_rpm_query_output(stdout: &str) -> Result<Vec<RpmQueryPackage>, String> {
@@ -539,11 +595,6 @@ fn infer_platform_architecture(platform: Option<&str>) -> Option<String> {
 }
 
 #[cfg(test)]
-fn rpm_command_available() -> bool {
-    Command::new("rpm").arg("--version").output().is_ok()
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -621,16 +672,6 @@ mod tests {
 
         let pkg = RpmSqliteDatabaseParser::extract_first_package(&test_file);
 
-        if !rpm_command_available() {
-            assert_eq!(pkg.package_type, Some(PackageType::Rpm));
-            assert_eq!(
-                pkg.datasource_id,
-                Some(DatasourceId::RpmInstalledDatabaseSqlite)
-            );
-            assert_eq!(pkg.name, None);
-            return;
-        }
-
         assert_eq!(pkg.package_type, Some(PackageType::Rpm));
         assert_eq!(
             pkg.datasource_id,
@@ -644,11 +685,6 @@ mod tests {
         let test_file = PathBuf::from("testdata/rpm/rpmdb.sqlite");
 
         let pkg = RpmSqliteDatabaseParser::extract_first_package(&test_file);
-
-        if !rpm_command_available() {
-            assert_eq!(pkg.version, None);
-            return;
-        }
 
         assert!(
             pkg.version

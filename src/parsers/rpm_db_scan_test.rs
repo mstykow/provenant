@@ -1,15 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::path::Path;
-    use std::process::Command;
-
     use super::super::scan_test_utils::scan_and_assemble;
     use crate::models::{DatasourceId, PackageType};
+    use std::fs;
+    use std::fs::File;
+    use std::path::Path;
 
-    fn rpm_command_available() -> bool {
-        Command::new("rpm").arg("--version").output().is_ok()
-    }
+    use liblzma::read::XzDecoder;
+    use tar::Archive;
 
     #[test]
     fn test_rpm_sqlite_scan_assigns_referenced_files_from_rootfs_layout() {
@@ -40,19 +38,6 @@ mod tests {
             .find(|file| file.path.ends_with("/usr/lib/sysimage/rpm/rpmdb.sqlite"))
             .expect("rpmdb sqlite should be scanned");
 
-        if !rpm_command_available() {
-            assert!(
-                result
-                    .packages
-                    .iter()
-                    .all(|package| package.name.as_deref() != Some("libgcc"))
-            );
-            assert!(rpmdb.package_data.iter().any(|pkg_data| {
-                pkg_data.datasource_id == Some(DatasourceId::RpmInstalledDatabaseSqlite)
-            }));
-            return;
-        }
-
         let package = result
             .packages
             .iter()
@@ -66,6 +51,40 @@ mod tests {
         assert!(copying.for_packages.contains(&package.package_uid));
         assert!(rpmdb.package_data.iter().any(|pkg_data| {
             pkg_data.datasource_id == Some(DatasourceId::RpmInstalledDatabaseSqlite)
+        }));
+    }
+
+    #[test]
+    fn test_rpm_bdb_scan_assigns_referenced_files_from_fedora_rootfs() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        let archive = File::open("testdata/rpm/bdb-fedora-rootfs.tar.xz")
+            .expect("open fedora rootfs archive");
+        Archive::new(XzDecoder::new(archive))
+            .unpack(temp_dir.path())
+            .expect("extract fedora rootfs archive");
+
+        let rootfs = temp_dir.path().join("rootfs");
+        let (files, result) = scan_and_assemble(&rootfs);
+
+        let rpmdb = files
+            .iter()
+            .find(|file| file.path.ends_with("/var/lib/rpm/Packages"))
+            .expect("rpmdb bdb should be scanned");
+        let package = result
+            .packages
+            .iter()
+            .find(|package| package.name.as_deref() == Some("libgcc"))
+            .expect("libgcc package should be assembled from BDB rootfs");
+        let copying = files
+            .iter()
+            .find(|file| file.path.ends_with("/usr/share/licenses/libgcc/COPYING"))
+            .expect("COPYING should be scanned from fedora rootfs");
+
+        assert_eq!(package.package_type, Some(PackageType::Rpm));
+        assert!(copying.for_packages.contains(&package.package_uid));
+        assert!(rpmdb.package_data.iter().any(|pkg_data| {
+            pkg_data.datasource_id == Some(DatasourceId::RpmInstalledDatabaseBdb)
+                && pkg_data.name.as_deref() == Some("libgcc")
         }));
     }
 

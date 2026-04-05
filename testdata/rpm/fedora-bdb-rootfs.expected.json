@@ -1,0 +1,160 @@
+[
+  {
+    "type": "rpm",
+    "namespace": "fedora",
+    "name": "fedora-modular-repos",
+    "version": "26-0.4.module_39876f37",
+    "qualifiers": {
+      "arch": "noarch"
+    },
+    "subpath": null,
+    "primary_language": null,
+    "description": null,
+    "release_date": null,
+    "parties": [],
+    "keywords": [],
+    "homepage_url": null,
+    "download_url": null,
+    "size": 14308,
+    "sha1": null,
+    "md5": null,
+    "sha256": null,
+    "sha512": null,
+    "bug_tracking_url": null,
+    "code_view_url": null,
+    "vcs_url": null,
+    "copyright": null,
+    "holder": null,
+    "declared_license_expression": null,
+    "declared_license_expression_spdx": null,
+    "license_detections": [],
+    "other_license_expression": null,
+    "other_license_expression_spdx": null,
+    "other_license_detections": [],
+    "extracted_license_statement": "MIT",
+    "notice_text": null,
+    "source_packages": ["fedora-modular-repos-26-0.4.module_39876f37.src.rpm"],
+    "file_references": [
+      {
+        "path": "/etc/pki/rpm-gpg"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-26-fedora"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-aarch64"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-armhfp"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-i386"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-ppc64"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-ppc64le"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-primary"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-s390x"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-secondary"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-x86_64"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-aarch64"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-armhfp"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-i386"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-ppc64"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-ppc64le"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-primary"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-s390x"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-secondary"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-x86_64"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-aarch64"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-armhfp"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-i386"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-ppc64"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-ppc64le"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-primary"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-s390x"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-x86_64"
+      },
+      {
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-modularity"
+      },
+      {
+        "path": "/etc/yum.repos.d"
+      },
+      {
+        "path": "/etc/yum.repos.d/fedora-modular.repo"
+      },
+      {
+        "path": "/usr/share/licenses/fedora-modular-repos"
+      },
+      {
+        "path": "/usr/share/licenses/fedora-modular-repos/LICENSE"
+      }
+    ],
+    "is_private": false,
+    "is_virtual": false,
+    "extra_data": {},
+    "dependencies": [
+      {
+        "purl": "pkg:rpm/system-modular-release(26)",
+        "extracted_requirement": null,
+        "scope": "requires",
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": false,
+        "is_direct": true,
+        "resolved_package": null,
+        "extra_data": {}
+      }
+    ],
+    "repository_homepage_url": null,
+    "repository_download_url": null,
+    "api_data_url": null,
+    "datasource_id": "rpm_installed_database_bdb",
+    "purl": "pkg:rpm/fedora/fedora-modular-repos@26-0.4.module_39876f37?arch=noarch"
+  }
+]
