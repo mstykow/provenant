@@ -1470,7 +1470,10 @@ fn is_zip_archive(bytes: &[u8]) -> bool {
 
 pub fn extract_printable_strings(bytes: &[u8]) -> String {
     const MIN_LEN: usize = 4;
-    const MAX_OUTPUT_BYTES: usize = 2_000_000;
+    const MIN_OUTPUT_BYTES: usize = 2_000_000;
+    const MAX_OUTPUT_BYTES_CAP: usize = 16_000_000;
+
+    let max_output_bytes = bytes.len().clamp(MIN_OUTPUT_BYTES, MAX_OUTPUT_BYTES_CAP);
 
     fn is_printable_ascii(b: u8) -> bool {
         matches!(b, 0x20..=0x7E)
@@ -1494,13 +1497,13 @@ pub fn extract_printable_strings(bytes: &[u8]) -> String {
             run.push(b);
         } else {
             flush_run(&mut out, &mut run);
-            if out.len() >= MAX_OUTPUT_BYTES {
+            if out.len() >= max_output_bytes {
                 return out;
             }
         }
     }
     flush_run(&mut out, &mut run);
-    if out.len() >= MAX_OUTPUT_BYTES {
+    if out.len() >= max_output_bytes {
         return out;
     }
 
@@ -1515,14 +1518,14 @@ pub fn extract_printable_strings(bytes: &[u8]) -> String {
                 run.push(ch);
             } else {
                 flush_run(&mut out, &mut run);
-                if out.len() >= MAX_OUTPUT_BYTES {
+                if out.len() >= max_output_bytes {
                     return out;
                 }
             }
             i += 2;
         }
         flush_run(&mut out, &mut run);
-        if out.len() >= MAX_OUTPUT_BYTES {
+        if out.len() >= max_output_bytes {
             return out;
         }
     }
@@ -1535,8 +1538,8 @@ mod tests {
     use std::path::Path;
 
     use super::{
-        ExtractedTextKind, classify_file_info, extract_text_for_detection, normalize_mime_type,
-        normalize_pdf_heading_comparison_text,
+        ExtractedTextKind, classify_file_info, extract_printable_strings,
+        extract_text_for_detection, normalize_mime_type, normalize_pdf_heading_comparison_text,
     };
 
     #[test]
@@ -1627,6 +1630,20 @@ mod tests {
 
         assert_ne!(kind, ExtractedTextKind::None);
         assert!(text.contains("Copyright nexB and others (c) 2012"));
+    }
+
+    #[test]
+    fn test_extract_printable_strings_scales_cap_for_medium_binary_files() {
+        let bytes = b"abcd\0".repeat(525_000);
+
+        let text = extract_printable_strings(&bytes);
+
+        assert!(
+            text.len() > 2_000_000,
+            "unexpected truncation at {}",
+            text.len()
+        );
+        assert!(text.ends_with("abcd"));
     }
 
     #[test]

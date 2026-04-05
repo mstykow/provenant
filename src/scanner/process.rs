@@ -23,6 +23,7 @@ use crate::models::{
     Author, Copyright, DatasourceId, FileInfo, FileInfoBuilder, FileType, Holder, LicenseDetection,
     Match, OutputEmail, OutputURL,
 };
+use crate::parsers::utils::split_name_email;
 use crate::progress::ScanProgress;
 use crate::scanner::collect::CollectedPaths;
 use crate::scanner::{LicenseScanOptions, ProcessResult, TextDetectionOptions};
@@ -567,7 +568,7 @@ fn extract_copyright_information(
     let (copyrights, holders, authors) =
         copyright::detect_copyrights_with_options(text_content, &copyright_options);
     let (copyrights, holders, authors) = if from_binary_strings {
-        prune_binary_string_detections(copyrights, holders, authors)
+        prune_binary_string_detections(text_content, copyrights, holders, authors)
     } else {
         (copyrights, holders, authors)
     };
@@ -605,9 +606,10 @@ fn extract_copyright_information(
 }
 
 fn prune_binary_string_detections(
+    text_content: &str,
     copyrights: Vec<CopyrightDetection>,
     holders: Vec<HolderDetection>,
-    _authors: Vec<AuthorDetection>,
+    authors: Vec<AuthorDetection>,
 ) -> (
     Vec<CopyrightDetection>,
     Vec<HolderDetection>,
@@ -632,7 +634,13 @@ fn prune_binary_string_detections(
         })
         .collect();
 
-    (kept_copyrights, kept_holders, Vec::new())
+    let kept_authors = authors
+        .into_iter()
+        .filter(|author| is_binary_string_author_candidate(&author.author))
+        .chain(extract_binary_string_author_supplements(text_content))
+        .collect();
+
+    (kept_copyrights, kept_holders, kept_authors)
 }
 
 fn ranges_overlap(a_start: usize, a_end: usize, b_start: usize, b_end: usize) -> bool {
@@ -644,11 +652,17 @@ fn is_binary_string_copyright_candidate(text: &str) -> bool {
         return true;
     }
 
-    let lower = text.to_ascii_lowercase();
+    let trimmed = text.trim();
+    let lower = trimmed.to_ascii_lowercase();
     let tail = if let Some(tail) = lower.strip_prefix("copyright") {
         tail.trim()
     } else {
         lower.trim()
+    };
+    let original_tail = if lower.starts_with("copyright") {
+        trimmed["copyright".len()..].trim()
+    } else {
+        trimmed
     };
 
     if tail.is_empty() || !has_sufficient_alphabetic_content(tail) || has_excessive_at_noise(tail) {
@@ -667,18 +681,137 @@ fn is_binary_string_copyright_candidate(text: &str) -> bool {
             });
     }
 
-    if tail.contains(',') || tail.contains(" and ") || tail.contains('&') {
-        return true;
+    if !has_explicit_copyright_marker(text) {
+        return false;
     }
 
-    alpha_tokens
+    has_binary_name_like_shape(original_tail)
+}
+
+fn extract_binary_string_author_supplements(text_content: &str) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
+
+    for (line_index, line) in text_content.lines().enumerate() {
+        if let Some(author) = extract_named_author_from_binary_line(line) {
+            authors.push(AuthorDetection {
+                author,
+                start_line: line_index + 1,
+                end_line: line_index + 1,
+            });
+        }
+    }
+
+    authors
+}
+
+fn extract_named_author_from_binary_line(line: &str) -> Option<String> {
+    let line = line.trim();
+    if line.is_empty() {
+        return None;
+    }
+
+    let emails = finder::find_emails(
+        line,
+        &DetectionConfig {
+            max_emails: 4,
+            max_urls: 0,
+            unique: false,
+        },
+    );
+    let email = emails.first()?.email.as_str();
+    if !is_binary_string_email_candidate(email) {
+        return None;
+    }
+
+    let lower_line = line.to_ascii_lowercase();
+    let email_start = lower_line.find(email)?;
+    let prefix = line[..email_start]
+        .trim_end_matches(['<', '(', '[', ' ', ':', '-'])
+        .trim();
+    let prefix = take_suffix_after_last_author_marker(prefix)?;
+    let prefix = prefix
+        .trim_start_matches(['*', '-', ':', ';', ',', '.', ' '])
+        .trim();
+
+    let (name, _) = split_name_email(prefix);
+    let name = name
+        .or_else(|| {
+            let trimmed =
+                prefix.trim_matches(|c: char| c == '<' || c == '(' || c == '[' || c == ' ');
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        })?
+        .trim()
+        .to_string();
+
+    if !has_binary_name_like_shape(&name) {
+        return None;
+    }
+
+    if line.contains(&format!("<{email}>")) {
+        Some(format!("{name} <{email}>"))
+    } else if line.contains(&format!("({email})")) {
+        Some(format!("{name} ({email})"))
+    } else {
+        Some(format!("{name} {email}"))
+    }
+}
+
+fn take_suffix_after_last_ascii_marker<'a>(text: &'a str, marker: &str) -> Option<&'a str> {
+    let lower = text.to_ascii_lowercase();
+    let idx = lower.rfind(marker)?;
+    Some(text[idx + marker.len()..].trim())
+}
+
+fn take_suffix_after_last_author_marker(text: &str) -> Option<&str> {
+    const MARKERS: &[&str] = &[
+        " patch author: ",
+        " patch author ",
+        " written by ",
+        " contributed by ",
+        " original work done by ",
+        " work done by ",
+        " thanks to ",
+        " review by ",
+        " by ",
+        " from ",
+    ];
+
+    MARKERS
         .iter()
-        .any(|token| is_company_like_suffix(token.trim_matches(|c: char| !c.is_alphanumeric())))
-        || alpha_tokens
+        .filter_map(|marker| take_suffix_after_last_ascii_marker(text, marker))
+        .next()
+}
+
+fn has_binary_name_like_shape(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() || trimmed.contains(" - ") || trimmed.chars().any(|c| c.is_ascii_digit())
+    {
+        return false;
+    }
+
+    let tokens: Vec<&str> = trimmed
+        .split(|c: char| !c.is_ascii_alphabetic() && c != '.' && c != '\'')
+        .filter(|segment| segment.chars().any(|c| c.is_ascii_alphabetic()))
+        .collect();
+    if tokens.is_empty() {
+        return false;
+    }
+
+    let uppercase_like = tokens
+        .iter()
+        .filter(|token| {
+            let token = token.trim_matches('.');
+            token
+                .chars()
+                .find(|c| c.is_ascii_alphabetic())
+                .is_some_and(|c| c.is_ascii_uppercase())
+        })
+        .count();
+
+    uppercase_like >= 2 && uppercase_like * 2 >= tokens.len()
+        || tokens
             .iter()
-            .filter(|token| token.chars().filter(|c| c.is_alphabetic()).count() >= 3)
-            .count()
-            >= 2
+            .any(|token| is_company_like_suffix(token.trim_matches(|c: char| !c.is_alphanumeric())))
 }
 
 fn has_sufficient_alphabetic_content(text: &str) -> bool {
@@ -743,7 +876,7 @@ fn extract_email_url_information(
         let config = DetectionConfig {
             max_emails: text_options.max_emails,
             max_urls: text_options.max_urls,
-            unique: false,
+            unique: from_binary_strings,
         };
         let emails = finder::find_emails(text_content, &config)
             .into_iter()
@@ -800,12 +933,38 @@ fn is_binary_string_url_candidate(url: &str) -> bool {
     has_strong_binary_host_shape(host) && has_meaningful_binary_url_context(&parsed)
 }
 
+fn is_binary_string_author_candidate(author: &str) -> bool {
+    let trimmed = author.trim();
+    if trimmed.is_empty()
+        || !has_sufficient_alphabetic_content(trimmed)
+        || has_excessive_at_noise(trimmed)
+    {
+        return false;
+    }
+
+    if trimmed.contains('@') {
+        return extract_named_author_from_binary_line(trimmed).is_some()
+            || finder::find_emails(
+                trimmed,
+                &DetectionConfig {
+                    max_emails: 4,
+                    max_urls: 0,
+                    unique: false,
+                },
+            )
+            .into_iter()
+            .any(|d| is_binary_string_email_candidate(&d.email));
+    }
+
+    has_binary_name_like_shape(trimmed)
+}
+
 fn has_meaningful_binary_url_context(parsed: &url::Url) -> bool {
     if parsed.path() != "/"
         && parsed
             .path()
             .split('/')
-            .any(|segment| segment.chars().any(|c| c.is_ascii_alphabetic()) && segment.len() >= 3)
+            .any(|segment| segment.chars().any(|c| c.is_ascii_alphabetic()) && segment.len() >= 2)
     {
         return true;
     }
@@ -819,8 +978,22 @@ fn has_meaningful_binary_url_context(parsed: &url::Url) -> bool {
     };
 
     let labels: Vec<&str> = host.split('.').collect();
+    if labels.len() > 2 {
+        return labels[..labels.len() - 1].iter().any(|label| {
+            label.len() >= 3 && label.chars().filter(|c| c.is_ascii_alphabetic()).count() >= 3
+        });
+    }
+
     if matches!(labels.first(), Some(&"www")) {
         return true;
+    }
+
+    if labels.len() == 2 {
+        let domain = labels[0];
+        let tld = labels[1];
+        if domain.len() >= 8 && matches!(tld, "org" | "edu" | "gov" | "mil" | "io" | "dev") {
+            return true;
+        }
     }
 
     labels
@@ -1184,7 +1357,8 @@ fn process_directory(
 mod tests {
     use super::{
         compute_percentage_of_license_text, convert_detection_to_model,
-        extract_email_url_information, is_binary_string_copyright_candidate,
+        extract_email_url_information, extract_named_author_from_binary_line,
+        is_binary_string_author_candidate, is_binary_string_copyright_candidate,
         is_binary_string_email_candidate, is_binary_string_url_candidate,
         is_go_non_production_source,
     };
@@ -1493,6 +1667,46 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_email_url_information_deduplicates_binary_emails_before_cap() {
+        let mut builder = FileInfoBuilder::default();
+        let options = TextDetectionOptions {
+            collect_info: false,
+            detect_packages: false,
+            detect_application_packages: false,
+            detect_system_packages: false,
+            detect_packages_in_compiled: false,
+            detect_copyrights: false,
+            detect_generated: false,
+            detect_emails: true,
+            detect_urls: false,
+            max_emails: 2,
+            max_urls: 50,
+            timeout_seconds: 120.0,
+        };
+
+        extract_email_url_information(
+            &mut builder,
+            "first jakub@redhat.com second jakub@redhat.com third contyk@redhat.com",
+            &options,
+            true,
+        );
+
+        let file = builder
+            .name("binary.bin".to_string())
+            .base_name("binary".to_string())
+            .extension(".bin".to_string())
+            .path("binary.bin".to_string())
+            .file_type(FileType::File)
+            .size(1)
+            .build()
+            .expect("builder should produce file info");
+
+        assert_eq!(file.emails.len(), 2, "emails: {:?}", file.emails);
+        assert_eq!(file.emails[0].email, "jakub@redhat.com");
+        assert_eq!(file.emails[1].email, "contyk@redhat.com");
+    }
+
+    #[test]
     fn test_binary_string_copyright_candidate_rejects_gibberish_holder_text() {
         let gibberish = "(c) S8@9 K @9 D @9 I,@9N(@ F@@9L,@ HD@9) M0@9s J'@y DH@9Ih@y";
         assert!(!is_binary_string_copyright_candidate(gibberish));
@@ -1502,6 +1716,13 @@ mod tests {
     fn test_binary_string_copyright_candidate_keeps_real_notice() {
         let notice = "Copyright nexB and others (c) 2012";
         assert!(is_binary_string_copyright_candidate(notice));
+    }
+
+    #[test]
+    fn test_binary_string_copyright_candidate_rejects_changelog_phrase() {
+        assert!(!is_binary_string_copyright_candidate(
+            "Copyright - split out libs"
+        ));
     }
 
     #[test]
@@ -1529,6 +1750,70 @@ mod tests {
     #[test]
     fn test_binary_string_url_candidate_rejects_bare_root_domain() {
         assert!(!is_binary_string_url_candidate("http://gmail.com/"));
+    }
+
+    #[test]
+    fn test_binary_string_url_candidate_keeps_project_subdomain_root() {
+        assert!(is_binary_string_url_candidate("http://gcc.gnu.org"));
+    }
+
+    #[test]
+    fn test_binary_string_url_candidate_keeps_long_org_root_domain() {
+        assert!(is_binary_string_url_candidate("https://publicsuffix.org/"));
+    }
+
+    #[test]
+    fn test_binary_string_url_candidate_keeps_short_project_path() {
+        assert!(is_binary_string_url_candidate("http://tukaani.org/xz/"));
+    }
+
+    #[test]
+    fn test_binary_string_author_candidate_keeps_named_author_with_email() {
+        assert!(is_binary_string_author_candidate(
+            "Andreas Schneider <asn@redhat.com>"
+        ));
+    }
+
+    #[test]
+    fn test_binary_string_author_candidate_rejects_gibberish() {
+        assert!(!is_binary_string_author_candidate(
+            "S8@9 K @9 D @9 I,@9N(@ F@@9L,@ HD@9"
+        ));
+    }
+
+    #[test]
+    fn test_binary_string_author_candidate_rejects_changelog_phrase() {
+        assert!(!is_binary_string_author_candidate(
+            "Developers can enable them. - revert news user back to"
+        ));
+    }
+
+    #[test]
+    fn test_extract_named_author_from_binary_line_recovers_by_prefix() {
+        assert_eq!(
+            extract_named_author_from_binary_line("Patch by Andreas Schneider <asn@redhat.com>"),
+            Some("Andreas Schneider <asn@redhat.com>".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_named_author_from_binary_line_recovers_parenthesized_email() {
+        assert_eq!(
+            extract_named_author_from_binary_line(
+                "same for both OpenSSL and NSS by Rob Crittenden (rcritten@redhat.com)"
+            ),
+            Some("Rob Crittenden (rcritten@redhat.com)".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_named_author_from_binary_line_rejects_plain_changelog_packager_line() {
+        assert_eq!(
+            extract_named_author_from_binary_line(
+                "Rob Crittenden <rcritten@redhat.com> - 3.11.7-9"
+            ),
+            None
+        );
     }
 
     #[test]
