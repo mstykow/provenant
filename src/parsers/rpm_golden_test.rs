@@ -1,9 +1,5 @@
 #[cfg(test)]
 mod golden_tests {
-    use std::path::Path;
-    use std::path::PathBuf;
-    use std::process::Command;
-
     use crate::models::{DatasourceId, PackageType};
     use crate::parsers::PackageParser;
     use crate::parsers::golden_test_utils::compare_package_data_parser_only;
@@ -15,6 +11,13 @@ mod golden_tests {
     use crate::parsers::rpm_parser::*;
     use crate::parsers::rpm_specfile::RpmSpecfileParser;
     use crate::parsers::rpm_yumdb::RpmYumdbParser;
+    use liblzma::read::XzDecoder;
+    use std::fs::File;
+    use std::path::Path;
+    use std::path::PathBuf;
+    use std::process::Command;
+    use tar::Archive;
+    use tempfile::tempdir;
 
     fn assert_fixture_exists(path: &Path) {
         assert!(path.exists(), "missing fixture: {}", path.display());
@@ -67,20 +70,32 @@ mod golden_tests {
 
         let package_data = RpmSqliteDatabaseParser::extract_first_package(&test_file);
 
-        if !rpm_command_available() {
-            assert_eq!(package_data.package_type, Some(PackageType::Rpm));
-            assert_eq!(
-                package_data.datasource_id,
-                Some(DatasourceId::RpmInstalledDatabaseSqlite)
-            );
-            assert_eq!(package_data.name, None);
-            assert_eq!(package_data.version, None);
-            return;
-        }
-
         match compare_package_data_parser_only(&package_data, &expected_file) {
             Ok(_) => (),
             Err(e) => panic!("Golden test failed for RPM sqlite db: {}", e),
+        }
+    }
+
+    #[test]
+    fn test_golden_rpm_bdb_fedora_rootfs() {
+        let archive_file = PathBuf::from("testdata/rpm/bdb-fedora-rootfs.tar.xz");
+        let expected_file = PathBuf::from("testdata/rpm/fedora-bdb-rootfs.expected.json");
+
+        assert_fixture_exists(&archive_file);
+        assert_fixture_exists(&expected_file);
+
+        let temp_dir = tempdir().expect("temporary extraction dir should exist");
+        let archive = File::open(&archive_file).expect("Fedora BDB archive should open");
+        Archive::new(XzDecoder::new(archive))
+            .unpack(temp_dir.path())
+            .expect("Fedora BDB archive should extract");
+
+        let test_file = temp_dir.path().join("rootfs/var/lib/rpm/Packages");
+        let package_data = RpmBdbDatabaseParser::extract_first_package(&test_file);
+
+        match compare_package_data_parser_only(&package_data, &expected_file) {
+            Ok(_) => (),
+            Err(e) => panic!("Golden test failed for Fedora RPM BDB rootfs: {}", e),
         }
     }
 

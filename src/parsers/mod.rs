@@ -252,6 +252,7 @@ mod requirements_txt;
 mod requirements_txt_test;
 pub(crate) mod rfc822;
 mod rpm_db;
+mod rpm_db_native;
 #[cfg(test)]
 mod rpm_db_scan_test;
 mod rpm_license_files;

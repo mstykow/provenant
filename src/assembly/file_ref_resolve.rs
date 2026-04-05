@@ -45,6 +45,10 @@ const DB_PATH_CONFIGS: &[DbPathConfig] = &[
         path_suffix: "usr/lib/sysimage/rpm/rpmdb.sqlite",
     },
     DbPathConfig {
+        datasource_ids: &[DatasourceId::RpmInstalledDatabaseSqlite],
+        path_suffix: "var/lib/rpm/rpmdb.sqlite",
+    },
+    DbPathConfig {
         datasource_ids: &[DatasourceId::DebianInstalledStatusDb],
         path_suffix: "var/lib/dpkg/status",
     },
@@ -698,6 +702,26 @@ fn build_path_index(files: &[FileInfo]) -> HashMap<String, usize> {
 }
 
 fn find_db_config(package: &Package) -> Option<&'static DbPathConfig> {
+    let datafile_paths = &package.datafile_paths;
+
+    for config in DB_PATH_CONFIGS {
+        if !datafile_paths.is_empty()
+            && !datafile_paths
+                .iter()
+                .any(|path| path.ends_with(config.path_suffix))
+        {
+            continue;
+        }
+
+        for &config_dsid in config.datasource_ids {
+            for &pkg_dsid in &package.datasource_ids {
+                if config_dsid == pkg_dsid {
+                    return Some(config);
+                }
+            }
+        }
+    }
+
     for config in DB_PATH_CONFIGS {
         for &config_dsid in config.datasource_ids {
             for &pkg_dsid in &package.datasource_ids {
@@ -707,6 +731,7 @@ fn find_db_config(package: &Package) -> Option<&'static DbPathConfig> {
             }
         }
     }
+
     None
 }
 

@@ -124,6 +124,7 @@ rmp-serde = { workspace = true }
 rpm = { version = "0.19.0", default-features = false, features = ["gzip-compression", "xz-compression", "zstd-compression", "bzip2-compression"] }
 ruff_python_ast = { version = "0.15.8", package = "rustpython-ruff_python_ast" }
 ruff_python_parser = { version = "0.15.8", package = "rustpython-ruff_python_parser" }
+rusqlite = "0.39.0"
 rustc_version_runtime = "0.3.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
