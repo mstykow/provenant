@@ -1,0 +1,24 @@
+{
+  "files": [
+    {
+      "path": "binary_rootfs_contacts/fedora.bin",
+      "type": "file",
+      "authors": [
+        "Andreas Schneider <asn@redhat.com>",
+        "Mr. Sam <sam@email-scan.com>",
+        "Rob Crittenden (rcritten@redhat.com)"
+      ],
+      "emails": [
+        "asn@redhat.com",
+        "contyk@redhat.com",
+        "jakub@redhat.com",
+        "rcritten@redhat.com",
+        "sam@email-scan.com"
+      ],
+      "urls": ["http://tukaani.org/xz/", "https://publicsuffix.org/"],
+      "copyrights": [],
+      "holders": [],
+      "scan_errors": []
+    }
+  ]
+}

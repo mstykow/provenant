@@ -6,6 +6,7 @@ use crate::utils::text::{
 };
 use anyhow::Error;
 use rayon::prelude::*;
+use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
@@ -638,6 +639,10 @@ fn prune_binary_string_detections(
         .into_iter()
         .filter(|author| is_binary_string_author_candidate(&author.author))
         .chain(extract_binary_string_author_supplements(text_content))
+        .filter({
+            let mut seen = HashSet::new();
+            move |author| seen.insert(author.author.clone())
+        })
         .collect();
 
     (kept_copyrights, kept_holders, kept_authors)
@@ -943,17 +948,31 @@ fn is_binary_string_author_candidate(author: &str) -> bool {
     }
 
     if trimmed.contains('@') {
-        return extract_named_author_from_binary_line(trimmed).is_some()
-            || finder::find_emails(
-                trimmed,
-                &DetectionConfig {
-                    max_emails: 4,
-                    max_urls: 0,
-                    unique: false,
-                },
-            )
-            .into_iter()
-            .any(|d| is_binary_string_email_candidate(&d.email));
+        let emails = finder::find_emails(
+            trimmed,
+            &DetectionConfig {
+                max_emails: 4,
+                max_urls: 0,
+                unique: true,
+            },
+        );
+        if emails.len() > 1 {
+            return false;
+        }
+
+        if let Some(extracted) = extract_named_author_from_binary_line(trimmed) {
+            return !extracted.is_empty();
+        }
+
+        let Some(email) = emails.first().map(|d| d.email.as_str()) else {
+            return false;
+        };
+        if !is_binary_string_email_candidate(email) {
+            return false;
+        }
+
+        let (name, _) = split_name_email(trimmed);
+        return name.as_deref().is_some_and(has_binary_name_like_shape);
     }
 
     has_binary_name_like_shape(trimmed)
@@ -1814,6 +1833,13 @@ mod tests {
             ),
             None
         );
+    }
+
+    #[test]
+    fn test_binary_string_author_candidate_rejects_multiple_emails_on_one_line() {
+        assert!(!is_binary_string_author_candidate(
+            "Rob Crittenden (rcritten@redhat.com) jakub@redhat.com"
+        ));
     }
 
     #[test]

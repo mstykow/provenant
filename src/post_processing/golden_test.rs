@@ -1,8 +1,10 @@
 mod tests {
+    use std::fs;
     use std::path::Path;
     use std::sync::Arc;
 
-    use serde_json::Value;
+    use serde_json::{Value, json};
+    use tempfile::tempdir;
 
     use super::super::materialize_generated_flags;
     use super::super::test_utils::{
@@ -13,6 +15,7 @@ mod tests {
         compare_scan_json_values, fixture_exclude_patterns, normalize_paths_for_test,
         normalize_scan_json,
     };
+    use crate::models::FileType;
     use crate::progress::{ProgressMode, ScanProgress};
     use crate::scanner::{
         LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected,
@@ -205,6 +208,94 @@ mod tests {
         if let Err(error) = compare_scan_json_values(&actual_normalized, &expected_normalized, "") {
             panic!(
                 "Generated CLI fixture mismatch: {}\nactual={}\nexpected={}",
+                error,
+                serde_json::to_string_pretty(&actual_normalized).unwrap_or_default(),
+                serde_json::to_string_pretty(&expected_normalized).unwrap_or_default()
+            );
+        }
+    }
+
+    #[test]
+    fn test_golden_fedora_binary_rootfs_contact_fixture_matches_expected_output() {
+        fn sorted(mut values: Vec<String>) -> Vec<String> {
+            values.sort();
+            values
+        }
+
+        let temp_dir = tempdir().expect("temporary fixture dir should be created");
+        let fixture_root = temp_dir.path().join("binary_rootfs_contacts");
+        fs::create_dir_all(&fixture_root).expect("fixture root should be created");
+
+        let mut bytes = b"abcd\0\xff".repeat(525_000);
+        bytes.extend_from_slice(
+            b"Patch by Andreas Schneider <asn@redhat.com>\0\xff\
+original work done by Mr. Sam <sam@email-scan.com>\0\xff\
+same for both OpenSSL and NSS by Rob Crittenden (rcritten@redhat.com)\0\xff\
+jakub@redhat.com\0\xffjakub@redhat.com\0\xffcontyk@redhat.com\0\xff\
+http://tukaani.org/xz/\0\xffhttps://publicsuffix.org/\0\xffhttp://gmail.com/\0\xff\
+Copyright - split out libs\0\xff",
+        );
+        fs::write(fixture_root.join("fedora.bin"), bytes).expect("fixture file should be written");
+
+        let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
+        let collected = collect_paths(&fixture_root, 0, &fixture_exclude_patterns(&fixture_root));
+        let mut files = process_collected(
+            &collected,
+            progress,
+            Some(super::super::test_utils::test_license_engine()),
+            LicenseScanOptions::default(),
+            &TextDetectionOptions {
+                collect_info: true,
+                detect_packages: true,
+                detect_application_packages: true,
+                detect_system_packages: true,
+                detect_packages_in_compiled: false,
+                detect_copyrights: true,
+                detect_emails: true,
+                detect_urls: true,
+                ..TextDetectionOptions::default()
+            },
+        )
+        .files;
+
+        normalize_paths_for_test(
+            &mut files,
+            temp_dir.path().to_str().expect("temp path should be UTF-8"),
+        );
+
+        let actual = json!({
+            "files": files
+                .into_iter()
+                .filter(|file| file.file_type == FileType::File)
+                .map(|file| json!({
+                    "path": file.path,
+                    "type": file.file_type,
+                    "authors": sorted(file.authors.into_iter().map(|author| author.author).collect::<Vec<_>>()),
+                    "emails": sorted(file.emails.into_iter().map(|email| email.email).collect::<Vec<_>>()),
+                    "urls": sorted(file.urls.into_iter().map(|url| url.url).collect::<Vec<_>>()),
+                    "copyrights": sorted(file.copyrights.into_iter().map(|copyright| copyright.copyright).collect::<Vec<_>>()),
+                    "holders": sorted(file.holders.into_iter().map(|holder| holder.holder).collect::<Vec<_>>()),
+                    "scan_errors": file.scan_errors,
+                }))
+                .collect::<Vec<_>>()
+        });
+
+        let expected: Value = serde_json::from_str(
+            &fs::read_to_string(
+                "testdata/summarycode-golden/file-info/fedora_binary_rootfs_contacts.expected.json",
+            )
+            .expect("expected file should be readable"),
+        )
+        .expect("expected file should parse");
+
+        let mut actual_normalized = actual;
+        let mut expected_normalized = expected;
+        normalize_scan_json(&mut actual_normalized, None);
+        normalize_scan_json(&mut expected_normalized, None);
+
+        if let Err(error) = compare_scan_json_values(&actual_normalized, &expected_normalized, "") {
+            panic!(
+                "Fedora binary rootfs contact fixture mismatch: {}\nactual={}\nexpected={}",
                 error,
                 serde_json::to_string_pretty(&actual_normalized).unwrap_or_default(),
                 serde_json::to_string_pretty(&expected_normalized).unwrap_or_default()
