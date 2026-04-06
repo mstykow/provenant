@@ -224,6 +224,37 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_flake_metadata_from_chromium_style_flake() {
+        let (_temp_dir, path) = create_named_manifest(
+            "chromium-flake",
+            "flake.nix",
+            r#"{
+  inputs = { };
+  outputs =
+    { self }:
+    let
+      devShell = system: {
+        "${system}".default = import ./make-shell-for-system.nix {
+          inherit system;
+        } { };
+      };
+    in
+    {
+      devShells = devShell "aarch64-linux" // devShell "x86_64-linux";
+    };
+}
+"#,
+        );
+
+        let package = NixFlakeParser::extract_first_package(&path);
+
+        assert_eq!(package.package_type, Some(PackageType::Nix));
+        assert_eq!(package.datasource_id, Some(DatasourceId::NixFlakeNix));
+        assert_eq!(package.name.as_deref(), Some("chromium-flake"));
+        assert!(package.dependencies.is_empty());
+    }
+
+    #[test]
     fn test_extract_default_nix_derivation_metadata_and_dependencies() {
         let (_temp_dir, path) = create_named_manifest(
             "demo-derivation",

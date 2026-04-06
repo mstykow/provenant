@@ -377,6 +377,7 @@ impl Parser {
 
     fn parse_term(&mut self) -> Result<Expr, String> {
         match self.peek() {
+            Some(Token::Ident(keyword)) if keyword == "let" => self.parse_let_in_expr(),
             Some(Token::Ident(keyword)) if keyword == "with" => {
                 self.index += 1;
                 let _ = self.parse_expr()?;
@@ -403,6 +404,29 @@ impl Parser {
             Some(Token::Ident(_)) => self.parse_symbol(),
             _ => Err("expected expression".to_string()),
         }
+    }
+
+    fn parse_let_in_expr(&mut self) -> Result<Expr, String> {
+        self.take_exact_ident("let")?;
+
+        while !matches!(self.peek(), Some(Token::Ident(keyword)) if keyword == "in") {
+            if self.peek().is_none() {
+                return Err("unterminated let expression".to_string());
+            }
+
+            if matches!(self.peek(), Some(Token::Ident(keyword)) if keyword == "inherit") {
+                self.skip_until_semicolon()?;
+                continue;
+            }
+
+            let _key = self.parse_attr_path()?;
+            self.expect(&Token::Equals)?;
+            let _value = self.parse_expr()?;
+            self.expect(&Token::Semicolon)?;
+        }
+
+        self.take_exact_ident("in")?;
+        self.parse_expr()
     }
 
     fn parse_attrset(&mut self) -> Result<Expr, String> {
@@ -432,9 +456,9 @@ impl Parser {
     }
 
     fn parse_attr_path(&mut self) -> Result<Vec<String>, String> {
-        let mut path = vec![self.take_ident()?];
+        let mut path = vec![self.take_attr_key()?];
         while self.consume(&Token::Dot) {
-            path.push(self.take_ident()?);
+            path.push(self.take_attr_key()?);
         }
         Ok(path)
     }
@@ -470,6 +494,20 @@ impl Parser {
         match self.next() {
             Some(Token::Ident(value)) => Ok(value),
             _ => Err("expected identifier".to_string()),
+        }
+    }
+
+    fn take_exact_ident(&mut self, expected: &str) -> Result<(), String> {
+        match self.next() {
+            Some(Token::Ident(value)) if value == expected => Ok(()),
+            _ => Err(format!("expected {expected}")),
+        }
+    }
+
+    fn take_attr_key(&mut self) -> Result<String, String> {
+        match self.next() {
+            Some(Token::Ident(value)) | Some(Token::String(value)) => Ok(value),
+            _ => Err("expected attribute key".to_string()),
         }
     }
 
