@@ -435,18 +435,12 @@ fn build_env_logger() -> env_logger::Logger {
 }
 
 fn apply_default_log_filters(builder: &mut env_logger::Builder) {
-    if let Some(level) = pdf_oxide_default_log_filter() {
-        for module in [
-            "pdf_oxide::decoders::flate",
-            "pdf_oxide::document",
-            "pdf_oxide::encryption::handler",
-            "pdf_oxide::extractors::text",
-            "pdf_oxide::fonts::font_dict",
-            "pdf_oxide::parser",
-            "pdf_oxide::xref",
-        ] {
-            builder.filter_module(module, level);
-        }
+    apply_default_log_filters_from(builder, env::var("RUST_LOG").ok().as_deref());
+}
+
+fn apply_default_log_filters_from(builder: &mut env_logger::Builder, rust_log: Option<&str>) {
+    if let Some(level) = pdf_oxide_default_log_filter_from(rust_log) {
+        builder.filter_module("pdf_oxide", level);
     }
 }
 
@@ -506,13 +500,8 @@ fn pluralize_files(count: usize) -> &'static str {
     if count == 1 { "file" } else { "files" }
 }
 
-fn pdf_oxide_default_log_filter() -> Option<LevelFilter> {
-    should_filter_pdf_oxide_default_warnings().then_some(LevelFilter::Error)
-}
-
-fn should_filter_pdf_oxide_default_warnings() -> bool {
-    let rust_log = env::var("RUST_LOG").ok();
-    should_filter_pdf_oxide_default_warnings_from(rust_log.as_deref())
+fn pdf_oxide_default_log_filter_from(rust_log: Option<&str>) -> Option<LevelFilter> {
+    should_filter_pdf_oxide_default_warnings_from(rust_log).then_some(LevelFilter::Error)
 }
 
 fn should_filter_pdf_oxide_default_warnings_from(rust_log: Option<&str>) -> bool {
@@ -686,14 +675,15 @@ fn num_cpus_for_display() -> usize {
 #[cfg(test)]
 mod tests {
     use super::{
-        ScanStats, build_summary_messages, concise_scan_error_reason, format_default_scan_error,
-        format_default_scan_error_from_list, format_size, pdf_oxide_default_log_filter,
-        pluralize_files, should_filter_pdf_oxide_default_warnings_from,
+        ScanStats, apply_default_log_filters_from, build_summary_messages,
+        concise_scan_error_reason, format_default_scan_error, format_default_scan_error_from_list,
+        format_size, pdf_oxide_default_log_filter_from, pluralize_files,
+        should_filter_pdf_oxide_default_warnings_from,
     };
 
     use std::path::Path;
 
-    use log::LevelFilter;
+    use log::{Level, LevelFilter, Log, MetadataBuilder};
 
     #[test]
     fn format_size_matches_expected_shape() {
@@ -781,7 +771,10 @@ mod tests {
 
     #[test]
     fn default_pdf_oxide_warnings_are_suppressed() {
-        assert_eq!(pdf_oxide_default_log_filter(), Some(LevelFilter::Error));
+        assert_eq!(
+            pdf_oxide_default_log_filter_from(None),
+            Some(LevelFilter::Error)
+        );
         assert!(should_filter_pdf_oxide_default_warnings_from(None));
     }
 
@@ -790,6 +783,25 @@ mod tests {
         assert!(!should_filter_pdf_oxide_default_warnings_from(Some(
             "pdf_oxide::fonts::font_dict=warn"
         )));
+    }
+
+    #[test]
+    fn default_pdf_oxide_filter_covers_unlisted_submodules() {
+        let mut builder = env_logger::Builder::new();
+        builder.filter_level(LevelFilter::Warn);
+        apply_default_log_filters_from(&mut builder, None);
+        let logger = builder.build();
+        let warn_metadata = MetadataBuilder::new()
+            .target("pdf_oxide::content::parser")
+            .level(Level::Warn)
+            .build();
+        let error_metadata = MetadataBuilder::new()
+            .target("pdf_oxide::content::parser")
+            .level(Level::Error)
+            .build();
+
+        assert!(!logger.enabled(&warn_metadata));
+        assert!(logger.enabled(&error_metadata));
     }
 
     #[test]
