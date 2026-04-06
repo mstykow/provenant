@@ -23,7 +23,7 @@ use crate::post_processing::{
     apply_license_policy_from_file, apply_package_reference_following, build_facet_rules,
     collect_top_level_license_detections, collect_top_level_license_references, create_output,
 };
-use crate::progress::{ProgressMode, ScanProgress};
+use crate::progress::{ProgressMode, ScanProgress, format_default_scan_error};
 use crate::scan_result_shaping::{
     apply_cli_path_selection_filter, apply_ignore_resource_filter, apply_mark_source,
     apply_only_findings_filter, apply_user_path_filters_to_collected, filter_redundant_clues,
@@ -95,6 +95,7 @@ fn run() -> Result<()> {
         preloaded_license_detections,
         preloaded_license_references,
         preloaded_license_rule_references,
+        preloaded_extra_errors,
         mut active_license_engine,
     ) = if cli.from_json {
         let loaded = load_and_merge_json_inputs(&cli.dir_path, cli.strip_root, cli.full_root)?;
@@ -113,6 +114,7 @@ fn run() -> Result<()> {
             license_detections,
             license_references,
             license_rule_references,
+            extra_errors,
         ) = loaded.into_parts();
         (
             process_result,
@@ -121,6 +123,7 @@ fn run() -> Result<()> {
             license_detections,
             license_references,
             license_rule_references,
+            extra_errors,
             None,
         )
     } else {
@@ -148,6 +151,11 @@ fn run() -> Result<()> {
             .files
             .iter()
             .map(|(path, _)| path.clone())
+            .collect();
+        let runtime_errors = collected
+            .collection_errors
+            .iter()
+            .map(|(path, err)| format_default_scan_error(path, err))
             .collect();
         for (path, err) in &collected.collection_errors {
             progress.record_runtime_error(path, err);
@@ -274,6 +282,7 @@ fn run() -> Result<()> {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            runtime_errors,
             license_engine,
         )
     };
@@ -335,11 +344,22 @@ fn run() -> Result<()> {
         }
     });
 
-    let mut extra_errors = Vec::new();
+    if cli.from_json {
+        for err in &preloaded_extra_errors {
+            progress.record_additional_error(err);
+        }
+    }
+
+    let mut extra_errors = preloaded_extra_errors;
     if let Some(policy_path) = cli.license_policy.as_deref() {
-        extra_errors = record_detail_timing(&progress, "post-scan:license-policy", || {
-            apply_license_policy_from_file(&mut scan_result.files, Path::new(policy_path))
-        })?;
+        let license_policy_errors =
+            record_detail_timing(&progress, "post-scan:license-policy", || {
+                apply_license_policy_from_file(&mut scan_result.files, Path::new(policy_path))
+            })?;
+        for err in &license_policy_errors {
+            progress.record_additional_error(err);
+        }
+        extra_errors.extend(license_policy_errors);
     }
 
     if cli.from_json {
