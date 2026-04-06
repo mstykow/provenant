@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use log::warn;
+use log::debug;
 
 use crate::models::{DatasourceId, FileInfo, Package, PackageData, TopLevelDependency};
 
@@ -76,7 +76,7 @@ pub(super) fn plan_cargo_workspace_domains(
         let member_indices = discover_members(files, workspace_hint);
 
         if member_indices.is_empty() {
-            warn!(
+            debug!(
                 "No workspace members found for patterns {:?} in {:?}",
                 workspace_hint.members, workspace_hint.root_dir
             );
