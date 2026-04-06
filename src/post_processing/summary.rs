@@ -22,7 +22,7 @@ use super::tallies::{
 use super::{is_score_key_file, package_root};
 
 #[cfg(test)]
-pub(crate) fn compute_summary(files: &[FileInfo], packages: &[Package]) -> Option<Summary> {
+pub(super) fn compute_summary(files: &[FileInfo], packages: &[Package]) -> Option<Summary> {
     let package_file_index = super::package_file_index::PackageFileIndex::build(files, packages);
     let indexes = super::output_indexes::OutputIndexes::build(
         files,
@@ -33,7 +33,7 @@ pub(crate) fn compute_summary(files: &[FileInfo], packages: &[Package]) -> Optio
     compute_summary_with_options(files, packages, &indexes, true, true)
 }
 
-pub(crate) fn compute_summary_with_options(
+pub(super) fn compute_summary_with_options(
     files: &[FileInfo],
     packages: &[Package],
     indexes: &OutputIndexes,
@@ -324,7 +324,7 @@ where
     expressions
 }
 
-pub(crate) fn get_primary_license(declared_license_expressions: &[String]) -> Option<String> {
+pub(super) fn get_primary_license(declared_license_expressions: &[String]) -> Option<String> {
     let unique_declared_license_expressions = unique(declared_license_expressions);
     if unique_declared_license_expressions.len() == 1 {
         return unique_declared_license_expressions.into_iter().next();

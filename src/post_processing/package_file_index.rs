@@ -10,10 +10,10 @@ use super::classification::{
 use super::{lowest_common_parent_path, package_root};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct FileIx(pub(crate) usize);
+pub(super) struct FileIx(pub(super) usize);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct PackageIx(pub(crate) usize);
+pub(super) struct PackageIx(pub(super) usize);
 
 #[derive(Clone, Copy, Debug, Default)]
 struct FileFlags {
@@ -23,7 +23,7 @@ struct FileFlags {
     is_community_candidate: bool,
 }
 
-pub(crate) struct PackageFileIndex {
+pub(super) struct PackageFileIndex {
     file_ix_by_path: HashMap<String, FileIx>,
     file_package_ixs: Vec<Vec<PackageIx>>,
     file_flags: Vec<FileFlags>,
@@ -34,7 +34,7 @@ pub(crate) struct PackageFileIndex {
 }
 
 impl PackageFileIndex {
-    pub(crate) fn build(files: &[FileInfo], packages: &[Package]) -> Self {
+    pub(super) fn build(files: &[FileInfo], packages: &[Package]) -> Self {
         let package_ix_by_uid: HashMap<_, _> = packages
             .iter()
             .enumerate()
@@ -137,7 +137,7 @@ impl PackageFileIndex {
         }
     }
 
-    pub(crate) fn is_key_file(
+    pub(super) fn is_key_file(
         &self,
         files: &[FileInfo],
         file_ix: FileIx,
@@ -150,15 +150,15 @@ impl PackageFileIndex {
         }
     }
 
-    pub(crate) fn package_ixs_for_file(&self, file_ix: FileIx) -> &[PackageIx] {
+    pub(super) fn package_ixs_for_file(&self, file_ix: FileIx) -> &[PackageIx] {
         &self.file_package_ixs[file_ix.0]
     }
 
-    pub(crate) fn file_ix_by_path(&self, path: &str) -> Option<FileIx> {
+    pub(super) fn file_ix_by_path(&self, path: &str) -> Option<FileIx> {
         self.file_ix_by_path.get(path).copied()
     }
 
-    pub(crate) fn classify_file(&self, files: &[FileInfo], file_ix: FileIx) -> FileClassification {
+    pub(super) fn classify_file(&self, files: &[FileInfo], file_ix: FileIx) -> FileClassification {
         let file = &files[file_ix.0];
         let flags = self.file_flags[file_ix.0];
         let is_top_level = self.scan_top_level_flags[file_ix.0]

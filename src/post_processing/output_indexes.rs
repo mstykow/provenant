@@ -5,13 +5,13 @@ use crate::models::FileInfo;
 use super::package_file_index::{FileIx, PackageFileIndex, PackageIx};
 
 #[derive(Default)]
-pub(crate) struct OutputIndexes {
+pub(super) struct OutputIndexes {
     first_file_index_by_path: HashMap<String, FileIx>,
     key_file_indices_by_package_ix: HashMap<PackageIx, Vec<FileIx>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum OutputIndexMode {
+pub(super) enum OutputIndexMode {
     KeyFilesOnly,
     Full,
 }
@@ -23,7 +23,7 @@ impl OutputIndexMode {
 }
 
 impl OutputIndexes {
-    pub(crate) fn build(
+    pub(super) fn build(
         files: &[FileInfo],
         package_file_index: Option<&PackageFileIndex>,
         use_fallback_key_classification: bool,
@@ -62,11 +62,11 @@ impl OutputIndexes {
         indexes
     }
 
-    pub(crate) fn file_ix_by_path(&self, path: &str) -> Option<FileIx> {
+    pub(super) fn file_ix_by_path(&self, path: &str) -> Option<FileIx> {
         self.first_file_index_by_path.get(path).copied()
     }
 
-    pub(crate) fn key_file_indices_for_package(&self, package_ix: PackageIx) -> Option<&[FileIx]> {
+    pub(super) fn key_file_indices_for_package(&self, package_ix: PackageIx) -> Option<&[FileIx]> {
         self.key_file_indices_by_package_ix
             .get(&package_ix)
             .map(Vec::as_slice)

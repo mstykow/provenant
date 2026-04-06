@@ -10,7 +10,7 @@ use super::summary_helpers::{
     package_primary_detected_license_values,
 };
 
-pub(crate) fn compute_tallies(files: &[FileInfo]) -> Option<Tallies> {
+pub(super) fn compute_tallies(files: &[FileInfo]) -> Option<Tallies> {
     let detected_license_expression = tally_file_values(files, detected_license_values, true);
     let copyrights = tally_file_values(files, copyright_values, true);
     let holders = tally_file_values(files, holder_values, true);
@@ -28,7 +28,7 @@ pub(crate) fn compute_tallies(files: &[FileInfo]) -> Option<Tallies> {
     (!tallies.is_empty()).then_some(tallies)
 }
 
-pub(crate) fn compute_key_file_tallies(files: &[FileInfo]) -> Option<Tallies> {
+pub(super) fn compute_key_file_tallies(files: &[FileInfo]) -> Option<Tallies> {
     if !files
         .iter()
         .any(|file| file.file_type == FileType::File && file.is_key_file)
@@ -62,7 +62,7 @@ pub(crate) fn compute_key_file_tallies(files: &[FileInfo]) -> Option<Tallies> {
     (!tallies.is_empty()).then_some(tallies)
 }
 
-pub(crate) fn compute_tallies_by_facet(files: &[FileInfo]) -> Option<Vec<FacetTallies>> {
+pub(super) fn compute_tallies_by_facet(files: &[FileInfo]) -> Option<Vec<FacetTallies>> {
     let mut buckets: HashMap<&'static str, TallyAccumulator> = FACETS
         .iter()
         .map(|facet| (*facet, TallyAccumulator::default()))
@@ -100,7 +100,7 @@ pub(crate) fn compute_tallies_by_facet(files: &[FileInfo]) -> Option<Vec<FacetTa
     )
 }
 
-pub(crate) fn compute_detailed_tallies(files: &mut [FileInfo]) {
+pub(super) fn compute_detailed_tallies(files: &mut [FileInfo]) {
     let mut children_by_parent: HashMap<String, Vec<usize>> = HashMap::new();
     let known_paths: HashSet<String> = files.iter().map(|file| file.path.clone()).collect();
 
@@ -132,7 +132,7 @@ pub(crate) fn compute_detailed_tallies(files: &mut [FileInfo]) {
     }
 }
 
-pub(crate) fn compute_file_tallies(files: &mut [FileInfo]) {
+pub(super) fn compute_file_tallies(files: &mut [FileInfo]) {
     for file in files.iter_mut() {
         if file.file_type == FileType::File {
             file.tallies = Some(compute_direct_file_tallies(file));

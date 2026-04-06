@@ -20,9 +20,8 @@ use crate::models::{FileInfo, FileType};
 use crate::output::{OutputWriteConfig, write_output_file};
 use crate::post_processing::{
     CreateOutputContext, CreateOutputOptions, DEFAULT_LICENSEDB_URL_TEMPLATE,
-    apply_package_reference_following, build_facet_rules, collect_top_level_license_detections,
-    collect_top_level_license_references, create_output,
-    license_policy::apply_license_policy_from_file,
+    apply_license_policy_from_file, apply_package_reference_following, build_facet_rules,
+    collect_top_level_license_detections, collect_top_level_license_references, create_output,
 };
 use crate::progress::{ProgressMode, ScanProgress};
 use crate::scan_result_shaping::{

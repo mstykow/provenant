@@ -6,6 +6,7 @@ use chrono::Utc;
 use glob::Pattern;
 
 use self::classification::apply_file_classification;
+pub(crate) use self::license_policy::apply_license_policy_from_file;
 pub(crate) use self::license_references::collect_top_level_license_references;
 use self::output_indexes::{OutputIndexMode, OutputIndexes};
 use self::package_file_index::PackageFileIndex;
@@ -13,14 +14,14 @@ use self::package_metadata_promotion::promote_package_metadata_from_key_files;
 pub(crate) use self::reference_following::apply_package_reference_following;
 pub(crate) use self::reference_following::collect_top_level_license_detections;
 #[cfg(test)]
-pub(crate) use self::reference_following::{
+use self::reference_following::{
     build_reference_follow_snapshot, resolve_referenced_resource, use_referenced_license_expression,
 };
 #[cfg(test)]
-pub(crate) use self::summary::compute_summary;
+use self::summary::compute_summary;
 use self::summary::compute_summary_with_options;
 #[cfg(test)]
-pub(crate) use self::summary::get_primary_license;
+use self::summary::get_primary_license;
 use self::tallies::{
     compute_detailed_tallies, compute_file_tallies, compute_key_file_tallies, compute_tallies,
     compute_tallies_by_facet,
@@ -48,7 +49,7 @@ mod facet_test;
 mod generated_test;
 #[cfg(all(test, feature = "golden-tests"))]
 mod golden_test;
-pub(crate) mod license_policy;
+mod license_policy;
 mod license_references;
 mod output_indexes;
 #[cfg(test)]

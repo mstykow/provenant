@@ -22,14 +22,14 @@ const DETECTION_LOG_UNKNOWN_REFERENCE_IN_FILE_TO_NONEXISTENT_PACKAGE: &str =
     "unknown-reference-in-file-to-nonexistent-package";
 
 #[derive(Debug, Clone)]
-pub(crate) struct ResolvedReferenceTarget {
-    pub(crate) path: String,
+pub(super) struct ResolvedReferenceTarget {
+    pub(super) path: String,
     detections: Vec<LicenseDetection>,
     preserve_match_from_file: bool,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ReferenceFollowSnapshot {
+pub(super) struct ReferenceFollowSnapshot {
     files_by_path: HashMap<String, ResolvedReferenceTarget>,
     package_targets_by_uid: HashMap<String, ResolvedReferenceTarget>,
     package_manifest_dirs_by_uid: HashMap<String, Vec<String>>,
@@ -142,7 +142,7 @@ pub(crate) fn collect_top_level_license_detections(
     unique_detections
 }
 
-pub(crate) fn build_reference_follow_snapshot(
+pub(super) fn build_reference_follow_snapshot(
     files: &[FileInfo],
     packages: &[Package],
 ) -> ReferenceFollowSnapshot {
@@ -735,7 +735,7 @@ fn sanitize_referenced_filename(name: &str) -> String {
         .to_string()
 }
 
-pub(crate) fn resolve_referenced_resource(
+pub(super) fn resolve_referenced_resource(
     referenced_filename: &str,
     current_path: &str,
     package_uids: &[String],
@@ -856,7 +856,7 @@ fn join_reference_candidate(base: &str, referenced_filename: &str) -> String {
     }
 }
 
-pub(crate) fn use_referenced_license_expression(
+pub(super) fn use_referenced_license_expression(
     referenced_license_expression: Option<&str>,
     detection: &LicenseDetection,
 ) -> bool {
