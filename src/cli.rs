@@ -6,6 +6,8 @@ use yaml_serde::Value;
 use crate::license_detection::DEFAULT_LICENSEDB_URL_TEMPLATE;
 use crate::output::OutputFormat;
 
+const PDF_OXIDE_LOG_HELP: &str = "Troubleshooting PDF parser logs:\n  Provenant suppresses noisy pdf_oxide warnings by default.\n  To inspect raw pdf_oxide logs for debugging, rerun with RUST_LOG=pdf_oxide=warn (or =error).";
+
 fn parse_license_policy_arg(value: &str) -> Result<String, String> {
     let policy_path = Path::new(value);
     let metadata = fs::metadata(policy_path).map_err(|err| {
@@ -60,6 +62,7 @@ fn parse_license_policy_arg(value: &str) -> Result<String, String> {
         "\n",
         "License detection uses data from ScanCode Toolkit (CC-BY-4.0). See NOTICE or --show_attribution."
     ),
+    after_help = PDF_OXIDE_LOG_HELP,
     about,
     long_about = None,
     group(
@@ -543,6 +546,14 @@ mod tests {
             .to_string();
 
         assert!(help.contains("requires --license, --copyright, and --license-text"));
+    }
+
+    #[test]
+    fn test_help_mentions_pdf_oxide_rust_log_escape_hatch() {
+        let help = Cli::command().render_help().to_string();
+
+        assert!(help.contains("RUST_LOG=pdf_oxide=warn"));
+        assert!(help.contains("suppresses noisy pdf_oxide warnings by default"));
     }
 
     #[test]

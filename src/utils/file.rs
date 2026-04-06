@@ -109,6 +109,14 @@ pub fn decode_bytes_to_string(bytes: &[u8]) -> String {
 }
 
 pub fn extract_text_for_detection(path: &Path, bytes: &[u8]) -> (String, ExtractedTextKind) {
+    let (text, kind, _) = extract_text_for_detection_with_diagnostics(path, bytes);
+    (text, kind)
+}
+
+pub(crate) fn extract_text_for_detection_with_diagnostics(
+    path: &Path,
+    bytes: &[u8],
+) -> (String, ExtractedTextKind, Option<String>) {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
@@ -118,18 +126,18 @@ pub fn extract_text_for_detection(path: &Path, bytes: &[u8]) -> (String, Extract
     if looks_like_rtf(bytes, ext.as_deref()) {
         let text = extract_rtf_text(bytes);
         return if text.trim().is_empty() {
-            (String::new(), ExtractedTextKind::None)
+            (String::new(), ExtractedTextKind::None, None)
         } else {
-            (text, ExtractedTextKind::Decoded)
+            (text, ExtractedTextKind::Decoded, None)
         };
     }
 
     if looks_like_pdf(bytes) || detected_format.short_name() == Some("PDF") {
-        let text = extract_pdf_text(path, bytes);
+        let (text, scan_error) = extract_pdf_text(path, bytes);
         return if text.is_empty() {
-            (String::new(), ExtractedTextKind::None)
+            (String::new(), ExtractedTextKind::None, scan_error)
         } else {
-            (text, ExtractedTextKind::Pdf)
+            (text, ExtractedTextKind::Pdf, None)
         };
     }
 
@@ -137,34 +145,34 @@ pub fn extract_text_for_detection(path: &Path, bytes: &[u8]) -> (String, Extract
         let text = extract_image_metadata_text(bytes, format);
         return if text.is_empty() {
             if is_supported_image_container(bytes, format) {
-                (String::new(), ExtractedTextKind::None)
+                (String::new(), ExtractedTextKind::None, None)
             } else {
                 let decoded = decode_bytes_to_string(bytes);
                 if decoded.is_empty() {
-                    (String::new(), ExtractedTextKind::None)
+                    (String::new(), ExtractedTextKind::None, None)
                 } else {
-                    (decoded, ExtractedTextKind::Decoded)
+                    (decoded, ExtractedTextKind::Decoded, None)
                 }
             }
         } else {
-            (text, ExtractedTextKind::ImageMetadata)
+            (text, ExtractedTextKind::ImageMetadata, None)
         };
     }
 
     if should_skip_binary_string_extraction(path, bytes, detected_format) {
-        return (String::new(), ExtractedTextKind::None);
+        return (String::new(), ExtractedTextKind::None, None);
     }
 
     let decoded = decode_bytes_to_string(bytes);
     if !decoded.is_empty() {
-        return (decoded, ExtractedTextKind::Decoded);
+        return (decoded, ExtractedTextKind::Decoded, None);
     }
 
     let text = extract_printable_strings(bytes);
     if text.is_empty() {
-        (String::new(), ExtractedTextKind::None)
+        (String::new(), ExtractedTextKind::None, None)
     } else {
-        (text, ExtractedTextKind::BinaryStrings)
+        (text, ExtractedTextKind::BinaryStrings, None)
     }
 }
 
@@ -1308,10 +1316,13 @@ fn normalize_metadata_value(value: &str) -> String {
         .to_string()
 }
 
-fn extract_pdf_text(path: &Path, bytes: &[u8]) -> String {
+fn extract_pdf_text(path: &Path, bytes: &[u8]) -> (String, Option<String>) {
     if bytes.len() < 5 || &bytes[..5] != b"%PDF-" {
-        return String::new();
+        return (String::new(), None);
     }
+
+    let mut failures = Vec::new();
+    let mut saw_success = false;
 
     let extracted = catch_unwind(AssertUnwindSafe(
         || -> Result<String, Box<dyn std::error::Error>> {
@@ -1319,10 +1330,18 @@ fn extract_pdf_text(path: &Path, bytes: &[u8]) -> String {
             extract_first_pdf_page_text(&mut document)
         },
     ));
-    if let Ok(Ok(text)) = extracted
-        && let Some(normalized) = normalize_pdf_text(text)
-    {
-        return normalized;
+    match extracted {
+        Ok(Ok(text)) => {
+            saw_success = true;
+            if let Some(normalized) = normalize_pdf_text(text) {
+                return (normalized, None);
+            }
+        }
+        Ok(Err(err)) => failures.push(format!("from-bytes first-page: {err}")),
+        Err(payload) => failures.push(format!(
+            "from-bytes first-page panic: {}",
+            panic_payload_to_string(payload.as_ref())
+        )),
     }
 
     let extracted = catch_unwind(AssertUnwindSafe(
@@ -1331,10 +1350,18 @@ fn extract_pdf_text(path: &Path, bytes: &[u8]) -> String {
             extract_pdf_text_from_document(&mut document)
         },
     ));
-    if let Ok(Ok(text)) = extracted
-        && let Some(normalized) = normalize_pdf_text(text)
-    {
-        return normalized;
+    match extracted {
+        Ok(Ok(text)) => {
+            saw_success = true;
+            if let Some(normalized) = normalize_pdf_text(text) {
+                return (normalized, None);
+            }
+        }
+        Ok(Err(err)) => failures.push(format!("open full-document: {err}")),
+        Err(payload) => failures.push(format!(
+            "open full-document panic: {}",
+            panic_payload_to_string(payload.as_ref())
+        )),
     }
 
     let extracted = catch_unwind(AssertUnwindSafe(
@@ -1343,13 +1370,42 @@ fn extract_pdf_text(path: &Path, bytes: &[u8]) -> String {
             extract_pdf_text_from_document(&mut document)
         },
     ));
-    if let Ok(Ok(text)) = extracted
-        && let Some(normalized) = normalize_pdf_text(text)
-    {
-        return normalized;
+    match extracted {
+        Ok(Ok(text)) => {
+            saw_success = true;
+            if let Some(normalized) = normalize_pdf_text(text) {
+                return (normalized, None);
+            }
+        }
+        Ok(Err(err)) => failures.push(format!("from-bytes full-document: {err}")),
+        Err(payload) => failures.push(format!(
+            "from-bytes full-document panic: {}",
+            panic_payload_to_string(payload.as_ref())
+        )),
     }
 
-    String::new()
+    if saw_success {
+        (String::new(), None)
+    } else {
+        (
+            String::new(),
+            Some(format!(
+                "PDF text extraction failed after {} attempts: {}",
+                failures.len(),
+                failures.join("; ")
+            )),
+        )
+    }
+}
+
+fn panic_payload_to_string(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_string()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "unknown panic payload".to_string()
+    }
 }
 
 fn extract_first_pdf_page_text(
@@ -1539,7 +1595,8 @@ mod tests {
 
     use super::{
         ExtractedTextKind, classify_file_info, extract_printable_strings,
-        extract_text_for_detection, normalize_mime_type, normalize_pdf_heading_comparison_text,
+        extract_text_for_detection, extract_text_for_detection_with_diagnostics,
+        normalize_mime_type, normalize_pdf_heading_comparison_text,
     };
 
     #[test]
@@ -1604,6 +1661,19 @@ mod tests {
 
         assert_eq!(kind, ExtractedTextKind::Pdf);
         assert!(text.contains("Redistribution and use in source and binary forms"));
+    }
+
+    #[test]
+    fn test_extract_text_for_detection_reports_terminal_pdf_failure() {
+        let malformed = b"%PDF-1.7\nthis is not a valid pdf object graph\n";
+
+        let (text, kind, scan_error) =
+            extract_text_for_detection_with_diagnostics(Path::new("broken.pdf"), malformed);
+
+        assert!(text.is_empty());
+        assert_eq!(kind, ExtractedTextKind::None);
+        let scan_error = scan_error.expect("terminal pdf failure should be surfaced");
+        assert!(scan_error.contains("PDF text extraction failed after"));
     }
 
     #[test]

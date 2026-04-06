@@ -29,7 +29,8 @@ use crate::progress::ScanProgress;
 use crate::scanner::collect::CollectedPaths;
 use crate::scanner::{LicenseScanOptions, ProcessResult, TextDetectionOptions};
 use crate::utils::file::{
-    ExtractedTextKind, classify_file_info, extract_text_for_detection, get_creation_date,
+    ExtractedTextKind, classify_file_info, extract_text_for_detection_with_diagnostics,
+    get_creation_date,
 };
 use crate::utils::generated::generated_code_hints_from_bytes;
 use tempfile::TempDir;
@@ -276,12 +277,7 @@ fn process_file(
         Err(e) => scan_errors.push(e.to_string()),
     };
 
-    if is_timeout_exceeded(started, text_options.timeout_seconds) {
-        scan_errors.push(format!(
-            "Processing interrupted due to timeout after {:.2} seconds",
-            text_options.timeout_seconds
-        ));
-    }
+    maybe_record_processing_timeout(&mut scan_errors, started, text_options.timeout_seconds);
 
     let mut file_info = file_info_builder
         .name(path.file_name().unwrap().to_string_lossy().to_string())
@@ -425,7 +421,11 @@ fn extract_information_from_content(
         )));
     }
 
-    let (text_content, text_kind) = extract_text_for_detection(path, &buffer);
+    let (text_content, text_kind, text_scan_error) =
+        extract_text_for_detection_with_diagnostics(path, &buffer);
+    if let Some(text_scan_error) = text_scan_error {
+        scan_errors.push(text_scan_error);
+    }
     let from_binary_strings = matches!(text_kind, ExtractedTextKind::BinaryStrings);
 
     if is_timeout_exceeded(started, text_options.timeout_seconds) {
@@ -507,6 +507,27 @@ fn is_timeout_exceeded(started: Instant, timeout_seconds: f64) -> bool {
     timeout_seconds.is_finite()
         && timeout_seconds > 0.0
         && started.elapsed().as_secs_f64() > timeout_seconds
+}
+
+fn maybe_record_processing_timeout(
+    scan_errors: &mut Vec<String>,
+    started: Instant,
+    timeout_seconds: f64,
+) {
+    if is_timeout_exceeded(started, timeout_seconds)
+        && !scan_errors.iter().any(|error| is_timeout_scan_error(error))
+    {
+        scan_errors.push(format!(
+            "Processing interrupted due to timeout after {:.2} seconds",
+            timeout_seconds
+        ));
+    }
+}
+
+fn is_timeout_scan_error(error: &str) -> bool {
+    error.contains("Timeout while ")
+        || error.contains("Timeout before ")
+        || error.contains("Processing interrupted due to timeout")
 }
 
 fn is_system_datasource(datasource_id: &DatasourceId) -> bool {
@@ -1390,7 +1411,7 @@ mod tests {
         extract_email_url_information, extract_named_author_from_binary_line,
         is_binary_string_author_candidate, is_binary_string_copyright_candidate,
         is_binary_string_email_candidate, is_binary_string_url_candidate,
-        is_go_non_production_source,
+        is_go_non_production_source, process_file,
     };
     use crate::license_detection::LicenseDetection as InternalLicenseDetection;
     use crate::license_detection::index::LicenseIndex;
@@ -1399,10 +1420,14 @@ mod tests {
     use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind, RuleKind};
     use crate::license_detection::query::Query;
     use crate::models::{FileInfoBuilder, FileType};
+    use crate::progress::{ProgressMode, ScanProgress};
     use crate::scanner::scan_options_fingerprint;
     use crate::scanner::{LicenseScanOptions, TextDetectionOptions};
     use std::fs;
+    use std::time::{Duration, Instant};
     use tempfile::tempdir;
+
+    use super::maybe_record_processing_timeout;
 
     fn make_internal_match(rule_url: &str) -> LicenseMatch {
         LicenseMatch {
@@ -1535,6 +1560,51 @@ mod tests {
         );
         assert_eq!(clues[0].matched_text.as_deref(), Some("MIT"));
         assert_eq!(clues[0].matched_text_diagnostics, None);
+    }
+
+    #[test]
+    fn test_process_file_surfaces_terminal_pdf_extraction_failure_as_scan_error() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("broken.pdf");
+        fs::write(&path, b"%PDF-1.7\nthis is not a valid pdf object graph\n")
+            .expect("write malformed pdf");
+        let metadata = fs::metadata(&path).expect("metadata");
+        let progress = ScanProgress::new(ProgressMode::Quiet);
+
+        let file_info = process_file(
+            &path,
+            &metadata,
+            &progress,
+            None,
+            LicenseScanOptions::default(),
+            &TextDetectionOptions::default(),
+        );
+
+        assert_eq!(file_info.scan_errors.len(), 1);
+        assert!(file_info.scan_errors[0].contains("PDF text extraction failed after"));
+    }
+
+    #[test]
+    fn test_processing_timeout_is_not_duplicated_after_stage_specific_timeout() {
+        let started = Instant::now() - Duration::from_secs(2);
+        let mut scan_errors = vec!["Timeout before license scan (> 1.00s)".to_string()];
+
+        maybe_record_processing_timeout(&mut scan_errors, started, 1.0);
+
+        assert_eq!(scan_errors, vec!["Timeout before license scan (> 1.00s)"]);
+    }
+
+    #[test]
+    fn test_processing_timeout_is_recorded_when_no_timeout_error_exists() {
+        let started = Instant::now() - Duration::from_secs(2);
+        let mut scan_errors = Vec::new();
+
+        maybe_record_processing_timeout(&mut scan_errors, started, 1.0);
+
+        assert_eq!(
+            scan_errors,
+            vec!["Processing interrupted due to timeout after 1.00 seconds"]
+        );
     }
 
     #[test]

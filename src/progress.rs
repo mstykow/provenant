@@ -180,8 +180,8 @@ impl ScanProgress {
         match self.mode {
             ProgressMode::Quiet => {}
             ProgressMode::Default => {
-                if let Some(scan_error) = scan_errors.first() {
-                    self.error(&format_default_scan_error(path, scan_error));
+                if let Some(formatted) = format_default_scan_error_from_list(path, scan_errors) {
+                    self.error(&formatted);
                 }
             }
             ProgressMode::Verbose => {
@@ -209,6 +209,16 @@ impl ScanProgress {
                     self.error(&format!("  {line}"));
                 }
             }
+        }
+    }
+
+    pub fn record_additional_error(&self, err: &str) {
+        let mut stats = self.stats.lock().expect("stats lock poisoned");
+        stats.error_count += 1;
+        drop(stats);
+
+        if self.mode != ProgressMode::Quiet {
+            self.error(err);
         }
     }
 
@@ -425,14 +435,35 @@ fn build_env_logger() -> env_logger::Logger {
 }
 
 fn apply_default_log_filters(builder: &mut env_logger::Builder) {
-    if let Some(level) = pdf_oxide_font_log_filter() {
-        builder.filter_module("pdf_oxide::fonts::font_dict", level);
+    if let Some(level) = pdf_oxide_default_log_filter() {
+        for module in [
+            "pdf_oxide::decoders::flate",
+            "pdf_oxide::document",
+            "pdf_oxide::encryption::handler",
+            "pdf_oxide::extractors::text",
+            "pdf_oxide::fonts::font_dict",
+            "pdf_oxide::parser",
+            "pdf_oxide::xref",
+        ] {
+            builder.filter_module(module, level);
+        }
     }
 }
 
-fn format_default_scan_error(path: &Path, err: &str) -> String {
+pub(crate) fn format_default_scan_error(path: &Path, err: &str) -> String {
     let reason = concise_scan_error_reason(err);
     format!("{reason}: {}", path.to_string_lossy())
+}
+
+pub(crate) fn format_default_scan_error_from_list(
+    path: &Path,
+    scan_errors: &[String],
+) -> Option<String> {
+    scan_errors
+        .iter()
+        .find(|error| is_timeout_scan_error(error))
+        .or_else(|| scan_errors.first())
+        .map(|error| format_default_scan_error(path, error))
 }
 
 fn concise_scan_error_reason(err: &str) -> String {
@@ -457,6 +488,12 @@ fn concise_scan_error_reason(err: &str) -> String {
     first_line.to_string()
 }
 
+fn is_timeout_scan_error(err: &str) -> bool {
+    err.contains("Timeout while ")
+        || err.contains("Timeout before ")
+        || err.contains("Processing interrupted due to timeout")
+}
+
 fn is_structured_error_prefix(prefix: &str) -> bool {
     let lowercase = prefix.to_ascii_lowercase();
     lowercase.starts_with("failed to ")
@@ -469,16 +506,16 @@ fn pluralize_files(count: usize) -> &'static str {
     if count == 1 { "file" } else { "files" }
 }
 
-fn pdf_oxide_font_log_filter() -> Option<LevelFilter> {
-    should_filter_pdf_oxide_font_warnings().then_some(LevelFilter::Error)
+fn pdf_oxide_default_log_filter() -> Option<LevelFilter> {
+    should_filter_pdf_oxide_default_warnings().then_some(LevelFilter::Error)
 }
 
-fn should_filter_pdf_oxide_font_warnings() -> bool {
+fn should_filter_pdf_oxide_default_warnings() -> bool {
     let rust_log = env::var("RUST_LOG").ok();
-    should_filter_pdf_oxide_font_warnings_from(rust_log.as_deref())
+    should_filter_pdf_oxide_default_warnings_from(rust_log.as_deref())
 }
 
-fn should_filter_pdf_oxide_font_warnings_from(rust_log: Option<&str>) -> bool {
+fn should_filter_pdf_oxide_default_warnings_from(rust_log: Option<&str>) -> bool {
     rust_log.is_none_or(|value| !value.contains("pdf_oxide"))
 }
 
@@ -650,8 +687,8 @@ fn num_cpus_for_display() -> usize {
 mod tests {
     use super::{
         ScanStats, build_summary_messages, concise_scan_error_reason, format_default_scan_error,
-        format_size, pdf_oxide_font_log_filter, pluralize_files,
-        should_filter_pdf_oxide_font_warnings_from,
+        format_default_scan_error_from_list, format_size, pdf_oxide_default_log_filter,
+        pluralize_files, should_filter_pdf_oxide_default_warnings_from,
     };
 
     use std::path::Path;
@@ -743,14 +780,14 @@ mod tests {
     }
 
     #[test]
-    fn default_pdf_oxide_font_warnings_are_suppressed() {
-        assert_eq!(pdf_oxide_font_log_filter(), Some(LevelFilter::Error));
-        assert!(should_filter_pdf_oxide_font_warnings_from(None));
+    fn default_pdf_oxide_warnings_are_suppressed() {
+        assert_eq!(pdf_oxide_default_log_filter(), Some(LevelFilter::Error));
+        assert!(should_filter_pdf_oxide_default_warnings_from(None));
     }
 
     #[test]
     fn explicit_pdf_oxide_rust_log_override_disables_default_filter() {
-        assert!(!should_filter_pdf_oxide_font_warnings_from(Some(
+        assert!(!should_filter_pdf_oxide_default_warnings_from(Some(
             "pdf_oxide::fonts::font_dict=warn"
         )));
     }
@@ -783,6 +820,23 @@ mod tests {
         assert_eq!(
             formatted,
             "Failed to read or parse package.json: fixtures/package.json"
+        );
+    }
+
+    #[test]
+    fn default_scan_error_format_prefers_timeout_from_error_list() {
+        let formatted = format_default_scan_error_from_list(
+            Path::new("fixtures/package.json"),
+            &[
+                "Failed to read or parse package.json at \"fixtures/package.json\": expected value"
+                    .to_string(),
+                "Timeout before license scan (> 120.00s)".to_string(),
+            ],
+        );
+
+        assert_eq!(
+            formatted.as_deref(),
+            Some("Timeout before license scan (> 120.00s): fixtures/package.json")
         );
     }
 
