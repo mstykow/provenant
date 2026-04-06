@@ -22,6 +22,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::utils::magic;
 
 use crate::models::{
     DatasourceId, Dependency, FileReference, LicenseDetection, PackageData, PackageType, Party,
@@ -729,6 +730,8 @@ impl PackageParser for AlpineApkParser {
 
     fn is_match(path: &Path) -> bool {
         path.extension().and_then(|e| e.to_str()) == Some("apk")
+            && magic::is_gzip(path)
+            && !magic::is_zip(path)
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
@@ -1154,12 +1157,24 @@ p:so:libtest.so.1
 
     #[test]
     fn test_alpine_apk_parser_is_match() {
-        assert!(AlpineApkParser::is_match(&PathBuf::from("package.apk")));
-        assert!(AlpineApkParser::is_match(&PathBuf::from(
-            "/path/to/app-1.0.apk"
-        )));
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let apk_path = temp_dir.path().join("app-1.0.apk");
+        let mut file = std::fs::File::create(&apk_path).expect("Failed to create apk fixture");
+        file.write_all(&[0x1F, 0x8B, 0x08, 0x00])
+            .expect("Failed to write gzip signature");
+
+        assert!(AlpineApkParser::is_match(&apk_path));
         assert!(!AlpineApkParser::is_match(&PathBuf::from("package.tar.gz")));
         assert!(!AlpineApkParser::is_match(&PathBuf::from("installed")));
+    }
+
+    #[test]
+    fn test_alpine_apk_parser_rejects_android_apk_fixture() {
+        let android_apk = PathBuf::from("testdata/misc/test_android.apk");
+        let alpine_apk = PathBuf::from("testdata/misc/test_alpine.apk");
+
+        assert!(!AlpineApkParser::is_match(&android_apk));
+        assert!(AlpineApkParser::is_match(&alpine_apk));
     }
 
     #[test]

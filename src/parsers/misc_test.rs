@@ -5,7 +5,10 @@ use crate::models::PackageType;
 use super::PackageParser;
 use super::misc::*;
 use crate::models::DatasourceId;
+use crate::parsers::try_parse_file;
+use std::fs;
 use std::path::PathBuf;
+use tempfile::TempDir;
 
 // ============================================================================
 // Java Archives
@@ -547,6 +550,29 @@ fn test_android_apk_recognizer() {
     assert_eq!(packages.len(), 1);
     assert_eq!(packages[0].package_type, Some(PackageType::Android));
     assert_eq!(packages[0].datasource_id, Some(DatasourceId::AndroidApk));
+}
+
+#[test]
+fn test_try_parse_file_prefers_android_apk_for_zip_based_apk() {
+    let result = try_parse_file(&PathBuf::from("testdata/misc/test_android.apk"))
+        .expect("android apk should be claimed by a handler");
+
+    assert_eq!(result.packages.len(), 1);
+    assert!(result.scan_errors.is_empty());
+    assert_eq!(result.packages[0].package_type, Some(PackageType::Android));
+    assert_eq!(
+        result.packages[0].datasource_id,
+        Some(DatasourceId::AndroidApk)
+    );
+}
+
+#[test]
+fn test_try_parse_file_ignores_malformed_non_alpine_apk_fixture() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let apk_path = temp_dir.path().join("broken.apk");
+    fs::write(&apk_path, b"not an alpine or android apk").expect("write broken apk");
+
+    assert!(try_parse_file(&apk_path).is_none());
 }
 
 #[test]

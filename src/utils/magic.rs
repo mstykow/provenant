@@ -18,6 +18,10 @@ pub fn is_zip(path: &Path) -> bool {
     check_magic_bytes(path, &[0x50, 0x4B, 0x03, 0x04])
 }
 
+pub fn is_gzip(path: &Path) -> bool {
+    check_magic_bytes(path, &[0x1F, 0x8B])
+}
+
 /// Check if file starts with Squashfs magic bytes.
 ///
 /// Squashfs filesystems can be either little-endian (hsqs) or big-endian (sqsh).
@@ -99,6 +103,17 @@ mod tests {
 
         // Non-existent file
         assert!(!is_zip(Path::new("/nonexistent/file.zip")));
+    }
+
+    #[test]
+    fn test_is_gzip() {
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(&[0x1F, 0x8B, 0x08, 0x00]).unwrap();
+        assert!(is_gzip(file.path()));
+
+        let mut file2 = NamedTempFile::new().unwrap();
+        file2.write_all(&[0x50, 0x4B, 0x03, 0x04]).unwrap();
+        assert!(!is_gzip(file2.path()));
     }
 
     #[test]
