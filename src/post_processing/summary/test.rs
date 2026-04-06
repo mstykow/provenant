@@ -1,4 +1,8 @@
-use super::test_utils::{dir, file, package};
+use super::super::classification::{apply_file_classification, classify_key_files};
+use super::super::output_indexes::{OutputIndexMode, OutputIndexes};
+use super::super::package_file_index::PackageFileIndex;
+use super::super::package_metadata_promotion::promote_package_metadata_from_key_files;
+use super::super::test_utils::{dir, file, package};
 use super::*;
 use crate::models::{
     Copyright, DatasourceId, FileReference, Holder, Match, Package, PackageType, TallyEntry,

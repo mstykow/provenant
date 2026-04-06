@@ -1,7 +1,7 @@
 use crate::models::{FileInfo, Package};
 
+use super::PackageIx;
 use super::output_indexes::OutputIndexes;
-use super::package_file_index::PackageIx;
 use super::summary_helpers::unique;
 
 pub(super) fn promote_package_metadata_from_key_files(

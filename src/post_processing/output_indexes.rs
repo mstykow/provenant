@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use crate::models::FileInfo;
 
-use super::package_file_index::{FileIx, PackageFileIndex, PackageIx};
+use super::package_file_index::PackageFileIndex;
+use super::{FileIx, PackageIx};
 
 #[derive(Default)]
 pub(super) struct OutputIndexes {

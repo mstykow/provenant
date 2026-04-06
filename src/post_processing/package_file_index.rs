@@ -7,13 +7,7 @@ use crate::utils::path::{parent_dir, parent_dir_for_lookup};
 use super::classification::{
     FileClassification, is_community_file, is_legal_file, is_manifest_file, is_readme_file,
 };
-use super::{lowest_common_parent_path, package_root};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(super) struct FileIx(pub(super) usize);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(super) struct PackageIx(pub(super) usize);
+use super::{FileIx, PackageIx, lowest_common_parent_path, package_root};
 
 #[derive(Clone, Copy, Debug, Default)]
 struct FileFlags {

@@ -2,7 +2,8 @@ use crate::models::FileInfo;
 #[cfg(test)]
 use crate::models::Package;
 
-use super::package_file_index::{FileIx, PackageFileIndex};
+use super::FileIx;
+use super::package_file_index::PackageFileIndex;
 
 #[derive(Clone, Copy)]
 pub(super) struct FileClassification {
