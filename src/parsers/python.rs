@@ -650,10 +650,41 @@ fn detect_python_sdist_archive_format(path: &Path) -> Option<PythonSdistArchiveF
     } else if file_name.ends_with(".tar.xz") {
         Some(PythonSdistArchiveFormat::TarXz)
     } else if file_name.ends_with(".zip") {
-        Some(PythonSdistArchiveFormat::Zip)
+        zip_sdist_contains_pkg_info(path).then_some(PythonSdistArchiveFormat::Zip)
     } else {
         None
     }
+}
+
+fn zip_sdist_contains_pkg_info(path: &Path) -> bool {
+    if !path.is_file() {
+        return true;
+    }
+
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(_) => return false,
+    };
+    let mut archive = match ZipArchive::new(file) {
+        Ok(archive) => archive,
+        Err(_) => return false,
+    };
+
+    let validated_entries = match collect_validated_zip_entries(&mut archive, path, "sdist zip") {
+        Ok(entries) => entries,
+        Err(_) => return false,
+    };
+    let metadata_entries: Vec<_> = validated_entries
+        .iter()
+        .filter(|entry| entry.name.ends_with("/PKG-INFO"))
+        .filter_map(|entry| {
+            read_validated_zip_entry(&mut archive, entry, path, "sdist zip")
+                .ok()
+                .map(|content| (entry.name.clone(), content))
+        })
+        .collect();
+
+    has_matching_sdist_pkginfo_candidate(path, &metadata_entries)
 }
 
 fn is_likely_python_sdist_filename(file_name: &str) -> bool {
@@ -899,14 +930,7 @@ fn select_sdist_pkginfo_entry(
     archive_path: &Path,
     entries: &[(String, String)],
 ) -> Option<(String, String)> {
-    let expected_name = archive_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .and_then(strip_python_archive_extension)
-        .and_then(|stem| {
-            stem.rsplit_once('-')
-                .map(|(name, _)| normalize_python_package_name(name))
-        });
+    let expected_name = sdist_archive_expected_name(archive_path);
 
     entries
         .iter()
@@ -916,30 +940,63 @@ fn select_sdist_pkginfo_entry(
                 .split('/')
                 .filter(|part| !part.is_empty())
                 .collect();
-            let metadata = super::rfc822::parse_rfc822_content(content);
-            let candidate_name = super::rfc822::get_header_first(&metadata.headers, "name")
-                .map(|name| normalize_python_package_name(&name));
+            let candidate_name = sdist_pkginfo_candidate_name(content);
             let name_rank = if candidate_name == expected_name {
                 0
             } else {
                 1
             };
-            let kind_rank = if components.len() == 3
-                && components[1].ends_with(".egg-info")
-                && components[2] == "PKG-INFO"
-            {
-                0
-            } else if components.len() == 2 && components[1] == "PKG-INFO" {
-                1
-            } else if entry_path.ends_with(".egg-info/PKG-INFO") {
-                2
-            } else {
-                3
-            };
+            let kind_rank = sdist_pkginfo_kind_rank(entry_path);
 
             (name_rank, kind_rank, components.len(), entry_path.clone())
         })
         .map(|(entry_path, content)| (entry_path.clone(), content.clone()))
+}
+
+fn has_matching_sdist_pkginfo_candidate(archive_path: &Path, entries: &[(String, String)]) -> bool {
+    let Some(expected_name) = sdist_archive_expected_name(archive_path) else {
+        return false;
+    };
+
+    entries.iter().any(|(entry_path, content)| {
+        sdist_pkginfo_kind_rank(entry_path) < 3
+            && sdist_pkginfo_candidate_name(content).as_deref() == Some(expected_name.as_str())
+    })
+}
+
+fn sdist_archive_expected_name(archive_path: &Path) -> Option<String> {
+    archive_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .and_then(strip_python_archive_extension)
+        .and_then(|stem| {
+            stem.rsplit_once('-')
+                .map(|(name, _)| normalize_python_package_name(name))
+        })
+}
+
+fn sdist_pkginfo_candidate_name(content: &str) -> Option<String> {
+    let metadata = super::rfc822::parse_rfc822_content(content);
+    super::rfc822::get_header_first(&metadata.headers, "name")
+        .map(|name| normalize_python_package_name(&name))
+}
+
+fn sdist_pkginfo_kind_rank(entry_path: &str) -> usize {
+    let components: Vec<_> = entry_path
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect();
+
+    if components.len() == 3 && components[1].ends_with(".egg-info") && components[2] == "PKG-INFO"
+    {
+        0
+    } else if components.len() == 2 && components[1] == "PKG-INFO" {
+        1
+    } else if entry_path.ends_with(".egg-info/PKG-INFO") {
+        2
+    } else {
+        3
+    }
 }
 
 fn merge_sdist_archive_dependencies(
@@ -2001,10 +2058,6 @@ fn extract_from_pyproject_toml(path: &Path) -> PackageData {
                 // Poetry format with [tool.poetry] table
                 poetry.clone()
             } else {
-                warn!(
-                    "No project or tool.poetry data found in pyproject.toml at {:?}",
-                    path
-                );
                 return default_package_data(path);
             }
         } else if toml_content.get(FIELD_NAME).is_some() {
@@ -2017,7 +2070,6 @@ fn extract_from_pyproject_toml(path: &Path) -> PackageData {
                 }
             }
         } else {
-            warn!("No project data found in pyproject.toml at {:?}", path);
             return default_package_data(path);
         };
 
@@ -4700,7 +4752,9 @@ fn infer_python_datasource_id(path: &Path) -> Option<DatasourceId> {
         Some("origin.json") if is_pip_cache_origin_json(path) => {
             Some(DatasourceId::PypiPipOriginJson)
         }
-        _ if is_python_sdist_archive_path(path) => Some(DatasourceId::PypiSdist),
+        _ if file_name.is_some_and(is_likely_python_sdist_filename) => {
+            Some(DatasourceId::PypiSdist)
+        }
         _ if path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("whl")) =>

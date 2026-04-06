@@ -2,7 +2,7 @@
 mod tests {
     use crate::models::PackageType;
     use crate::models::{DatasourceId, Dependency};
-    use crate::parsers::{PackageParser, PythonParser};
+    use crate::parsers::{PackageParser, PythonParser, try_parse_file};
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
@@ -202,6 +202,29 @@ description = "demo"
             package_data.datasource_id,
             Some(DatasourceId::PypiPoetryPyprojectToml)
         );
+    }
+
+    #[test]
+    fn test_try_parse_file_build_system_only_pyproject_is_not_a_scan_error() {
+        let content = r#"
+[build-system]
+build-backend = 'setuptools.build_meta'
+requires = ['setuptools >= 47', 'wheel']
+
+[tool.black]
+line-length = 79
+"#;
+
+        let (_temp_dir, file_path) = create_temp_file(content, "pyproject.toml");
+        let result = try_parse_file(&file_path).expect("pyproject should still be recognized");
+
+        assert!(result.scan_errors.is_empty());
+        assert_eq!(result.packages.len(), 1);
+        assert_eq!(
+            result.packages[0].datasource_id,
+            Some(DatasourceId::PypiPyprojectToml)
+        );
+        assert!(result.packages[0].name.is_none());
     }
 
     #[test]
@@ -1337,6 +1360,45 @@ Test package description.
         assert!(PythonParser::is_match(&zip_path));
         assert!(!PythonParser::is_match(&plain_zip_path));
         assert!(!PythonParser::is_match(&plain_tar_path));
+    }
+
+    #[test]
+    fn test_is_match_zip_sdist_requires_pkg_info_for_real_file() {
+        let (_temp_dir, zip_path) = create_temp_zip(
+            &[("docs/readme.txt", "not a python sdist")],
+            "libzip-1.10.1.zip",
+        );
+
+        assert!(!PythonParser::is_match(&zip_path));
+        assert!(try_parse_file(&zip_path).is_none());
+    }
+
+    #[test]
+    fn test_try_parse_file_rejects_zip_sdist_with_unsafe_pkg_info_path() {
+        let (_temp_dir, zip_path) = create_temp_zip(
+            &[(
+                "../demo-1.0.0/PKG-INFO",
+                "Metadata-Version: 2.1\nName: demo\nVersion: 1.0.0\n",
+            )],
+            "demo-1.0.0.zip",
+        );
+
+        assert!(!PythonParser::is_match(&zip_path));
+        assert!(try_parse_file(&zip_path).is_none());
+    }
+
+    #[test]
+    fn test_try_parse_file_rejects_zip_sdist_with_vendored_pkg_info_only() {
+        let (_temp_dir, zip_path) = create_temp_zip(
+            &[(
+                "vendor/other-9.9.9/PKG-INFO",
+                "Metadata-Version: 2.1\nName: other\nVersion: 9.9.9\n",
+            )],
+            "demo-1.0.0.zip",
+        );
+
+        assert!(!PythonParser::is_match(&zip_path));
+        assert!(try_parse_file(&zip_path).is_none());
     }
 
     #[test]
