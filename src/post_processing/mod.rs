@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -32,6 +33,7 @@ use crate::models::{
     ExtraData, FileInfo, FileType, Header, OUTPUT_FORMAT_VERSION, Output, Package,
     SystemEnvironment, TopLevelLicenseDetection,
 };
+use crate::progress::format_default_scan_error_from_list;
 use crate::scanner;
 #[cfg(test)]
 use crate::utils::generated::generated_code_hints;
@@ -112,20 +114,12 @@ pub(crate) fn create_output(
         .files
         .iter()
         .filter_map(|file| {
-            if file.scan_errors.is_empty() {
-                None
-            } else {
-                Some(
-                    file.scan_errors
-                        .iter()
-                        .map(|error| format!("{}: {}", file.path, error))
-                        .collect::<Vec<String>>(),
-                )
-            }
+            format_default_scan_error_from_list(Path::new(&file.path), &file.scan_errors)
         })
-        .flatten()
         .collect();
     errors.extend(context.extra_errors);
+    let mut seen_errors = HashSet::new();
+    errors.retain(|error| seen_errors.insert(error.clone()));
 
     let mut files = scan_result.files;
     let assembly::AssemblyResult {

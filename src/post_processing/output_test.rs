@@ -1582,6 +1582,91 @@ fn collect_top_level_license_detections_includes_package_origin_detections() {
 }
 
 #[test]
+fn collect_top_level_license_detections_prefers_later_logged_representative() {
+    let mut first = file("project/src/lib.rs");
+    first.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: Some("project/src/lib.rs".to_string()),
+            start_line: 1,
+            end_line: 3,
+            matcher: Some("1-hash".to_string()),
+            score: 100.0,
+            matched_length: Some(10),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("mit.LICENSE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("mit-shared-id".to_string()),
+    }];
+
+    let mut second = file("project/src/other.rs");
+    second.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: Some("project/src/other.rs".to_string()),
+            start_line: 4,
+            end_line: 6,
+            matcher: Some("1-hash".to_string()),
+            score: 100.0,
+            matched_length: Some(10),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("mit.LICENSE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec!["imperfect-match-coverage".to_string()],
+        identifier: Some("mit-shared-id".to_string()),
+    }];
+
+    let detections = collect_top_level_license_detections(&[first, second]);
+
+    assert_eq!(detections.len(), 1);
+    assert_eq!(detections[0].detection_count, 2);
+    assert_eq!(
+        detections[0].reference_matches[0].from_file.as_deref(),
+        Some("project/src/other.rs")
+    );
+    assert_eq!(
+        detections[0].detection_log,
+        vec!["imperfect-match-coverage".to_string()]
+    );
+}
+
+#[test]
+fn collect_top_level_license_detections_keeps_identifier_with_zero_match_detection() {
+    let mut file = file("project/src/lib.rs");
+    file.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![],
+        detection_log: vec![],
+        identifier: Some("mit-empty".to_string()),
+    }];
+
+    let detections = collect_top_level_license_detections(&[file]);
+
+    assert_eq!(detections.len(), 1);
+    assert_eq!(detections[0].identifier, "mit-empty");
+    assert_eq!(detections[0].detection_count, 0);
+    assert!(detections[0].reference_matches.is_empty());
+}
+
+#[test]
 fn create_output_preserves_top_level_license_references_from_context() {
     let start = Utc::now();
     let end = start;
@@ -1723,7 +1808,7 @@ fn create_output_projects_file_scan_errors_into_headers_and_serialized_files() {
 
     assert_eq!(
         output.headers[0].errors,
-        vec![format!("project/package.json: {parse_error}")]
+        vec!["Failed to read or parse package.json: project/package.json".to_string()]
     );
 
     let serialized = serde_json::to_value(&output).expect("serialize output with scan errors");
@@ -1735,6 +1820,144 @@ fn create_output_projects_file_scan_errors_into_headers_and_serialized_files() {
         .expect("serialized package.json entry should exist");
 
     assert_eq!(serialized_manifest["scan_errors"], json!([parse_error]));
+}
+
+#[test]
+fn create_output_header_errors_use_first_concise_scan_error_per_file() {
+    let start = Utc::now();
+    let end = start;
+    let first_error = "Failed to parse package.json at \"project/package.json\": expected value";
+    let second_error = "Timeout before license scan (> 120.00s)";
+
+    let mut manifest = file("project/package.json");
+    manifest.scan_errors = vec![first_error.to_string(), second_error.to_string()];
+
+    let output = create_output(
+        start,
+        end,
+        crate::scanner::ProcessResult {
+            files: vec![dir("project"), manifest],
+            excluded_count: 0,
+        },
+        CreateOutputContext {
+            total_dirs: 1,
+            assembly_result: assembly::AssemblyResult {
+                packages: vec![],
+                dependencies: vec![],
+            },
+            license_detections: vec![],
+            license_references: vec![],
+            license_rule_references: vec![],
+            extra_errors: vec![],
+            options: CreateOutputOptions {
+                facet_rules: &[],
+                include_classify: false,
+                include_tallies_by_facet: false,
+                include_summary: false,
+                include_license_clarity_score: false,
+                include_tallies: false,
+                include_tallies_with_details: false,
+                include_tallies_of_key_files: false,
+                include_generated: false,
+            },
+        },
+    );
+
+    assert_eq!(
+        output.headers[0].errors,
+        vec!["Timeout before license scan: project/package.json".to_string()]
+    );
+}
+
+#[test]
+fn create_output_preserves_extra_errors_in_header_summary() {
+    let start = Utc::now();
+    let end = start;
+
+    let output = create_output(
+        start,
+        end,
+        crate::scanner::ProcessResult {
+            files: vec![dir("project")],
+            excluded_count: 0,
+        },
+        CreateOutputContext {
+            total_dirs: 1,
+            assembly_result: assembly::AssemblyResult {
+                packages: vec![],
+                dependencies: vec![],
+            },
+            license_detections: vec![],
+            license_references: vec![],
+            license_rule_references: vec![],
+            extra_errors: vec!["Failed to read directory: project/vendor".to_string()],
+            options: CreateOutputOptions {
+                facet_rules: &[],
+                include_classify: false,
+                include_tallies_by_facet: false,
+                include_summary: false,
+                include_license_clarity_score: false,
+                include_tallies: false,
+                include_tallies_with_details: false,
+                include_tallies_of_key_files: false,
+                include_generated: false,
+            },
+        },
+    );
+
+    assert_eq!(
+        output.headers[0].errors,
+        vec!["Failed to read directory: project/vendor".to_string()]
+    );
+}
+
+#[test]
+fn create_output_deduplicates_header_summary_errors() {
+    let start = Utc::now();
+    let end = start;
+    let parse_error =
+        "Failed to read or parse package.json at \"project/package.json\": expected value";
+
+    let mut manifest = file("project/package.json");
+    manifest.scan_errors = vec![parse_error.to_string()];
+
+    let output = create_output(
+        start,
+        end,
+        crate::scanner::ProcessResult {
+            files: vec![dir("project"), manifest],
+            excluded_count: 0,
+        },
+        CreateOutputContext {
+            total_dirs: 1,
+            assembly_result: assembly::AssemblyResult {
+                packages: vec![],
+                dependencies: vec![],
+            },
+            license_detections: vec![],
+            license_references: vec![],
+            license_rule_references: vec![],
+            extra_errors: vec![
+                "Failed to read or parse package.json: project/package.json".to_string(),
+            ],
+            options: CreateOutputOptions {
+                facet_rules: &[],
+                include_classify: false,
+                include_tallies_by_facet: false,
+                include_summary: false,
+                include_license_clarity_score: false,
+                include_tallies: false,
+                include_tallies_with_details: false,
+                include_tallies_of_key_files: false,
+                include_generated: false,
+            },
+        },
+    );
+
+    assert_eq!(
+        output.headers[0].errors,
+        vec!["Failed to read or parse package.json: project/package.json".to_string()]
+    );
 }
 
 #[test]

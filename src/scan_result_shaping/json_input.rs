@@ -18,7 +18,15 @@ use super::{normalize_paths, normalize_top_level_output_paths};
 mod json_input_test;
 
 #[derive(Deserialize)]
+pub(crate) struct JsonHeaderInput {
+    #[serde(default)]
+    errors: Vec<String>,
+}
+
+#[derive(Deserialize)]
 pub(crate) struct JsonScanInput {
+    #[serde(default)]
+    pub(crate) headers: Vec<JsonHeaderInput>,
     #[serde(default)]
     pub(crate) files: Vec<FileInfo>,
     #[serde(default)]
@@ -66,6 +74,7 @@ impl JsonScanInput {
         Vec<TopLevelLicenseDetection>,
         Vec<LicenseReference>,
         Vec<LicenseRuleReference>,
+        Vec<String>,
     ) {
         (
             ProcessResult {
@@ -79,6 +88,10 @@ impl JsonScanInput {
             self.license_detections,
             self.license_references,
             self.license_rule_references,
+            self.headers
+                .into_iter()
+                .flat_map(|header| header.errors)
+                .collect(),
         )
     }
 }
@@ -105,6 +118,7 @@ pub(crate) fn load_and_merge_json_inputs(
                 .append(&mut loaded.license_references);
             acc.license_rule_references
                 .append(&mut loaded.license_rule_references);
+            acc.headers.append(&mut loaded.headers);
             acc.excluded_count += loaded.excluded_count;
         } else {
             merged = Some(loaded);
@@ -132,6 +146,8 @@ pub(crate) fn normalize_loaded_json_scan(
     strip_root: bool,
     full_root: bool,
 ) {
+    let original_paths: Vec<String> = loaded.files.iter().map(|file| file.path.clone()).collect();
+
     if let Some(scan_root) = derive_json_scan_root(&loaded.files)
         && strip_root
     {
@@ -148,6 +164,8 @@ pub(crate) fn normalize_loaded_json_scan(
     if full_root {
         trim_loaded_json_full_root_paths(loaded);
     }
+
+    normalize_loaded_header_errors(loaded, &original_paths);
 }
 
 fn derive_json_scan_root(files: &[FileInfo]) -> Option<String> {
@@ -241,6 +259,28 @@ fn normalize_loaded_top_level_detection_paths(
                         normalize_loaded_detection_path(from_file, scan_root, false, true)
                 {
                     *from_file = normalized;
+                }
+            }
+        }
+    }
+}
+
+fn normalize_loaded_header_errors(loaded: &mut JsonScanInput, original_paths: &[String]) {
+    let mut replacements: Vec<_> = original_paths
+        .iter()
+        .zip(loaded.files.iter().map(|file| file.path.as_str()))
+        .filter(|(before, after)| before.as_str() != *after)
+        .map(|(before, after)| (before.as_str(), after))
+        .collect();
+    replacements.sort_by(|left, right| right.0.len().cmp(&left.0.len()));
+
+    for header in &mut loaded.headers {
+        for error in &mut header.errors {
+            for (before, after) in &replacements {
+                if error.ends_with(before) {
+                    let prefix_len = error.len() - before.len();
+                    error.replace_range(prefix_len.., after);
+                    break;
                 }
             }
         }

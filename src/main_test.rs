@@ -256,6 +256,7 @@ fn validate_scan_option_compatibility_rejects_mark_source_without_info() {
 #[test]
 fn from_json_skips_final_native_projection_block() {
     let mut loaded = JsonScanInput {
+        headers: vec![],
         files: vec![json_file(
             "/tmp/archive/root/src/main.rs",
             crate::models::FileType::File,
@@ -295,6 +296,7 @@ fn from_json_skips_final_native_projection_block() {
 #[test]
 fn from_json_loaded_manifest_detections_can_be_recomputed_into_top_level_uniques() {
     let mut loaded = JsonScanInput {
+        headers: vec![],
         files: vec![json_file(
             "project/package.json",
             crate::models::FileType::File,
@@ -351,6 +353,7 @@ fn from_json_loaded_manifest_detections_can_be_recomputed_into_top_level_uniques
 #[test]
 fn from_json_recomputes_top_level_uniques_even_without_shaping_flags() {
     let mut loaded = JsonScanInput {
+        headers: vec![],
         files: vec![json_file(
             "project/package.json",
             crate::models::FileType::File,
@@ -411,6 +414,7 @@ fn from_json_recomputes_top_level_uniques_even_without_shaping_flags() {
 #[test]
 fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
     let mut loaded = JsonScanInput {
+        headers: vec![],
         files: vec![
             json_file("project/Cargo.toml", crate::models::FileType::File),
             json_file("project/LICENSE", crate::models::FileType::File),
@@ -525,6 +529,7 @@ fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
 #[test]
 fn from_json_recomputes_top_level_outputs_after_package_inheritance_following() {
     let mut loaded = JsonScanInput {
+        headers: vec![],
         files: vec![
             json_file(
                 "venv/lib/python3.11/site-packages/demo-1.0.dist-info/METADATA",

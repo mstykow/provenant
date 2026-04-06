@@ -7,6 +7,11 @@ use std::fs;
 fn load_scan_from_json_reads_files_and_metadata_sections() {
     let temp_path = std::env::temp_dir().join("provenant-from-json-test.json");
     let content = json!({
+        "headers": [
+            {
+                "errors": ["Path: src/main.rs"]
+            }
+        ],
         "files": [
             {
                 "name": "main.rs",
@@ -51,6 +56,8 @@ fn load_scan_from_json_reads_files_and_metadata_sections() {
 
     assert_eq!(parsed.files.len(), 1);
     assert_eq!(parsed.files[0].path, "src/main.rs");
+    assert_eq!(parsed.headers.len(), 1);
+    assert_eq!(parsed.headers[0].errors, vec!["Path: src/main.rs"]);
     assert_eq!(parsed.license_detections.len(), 1);
     assert_eq!(parsed.license_references.len(), 1);
 
@@ -60,6 +67,11 @@ fn load_scan_from_json_reads_files_and_metadata_sections() {
 #[test]
 fn normalize_loaded_json_scan_applies_strip_root_per_loaded_input() {
     let mut loaded = JsonScanInput {
+        headers: vec![JsonHeaderInput {
+            errors: vec![
+                "Failed to read or parse package.json: archive/root/src/main.rs".to_string(),
+            ],
+        }],
         files: vec![
             json_file("archive/root", crate::models::FileType::Directory),
             json_file("archive/root/src/main.rs", crate::models::FileType::File),
@@ -100,6 +112,10 @@ fn normalize_loaded_json_scan_applies_strip_root_per_loaded_input() {
     let paths: Vec<_> = loaded.files.iter().map(|file| file.path.as_str()).collect();
     assert_eq!(paths, vec!["root", "src/main.rs"]);
     assert_eq!(
+        loaded.headers[0].errors,
+        vec!["Failed to read or parse package.json: src/main.rs"]
+    );
+    assert_eq!(
         loaded.license_detections[0].reference_matches[0]
             .from_file
             .as_deref(),
@@ -110,6 +126,9 @@ fn normalize_loaded_json_scan_applies_strip_root_per_loaded_input() {
 #[test]
 fn normalize_loaded_json_scan_trims_full_root_display_without_absolutizing() {
     let mut loaded = JsonScanInput {
+        headers: vec![JsonHeaderInput {
+            errors: vec!["Path: /tmp/archive/root/src/main.rs".to_string()],
+        }],
         files: vec![json_file(
             "/tmp/archive/root/src/main.rs",
             crate::models::FileType::File,
@@ -149,9 +168,34 @@ fn normalize_loaded_json_scan_trims_full_root_display_without_absolutizing() {
 
     assert_eq!(loaded.files[0].path, "tmp/archive/root/src/main.rs");
     assert_eq!(
+        loaded.headers[0].errors,
+        vec!["Path: tmp/archive/root/src/main.rs"]
+    );
+    assert_eq!(
         loaded.license_detections[0].reference_matches[0]
             .from_file
             .as_deref(),
         Some("tmp/archive/root/src/main.rs")
     );
+}
+
+#[test]
+fn into_parts_preserves_imported_header_errors_as_extra_errors() {
+    let loaded = JsonScanInput {
+        headers: vec![JsonHeaderInput {
+            errors: vec!["Path: src/main.rs".to_string()],
+        }],
+        files: vec![json_file("src/main.rs", crate::models::FileType::File)],
+        packages: vec![],
+        dependencies: vec![],
+        license_detections: vec![],
+        license_references: vec![],
+        license_rule_references: vec![],
+        excluded_count: 0,
+    };
+
+    let (_process_result, _assembly_result, _dets, _refs, _rule_refs, extra_errors) =
+        loaded.into_parts();
+
+    assert_eq!(extra_errors, vec!["Path: src/main.rs"]);
 }
