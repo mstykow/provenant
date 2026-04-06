@@ -124,6 +124,7 @@ pub fn cleanup_repo_worktree(cache_dir: &Path, worktree_dir: &Path) -> Result<()
 }
 
 pub fn current_git_revision(path: &Path) -> Option<String> {
+    current_git_repo_root(path)?;
     let output = Command::new("git")
         .current_dir(path)
         .args(["rev-parse", "HEAD"])
@@ -137,6 +138,7 @@ pub fn current_git_revision(path: &Path) -> Option<String> {
 }
 
 pub fn current_git_log_line(path: &Path) -> Option<String> {
+    current_git_repo_root(path)?;
     let output = Command::new("git")
         .current_dir(path)
         .args(["log", "-1", "--oneline"])
@@ -147,6 +149,21 @@ pub fn current_git_log_line(path: &Path) -> Option<String> {
     } else {
         None
     }
+}
+
+fn current_git_repo_root(path: &Path) -> Option<PathBuf> {
+    let canonical_path = path.canonicalize().ok()?;
+    let output = Command::new("git")
+        .current_dir(&canonical_path)
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let repo_root = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
+    let canonical_repo_root = repo_root.canonicalize().ok()?;
+    (canonical_repo_root == canonical_path).then_some(canonical_repo_root)
 }
 
 fn git_output<const N: usize>(dir_or_gitdir: &Path, args: [&str; N]) -> Result<String> {
@@ -181,5 +198,58 @@ fn run_git(command: &mut Command, context_message: &str) -> Result<()> {
             context_message,
             String::from_utf8_lossy(&output.stderr).trim()
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use tempfile::TempDir;
+
+    fn git(dir: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn init_test_repo() -> TempDir {
+        let temp_dir = TempDir::new().unwrap();
+        git(temp_dir.path(), &["init"]);
+        git(temp_dir.path(), &["config", "user.name", "Test User"]);
+        git(
+            temp_dir.path(),
+            &["config", "user.email", "test@example.com"],
+        );
+        fs::write(temp_dir.path().join("README.md"), "hello\n").unwrap();
+        git(temp_dir.path(), &["add", "README.md"]);
+        git(temp_dir.path(), &["commit", "-m", "init"]);
+        temp_dir
+    }
+
+    #[test]
+    fn git_helpers_accept_repo_root() {
+        let temp_dir = init_test_repo();
+
+        assert!(current_git_revision(temp_dir.path()).is_some());
+        assert!(current_git_log_line(temp_dir.path()).is_some());
+    }
+
+    #[test]
+    fn git_helpers_reject_nested_directory_inside_repo() {
+        let temp_dir = init_test_repo();
+        let nested = temp_dir.path().join("nested");
+        fs::create_dir_all(&nested).unwrap();
+
+        assert!(current_git_revision(&nested).is_none());
+        assert!(current_git_log_line(&nested).is_none());
     }
 }
