@@ -13,7 +13,7 @@ pub(crate) use types::{DetectionGroup, FileRegion, LicenseDetection, UniqueDetec
 
 use crate::license_detection::models::LicenseMatch;
 use crate::license_detection::spdx_mapping::SpdxMapping;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::license_detection::expression::parse_expression;
 use analysis::{
@@ -210,26 +210,29 @@ pub(crate) fn attach_source_path_to_detections(
     }
 }
 
+type SeenRegionKey = (String, usize, usize);
+type UniqueDetectionEntry = (UniqueDetection, HashSet<SeenRegionKey>);
+
 pub(crate) fn get_unique_detections(detections: &[LicenseDetection]) -> Vec<UniqueDetection> {
-    let mut detections_by_identifier: BTreeMap<String, UniqueDetection> = BTreeMap::new();
+    let mut detections_by_identifier: BTreeMap<String, UniqueDetectionEntry> = BTreeMap::new();
 
     for detection in detections {
         let Some(identifier) = detection.identifier.as_ref() else {
             continue;
         };
 
-        let entry = detections_by_identifier
+        let (entry, seen_regions) = detections_by_identifier
             .entry(identifier.clone())
-            .or_insert_with(|| UniqueDetection {
-                identifier: identifier.clone(),
-                file_regions: Vec::new(),
+            .or_insert_with(|| {
+                (
+                    UniqueDetection {
+                        identifier: identifier.clone(),
+                        file_regions: Vec::new(),
+                    },
+                    HashSet::new(),
+                )
             });
 
-        let mut seen_regions: BTreeSet<(String, usize, usize)> = entry
-            .file_regions
-            .iter()
-            .map(|region| (region.path.clone(), region.start_line, region.end_line))
-            .collect();
         for region in &detection.file_regions {
             let key = (region.path.clone(), region.start_line, region.end_line);
             if seen_regions.insert(key) {
@@ -238,7 +241,10 @@ pub(crate) fn get_unique_detections(detections: &[LicenseDetection]) -> Vec<Uniq
         }
     }
 
-    detections_by_identifier.into_values().collect()
+    detections_by_identifier
+        .into_values()
+        .map(|(unique_detection, _)| unique_detection)
+        .collect()
 }
 
 fn collect_file_regions_from_matches(matches: &[LicenseMatch]) -> Vec<FileRegion> {

@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::license_detection::detection::{
     FileRegion as InternalFileRegion, determine_license_expression, determine_spdx_expression,
-    get_unique_detections, select_matches_for_expression,
+    select_matches_for_expression,
 };
 use crate::license_detection::expression::parse_expression;
 use crate::models::{
@@ -65,7 +65,18 @@ pub(crate) fn apply_package_reference_following(files: &mut [FileInfo], packages
 pub(crate) fn collect_top_level_license_detections(
     files: &[FileInfo],
 ) -> Vec<TopLevelLicenseDetection> {
-    let mut internal_detections = Vec::new();
+    #[derive(Clone, Copy)]
+    struct RepresentativeDetection<'a> {
+        detection: &'a LicenseDetection,
+    }
+
+    struct AggregatedDetection<'a> {
+        representative: RepresentativeDetection<'a>,
+        seen_regions: HashSet<(String, usize, usize)>,
+        detection_count: usize,
+    }
+
+    let mut detections_by_identifier: HashMap<String, AggregatedDetection<'_>> = HashMap::new();
 
     for file in files {
         let mut file_detections = file.license_detections.iter().collect::<Vec<_>>();
@@ -75,62 +86,68 @@ pub(crate) fn collect_top_level_license_detections(
         }
 
         for detection in file_detections {
-            internal_detections.push(public_detection_to_internal(detection, &file.path));
+            let Some(identifier) = detection.identifier.as_ref() else {
+                continue;
+            };
+
+            let entry = detections_by_identifier
+                .entry(identifier.clone())
+                .or_insert_with(|| AggregatedDetection {
+                    representative: RepresentativeDetection { detection },
+                    seen_regions: HashSet::new(),
+                    detection_count: 0,
+                });
+
+            if entry.representative.detection.detection_log.is_empty()
+                && !detection.detection_log.is_empty()
+            {
+                entry.representative = RepresentativeDetection { detection };
+            }
+
+            if let Some(region_key) = public_detection_region_key(detection, &file.path)
+                && entry.seen_regions.insert(region_key)
+            {
+                entry.detection_count += 1;
+            }
         }
     }
 
-    let representative_detections: HashMap<_, _> =
-        internal_detections
-            .iter()
-            .fold(HashMap::new(), |mut acc, detection| {
-                if let Some(identifier) = detection.identifier.as_ref() {
-                    acc.entry(identifier.clone())
-                        .and_modify(
-                            |existing: &mut &crate::license_detection::LicenseDetection| {
-                                if existing.detection_log.is_empty()
-                                    && !detection.detection_log.is_empty()
-                                {
-                                    *existing = detection;
-                                }
-                            },
-                        )
-                        .or_insert(detection);
-                }
-                acc
-            });
-    let mut unique_detections: Vec<_> = get_unique_detections(&internal_detections)
+    let mut unique_detections: Vec<_> = detections_by_identifier
         .into_iter()
-        .filter_map(|unique| {
-            representative_detections
-                .get(&unique.identifier)
-                .map(|detection| {
-                    let license_expression = detection
-                        .license_expression
-                        .clone()
-                        .filter(|expression| !expression.is_empty())
-                        .or_else(|| determine_license_expression(&detection.matches, None).ok())
-                        .unwrap_or_default();
-                    let license_expression_spdx = detection
-                        .license_expression_spdx
-                        .clone()
-                        .filter(|expression| !expression.is_empty())
-                        .or_else(|| determine_spdx_expression(&detection.matches, None).ok())
-                        .unwrap_or_default();
+        .map(|(identifier, aggregated)| {
+            let representative = aggregated.representative.detection;
+            let reference_matches = representative
+                .matches
+                .iter()
+                .map(public_match_to_internal)
+                .map(internal_match_to_public)
+                .collect::<Vec<_>>();
+            let representative_internal_matches = representative
+                .matches
+                .iter()
+                .map(public_match_to_internal)
+                .collect::<Vec<_>>();
+            let license_expression = if representative.license_expression.is_empty() {
+                determine_license_expression(&representative_internal_matches, None)
+                    .unwrap_or_default()
+            } else {
+                representative.license_expression.clone()
+            };
+            let license_expression_spdx = if representative.license_expression_spdx.is_empty() {
+                determine_spdx_expression(&representative_internal_matches, None)
+                    .unwrap_or_default()
+            } else {
+                representative.license_expression_spdx.clone()
+            };
 
-                    TopLevelLicenseDetection {
-                        identifier: unique.identifier.clone(),
-                        license_expression,
-                        license_expression_spdx,
-                        detection_count: unique.file_regions.len(),
-                        detection_log: detection.detection_log.clone(),
-                        reference_matches: detection
-                            .matches
-                            .iter()
-                            .cloned()
-                            .map(internal_match_to_public)
-                            .collect(),
-                    }
-                })
+            TopLevelLicenseDetection {
+                identifier,
+                license_expression,
+                license_expression_spdx,
+                detection_count: aggregated.detection_count,
+                detection_log: representative.detection_log.clone(),
+                reference_matches,
+            }
         })
         .collect();
     unique_detections.sort_by(|left, right| {
@@ -140,6 +157,23 @@ pub(crate) fn collect_top_level_license_detections(
             .then_with(|| left.identifier.cmp(&right.identifier))
     });
     unique_detections
+}
+
+fn public_detection_region_key(
+    detection: &LicenseDetection,
+    owning_path: &str,
+) -> Option<(String, usize, usize)> {
+    let start_line = detection
+        .matches
+        .iter()
+        .map(|match_item| match_item.start_line)
+        .min()?;
+    let end_line = detection
+        .matches
+        .iter()
+        .map(|match_item| match_item.end_line)
+        .max()?;
+    Some((owning_path.to_string(), start_line, end_line))
 }
 
 pub(super) fn build_reference_follow_snapshot(
@@ -1006,5 +1040,97 @@ fn internal_match_to_public(
         matched_text: detection_match.matched_text,
         referenced_filenames: detection_match.referenced_filenames,
         matched_text_diagnostics: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::collect_top_level_license_detections;
+    use crate::models::Match;
+    use crate::post_processing::test_utils::file;
+
+    #[test]
+    fn collect_top_level_license_detections_prefers_later_logged_representative() {
+        let mut first = file("project/src/lib.rs");
+        first.license_detections = vec![crate::models::LicenseDetection {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            matches: vec![Match {
+                license_expression: "mit".to_string(),
+                license_expression_spdx: "MIT".to_string(),
+                from_file: Some("project/src/lib.rs".to_string()),
+                start_line: 1,
+                end_line: 3,
+                matcher: Some("1-hash".to_string()),
+                score: 100.0,
+                matched_length: Some(10),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: Some("mit.LICENSE".to_string()),
+                rule_url: None,
+                matched_text: None,
+                referenced_filenames: None,
+                matched_text_diagnostics: None,
+            }],
+            detection_log: vec![],
+            identifier: Some("mit-shared-id".to_string()),
+        }];
+
+        let mut second = file("project/src/other.rs");
+        second.license_detections = vec![crate::models::LicenseDetection {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            matches: vec![Match {
+                license_expression: "mit".to_string(),
+                license_expression_spdx: "MIT".to_string(),
+                from_file: Some("project/src/other.rs".to_string()),
+                start_line: 4,
+                end_line: 6,
+                matcher: Some("1-hash".to_string()),
+                score: 100.0,
+                matched_length: Some(10),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: Some("mit.LICENSE".to_string()),
+                rule_url: None,
+                matched_text: None,
+                referenced_filenames: None,
+                matched_text_diagnostics: None,
+            }],
+            detection_log: vec!["imperfect-match-coverage".to_string()],
+            identifier: Some("mit-shared-id".to_string()),
+        }];
+
+        let detections = collect_top_level_license_detections(&[first, second]);
+
+        assert_eq!(detections.len(), 1);
+        assert_eq!(detections[0].detection_count, 2);
+        assert_eq!(
+            detections[0].reference_matches[0].from_file.as_deref(),
+            Some("project/src/other.rs")
+        );
+        assert_eq!(
+            detections[0].detection_log,
+            vec!["imperfect-match-coverage".to_string()]
+        );
+    }
+
+    #[test]
+    fn collect_top_level_license_detections_keeps_identifier_with_zero_match_detection() {
+        let mut file = file("project/src/lib.rs");
+        file.license_detections = vec![crate::models::LicenseDetection {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            matches: vec![],
+            detection_log: vec![],
+            identifier: Some("mit-empty".to_string()),
+        }];
+
+        let detections = collect_top_level_license_detections(&[file]);
+
+        assert_eq!(detections.len(), 1);
+        assert_eq!(detections[0].identifier, "mit-empty");
+        assert_eq!(detections[0].detection_count, 0);
+        assert!(detections[0].reference_matches.is_empty());
     }
 }
