@@ -24,7 +24,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use log::warn;
+use log::debug;
 
 use super::{ASSEMBLERS, AssemblerConfig, sibling_merge};
 use crate::models::{DatasourceId, FileInfo, Package, PackageData, TopLevelDependency};
@@ -161,7 +161,7 @@ pub(super) fn plan_npm_workspace_domains(
         let member_indices = discover_members(files, workspace_hint);
 
         if member_indices.is_empty() {
-            warn!(
+            debug!(
                 "No workspace members found for patterns {:?} in {:?}",
                 workspace_hint.patterns, workspace_hint.root_dir
             );
