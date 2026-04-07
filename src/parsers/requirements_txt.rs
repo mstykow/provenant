@@ -55,20 +55,30 @@ impl PackageParser for RequirementsTxtParser {
             .and_then(|parent| parent.file_name())
             .and_then(|name| name.to_str());
 
-        if let Some(name) = filename {
-            if name == "requirements.txt" {
-                return true;
-            }
-            if name.starts_with("requirements-") && name.ends_with(".txt") {
-                return true;
-            }
-            if parent_name == Some("requirements") && name.ends_with(".txt") {
-                return true;
-            }
+        if let Some(name) = filename
+            && (is_requirements_txt_filename(name)
+                || (parent_name == Some("requirements") && name.ends_with(".txt")))
+        {
+            return true;
         }
 
         false
     }
+}
+
+fn is_requirements_txt_filename(name: &str) -> bool {
+    if name == "requirements.txt" {
+        return true;
+    }
+
+    let Some(suffix) = name
+        .strip_prefix("requirements")
+        .and_then(|suffix| suffix.strip_suffix(".txt"))
+    else {
+        return false;
+    };
+
+    suffix.is_empty() || suffix.starts_with('-') || suffix.starts_with('_')
 }
 
 struct ParseState {

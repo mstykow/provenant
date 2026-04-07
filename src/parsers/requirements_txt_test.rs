@@ -138,4 +138,17 @@ mod tests {
         let extra_data = package_data.extra_data.unwrap();
         assert!(extra_data.contains_key("constraints"));
     }
+
+    #[test]
+    fn test_is_match_supports_underscore_and_lockfile_names() {
+        assert!(RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/requirements_lock_3_11.txt"
+        )));
+        assert!(RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/requirements_build.txt"
+        )));
+        assert!(!RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/key-requirements-expected.txt"
+        )));
+    }
 }

@@ -314,4 +314,77 @@ checksum = "git-checksum"
             Some("git-checksum")
         );
     }
+
+    #[test]
+    fn test_extract_dependencies_deduplicates_repeated_transitive_edges() {
+        let content = r#"
+[[package]]
+name = "my-app"
+version = "0.4.0"
+dependencies = ["a 1.0.0", "b 1.0.0"]
+
+[[package]]
+name = "a"
+version = "1.0.0"
+dependencies = ["serde 1.0.228"]
+
+[[package]]
+name = "b"
+version = "1.0.0"
+dependencies = ["serde 1.0.228"]
+
+[[package]]
+name = "serde"
+version = "1.0.228"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "serde-checksum"
+"#;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let lock_path = temp_dir.path().join("Cargo.lock");
+        std::fs::write(&lock_path, content).unwrap();
+
+        let package_data = CargoLockParser::extract_first_package(&lock_path);
+        let serde_deps: Vec<_> = package_data
+            .dependencies
+            .iter()
+            .filter(|dep| dep.purl.as_deref() == Some("pkg:cargo/serde@1.0.228"))
+            .collect();
+
+        assert_eq!(serde_deps.len(), 1, "serde should be emitted once");
+    }
+
+    #[test]
+    fn test_extract_dependencies_marks_deduplicated_root_dependency_as_direct() {
+        let content = r#"
+[[package]]
+name = "my-app"
+version = "0.4.0"
+dependencies = ["serde 1.0.228", "helper 1.0.0"]
+
+[[package]]
+name = "helper"
+version = "1.0.0"
+dependencies = ["serde 1.0.228"]
+
+[[package]]
+name = "serde"
+version = "1.0.228"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "serde-checksum"
+"#;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let lock_path = temp_dir.path().join("Cargo.lock");
+        std::fs::write(&lock_path, content).unwrap();
+
+        let package_data = CargoLockParser::extract_first_package(&lock_path);
+        let serde_dep = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:cargo/serde@1.0.228"))
+            .expect("serde dependency should exist");
+
+        assert_eq!(serde_dep.is_direct, Some(true));
+    }
 }

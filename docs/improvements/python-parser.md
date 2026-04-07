@@ -2,7 +2,7 @@
 
 ## Summary
 
-**🐛 Bug Fix + ✨ New Feature + 🔍 Enhanced Extraction**: Rust now extracts richer Python manifest metadata, resolves a narrow class of imported sibling dunder values for `setup.py`, preserves more installed and source-package provenance, supports saved `pypi.json` payloads, recovers RFC822 dependency metadata that was previously missing, can parse Python source distribution archives directly, and keeps parser identity visible when malformed Python package inputs degrade to empty fallback rows.
+**🐛 Bug Fix + ✨ New Feature + 🔍 Enhanced Extraction**: Rust now extracts richer Python manifest metadata, resolves a narrow class of imported sibling dunder values for `setup.py`, discovers real function-scoped `setup()` calls when they are invoked from top-level control flow, matches more real-world `requirements_*.txt` / `requirements_lock*.txt` files, preserves more installed and source-package provenance, supports saved `pypi.json` payloads, recovers RFC822 dependency metadata that was previously missing, can parse Python source distribution archives directly, and keeps parser identity visible when malformed Python package inputs degrade to empty fallback rows.
 
 ## What changed
 
@@ -20,6 +20,14 @@ When AST parsing leaves plain dunder metadata unresolved, Rust can perform a nar
 
 The fallback stays intentionally tight. It does not broaden into general code execution or whole-tree harvesting.
 
+### 3b. Function-scoped `setup()` discovery for real package manifests
+
+Rust now recognizes a bounded additional `setup.py` shape where the real `setup(...)` call lives
+inside a helper such as `main()` and that helper is invoked from top-level control flow.
+
+This closes real manifest gaps such as Chromium's vendored `pycoverage/setup.py` without broadly
+treating every helper function as package metadata.
+
 ### 4. Private package classifier support
 
 Rust recognizes the classifier `Private :: Do Not Upload` and maps it to `is_private = true`.
@@ -36,6 +44,15 @@ Rust now treats several adjacent metadata files as part of the same Python packa
 - pip wheel-cache `origin.json` files can preserve source archive provenance and merge with sibling cached wheels when the identities agree
 
 This improves package attribution while staying grounded in explicit metadata rather than generic filesystem guessing.
+
+### 5b. Broader `requirements_*.txt` lockfile-style matching
+
+Rust now matches additional real-world requirements filenames such as `requirements_build.txt` and
+`requirements_lock_3_11.txt`, not just `requirements.txt`, `requirements-*.txt`, and dedicated
+`requirements/` subdirectory layouts.
+
+This closes a Chromium-discovered gap where valid pip-compile output and environment-specific lock
+variants were being ignored even though their contents were standard pip requirements data.
 
 ### 6. Saved PyPI JSON support
 
@@ -89,4 +106,4 @@ This is an intentional improvement over the Python reference for hard parse fail
 
 ## Coverage
 
-Coverage focuses on the user-visible behaviors above, including richer `setup.cfg` extraction, `OrderedDict` project URLs, imported sibling dunder fallback, private-package classification, installed and source sidecar handling, `requirements/` subdirectory dependency attachment, direct sdist archive parsing, archive hardening for suspicious zip metadata entries, malformed-input fallback identity for pip cache / pip-inspect / archive surfaces, `WHEEL` and `origin.json` provenance, saved `pypi.json` parsing, and RFC822 dependency recovery.
+Coverage focuses on the user-visible behaviors above, including richer `setup.cfg` extraction, `OrderedDict` project URLs, imported sibling dunder fallback, function-scoped `setup()` discovery, private-package classification, installed and source sidecar handling, `requirements/` subdirectory dependency attachment, broader `requirements_*.txt` matching, direct sdist archive parsing, archive hardening for suspicious zip metadata entries, malformed-input fallback identity for pip cache / pip-inspect / archive surfaces, `WHEEL` and `origin.json` provenance, saved `pypi.json` parsing, and RFC822 dependency recovery.

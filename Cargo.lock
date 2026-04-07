@@ -2865,6 +2865,7 @@ dependencies = [
  "tempfile",
  "tera",
  "toml",
+ "ttf-parser",
  "url",
  "uuid",
  "yaml_serde",

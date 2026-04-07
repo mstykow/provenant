@@ -37,4 +37,22 @@ mod golden_tests {
             Err(e) => panic!("Golden test failed: {}", e),
         }
     }
+
+    #[test]
+    fn test_parse_requirements_txt_lockfile_style_golden() {
+        let test_file =
+            PathBuf::from("testdata/python/golden/requirements_txt/requirements_lock_3_11.txt");
+        let expected_file = PathBuf::from(
+            "testdata/python/golden/requirements_txt/requirements_lock_3_11-expected.json",
+        );
+
+        let package_data = RequirementsTxtParser::extract_first_package(&test_file);
+
+        assert_eq!(package_data.dependencies.len(), 5);
+
+        match compare_package_data_parser_only(&package_data, &expected_file) {
+            Ok(_) => (),
+            Err(e) => panic!("Golden test failed: {}", e),
+        }
+    }
 }

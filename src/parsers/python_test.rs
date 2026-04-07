@@ -16,6 +16,16 @@ mod tests {
         (temp_dir, file_path)
     }
 
+    fn create_temp_dist_info_metadata_file(content: &str) -> (TempDir, PathBuf) {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let dist_info = temp_dir.path().join("demo-1.0.0.dist-info");
+        fs::create_dir_all(&dist_info).expect("Failed to create dist-info dir");
+        let file_path = dist_info.join("METADATA");
+        fs::write(&file_path, content).expect("Failed to write METADATA");
+
+        (temp_dir, file_path)
+    }
+
     fn create_temp_tar_gz(entries: &[(&str, &str)], filename: &str) -> (TempDir, PathBuf) {
         use flate2::Compression;
         use flate2::write::GzEncoder;
@@ -112,7 +122,8 @@ mod tests {
         let setup_cfg_path = PathBuf::from("/some/path/setup.cfg");
         let setup_path = PathBuf::from("/some/path/setup.py");
         let pkg_info_path = PathBuf::from("/some/path/PKG-INFO");
-        let metadata_path = PathBuf::from("/some/path/METADATA");
+        let metadata_path = PathBuf::from("/some/path/demo-1.0.0.dist-info/METADATA");
+        let bare_metadata_path = PathBuf::from("/some/path/METADATA");
         let pip_inspect_path = PathBuf::from("/some/path/pip-inspect.deplock");
         let pypi_json_path = PathBuf::from("/some/path/pypi.json");
         let invalid_path = PathBuf::from("/some/path/not_python.txt");
@@ -122,6 +133,7 @@ mod tests {
         assert!(PythonParser::is_match(&setup_path));
         assert!(PythonParser::is_match(&pkg_info_path));
         assert!(PythonParser::is_match(&metadata_path));
+        assert!(!PythonParser::is_match(&bare_metadata_path));
         assert!(PythonParser::is_match(&pip_inspect_path));
         assert!(PythonParser::is_match(&pypi_json_path));
         assert!(!PythonParser::is_match(&invalid_path));
@@ -504,6 +516,90 @@ setup(
     }
 
     #[test]
+    fn test_setup_py_without_setup_call_emits_minimal_package() {
+        let content = r#"
+import pathlib
+
+def main():
+    script_dir = pathlib.Path(__file__).resolve().parent
+    return script_dir
+
+if __name__ == '__main__':
+    main()
+"#;
+        let (_temp_dir, file_path) = create_temp_file(content, "setup.py");
+
+        let package_data = PythonParser::extract_first_package(&file_path);
+
+        assert_eq!(package_data.package_type, Some(PackageType::Pypi));
+        assert_eq!(package_data.datasource_id, Some(DatasourceId::PypiSetupPy));
+        assert!(package_data.name.is_none());
+        assert!(package_data.version.is_none());
+    }
+
+    #[test]
+    fn test_suffix_setup_py_is_matched_and_emits_minimal_package() {
+        let content = r#"
+def main():
+    return "no setup call"
+"#;
+        let (_temp_dir, file_path) = create_temp_file(content, "chrome_setup.py");
+
+        assert!(PythonParser::is_match(&file_path));
+
+        let package_data = PythonParser::extract_first_package(&file_path);
+
+        assert_eq!(package_data.package_type, Some(PackageType::Pypi));
+        assert_eq!(package_data.datasource_id, Some(DatasourceId::PypiSetupPy));
+        assert!(package_data.name.is_none());
+        assert!(package_data.version.is_none());
+    }
+
+    #[test]
+    fn test_setup_py_detects_setup_call_inside_called_function() {
+        let content = r#"
+from setuptools import setup
+
+setup_args = {
+    "name": "coverage",
+    "version": "3.7",
+    "license": "BSD",
+}
+
+def main():
+    setup(**setup_args)
+
+if __name__ == '__main__':
+    main()
+"#;
+        let (_temp_dir, file_path) = create_temp_file(content, "setup.py");
+
+        let package_data = PythonParser::extract_first_package(&file_path);
+
+        assert_eq!(package_data.name, Some("coverage".to_string()));
+        assert_eq!(package_data.version, Some("3.7".to_string()));
+        assert_eq!(package_data.purl.as_deref(), Some("pkg:pypi/coverage@3.7"));
+        assert_eq!(
+            package_data.extracted_license_statement.as_deref(),
+            Some("BSD")
+        );
+    }
+
+    #[test]
+    fn test_setup_py_with_empty_setup_call_emits_minimal_package() {
+        let content = "from setuptools import setup\n\nsetup()\n";
+        let (_temp_dir, file_path) = create_temp_file(content, "setup.py");
+
+        let package_data = PythonParser::extract_first_package(&file_path);
+
+        assert_eq!(package_data.package_type, Some(PackageType::Pypi));
+        assert_eq!(package_data.primary_language.as_deref(), Some("Python"));
+        assert_eq!(package_data.datasource_id, Some(DatasourceId::PypiSetupPy));
+        assert!(package_data.name.is_none());
+        assert!(package_data.version.is_none());
+    }
+
+    #[test]
     fn test_setup_py_ast_large_file() {
         let mut content = String::from("from setuptools import setup\n");
         content.push_str("setup(name=\"big-package\", version=\"9.9.9\")\n");
@@ -701,7 +797,7 @@ Requires-Python: >=3.8
 This is a test package.
 "#;
 
-        let (_temp_file, file_path) = create_temp_file(content, "METADATA");
+        let (_temp_file, file_path) = create_temp_dist_info_metadata_file(content);
         let package_data = PythonParser::extract_first_package(&file_path);
 
         // Verify Download-URL is extracted
@@ -736,7 +832,7 @@ Project-URL: Changelog, https://pip.pypa.io/en/stable/news/
 pip - The Python Package Installer
 "#;
 
-        let (_temp_file, file_path) = create_temp_file(content, "METADATA");
+        let (_temp_file, file_path) = create_temp_dist_info_metadata_file(content);
         let package_data = PythonParser::extract_first_package(&file_path);
 
         assert_eq!(package_data.name, Some("pip".to_string()));
@@ -794,7 +890,7 @@ License-Expression: MIT OR Apache-2.0
 Example metadata.
 "#;
 
-        let (_temp_file, file_path) = create_temp_file(content, "METADATA");
+        let (_temp_file, file_path) = create_temp_dist_info_metadata_file(content);
         let package_data = PythonParser::extract_first_package(&file_path);
 
         assert_eq!(
@@ -828,7 +924,7 @@ Project-URL: Repository, https://github.com/mikedh/trimesh
 Trimesh is a pure Python library for loading and using triangular meshes.
 "#;
 
-        let (_temp_file, file_path) = create_temp_file(content, "METADATA");
+        let (_temp_file, file_path) = create_temp_dist_info_metadata_file(content);
         let package_data = PythonParser::extract_first_package(&file_path);
 
         assert_eq!(package_data.name, Some("trimesh".to_string()));
@@ -885,7 +981,7 @@ Project-URL: Issues, https://github.com/user/test-package/issues
 Test package description.
 "#;
 
-        let (_temp_file, file_path) = create_temp_file(content, "METADATA");
+        let (_temp_file, file_path) = create_temp_dist_info_metadata_file(content);
         let package_data = PythonParser::extract_first_package(&file_path);
 
         assert_eq!(
@@ -923,7 +1019,9 @@ Test package description.
 
     #[test]
     fn test_extract_license_file_from_metadata() {
-        let metadata_path = PathBuf::from("testdata/python/metadata-license-files/METADATA");
+        let content = fs::read_to_string("testdata/python/metadata-license-files/METADATA")
+            .expect("read metadata fixture");
+        let (_temp_dir, metadata_path) = create_temp_dist_info_metadata_file(&content);
         let package_data = PythonParser::extract_first_package(&metadata_path);
 
         assert_eq!(package_data.name, Some("example-package".to_string()));
@@ -1044,9 +1142,8 @@ Test package description.
 
     #[test]
     fn test_extract_metadata_without_sibling_wheel_keeps_plain_purl() {
-        let (_temp_dir, metadata_path) = create_temp_file(
+        let (_temp_dir, metadata_path) = create_temp_dist_info_metadata_file(
             "Metadata-Version: 2.1\nName: demo\nVersion: 1.0.0\n",
-            "METADATA",
         );
 
         let package_data = PythonParser::extract_first_package(&metadata_path);
@@ -1058,6 +1155,30 @@ Test package description.
                 .as_ref()
                 .is_none_or(|extra| !extra.contains_key("wheel_tags"))
         );
+    }
+
+    #[test]
+    fn test_is_match_rejects_bare_metadata_outside_dist_info() {
+        assert!(!PythonParser::is_match(&PathBuf::from(
+            "third_party/devscripts/METADATA"
+        )));
+        assert!(PythonParser::is_match(&PathBuf::from(
+            "site-packages/demo-1.0.0.dist-info/METADATA"
+        )));
+    }
+
+    #[test]
+    fn test_extract_first_package_returns_default_for_bare_metadata_outside_dist_info() {
+        let (_temp_dir, metadata_path) = create_temp_file(
+            "Metadata-Version: 2.1\nName: demo\nVersion: 1.0.0\n",
+            "METADATA",
+        );
+
+        let package_data = PythonParser::extract_first_package(&metadata_path);
+
+        assert_eq!(package_data.datasource_id, None);
+        assert_eq!(package_data.name, None);
+        assert_eq!(package_data.version, None);
     }
 
     #[test]
@@ -1316,9 +1437,8 @@ Test package description.
 
     #[test]
     fn test_extract_metadata_requires_dist_pinned_version() {
-        let (_temp_dir, file_path) = create_temp_file(
+        let (_temp_dir, file_path) = create_temp_dist_info_metadata_file(
             "Metadata-Version: 2.1\nName: demo\nVersion: 1.0.0\nRequires-Dist: helper==1.2.3\n",
-            "METADATA",
         );
         let package_data = PythonParser::extract_first_package(&file_path);
 

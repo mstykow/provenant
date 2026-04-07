@@ -37,7 +37,7 @@ This file is intended to work incrementally.
 
 All production handlers in the original plan scope are covered. Some ecosystems consolidate multiple Python handlers into fewer Rust parsers by design.
 
-"✅ Implemented" here means the planned Rust production scope for that ecosystem is present, not that every upstream ScanCode packagedcode handler exists one-for-one in Rust. Explicit upstream parity gaps that remain intentionally deferred are called out below, especially the Windows-specific `MsiInstallerHandler` and `WindowsExecutableHandler`, and several implemented rows still describe bounded static support rather than full evaluator-style parity.
+"✅ Implemented" here means the planned Rust production scope for that ecosystem is present, not that every upstream ScanCode packagedcode handler exists one-for-one in Rust. Explicit upstream parity gaps that remain intentionally deferred are called out below, especially the Windows-specific `MsiInstallerHandler`, and several implemented rows still describe bounded static support rather than full evaluator-style parity.
 
 | Ecosystem             | Coverage       | Notes                                                                                                                                                                                                                                                                                                                  |
 | --------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -82,7 +82,7 @@ All production handlers in the original plan scope are covered. Some ecosystems 
 | Swift                 | ✅ Implemented | `Package.resolved`, `Package.swift.json`, ⭐ full dependency graph                                                                                                                                                                                                                                                     |
 | vcpkg                 | ✅ Implemented | `vcpkg.json` manifest parsing with embedded/sibling configuration metadata; standalone `vcpkg-configuration.json` / `vcpkg-lock.json` remain follow-up work                                                                                                                                                            |
 | Windows Update        | ✅ Implemented | `MicrosoftUpdateManifestParser`                                                                                                                                                                                                                                                                                        |
-| `misc.py` recognizers | ✅ Implemented | All `misc.py` non-assemblable recognizers are implemented, including magic byte detection. This row does **not** include Python's separate `win_pe.py` / `msi.py` handlers; those remain deferred below.                                                                                                               |
+| `misc.py` recognizers | ✅ Implemented | All `misc.py` non-assemblable recognizers are implemented, including magic byte detection. Python's separate `win_pe.py` surface is now covered by a bounded scanner-gated Windows executable detector; only `msi.py` remains deferred below.                                                                          |
 
 ---
 
@@ -122,28 +122,29 @@ These are still useful expansions with credible ecosystem reach, but they now si
 
 ### Ranked Compiled-Binary / Shipped-Artifact Follow-Ons
 
-Go build info and Rust cargo-auditable metadata are currently the only **obvious raw executable**
-surfaces for `--package-in-compiled`: both embed structured, toolchain-recognized package metadata
-that Provenant can extract statically from already-read bytes without broad reverse engineering.
-Today there is no equally strong next raw-binary candidate with the same combination of widespread
-ecosystem value, trustworthy embedded dependency semantics, and bounded extraction cost.
+Go build info and Rust cargo-auditable metadata remain the current **obvious raw executable**
+surfaces for `--package-in-compiled`: each exposes structured package metadata that Provenant can
+extract statically from already-read bytes without broad reverse engineering. Bounded Windows PE
+`VERSIONINFO` identity extraction now ships on the normal application-package scan path instead of
+the compiled-binary opt-in lane.
 
 Most future value therefore sits in **shipped artifacts and runtime package/container formats** with
 stable filenames and explicit metadata, not in general-purpose executable introspection.
 
-| Rank | Candidate                                                                                               | Utility / rationale                                                                                                                                                                               | Detector vs parser fit                                                                             |
-| ---- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| 1    | Android metadata and package artifacts (`METADATA`, `.aab`, binary `AndroidManifest.xml`)               | Best next artifact target because Android shipped artifacts are common, package identity is explicit, and binary `AndroidManifest.xml` extraction is a solved static-analysis problem.            | Treat as normal artifact/package parsing, not as a new raw executable detector.                    |
-| 2    | OCI images (OCI manifest/index JSON, image layout files)                                                | Very high shipped-artifact value with clear JSON semantics, content-addressed identity, and strong reuse of existing Docker/OCI knowledge.                                                        | Normal parser/artifact ingestion; manifests and configs have stable paths.                         |
-| 3    | Flatpak / Snap / AppImage-style package formats                                                         | Useful distribution-artifact coverage with structured metadata, but the grouped scope spans different container/runtime models and is less uniform than Android or OCI.                           | Normal artifact/package parsing; not a reason to expand `--package-in-compiled`.                   |
-| 4    | .NET published runtime artifacts and assemblies (`.deps.json`, `runtimeconfig.json`, assembly metadata) | Strongest net-new runtime candidate if user demand appears because published .NET apps expose structured dependency/runtime metadata and assemblies carry standardized manifest/reference tables. | Prefer stable published-artifact parsing first; keep generic PE executable introspection deferred. |
-| 5    | Java runtime/module artifacts (`JMOD`, `JIMAGE`, non-Gradle Java module descriptors)                    | Real runtime-artifact value with standardized module metadata, but still lower leverage than source manifests and lockfiles already covered across the JVM family.                                | Artifact/runtime parsing, separate from already-implemented Gradle `.module` support.              |
-| 6    | PEX Python binaries                                                                                     | Valuable for packaged Python applications, but weaker general demand and lower leverage than Python metadata/lockfile follow-ons.                                                                 | Artifact parsing, not a broad compiled-binary detector expansion.                                  |
+| Rank | Candidate                                                                                               | Utility / rationale                                                                                                                                                                               | Detector vs parser fit                                                                                                       |
+| ---- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 1    | Android metadata and package artifacts (`METADATA`, `.aab`, binary `AndroidManifest.xml`)               | Best next artifact target because Android shipped artifacts are common, package identity is explicit, and binary `AndroidManifest.xml` extraction is a solved static-analysis problem.            | Treat as normal artifact/package parsing, not as a new raw executable detector.                                              |
+| 2    | OCI images (OCI manifest/index JSON, image layout files)                                                | Very high shipped-artifact value with clear JSON semantics, content-addressed identity, and strong reuse of existing Docker/OCI knowledge.                                                        | Normal parser/artifact ingestion; manifests and configs have stable paths.                                                   |
+| 3    | Flatpak / Snap / AppImage-style package formats                                                         | Useful distribution-artifact coverage with structured metadata, but the grouped scope spans different container/runtime models and is less uniform than Android or OCI.                           | Normal artifact/package parsing; not a reason to expand `--package-in-compiled`.                                             |
+| 4    | .NET published runtime artifacts and assemblies (`.deps.json`, `runtimeconfig.json`, assembly metadata) | Strongest net-new runtime candidate if user demand appears because published .NET apps expose structured dependency/runtime metadata and assemblies carry standardized manifest/reference tables. | Prefer stable published-artifact parsing first; keep deeper PE introspection beyond bounded `VERSIONINFO` metadata deferred. |
+| 5    | Java runtime/module artifacts (`JMOD`, `JIMAGE`, non-Gradle Java module descriptors)                    | Real runtime-artifact value with standardized module metadata, but still lower leverage than source manifests and lockfiles already covered across the JVM family.                                | Artifact/runtime parsing, separate from already-implemented Gradle `.module` support.                                        |
+| 6    | PEX Python binaries                                                                                     | Valuable for packaged Python applications, but weaker general demand and lower leverage than Python metadata/lockfile follow-ons.                                                                 | Artifact parsing, not a broad compiled-binary detector expansion.                                                            |
 
-Windows binary formats remain deferred because generic `.exe` / `.dll` / `.msi` work still looks
-like low-ROI binary reverse engineering rather than package-identity parsing. If future demand
-justifies deeper runtime artifact work, the clearest first net-new direction is the .NET published
-artifact family above, not generic PE metadata scraping.
+Windows binary formats are now partially covered: bounded `.exe` / `.dll` `VERSIONINFO` package
+identity extraction is implemented under `--package-in-compiled`, while broader `.msi` support and
+deeper PE/runtime introspection still look like lower-ROI follow-on work. If future demand
+justifies deeper runtime artifact work, the clearest first net-new direction remains the .NET
+published artifact family above rather than broad PE archaeology.
 
 ### Lower-Value Or Opportunistic Opportunities
 
@@ -185,13 +186,12 @@ These issues may still be worth doing, but they are currently lower-value becaus
 
 ## Deferred: Windows Binary Formats
 
-These remain explicit upstream parity gaps in Rust today. Python ships a `WindowsExecutableHandler` plus a Linux-only `MsiInstallerHandler`, but Provenant does not currently implement either surface. They still require specialized crates or external tooling and remain deferred unless user demand becomes concrete.
+These remain explicit upstream parity gaps in Rust today. Python ships a Linux-only `MsiInstallerHandler`, and Provenant still does not currently implement that surface. Deeper MSI/runtime artifact support remains deferred unless user demand becomes concrete.
 
-| Handler                    | Format                                 | Challenge                               | Priority |
-| -------------------------- | -------------------------------------- | --------------------------------------- | -------- |
-| `MsiInstallerHandler`      | `*.msi`                                | OLE Compound Document binary format     | Low      |
-| `WindowsExecutableHandler` | `*.exe`, `*.dll`, related PE artifacts | PE binary format, VERSION_INFO resource | Low      |
-| Win Registry handlers      | Registry hive files                    | Binary registry format                  | Low      |
+| Handler               | Format              | Challenge                           | Priority |
+| --------------------- | ------------------- | ----------------------------------- | -------- |
+| `MsiInstallerHandler` | `*.msi`             | OLE Compound Document binary format | Low      |
+| Win Registry handlers | Registry hive files | Binary registry format              | Low      |
 
 ### Out of Scope
 

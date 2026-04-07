@@ -22,7 +22,7 @@ use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
 use serde_json::json;
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map::Entry};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -161,7 +161,7 @@ fn extract_all_dependencies(
     packages: &[Value],
     root_package: Option<&toml::map::Map<String, Value>>,
 ) -> Vec<Dependency> {
-    let mut all_dependencies = Vec::new();
+    let mut all_dependencies: HashMap<CargoDependencyKey, Dependency> = HashMap::new();
 
     let package_versions = build_package_versions(packages);
     let package_provenance = build_package_provenance(packages);
@@ -204,7 +204,7 @@ fn extract_all_dependencies(
                                 &package_provenance,
                             );
 
-                            all_dependencies.push(Dependency {
+                            let dependency = Dependency {
                                 purl,
                                 extracted_requirement: if resolved_version.is_empty() {
                                     None
@@ -218,7 +218,19 @@ fn extract_all_dependencies(
                                 is_direct: Some(is_root_package),
                                 resolved_package: None,
                                 extra_data,
-                            });
+                            };
+
+                            let key = CargoDependencyKey::from_dependency(&dependency);
+                            match all_dependencies.entry(key) {
+                                Entry::Vacant(entry) => {
+                                    entry.insert(dependency);
+                                }
+                                Entry::Occupied(mut entry) => {
+                                    if is_root_package {
+                                        entry.get_mut().is_direct = Some(true);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -226,7 +238,42 @@ fn extract_all_dependencies(
         }
     }
 
-    all_dependencies
+    let mut dependencies: Vec<_> = all_dependencies.into_values().collect();
+    dependencies.sort_by(|left, right| {
+        left.purl
+            .as_deref()
+            .cmp(&right.purl.as_deref())
+            .then_with(|| {
+                left.extracted_requirement
+                    .as_deref()
+                    .cmp(&right.extracted_requirement.as_deref())
+            })
+    });
+    dependencies
+}
+
+#[derive(Hash, PartialEq, Eq)]
+struct CargoDependencyKey {
+    purl: Option<String>,
+    extracted_requirement: Option<String>,
+    source: Option<String>,
+}
+
+impl CargoDependencyKey {
+    fn from_dependency(dependency: &Dependency) -> Self {
+        let source = dependency
+            .extra_data
+            .as_ref()
+            .and_then(|extra_data| extra_data.get("source"))
+            .and_then(|value| value.as_str())
+            .map(ToOwned::to_owned);
+
+        Self {
+            purl: dependency.purl.clone(),
+            extracted_requirement: dependency.extracted_requirement.clone(),
+            source,
+        }
+    }
 }
 
 fn build_package_versions(packages: &[Value]) -> HashMap<&str, Vec<&str>> {

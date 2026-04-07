@@ -140,4 +140,20 @@ mod golden_tests {
             Err(e) => panic!("Golden test failed for lock-basic: {}", e),
         }
     }
+
+    #[test]
+    fn test_golden_cargo_lock_deduplicates_repeated_transitive_edges() {
+        let test_file = PathBuf::from("testdata/cargo-golden/lock-dedup/Cargo.lock");
+        let expected_file = PathBuf::from("testdata/cargo-golden/lock-dedup/Cargo.lock.expected");
+
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
+
+        let package_data = CargoLockParser::extract_first_package(&test_file);
+
+        match compare_package_data_parser_only(&package_data, &expected_file) {
+            Ok(_) => (),
+            Err(e) => panic!("Golden test failed for lock-dedup: {}", e),
+        }
+    }
 }

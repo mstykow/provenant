@@ -104,6 +104,7 @@ pub enum PackageType {
     Swift,
     Vcpkg,
     War,
+    Winexe,
     #[serde(rename = "windows-update")]
     WindowsUpdate,
 }
@@ -178,6 +179,7 @@ impl PackageType {
             Self::Swift => "swift",
             Self::Vcpkg => "vcpkg",
             Self::War => "war",
+            Self::Winexe => "winexe",
             Self::WindowsUpdate => "windows-update",
         }
     }
@@ -250,6 +252,7 @@ mod tests {
         assert_eq!(PackageType::JbossService.as_str(), "jboss-service");
         assert_eq!(PackageType::LinuxDistro.as_str(), "linux-distro");
         assert_eq!(PackageType::PnpmLock.as_str(), "pnpm-lock");
+        assert_eq!(PackageType::Winexe.as_str(), "winexe");
         assert_eq!(PackageType::WindowsUpdate.as_str(), "windows-update");
 
         // Verify serialization matches
@@ -261,6 +264,9 @@ mod tests {
 
         let json = serde_json::to_string(&PackageType::PnpmLock).unwrap();
         assert_eq!(json, r#""pnpm-lock""#);
+
+        let json = serde_json::to_string(&PackageType::Winexe).unwrap();
+        assert_eq!(json, r#""winexe""#);
 
         let json = serde_json::to_string(&PackageType::WindowsUpdate).unwrap();
         assert_eq!(json, r#""windows-update""#);
@@ -284,6 +290,9 @@ mod tests {
 
         let pt: PackageType = serde_json::from_str(r#""pnpm-lock""#).unwrap();
         assert_eq!(pt, PackageType::PnpmLock);
+
+        let pt: PackageType = serde_json::from_str(r#""winexe""#).unwrap();
+        assert_eq!(pt, PackageType::Winexe);
 
         let pt: PackageType = serde_json::from_str(r#""windows-update""#).unwrap();
         assert_eq!(pt, PackageType::WindowsUpdate);

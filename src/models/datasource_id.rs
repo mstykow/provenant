@@ -80,6 +80,7 @@ pub enum DatasourceId {
     CargoLock,
     CargoToml,
     RustBinary,
+    WindowsExecutable,
 
     // ── Chef ──
     /// Matches Python reference value.
@@ -387,6 +388,7 @@ impl DatasourceId {
             Self::CargoLock => "cargo_lock",
             Self::CargoToml => "cargo_toml",
             Self::RustBinary => "rust_binary",
+            Self::WindowsExecutable => "windows_executable",
 
             // Chef
             Self::ChefCookbookMetadataJson => "chef_cookbook_metadata_json",

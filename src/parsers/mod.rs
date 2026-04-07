@@ -54,7 +54,7 @@ mod clojure;
 mod clojure_test;
 #[cfg(test)]
 mod cocoapods_scan_test;
-mod compiled_binary;
+pub(crate) mod compiled_binary;
 mod composer;
 #[cfg(test)]
 mod composer_scan_test;
@@ -298,6 +298,9 @@ mod vcpkg;
 mod vcpkg_scan_test;
 #[cfg(test)]
 mod vcpkg_test;
+pub(crate) mod windows_executable;
+#[cfg(test)]
+mod windows_executable_golden_test;
 mod yarn_lock;
 #[cfg(test)]
 mod yarn_lock_test;
@@ -491,7 +494,6 @@ pub use self::cargo_lock::CargoLockParser;
 pub use self::chef::{ChefMetadataJsonParser, ChefMetadataRbParser};
 pub use self::citation::CitationCffParser;
 pub use self::clojure::{ClojureDepsEdnParser, ClojureProjectCljParser};
-pub(crate) use self::compiled_binary::try_parse_compiled_bytes;
 pub use self::composer::{ComposerJsonParser, ComposerLockParser};
 pub use self::conan::{ConanFilePyParser, ConanLockParser, ConanfileTxtParser};
 pub use self::conan_data::ConanDataParser;

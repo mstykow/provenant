@@ -6,7 +6,8 @@ mod golden_tests {
 
     #[test]
     fn test_golden_metadata() {
-        let test_file = PathBuf::from("testdata/python/golden/metadata/METADATA");
+        let test_file =
+            PathBuf::from("testdata/python/golden/metadata/six-1.10.0.dist-info/METADATA");
         let expected_file = PathBuf::from("testdata/python/golden/metadata/METADATA-expected.json");
 
         let package_data = PythonParser::extract_first_package(&test_file);
@@ -22,6 +23,34 @@ mod golden_tests {
         let test_file = PathBuf::from("testdata/python/golden/setup_cfg_wheel/setup.cfg");
         let expected_file =
             PathBuf::from("testdata/python/setup_cfg_wheel/setup.cfg-expected-corrected.json");
+
+        let package_data = PythonParser::extract_first_package(&test_file);
+
+        match compare_package_data_parser_only(&package_data, &expected_file) {
+            Ok(_) => (),
+            Err(e) => panic!("Golden test failed: {}", e),
+        }
+    }
+
+    #[test]
+    fn test_golden_setup_py_function_call() {
+        let test_file = PathBuf::from("testdata/python/golden/setup_py_function_call/setup.py");
+        let expected_file =
+            PathBuf::from("testdata/python/golden/setup_py_function_call/setup.py-expected.json");
+
+        let package_data = PythonParser::extract_first_package(&test_file);
+
+        match compare_package_data_parser_only(&package_data, &expected_file) {
+            Ok(_) => (),
+            Err(e) => panic!("Golden test failed: {}", e),
+        }
+    }
+
+    #[test]
+    fn test_golden_setup_py_empty_call() {
+        let test_file = PathBuf::from("testdata/python/golden/setup_py_empty_call/setup.py");
+        let expected_file =
+            PathBuf::from("testdata/python/golden/setup_py_empty_call/setup.py-expected.json");
 
         let package_data = PythonParser::extract_first_package(&test_file);
 

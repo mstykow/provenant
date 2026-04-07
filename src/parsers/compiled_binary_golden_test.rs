@@ -3,13 +3,12 @@ mod golden_tests {
     use std::fs;
     use std::path::PathBuf;
 
+    use crate::parsers::compiled_binary::try_parse_compiled_bytes;
     use crate::parsers::golden_test_utils::compare_package_data_collection_parser_only;
-    use crate::parsers::try_parse_compiled_bytes;
 
     const RUST_COMPILED_BINARY_FIXTURE: &str =
         "testdata/compiled-binary-golden/rust/cargo_dependencies";
     const GO_COMPILED_BINARY_FIXTURE: &str = "testdata/compiled-binary-golden/go-basic/demo";
-
     #[test]
     fn test_golden_rust_compiled_binary() {
         let test_file = PathBuf::from(RUST_COMPILED_BINARY_FIXTURE);

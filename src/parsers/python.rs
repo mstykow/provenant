@@ -117,11 +117,11 @@ impl PackageParser for PythonParser {
                 extract_from_pyproject_toml(path)
             } else if path.file_name().unwrap_or_default() == "setup.cfg" {
                 extract_from_setup_cfg(path)
-            } else if path.file_name().unwrap_or_default() == "setup.py" {
-                extract_from_setup_py(path)
+            } else if is_setup_py_like_path(path) {
+                return extract_setup_py_packages(path);
             } else if path.file_name().unwrap_or_default() == "PKG-INFO" {
                 extract_from_rfc822_metadata(path, detect_pkg_info_datasource_id(path))
-            } else if path.file_name().unwrap_or_default() == "METADATA" {
+            } else if is_installed_wheel_metadata_path(path) {
                 extract_from_rfc822_metadata(path, DatasourceId::PypiWheelMetadata)
             } else if is_pip_cache_origin_json(path) {
                 extract_from_pip_origin_json(path)
@@ -151,9 +151,9 @@ impl PackageParser for PythonParser {
         if let Some(filename) = path.file_name()
             && (filename == "pyproject.toml"
                 || filename == "setup.cfg"
-                || filename == "setup.py"
+                || is_setup_py_like_path(path)
                 || filename == "PKG-INFO"
-                || filename == "METADATA"
+                || (filename == "METADATA" && is_installed_wheel_metadata_path(path))
                 || filename == "pypi.json"
                 || filename == "pip-inspect.deplock"
                 || is_pip_cache_origin_json(path))
@@ -170,6 +170,21 @@ impl PackageParser for PythonParser {
 
         false
     }
+}
+
+fn is_setup_py_like_path(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == "setup.py" || name.ends_with("_setup.py"))
+}
+
+fn is_installed_wheel_metadata_path(path: &Path) -> bool {
+    path.file_name().and_then(|name| name.to_str()) == Some("METADATA")
+        && path
+            .parent()
+            .and_then(|parent| parent.file_name())
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with(".dist-info"))
 }
 
 #[derive(Debug, Clone)]
@@ -2714,23 +2729,28 @@ struct SetupAliases {
     module_aliases: HashMap<String, String>,
 }
 
-fn extract_from_setup_py(path: &Path) -> PackageData {
+fn extract_setup_py_packages(path: &Path) -> Vec<PackageData> {
+    extract_from_setup_py(path).into_iter().collect()
+}
+
+fn extract_from_setup_py(path: &Path) -> Option<PackageData> {
     let content = match read_file_to_string(path) {
         Ok(content) => content,
         Err(e) => {
             warn!("Failed to read setup.py at {:?}: {}", path, e);
-            return default_package_data(path);
+            return Some(default_package_data(path));
         }
     };
 
     if content.len() > MAX_SETUP_PY_BYTES {
         warn!("setup.py too large at {:?}: {} bytes", path, content.len());
-        return extract_from_setup_py_regex(&content);
+        let package_data = extract_from_setup_py_regex(&content);
+        return should_emit_setup_py_package(&package_data).then_some(package_data);
     }
 
     let mut package_data = match extract_from_setup_py_ast(&content) {
         Ok(Some(data)) => data,
-        Ok(None) => extract_from_setup_py_regex(&content),
+        Ok(None) => return Some(default_package_data(path)),
         Err(e) => {
             warn!("Failed to parse setup.py AST at {:?}: {}", path, e);
             extract_from_setup_py_regex(&content)
@@ -2754,7 +2774,26 @@ fn extract_from_setup_py(path: &Path) -> PackageData {
         );
     }
 
-    package_data
+    if should_emit_setup_py_package(&package_data) {
+        Some(package_data)
+    } else {
+        Some(default_package_data(path))
+    }
+}
+
+fn should_emit_setup_py_package(package_data: &PackageData) -> bool {
+    package_data.name.is_some()
+        || package_data.version.is_some()
+        || package_data.purl.is_some()
+        || !package_data.dependencies.is_empty()
+        || package_data.extracted_license_statement.is_some()
+        || !package_data.license_detections.is_empty()
+        || !package_data.parties.is_empty()
+        || package_data.description.is_some()
+        || package_data.homepage_url.is_some()
+        || package_data.bug_tracking_url.is_some()
+        || package_data.code_view_url.is_some()
+        || package_data.vcs_url.is_some()
 }
 
 fn fill_from_sibling_dunder_metadata(path: &Path, content: &str, package_data: &mut PackageData) {
@@ -3010,13 +3049,90 @@ fn find_setup_call<'a>(
 ) -> Option<&'a ast::Expr> {
     let mut finder = SetupCallFinder {
         aliases,
+        called_function_names: collect_top_level_called_function_names(statements),
         nodes_visited: 0,
     };
     finder.find_in_statements(statements)
 }
 
+fn collect_top_level_called_function_names(statements: &[ast::Stmt]) -> HashSet<String> {
+    let mut called = HashSet::new();
+    collect_called_function_names_in_statements(statements, &mut called);
+    called
+}
+
+fn collect_called_function_names_in_statements(
+    statements: &[ast::Stmt],
+    called: &mut HashSet<String>,
+) {
+    for stmt in statements {
+        match stmt {
+            ast::Stmt::Expr(ast::StmtExpr { value, .. })
+            | ast::Stmt::Assign(ast::StmtAssign { value, .. }) => {
+                collect_called_function_names_in_expr(value.as_ref(), called);
+            }
+            ast::Stmt::If(ast::StmtIf {
+                body,
+                elif_else_clauses,
+                ..
+            }) => {
+                collect_called_function_names_in_statements(body, called);
+                for clause in elif_else_clauses {
+                    collect_called_function_names_in_statements(&clause.body, called);
+                }
+            }
+            ast::Stmt::For(ast::StmtFor { body, orelse, .. })
+            | ast::Stmt::While(ast::StmtWhile { body, orelse, .. }) => {
+                collect_called_function_names_in_statements(body, called);
+                collect_called_function_names_in_statements(orelse, called);
+            }
+            ast::Stmt::With(ast::StmtWith { body, .. }) => {
+                collect_called_function_names_in_statements(body, called);
+            }
+            ast::Stmt::Try(ast::StmtTry {
+                body,
+                orelse,
+                finalbody,
+                handlers,
+                ..
+            }) => {
+                collect_called_function_names_in_statements(body, called);
+                collect_called_function_names_in_statements(orelse, called);
+                collect_called_function_names_in_statements(finalbody, called);
+                for handler in handlers {
+                    let ast::ExceptHandler::ExceptHandler(ast::ExceptHandlerExceptHandler {
+                        body,
+                        ..
+                    }) = handler;
+                    collect_called_function_names_in_statements(body, called);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn collect_called_function_names_in_expr(expr: &ast::Expr, called: &mut HashSet<String>) {
+    if let ast::Expr::Call(ast::ExprCall {
+        func, arguments, ..
+    }) = expr
+    {
+        if let ast::Expr::Name(ast::ExprName { id, .. }) = func.as_ref() {
+            called.insert(id.as_str().to_string());
+        }
+
+        for arg in arguments.args.iter() {
+            collect_called_function_names_in_expr(arg, called);
+        }
+        for keyword in arguments.keywords.iter() {
+            collect_called_function_names_in_expr(&keyword.value, called);
+        }
+    }
+}
+
 struct SetupCallFinder<'a> {
     aliases: &'a SetupAliases,
+    called_function_names: HashSet<String>,
     nodes_visited: usize,
 }
 
@@ -3047,6 +3163,11 @@ impl<'a> SetupCallFinder<'a> {
                 | ast::Stmt::While(ast::StmtWhile { body, orelse, .. }) => self
                     .find_in_statements(body)
                     .or_else(|| self.find_in_statements(orelse)),
+                ast::Stmt::FunctionDef(ast::StmtFunctionDef { name, body, .. }) => self
+                    .called_function_names
+                    .contains(name.as_str())
+                    .then(|| self.find_in_statements(body))
+                    .flatten(),
                 ast::Stmt::With(ast::StmtWith { body, .. }) => self.find_in_statements(body),
                 ast::Stmt::Try(ast::StmtTry {
                     body,
@@ -4743,10 +4864,14 @@ fn infer_python_datasource_id(path: &Path) -> Option<DatasourceId> {
                 Some(DatasourceId::PypiPyprojectToml)
             }
         }
-        Some("setup.py") => Some(DatasourceId::PypiSetupPy),
+        Some(name) if name == "setup.py" || name.ends_with("_setup.py") => {
+            Some(DatasourceId::PypiSetupPy)
+        }
         Some("setup.cfg") => Some(DatasourceId::PypiSetupCfg),
         Some("PKG-INFO") => Some(detect_pkg_info_datasource_id(path)),
-        Some("METADATA") => Some(DatasourceId::PypiWheelMetadata),
+        Some("METADATA") if is_installed_wheel_metadata_path(path) => {
+            Some(DatasourceId::PypiWheelMetadata)
+        }
         Some("pypi.json") => Some(DatasourceId::PypiJson),
         Some("pip-inspect.deplock") => Some(DatasourceId::PypiInspectDeplock),
         Some("origin.json") if is_pip_cache_origin_json(path) => {
@@ -4772,14 +4897,15 @@ fn infer_python_datasource_id(path: &Path) -> Option<DatasourceId> {
 }
 
 crate::register_parser!(
-    "Python package manifests (pyproject.toml, setup.py, setup.cfg, pypi.json, PKG-INFO, METADATA, pip cache origin.json, sdist archives, .whl, .egg)",
+    "Python package manifests (pyproject.toml, setup.py, *_setup.py, setup.cfg, pypi.json, PKG-INFO, .dist-info/METADATA, pip cache origin.json, sdist archives, .whl, .egg)",
     &[
         "**/pyproject.toml",
         "**/setup.py",
+        "**/*_setup.py",
         "**/setup.cfg",
         "**/pypi.json",
         "**/PKG-INFO",
-        "**/METADATA",
+        "**/*.dist-info/METADATA",
         "**/origin.json",
         "**/*.tar.gz",
         "**/*.tgz",
