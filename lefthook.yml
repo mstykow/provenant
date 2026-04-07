@@ -36,6 +36,13 @@ pre-commit:
         - release.sh
       run: ./scripts/check_release_version_sync.sh
 
+    dependency-policy:
+      glob:
+        - Cargo.toml
+        - Cargo.lock
+        - deny.toml
+      run: ./scripts/check_dependency_policy.sh
+
     generate-supported-formats:
       glob: src/parsers/*.rs
       exclude:

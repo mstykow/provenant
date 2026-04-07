@@ -5,7 +5,7 @@
   "description": "Documentation tooling for Provenant",
   "scripts": {
     "prepare": "lefthook install",
-    "setup": "npm install && cargo install --locked cargo-sort cargo-machete && ./setup.sh",
+    "setup": "npm install && cargo install --locked cargo-sort cargo-machete cargo-deny && ./setup.sh",
     "hooks:install": "lefthook install",
     "hooks:run": "lefthook run pre-commit --all-files",
     "format": "npx prettier --write \"**/*.{yml,yaml,json,md}\"",

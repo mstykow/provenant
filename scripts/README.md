@@ -29,6 +29,17 @@ Example:
 ./scripts/check_unused_deps.sh
 ```
 
+## `check_dependency_policy.sh`
+
+Run `cargo-deny` against the shipped workspace dependency graph using the
+repo-root `deny.toml` policy.
+
+Example:
+
+```bash
+./scripts/check_dependency_policy.sh
+```
+
 ## `check_crate_size.sh`
 
 Package the crate locally and fail if the resulting `.crate` archive exceeds the

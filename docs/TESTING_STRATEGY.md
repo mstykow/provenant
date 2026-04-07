@@ -401,7 +401,7 @@ Golden suites are gated behind the `golden-tests` feature flag, so local ignored
 
 Quality gates run automatically on:
 
-- Every commit (via Lefthook pre-commit hooks: formatting, linting, and docs/file-quality checks)
+- Every commit (via Lefthook pre-commit hooks: formatting, linting, dependency policy, and docs/file-quality checks)
 - Every push to main
 - Every pull request
 
@@ -414,6 +414,7 @@ Commands:
   - `cargo clippy --all-targets --all-features -- -D warnings`
   - `cargo check --all --verbose`
   - `cargo test --doc --release --verbose`
+  - `./scripts/check_dependency_policy.sh`
 - **Rust Library Tests**
   - `cargo test --lib --release --verbose -- --skip _scan_test::`
 - **Rust Scan/Integration Tests**

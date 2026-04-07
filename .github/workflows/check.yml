@@ -80,6 +80,12 @@ jobs:
       - name: Run doctests
         run: cargo test --doc --release --verbose
 
+      - name: Install cargo-deny
+        run: cargo install --locked cargo-deny
+
+      - name: Check dependency policy
+        run: ./scripts/check_dependency_policy.sh
+
       - name: Install cargo-machete
         run: cargo install --locked cargo-machete
 

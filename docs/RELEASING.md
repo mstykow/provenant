@@ -15,6 +15,7 @@ Before cutting a release, make sure you have:
 - A clean working tree
 - The `reference/scancode-toolkit/` submodule initialized via `./setup.sh`
 - `cargo-release` installed locally
+- `cargo-deny` installed locally if you want to run the full dependency policy preflight
 - A valid crates.io login in your Cargo credentials
 - GPG signing configured for git tags
 
@@ -42,6 +43,7 @@ cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo check --all --verbose
 cargo test --doc --release --verbose
+./scripts/check_dependency_policy.sh
 cargo test --lib --release --verbose -- --skip _scan_test::
 cargo test --lib --release --verbose _scan_test::
 cargo test --test scanner_integration --release --verbose
@@ -50,7 +52,7 @@ cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin generate-suppo
 ./scripts/check_release_version_sync.sh
 ```
 
-The GitHub `Quality Checks` workflow is the authoritative release gate. It also verifies the embedded license index, crate size, manifest sorting, unused dependencies, golden-test shards, Windows and Intel macOS build smoke, and the split integration-test matrix defined in `.github/workflows/check.yml`. It is best to start from a branch and commit state where that workflow is already green.
+The GitHub `Quality Checks` workflow is the authoritative release gate. It also verifies the embedded license index, dependency policy via `cargo-deny`, crate size, manifest sorting, unused dependencies, golden-test shards, Windows and Intel macOS build smoke, and the split integration-test matrix defined in `.github/workflows/check.yml`. It is best to start from a branch and commit state where that workflow is already green.
 
 ## Release Commands
 
