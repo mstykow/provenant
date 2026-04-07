@@ -501,7 +501,7 @@ fn pluralize_files(count: usize) -> &'static str {
 }
 
 fn pdf_oxide_default_log_filter_from(rust_log: Option<&str>) -> Option<LevelFilter> {
-    should_filter_pdf_oxide_default_warnings_from(rust_log).then_some(LevelFilter::Error)
+    should_filter_pdf_oxide_default_warnings_from(rust_log).then_some(LevelFilter::Off)
 }
 
 fn should_filter_pdf_oxide_default_warnings_from(rust_log: Option<&str>) -> bool {
@@ -773,7 +773,7 @@ mod tests {
     fn default_pdf_oxide_warnings_are_suppressed() {
         assert_eq!(
             pdf_oxide_default_log_filter_from(None),
-            Some(LevelFilter::Error)
+            Some(LevelFilter::Off)
         );
         assert!(should_filter_pdf_oxide_default_warnings_from(None));
     }
@@ -801,7 +801,7 @@ mod tests {
             .build();
 
         assert!(!logger.enabled(&warn_metadata));
-        assert!(logger.enabled(&error_metadata));
+        assert!(!logger.enabled(&error_metadata));
     }
 
     #[test]

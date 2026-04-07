@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use super::font_policy::{is_font_asset_path, is_font_license_file_name};
 use crate::license_detection::detection::{
     FileRegion as InternalFileRegion, determine_license_expression, determine_spdx_expression,
     select_matches_for_expression,
@@ -33,6 +34,7 @@ pub(super) struct ReferenceFollowSnapshot {
     files_by_path: HashMap<String, ResolvedReferenceTarget>,
     package_targets_by_uid: HashMap<String, ResolvedReferenceTarget>,
     package_manifest_dirs_by_uid: HashMap<String, Vec<String>>,
+    same_directory_legal_targets_by_dir: HashMap<String, Vec<ResolvedReferenceTarget>>,
     root_license_targets_by_root: HashMap<String, Vec<ResolvedReferenceTarget>>,
     root_paths: Vec<String>,
 }
@@ -48,6 +50,9 @@ pub(crate) fn apply_package_reference_following(files: &mut [FileInfo], packages
             .filter(|file| file.file_type == FileType::File)
         {
             if follow_references_for_file(file, &snapshot) {
+                modified = true;
+            }
+            if inherit_same_directory_legal_detections_for_file(file, &snapshot) {
                 modified = true;
             }
         }
@@ -236,15 +241,59 @@ pub(super) fn build_reference_follow_snapshot(
         .collect();
 
     let root_paths = top_level_root_paths(files);
+    let same_directory_legal_targets_by_dir = build_same_directory_legal_targets(files);
     let root_license_targets_by_root = build_root_license_targets(files, &root_paths);
 
     ReferenceFollowSnapshot {
         files_by_path,
         package_targets_by_uid,
         package_manifest_dirs_by_uid,
+        same_directory_legal_targets_by_dir,
         root_license_targets_by_root,
         root_paths,
     }
+}
+
+fn build_same_directory_legal_targets(
+    files: &[FileInfo],
+) -> HashMap<String, Vec<ResolvedReferenceTarget>> {
+    let mut targets_by_dir: HashMap<String, Vec<ResolvedReferenceTarget>> = HashMap::new();
+
+    for file in files {
+        if file.file_type != FileType::File
+            || file.license_detections.is_empty()
+            || !is_same_directory_legal_target(file)
+        {
+            continue;
+        }
+
+        let Some(expression) = combine_detection_expressions(&file.license_detections) else {
+            continue;
+        };
+        if !is_resolved_package_context_expression(&expression) {
+            continue;
+        }
+
+        let directory = parent_directory(&file.path);
+        targets_by_dir
+            .entry(directory)
+            .or_default()
+            .push(ResolvedReferenceTarget {
+                path: file.path.clone(),
+                detections: file.license_detections.clone(),
+                preserve_match_from_file: false,
+            });
+    }
+
+    for targets in targets_by_dir.values_mut() {
+        targets.sort_by(|left, right| {
+            root_license_candidate_priority(&left.path)
+                .cmp(&root_license_candidate_priority(&right.path))
+                .then_with(|| left.path.cmp(&right.path))
+        });
+    }
+
+    targets_by_dir
 }
 
 fn build_root_license_targets(
@@ -324,6 +373,13 @@ fn root_license_candidate_priority(path: &str) -> usize {
     } else {
         4
     }
+}
+
+fn parent_directory(path: &str) -> String {
+    Path::new(path)
+        .parent()
+        .map(|parent| parent.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_default()
 }
 
 fn combine_detection_expressions(detections: &[LicenseDetection]) -> Option<String> {
@@ -444,6 +500,67 @@ fn follow_references_for_file(file: &mut FileInfo, snapshot: &ReferenceFollowSna
     }
 
     modified
+}
+
+fn inherit_same_directory_legal_detections_for_file(
+    file: &mut FileInfo,
+    snapshot: &ReferenceFollowSnapshot,
+) -> bool {
+    if !is_same_directory_legal_inheritance_candidate(file) {
+        return false;
+    }
+
+    let directory = parent_directory(&file.path);
+    let Some(targets) = snapshot.same_directory_legal_targets_by_dir.get(&directory) else {
+        return false;
+    };
+
+    let inherited_detections: Vec<_> = targets
+        .iter()
+        .flat_map(|target| {
+            target
+                .detections
+                .iter()
+                .cloned()
+                .map(|detection| detection_with_match_source(detection, &target.path))
+        })
+        .collect();
+    if inherited_detections.is_empty() {
+        return false;
+    }
+
+    file.license_detections = inherited_detections;
+    file.license_expression = combine_license_expressions(
+        file.license_detections
+            .iter()
+            .map(|detection| detection.license_expression.clone()),
+    );
+    true
+}
+
+fn is_same_directory_legal_inheritance_candidate(file: &FileInfo) -> bool {
+    file.file_type == FileType::File
+        && file.license_detections.is_empty()
+        && file.for_packages.is_empty()
+        && is_font_asset_path(Path::new(&file.path))
+}
+
+fn is_same_directory_legal_target(file: &FileInfo) -> bool {
+    is_legal_file(file) || is_font_license_file(file)
+}
+
+fn is_font_license_file(file: &FileInfo) -> bool {
+    is_font_license_file_name(&file.name, &file.base_name)
+}
+
+fn detection_with_match_source(
+    mut detection: LicenseDetection,
+    source_path: &str,
+) -> LicenseDetection {
+    for detection_match in &mut detection.matches {
+        detection_match.from_file = Some(source_path.to_string());
+    }
+    detection
 }
 
 fn sync_packages_from_followed_package_data(
@@ -1045,7 +1162,7 @@ fn internal_match_to_public(
 
 #[cfg(test)]
 mod tests {
-    use super::collect_top_level_license_detections;
+    use super::{apply_package_reference_following, collect_top_level_license_detections};
     use crate::models::Match;
     use crate::post_processing::test_utils::file;
 
@@ -1132,5 +1249,46 @@ mod tests {
         assert_eq!(detections[0].identifier, "mit-empty");
         assert_eq!(detections[0].detection_count, 0);
         assert!(detections[0].reference_matches.is_empty());
+    }
+
+    #[test]
+    fn same_directory_legal_file_inheritance_applies_to_font_assets() {
+        let mut font = file("fonts/Scheherazade-Bold.ttf");
+        let mut legal = file("fonts/OFL.txt");
+        legal.license_detections = vec![crate::models::LicenseDetection {
+            license_expression: "ofl-1.1".to_string(),
+            license_expression_spdx: "OFL-1.1".to_string(),
+            matches: vec![Match {
+                license_expression: "ofl-1.1".to_string(),
+                license_expression_spdx: "OFL-1.1".to_string(),
+                from_file: Some("fonts/OFL.txt".to_string()),
+                start_line: 1,
+                end_line: 3,
+                matcher: Some("2-aho".to_string()),
+                score: 100.0,
+                matched_length: Some(10),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: Some("ofl-1.1_0.RULE".to_string()),
+                rule_url: None,
+                matched_text: None,
+                referenced_filenames: None,
+                matched_text_diagnostics: None,
+            }],
+            detection_log: vec![],
+            identifier: Some("ofl-1.1-font".to_string()),
+        }];
+        legal.license_expression = Some("ofl-1.1".to_string());
+
+        let mut files = vec![font.clone(), legal];
+        apply_package_reference_following(&mut files, &mut []);
+        font = files.remove(0);
+
+        assert_eq!(font.license_expression.as_deref(), Some("ofl-1.1"));
+        assert_eq!(font.license_detections.len(), 1);
+        assert_eq!(
+            font.license_detections[0].matches[0].from_file.as_deref(),
+            Some("fonts/OFL.txt")
+        );
     }
 }

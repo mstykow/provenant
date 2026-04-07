@@ -168,6 +168,69 @@ mod golden_tests {
         }
     }
 
+    fn run_explicit_golden(
+        test_file: &Path,
+        yaml_path: &Path,
+        unknown_licenses: bool,
+    ) -> Result<(), String> {
+        let content = fs::read_to_string(yaml_path)
+            .map_err(|e| format!("Failed to read {}: {}", yaml_path.display(), e))?;
+        let yaml: LicenseTestYaml = yaml_serde::from_str(&content)
+            .map_err(|e| format!("Failed to parse YAML {}: {}", yaml_path.display(), e))?;
+
+        let engine = ensure_engine().ok_or_else(|| {
+            format!(
+                "Skipping explicit golden test - LicenseDetectionEngine unavailable for {}",
+                test_file.display()
+            )
+        })?;
+
+        let actual = detect_license_expressions_for_golden(engine, test_file, unknown_licenses)
+            .map_err(|e| format!("Detection failed for {}: {e:?}", test_file.display()))?;
+        let actual: Vec<&str> = actual.iter().map(|s| s.as_str()).collect();
+        let expected: Vec<&str> = yaml
+            .license_expressions
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+        if actual != expected {
+            return Err(format!(
+                "license_expressions mismatch for {}:  Expected: {:?}  Actual:   {:?}",
+                test_file.display(),
+                expected,
+                actual
+            ));
+        }
+
+        if !yaml.detected_license_expressions.is_empty() {
+            let actual_detected =
+                detect_detection_expressions_for_golden(engine, test_file, unknown_licenses)
+                    .map_err(|e| {
+                        format!(
+                            "Top-level detection failed for {}: {e:?}",
+                            test_file.display()
+                        )
+                    })?;
+            let actual_detected: Vec<&str> = actual_detected.iter().map(|s| s.as_str()).collect();
+            let expected_detected: Vec<&str> = yaml
+                .detected_license_expressions
+                .iter()
+                .map(|s| s.as_str())
+                .collect();
+
+            if actual_detected != expected_detected {
+                return Err(format!(
+                    "detected_license_expressions mismatch for {}:  Expected: {:?}  Actual:   {:?}",
+                    test_file.display(),
+                    expected_detected,
+                    actual_detected
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     /// Discover all golden tests in a directory (recursively)
     fn discover_tests(dir: &Path) -> Vec<LicenseGoldenTest> {
         let mut tests = Vec::new();
@@ -625,5 +688,15 @@ mod golden_tests {
             }
         }
         assert_eq!(result.failed, 0, "unknown had {} failures", result.failed);
+    }
+
+    #[test]
+    fn test_golden_windows_executable_metadata_license_regression() {
+        run_explicit_golden(
+            Path::new("testdata/compiled-binary-golden/win_pe/libiconv2.dll"),
+            Path::new("testdata/license-golden/provenant-regressions/libiconv2.dll.yml"),
+            false,
+        )
+        .unwrap();
     }
 }

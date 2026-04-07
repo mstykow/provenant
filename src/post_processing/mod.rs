@@ -49,6 +49,7 @@ mod classification;
 mod classify_test;
 #[cfg(test)]
 mod facet_test;
+mod font_policy;
 #[cfg(test)]
 mod generated_test;
 #[cfg(all(test, feature = "golden-tests"))]

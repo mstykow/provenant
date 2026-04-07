@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::{BufReader, Cursor, Read};
@@ -13,15 +14,19 @@ use mime_guess::from_path;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader as XmlReader;
 
+use crate::parsers::windows_executable::extract_windows_executable_metadata_text;
+use crate::utils::font::extract_font_metadata_text;
 use crate::utils::language::detect_language;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExtractedTextKind {
     None,
     Decoded,
+    FontMetadata,
     Pdf,
     BinaryStrings,
     ImageMetadata,
+    WindowsExecutableMetadata,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +45,7 @@ pub struct FileInfoClassification {
 const MAX_IMAGE_METADATA_VALUES: usize = 64;
 const MAX_IMAGE_METADATA_TEXT_BYTES: usize = 32 * 1024;
 const BINARY_CONTROL_CHAR_THRESHOLD_DIVISOR: usize = 10;
+const LARGE_OPAQUE_BINARY_SKIP_BYTES: usize = 512 * 1024;
 const PLAIN_TEXT_EXTENSIONS: &[&str] = &[
     "rst", "rest", "md", "txt", "log", "json", "xml", "yaml", "yml", "toml", "ini",
 ];
@@ -113,6 +119,95 @@ pub fn extract_text_for_detection(path: &Path, bytes: &[u8]) -> (String, Extract
     (text, kind)
 }
 
+pub(crate) fn augment_license_detection_text<'a>(path: &Path, text: &'a str) -> Cow<'a, str> {
+    let Some(extension) = path.extension().and_then(|ext| ext.to_str()) else {
+        return Cow::Borrowed(text);
+    };
+    if !matches!(
+        extension.to_ascii_lowercase().as_str(),
+        "md" | "markdown" | "html" | "htm"
+    ) {
+        return Cow::Borrowed(text);
+    }
+
+    let mut hints = Vec::new();
+    if text.contains("CC BY 4.0") || text.contains("creativecommons.org/licenses/by/4.0") {
+        hints.push("Creative Commons Attribution 4.0 International License".to_string());
+    }
+    if text.contains("Apache License (Version 2.0)") || text.contains("Apache License, Version 2.0")
+    {
+        hints.push(
+            "Licensed under the Apache License, Version 2.0. http://www.apache.org/licenses/LICENSE-2.0"
+                .to_string(),
+        );
+    }
+
+    hints.extend(extract_shields_license_badge_hints(text));
+
+    if hints.is_empty() {
+        Cow::Borrowed(text)
+    } else {
+        let mut augmented =
+            String::with_capacity(text.len() + hints.iter().map(String::len).sum::<usize>() + 8);
+        augmented.push_str(text);
+        augmented.push_str("\n\n");
+        for (index, hint) in hints.into_iter().enumerate() {
+            if index > 0 {
+                augmented.push('\n');
+            }
+            augmented.push_str(&hint);
+        }
+        Cow::Owned(augmented)
+    }
+}
+
+fn extract_shields_license_badge_hints(text: &str) -> Vec<String> {
+    let mut hints = Vec::new();
+    let mut rest = text;
+    let needle = "img.shields.io/badge/license-";
+
+    while let Some(index) = rest.find(needle) {
+        let start = index + needle.len();
+        let suffix = &rest[start..];
+        let end = suffix
+            .find([')', ']', '"', '\'', ' ', '\n'])
+            .unwrap_or(suffix.len());
+        let badge = &suffix[..end];
+        let Some(badge) = badge.strip_suffix(".svg") else {
+            rest = &suffix[end..];
+            continue;
+        };
+
+        let mut segments: Vec<_> = badge
+            .split('-')
+            .filter(|segment| !segment.is_empty())
+            .collect();
+        if segments.len() < 2 {
+            rest = &suffix[end..];
+            continue;
+        }
+        segments.pop();
+        let candidate = segments.join("-").replace("%20", " ").replace('_', "-");
+        if !candidate.is_empty() {
+            hints.push(canonical_shields_license_hint(&candidate));
+        }
+
+        rest = &suffix[end..];
+    }
+
+    hints.sort();
+    hints.dedup();
+    hints
+}
+
+fn canonical_shields_license_hint(candidate: &str) -> String {
+    match candidate.trim() {
+        "MIT" => "The MIT License".to_string(),
+        "Apache-2.0" | "Apache 2.0" => "Apache License 2.0".to_string(),
+        other => format!("{other} License"),
+    }
+}
+
 pub(crate) fn extract_text_for_detection_with_diagnostics(
     path: &Path,
     bytes: &[u8],
@@ -159,20 +254,51 @@ pub(crate) fn extract_text_for_detection_with_diagnostics(
         };
     }
 
+    if let Some(text) = extract_font_metadata_text(path, bytes) {
+        return (text, ExtractedTextKind::FontMetadata, None);
+    }
+
+    let windows_executable_metadata_text = extract_windows_executable_metadata_text(bytes);
+
+    if should_skip_large_opaque_binary_text_extraction(path, bytes, detected_format) {
+        return (String::new(), ExtractedTextKind::None, None);
+    }
+
     if should_skip_binary_string_extraction(path, bytes, detected_format) {
         return (String::new(), ExtractedTextKind::None, None);
     }
 
     let decoded = decode_bytes_to_string(bytes);
     if !decoded.is_empty() {
-        return (decoded, ExtractedTextKind::Decoded, None);
+        let combined = combine_extracted_text_fragments(windows_executable_metadata_text, decoded);
+        return (combined, ExtractedTextKind::Decoded, None);
     }
 
     let text = extract_printable_strings(bytes);
     if text.is_empty() {
-        (String::new(), ExtractedTextKind::None, None)
+        if let Some(metadata_text) = windows_executable_metadata_text {
+            (
+                metadata_text,
+                ExtractedTextKind::WindowsExecutableMetadata,
+                None,
+            )
+        } else {
+            (String::new(), ExtractedTextKind::None, None)
+        }
     } else {
-        (text, ExtractedTextKind::BinaryStrings, None)
+        (
+            combine_extracted_text_fragments(windows_executable_metadata_text, text),
+            ExtractedTextKind::BinaryStrings,
+            None,
+        )
+    }
+}
+
+fn combine_extracted_text_fragments(prefix: Option<String>, suffix: String) -> String {
+    match prefix {
+        Some(prefix) if !prefix.is_empty() && !suffix.is_empty() => format!("{prefix}\n{suffix}"),
+        Some(prefix) if !prefix.is_empty() => prefix,
+        _ => suffix,
     }
 }
 
@@ -1061,6 +1187,101 @@ fn should_skip_binary_string_extraction(
         || looks_like_squashfs(bytes, path)
 }
 
+fn should_skip_large_opaque_binary_text_extraction(
+    _path: &Path,
+    bytes: &[u8],
+    detected_format: FileFormat,
+) -> bool {
+    if bytes.len() < LARGE_OPAQUE_BINARY_SKIP_BYTES {
+        return false;
+    }
+
+    if !matches!(detected_format, FileFormat::ArbitraryBinaryData) {
+        return false;
+    }
+
+    if !has_binary_control_chars(bytes) {
+        return false;
+    }
+
+    !sample_has_promising_printable_strings(bytes)
+}
+
+fn sample_has_promising_printable_strings(bytes: &[u8]) -> bool {
+    const SAMPLE_WINDOW_BYTES: usize = 64 * 1024;
+    const MIN_PROMISING_RUN: usize = 16;
+    const MIN_PROMISING_WINDOWS: usize = 2;
+
+    let len = bytes.len();
+    let mut windows = Vec::new();
+    windows.push(&bytes[..bytes.len().min(SAMPLE_WINDOW_BYTES)]);
+    if len > SAMPLE_WINDOW_BYTES * 2 {
+        let mid_start = len / 2 - SAMPLE_WINDOW_BYTES / 2;
+        let mid_end = (mid_start + SAMPLE_WINDOW_BYTES).min(len);
+        windows.push(&bytes[mid_start..mid_end]);
+    }
+    if len > SAMPLE_WINDOW_BYTES {
+        windows.push(&bytes[len - SAMPLE_WINDOW_BYTES..]);
+    }
+
+    windows
+        .into_iter()
+        .filter(|window| has_promising_printable_run(window, MIN_PROMISING_RUN))
+        .take(MIN_PROMISING_WINDOWS)
+        .count()
+        >= MIN_PROMISING_WINDOWS
+}
+
+fn has_promising_printable_run(bytes: &[u8], min_run: usize) -> bool {
+    longest_printable_ascii_run(bytes) >= min_run
+        || longest_utf16le_printable_ascii_run(bytes) >= min_run
+        || longest_utf16be_printable_ascii_run(bytes) >= min_run
+}
+
+fn longest_printable_ascii_run(bytes: &[u8]) -> usize {
+    bytes
+        .iter()
+        .fold((0, 0), |(best, current), &byte| {
+            if matches!(byte, 0x20..=0x7E) {
+                let next = current + 1;
+                (best.max(next), next)
+            } else {
+                (best, 0)
+            }
+        })
+        .0
+}
+
+fn longest_utf16le_printable_ascii_run(bytes: &[u8]) -> usize {
+    longest_utf16_printable_ascii_run(bytes, true)
+}
+
+fn longest_utf16be_printable_ascii_run(bytes: &[u8]) -> usize {
+    longest_utf16_printable_ascii_run(bytes, false)
+}
+
+fn longest_utf16_printable_ascii_run(bytes: &[u8], little_endian: bool) -> usize {
+    let mut best = 0;
+    let mut current = 0;
+    let start = usize::from(!little_endian);
+    let mut index = start;
+    while index + 1 < bytes.len() {
+        let (ch, zero) = if little_endian {
+            (bytes[index], bytes[index + 1])
+        } else {
+            (bytes[index + 1], bytes[index])
+        };
+        if matches!(ch, 0x20..=0x7E) && zero == 0 {
+            current += 1;
+            best = best.max(current);
+        } else {
+            current = 0;
+        }
+        index += 2;
+    }
+    best
+}
+
 fn is_supported_image_container(bytes: &[u8], format: ImageFormat) -> bool {
     match format {
         ImageFormat::Png => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
@@ -1384,7 +1605,7 @@ fn extract_pdf_text(path: &Path, bytes: &[u8]) -> (String, Option<String>) {
         )),
     }
 
-    if saw_success {
+    if saw_success || is_non_actionable_pdf_failure(&failures) {
         (String::new(), None)
     } else {
         (
@@ -1396,6 +1617,14 @@ fn extract_pdf_text(path: &Path, bytes: &[u8]) -> (String, Option<String>) {
             )),
         )
     }
+}
+
+fn is_non_actionable_pdf_failure(failures: &[String]) -> bool {
+    !failures.is_empty()
+        && failures.iter().all(|failure| {
+            failure.contains("requires a password")
+                || failure.contains("Invalid cross-reference table")
+        })
 }
 
 fn panic_payload_to_string(payload: &(dyn std::any::Any + Send)) -> String {
@@ -1594,8 +1823,9 @@ mod tests {
     use std::path::Path;
 
     use super::{
-        ExtractedTextKind, classify_file_info, extract_printable_strings,
-        extract_text_for_detection, extract_text_for_detection_with_diagnostics,
+        ExtractedTextKind, LARGE_OPAQUE_BINARY_SKIP_BYTES, classify_file_info,
+        extract_printable_strings, extract_text_for_detection,
+        extract_text_for_detection_with_diagnostics, is_non_actionable_pdf_failure,
         normalize_mime_type, normalize_pdf_heading_comparison_text,
     };
 
@@ -1677,6 +1907,69 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_text_for_detection_skips_large_opaque_binary_blobs() {
+        let bytes = vec![0_u8; LARGE_OPAQUE_BINARY_SKIP_BYTES + 8];
+
+        let (text, kind) = extract_text_for_detection(Path::new("model.bin"), &bytes);
+
+        assert!(text.is_empty());
+        assert_eq!(kind, ExtractedTextKind::None);
+    }
+
+    #[test]
+    fn test_extract_text_for_detection_keeps_large_binaries_with_promising_strings() {
+        let mut bytes = vec![0_u8; LARGE_OPAQUE_BINARY_SKIP_BYTES + 8];
+        let text = b"Copyright 2026 Example Project!!!";
+        bytes[..text.len()].copy_from_slice(text);
+        let second_offset = LARGE_OPAQUE_BINARY_SKIP_BYTES / 2;
+        bytes[second_offset..second_offset + text.len()].copy_from_slice(text);
+
+        let (text, kind) = extract_text_for_detection(Path::new("weights.bin"), &bytes);
+
+        assert_ne!(kind, ExtractedTextKind::None);
+        assert!(text.contains("Copyright 2026 Example Project"));
+    }
+
+    #[test]
+    fn test_extract_text_for_detection_uses_windows_executable_metadata() {
+        let path = Path::new("testdata/compiled-binary-golden/win_pe/libiconv2.dll");
+        let bytes = std::fs::read(path).expect("read PE fixture");
+
+        let (text, kind) = extract_text_for_detection(path, &bytes);
+
+        assert_eq!(kind, ExtractedTextKind::BinaryStrings);
+        assert!(text.contains("License: This program is free software"));
+        assert!(text.contains("LegalCopyright:"));
+    }
+
+    #[test]
+    fn test_extract_text_for_detection_skips_large_binary_with_single_isolated_string_run() {
+        let mut bytes = vec![0_u8; LARGE_OPAQUE_BINARY_SKIP_BYTES + 8];
+        let text = b"Copyright 2026 Example Project!!!";
+        bytes[..text.len()].copy_from_slice(text);
+
+        let (text, kind) = extract_text_for_detection(Path::new("opaque.bin"), &bytes);
+
+        assert!(text.is_empty());
+        assert_eq!(kind, ExtractedTextKind::None);
+    }
+
+    #[test]
+    fn test_non_actionable_pdf_failures_are_suppressed() {
+        assert!(is_non_actionable_pdf_failure(&[
+            "from-bytes first-page: PDF is encrypted and requires a password".to_string(),
+            "open full-document: PDF is encrypted and requires a password".to_string(),
+        ]));
+        assert!(is_non_actionable_pdf_failure(&[
+            "from-bytes first-page: Invalid cross-reference table".to_string(),
+            "open full-document: Invalid cross-reference table".to_string(),
+        ]));
+        assert!(!is_non_actionable_pdf_failure(&[
+            "from-bytes first-page: some other parser failure".to_string(),
+        ]));
+    }
+
+    #[test]
     fn test_extract_text_for_detection_skips_zip_like_archives() {
         let zip_bytes = b"PK\x03\x04\x14\x00\x00\x00\x08\x00artifact";
 
@@ -1700,6 +1993,21 @@ mod tests {
 
         assert_ne!(kind, ExtractedTextKind::None);
         assert!(text.contains("Copyright nexB and others (c) 2012"));
+    }
+
+    #[test]
+    fn test_extract_text_for_detection_reads_font_metadata() {
+        let path = Path::new("testdata/font-fixtures/Lato-Bold.ttf");
+        let bytes = std::fs::read(path).expect("failed to read font fixture");
+
+        let (text, kind) = extract_text_for_detection(path, &bytes);
+
+        assert_eq!(kind, ExtractedTextKind::FontMetadata);
+        assert!(text.contains("License Description:"), "{text}");
+        assert!(
+            text.contains("Open Font License") || text.contains("OFL"),
+            "{text}"
+        );
     }
 
     #[test]

@@ -116,7 +116,7 @@ mod tests {
     use tempfile::TempDir;
 
     use crate::license_detection::LicenseDetectionEngine;
-    use crate::models::FileType;
+    use crate::models::{DatasourceId, FileType, PackageType as FilePackageType};
     use crate::progress::{ProgressMode, ScanProgress};
 
     use super::{
@@ -177,6 +177,36 @@ mod tests {
             &collected,
             progress,
             None,
+            LicenseScanOptions::default(),
+            options,
+        );
+
+        result
+            .files
+            .into_iter()
+            .find(|entry| {
+                entry.file_type == FileType::File && entry.path == file_path.to_string_lossy()
+            })
+            .expect("scanned file entry")
+    }
+
+    fn scan_single_file_with_license_engine(
+        file_name: &str,
+        content: &str,
+        options: &TextDetectionOptions,
+    ) -> crate::models::FileInfo {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let file_path = temp_dir.path().join(file_name);
+        fs::write(&file_path, content).expect("write test file");
+
+        let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+        let engine =
+            Arc::new(LicenseDetectionEngine::from_embedded().expect("initialize license engine"));
+        let result = process_collected(
+            &collected,
+            progress,
+            Some(engine),
             LicenseScanOptions::default(),
             options,
         );
@@ -1114,6 +1144,232 @@ mod tests {
             without_compiled.package_data
         );
         assert!(!with_compiled.package_data.is_empty());
+    }
+
+    #[test]
+    fn scanner_parses_windows_executable_packages_under_normal_package_scan() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let file_path = temp_dir.path().join("libiconv2.dll");
+        let fixture = fs::read("testdata/compiled-binary-golden/win_pe/libiconv2.dll")
+            .expect("read PE fixture");
+        fs::write(&file_path, fixture).expect("write PE fixture");
+
+        let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+
+        let without_package = process_collected(
+            &collected,
+            Arc::clone(&progress),
+            None,
+            LicenseScanOptions::default(),
+            &TextDetectionOptions {
+                collect_info: false,
+                detect_packages: false,
+                detect_application_packages: false,
+                detect_system_packages: false,
+                detect_packages_in_compiled: false,
+                detect_copyrights: false,
+                detect_generated: false,
+                detect_emails: false,
+                detect_urls: false,
+                max_emails: 50,
+                max_urls: 50,
+                timeout_seconds: 120.0,
+            },
+        );
+        let with_package = process_collected(
+            &collected,
+            progress,
+            None,
+            LicenseScanOptions::default(),
+            &TextDetectionOptions {
+                collect_info: false,
+                detect_packages: true,
+                detect_application_packages: true,
+                detect_system_packages: false,
+                detect_packages_in_compiled: false,
+                detect_copyrights: false,
+                detect_generated: false,
+                detect_emails: false,
+                detect_urls: false,
+                max_emails: 50,
+                max_urls: 50,
+                timeout_seconds: 120.0,
+            },
+        );
+
+        let without_package = without_package
+            .files
+            .into_iter()
+            .find(|entry| {
+                entry.file_type == FileType::File && entry.path.ends_with("/libiconv2.dll")
+            })
+            .expect("compiled artifact present");
+        let with_package = with_package
+            .files
+            .into_iter()
+            .find(|entry| {
+                entry.file_type == FileType::File && entry.path.ends_with("/libiconv2.dll")
+            })
+            .expect("compiled artifact present");
+
+        assert!(without_package.package_data.is_empty());
+        assert_eq!(with_package.package_data.len(), 1);
+        assert_eq!(
+            with_package.package_data[0].package_type,
+            Some(FilePackageType::Winexe)
+        );
+        assert_eq!(
+            with_package.package_data[0].datasource_id,
+            Some(DatasourceId::WindowsExecutable)
+        );
+    }
+
+    #[test]
+    fn scanner_detects_license_from_font_metadata() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let file_path = temp_dir.path().join("Lato-Bold.ttf");
+        let fixture = fs::read("testdata/font-fixtures/Lato-Bold.ttf").expect("read font fixture");
+        fs::write(&file_path, fixture).expect("write font fixture");
+
+        let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+        let engine =
+            Arc::new(LicenseDetectionEngine::from_embedded().expect("initialize license engine"));
+        let result = process_collected(
+            &collected,
+            progress,
+            Some(engine),
+            LicenseScanOptions::default(),
+            &TextDetectionOptions::default(),
+        );
+        let scanned = result
+            .files
+            .into_iter()
+            .find(|entry| {
+                entry.file_type == FileType::File && entry.path == file_path.to_string_lossy()
+            })
+            .expect("scanned file entry");
+
+        assert!(
+            scanned.license_expression.is_some(),
+            "license detections: {:#?}",
+            scanned.license_detections
+        );
+        assert!(
+            scanned
+                .license_expression
+                .as_deref()
+                .is_some_and(
+                    |expression| expression.contains("OFL-1.1") || expression.contains("ofl-1.1")
+                ),
+            "license expression: {:?}",
+            scanned.license_expression
+        );
+    }
+
+    #[test]
+    fn scanner_detects_license_from_windows_executable_metadata() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let file_path = temp_dir.path().join("libiconv2.dll");
+        let fixture = fs::read("testdata/compiled-binary-golden/win_pe/libiconv2.dll")
+            .expect("read PE fixture");
+        fs::write(&file_path, fixture).expect("write PE fixture");
+
+        let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+        let engine =
+            Arc::new(LicenseDetectionEngine::from_embedded().expect("initialize license engine"));
+        let result = process_collected(
+            &collected,
+            progress,
+            Some(engine),
+            LicenseScanOptions::default(),
+            &TextDetectionOptions::default(),
+        );
+        let scanned = result
+            .files
+            .into_iter()
+            .find(|entry| {
+                entry.file_type == FileType::File && entry.path == file_path.to_string_lossy()
+            })
+            .expect("scanned file entry");
+
+        assert!(
+            scanned.license_expression.is_some(),
+            "license detections: {:#?}",
+            scanned.license_detections
+        );
+        assert!(
+            scanned
+                .license_expression
+                .as_deref()
+                .is_some_and(|expression| {
+                    expression.contains("lgpl") || expression.contains("LGPL")
+                }),
+            "license expression: {:?}",
+            scanned.license_expression
+        );
+    }
+
+    #[test]
+    fn scanner_detects_cc_by_license_from_markdown_comment_banner() {
+        let scanned = scan_single_file_with_license_engine(
+            "navbar.md",
+            "<!-- Documentation licensed under CC BY 4.0 -->\n<!-- License available at https://creativecommons.org/licenses/by/4.0/ -->\n",
+            &TextDetectionOptions::default(),
+        );
+
+        assert!(
+            scanned
+                .license_expression
+                .as_deref()
+                .is_some_and(|expression| {
+                    expression.contains("cc-by-4.0") || expression.contains("CC-BY-4.0")
+                }),
+            "license expression: {:?}",
+            scanned.license_expression
+        );
+    }
+
+    #[test]
+    fn scanner_detects_mit_license_from_shields_badge_markdown() {
+        let scanned = scan_single_file_with_license_engine(
+            "README.md",
+            "[![](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)\n",
+            &TextDetectionOptions::default(),
+        );
+
+        assert!(
+            scanned
+                .license_expression
+                .as_deref()
+                .is_some_and(|expression| {
+                    expression.contains("mit") || expression.contains("MIT")
+                }),
+            "license expression: {:?}",
+            scanned.license_expression
+        );
+    }
+
+    #[test]
+    fn scanner_detects_apache_license_from_markdown_readme_phrase() {
+        let scanned = scan_single_file_with_license_engine(
+            "README.md",
+            "This crate is distributed under the terms of the Apache License (Version 2.0).\n",
+            &TextDetectionOptions::default(),
+        );
+
+        assert!(
+            scanned
+                .license_expression
+                .as_deref()
+                .is_some_and(|expression| {
+                    expression.contains("apache-2.0") || expression.contains("Apache-2.0")
+                }),
+            "license expression: {:?}",
+            scanned.license_expression
+        );
     }
 
     #[test]

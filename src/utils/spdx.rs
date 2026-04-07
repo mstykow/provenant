@@ -58,8 +58,8 @@ fn combine_parsed_expressions(
         ExpressionRelation::Or => LicenseExpression::or(parsed_expressions),
     }?;
 
-    let simplified = simplify_expression(&combined);
-    Some(render_expression_with_case_map(&simplified, &case_map))
+    let combined = simplify_expression(&combined);
+    Some(render_expression_with_case_map(&combined, &case_map))
 }
 
 fn combine_license_expressions_fallback(

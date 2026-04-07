@@ -1,5 +1,9 @@
 use crate::license_detection::LicenseDetectionEngine;
-use crate::parsers::{try_parse_compiled_bytes, try_parse_file};
+use crate::parsers::compiled_binary::{
+    is_supported_compiled_binary_format, try_parse_compiled_bytes,
+};
+use crate::parsers::try_parse_file;
+use crate::parsers::windows_executable::try_parse_windows_executable_bytes;
 use crate::utils::hash::{calculate_md5, calculate_sha1, calculate_sha1_git, calculate_sha256};
 use crate::utils::text::{
     remove_verbatim_escape_sequences, should_remove_verbatim_escape_sequences,
@@ -29,8 +33,8 @@ use crate::progress::ScanProgress;
 use crate::scanner::collect::CollectedPaths;
 use crate::scanner::{LicenseScanOptions, ProcessResult, TextDetectionOptions};
 use crate::utils::file::{
-    ExtractedTextKind, classify_file_info, extract_text_for_detection_with_diagnostics,
-    get_creation_date,
+    ExtractedTextKind, augment_license_detection_text, classify_file_info,
+    extract_text_for_detection_with_diagnostics, get_creation_date,
 };
 use crate::utils::generated::generated_code_hints_from_bytes;
 use tempfile::TempDir;
@@ -379,12 +383,23 @@ fn extract_information_from_content(
     // Python ScanCode runs all enabled plugins on every file, so we do the same.
     if text_options.detect_packages {
         let started = Instant::now();
-        let parse_result = try_parse_file(path).or_else(|| {
-            text_options
-                .detect_packages_in_compiled
-                .then(|| try_parse_compiled_bytes(&buffer))
-                .flatten()
-        });
+        let parse_result = try_parse_file(path)
+            .or_else(|| {
+                text_options
+                    .detect_application_packages
+                    .then(|| try_parse_windows_executable_bytes(path, &buffer))
+                    .flatten()
+            })
+            .or_else(|| {
+                text_options
+                    .detect_packages_in_compiled
+                    .then(|| {
+                        (classification.is_binary && is_supported_compiled_binary_format(&buffer))
+                            .then(|| try_parse_compiled_bytes(&buffer))
+                            .flatten()
+                    })
+                    .flatten()
+            });
 
         if let Some(parse_result) = parse_result {
             let packages = parse_result
@@ -475,6 +490,9 @@ fn extract_information_from_content(
     } else {
         text_content
     };
+    let text_content_for_license_detection =
+        augment_license_detection_text(path, &text_content_for_license_detection);
+    let text_content_for_license_detection = text_content_for_license_detection.into_owned();
 
     if license_enabled {
         let started = Instant::now();
@@ -482,7 +500,7 @@ fn extract_information_from_content(
             file_info_builder,
             scan_errors,
             path,
-            text_content_for_license_detection,
+            text_content_for_license_detection.clone(),
             license_engine,
             license_options,
             from_binary_strings,

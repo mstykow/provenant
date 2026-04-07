@@ -52,6 +52,25 @@ const GO_BUILD_INFO_MAGIC: &[u8] = b"\xff Go buildinf:";
 const GO_BUILD_INFO_ALIGN: usize = 16;
 const GO_BUILD_INFO_HEADER_SIZE: usize = 32;
 
+const ELF_MAGIC: &[u8] = b"\x7FELF";
+const PE_MAGIC: &[u8] = b"MZ";
+const MACHO_MAGICS: &[[u8; 4]] = &[
+    [0xFE, 0xED, 0xFA, 0xCE],
+    [0xCE, 0xFA, 0xED, 0xFE],
+    [0xFE, 0xED, 0xFA, 0xCF],
+    [0xCF, 0xFA, 0xED, 0xFE],
+    [0xCA, 0xFE, 0xBA, 0xBE],
+    [0xBE, 0xBA, 0xFE, 0xCA],
+    [0xCA, 0xFE, 0xBA, 0xBF],
+    [0xBF, 0xBA, 0xFE, 0xCA],
+];
+
+pub(crate) fn is_supported_compiled_binary_format(bytes: &[u8]) -> bool {
+    bytes.starts_with(ELF_MAGIC)
+        || bytes.starts_with(PE_MAGIC)
+        || MACHO_MAGICS.iter().any(|magic| bytes.starts_with(magic))
+}
+
 pub(crate) fn try_parse_compiled_bytes(bytes: &[u8]) -> Option<ParsePackagesResult> {
     let mut packages = parse_rust_binary_bytes(bytes);
     packages.extend(parse_go_binary_bytes(bytes));
@@ -389,5 +408,18 @@ mod tests {
         let compressed = encoder.finish().expect("finish audit payload compression");
 
         assert!(decode_rust_audit_data(&compressed).is_none());
+    }
+
+    #[test]
+    fn detects_supported_compiled_binary_formats_by_magic() {
+        assert!(is_supported_compiled_binary_format(b"\x7FELF\x02\x01"));
+        assert!(is_supported_compiled_binary_format(b"MZ\x90\x00"));
+        assert!(is_supported_compiled_binary_format(&[
+            0xFE, 0xED, 0xFA, 0xCF, 0x00
+        ]));
+        assert!(!is_supported_compiled_binary_format(
+            b"#!/usr/bin/env bash\n"
+        ));
+        assert!(!is_supported_compiled_binary_format(b"{\"name\":\"demo\"}"));
     }
 }

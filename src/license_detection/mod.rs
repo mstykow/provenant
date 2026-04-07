@@ -109,7 +109,7 @@ fn truncate_detection_text(clean_text: &str) -> &str {
         return clean_text;
     }
 
-    log::warn!(
+    log::debug!(
         "Content size {} exceeds limit {}, truncating for detection",
         clean_text.len(),
         MAX_DETECTION_SIZE

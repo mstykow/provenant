@@ -6,7 +6,7 @@ use yaml_serde::Value;
 use crate::license_detection::DEFAULT_LICENSEDB_URL_TEMPLATE;
 use crate::output::OutputFormat;
 
-const PDF_OXIDE_LOG_HELP: &str = "Troubleshooting PDF parser logs:\n  Provenant suppresses noisy pdf_oxide warnings by default.\n  To inspect raw pdf_oxide logs for debugging, rerun with RUST_LOG=pdf_oxide=warn (or =error).";
+const PDF_OXIDE_LOG_HELP: &str = "Troubleshooting PDF parser logs:\n  Provenant suppresses noisy pdf_oxide logs by default.\n  To inspect raw pdf_oxide logs for debugging, rerun with RUST_LOG=pdf_oxide=warn (or =error).";
 
 fn parse_license_policy_arg(value: &str) -> Result<String, String> {
     let policy_path = Path::new(value);
@@ -553,7 +553,7 @@ mod tests {
         let help = Cli::command().render_help().to_string();
 
         assert!(help.contains("RUST_LOG=pdf_oxide=warn"));
-        assert!(help.contains("suppresses noisy pdf_oxide warnings by default"));
+        assert!(help.contains("suppresses noisy pdf_oxide logs by default"));
     }
 
     #[test]

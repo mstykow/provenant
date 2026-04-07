@@ -18,6 +18,7 @@ The copyright detection engine in Provenant is a **complete rewrite** of Python 
 12. **✨ Enhanced**: Better Office/HTML demarkup for noisy `<o:...>` markup tags
 13. **✨ Enhanced**: Deterministic canonicalization for conflicting byte-identical HTML fixtures
 14. **✨ Enhanced**: EXIF/XMP image metadata clue scanning for supported image formats
+15. **✨ Enhanced**: Dedicated font metadata text extraction can now feed the shared clue pipeline for supported TTF/OTF files
 
 ## Improvement 1: Extended Year Range (Bug Fix)
 
@@ -204,6 +205,6 @@ Coverage includes unit-level detector behavior and golden regression coverage fo
 - **Intentional differences**: Some outputs are intentionally improved (for example Unicode name preservation and bug-fix correctness changes).
 - **Determinism guarantee**: Identical input bytes produce identical output; fixture names do not influence detection.
 - **Edge-case differences**: Some outputs still differ intentionally where Rust chooses a more accurate or more deterministic result.
-- **Media metadata bonus**: Supported images can surface copyright clues from EXIF/XMP metadata even though Python's text-analysis parity baseline does not scan generic media metadata.
+- **Media metadata bonus**: Supported images can surface copyright clues from EXIF/XMP metadata, and supported TTF/OTF fonts can now contribute copyright/licensing strings from native font metadata tables, even though Python's text-analysis parity baseline does not scan these media metadata sources generically.
 
 The sections above describe the stable behavior changes: bug fixes, Unicode preservation, deterministic output, parallel-safe execution, optional runtime limits, and explicit documented divergences where Rust intentionally differs from the Python baseline.

@@ -151,7 +151,7 @@ provenant --json-pp licenses.json --license --license-text --license-text-diagno
 Add `--license-references` when you want top-level unique license and rule reference blocks, and add `--unknown-licenses` when you want unmatched license-like text surfaced for review.
 
 If you are troubleshooting PDF extraction specifically, Provenant suppresses noisy `pdf_oxide`
-dependency warnings by default so normal scan output stays readable. To inspect the raw PDF parser
+dependency logs by default so normal scan output stays readable. To inspect the raw PDF parser
 logs for a debugging run, rerun with `RUST_LOG=pdf_oxide=warn` (or `=error` if you only want
 higher-severity dependency logs).
 
