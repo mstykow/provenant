@@ -192,7 +192,7 @@ cd provenant
 npm run setup
 ```
 
-That command runs `npm install`, installs the Rust CLI helper tools used by local hooks/checks, and then runs `./setup.sh` to initialize submodules and hooks.
+That command runs `npm install`, installs the Rust CLI helper tools used by local hooks/checks (including `cargo-deny` for dependency policy enforcement), and then runs `./setup.sh` to initialize submodules and hooks.
 
 The embedded license index is checked into the repository directly. If you only need to re-run submodule and hook setup after the initial bootstrap, `./setup.sh` is sufficient:
 
