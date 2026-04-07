@@ -80,11 +80,13 @@ jobs:
       - name: Run doctests
         run: cargo test --doc --release --verbose
 
-      - name: Install cargo-deny
-        run: cargo install --locked cargo-deny
-
       - name: Check dependency policy
-        run: ./scripts/check_dependency_policy.sh
+        uses: EmbarkStudios/cargo-deny-action@44db170f6a7d12a6e90340e9e0fca1f650d34b14
+        with:
+          rust-version: "1.93.0"
+          manifest-path: ./Cargo.toml
+          arguments: ""
+          command: check advisories bans licenses sources
 
       - name: Install cargo-machete
         run: cargo install --locked cargo-machete
