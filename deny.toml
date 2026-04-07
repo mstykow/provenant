@@ -46,6 +46,6 @@ allow = [
     "bzip2-1.0.6",
 ]
 exceptions = [
-    { crate = "option-ext@0.2.0", allow = ["MPL-2.0"] },
-    { crate = "version-ranges@0.1.2", allow = ["MPL-2.0"] },
+    { crate = "option-ext", allow = ["MPL-2.0"] },
+    { crate = "version-ranges", allow = ["MPL-2.0"] },
 ]
