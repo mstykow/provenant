@@ -12,6 +12,7 @@ use serde::Serialize;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum ScanProfile {
     Common,
+    CommonWithCompiled,
     Licenses,
     Packages,
 }
@@ -39,6 +40,12 @@ impl ScanProfile {
     pub fn args(self) -> &'static [&'static str] {
         match self {
             Self::Common => &["-clupe", "--system-package", "--strip-root"],
+            Self::CommonWithCompiled => &[
+                "-clupe",
+                "--system-package",
+                "--package-in-compiled",
+                "--strip-root",
+            ],
             Self::Licenses => &["-l", "--strip-root"],
             Self::Packages => &["-p", "--strip-root"],
         }
@@ -47,6 +54,7 @@ impl ScanProfile {
     pub fn display_name(self) -> &'static str {
         match self {
             Self::Common => "common",
+            Self::CommonWithCompiled => "common-with-compiled",
             Self::Licenses => "licenses",
             Self::Packages => "packages",
         }
@@ -331,4 +339,43 @@ pub fn render_tsv_table(path: &Path, display_headers: &[&str]) -> Result<Vec<Vec
     }
 
     Ok(rows)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ScanProfile, resolve_scan_args};
+
+    #[test]
+    fn common_with_compiled_profile_expands_to_expected_args() {
+        assert_eq!(
+            ScanProfile::CommonWithCompiled.args(),
+            [
+                "-clupe",
+                "--system-package",
+                "--package-in-compiled",
+                "--strip-root",
+            ]
+        );
+        assert_eq!(
+            ScanProfile::CommonWithCompiled.display_name(),
+            "common-with-compiled"
+        );
+    }
+
+    #[test]
+    fn resolve_scan_args_uses_common_with_compiled_profile() {
+        let resolved =
+            resolve_scan_args(Some(ScanProfile::CommonWithCompiled), Vec::new(), "unused")
+                .expect("profile should resolve");
+
+        assert_eq!(
+            resolved,
+            vec![
+                "-clupe".to_string(),
+                "--system-package".to_string(),
+                "--package-in-compiled".to_string(),
+                "--strip-root".to_string(),
+            ]
+        );
+    }
 }

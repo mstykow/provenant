@@ -54,7 +54,7 @@ fn main() -> Result<()> {
     let scan_args = resolve_scan_args(
         args.profile,
         args.scan_args.clone(),
-        "pass --profile <common|licenses|packages> or benchmark scan flags after --",
+        "pass --profile <common|common-with-compiled|licenses|packages> or benchmark scan flags after --",
     )?;
     let project_root = project_root();
     let mut context = prepare_context(&project_root, &args, scan_args)?;

@@ -138,7 +138,7 @@ fn main() -> Result<()> {
     let scan_args = resolve_scan_args(
         profile,
         explicit_scan_args,
-        "pass --profile <common|licenses|packages> or explicit shared scan flags after --",
+        "pass --profile <common|common-with-compiled|licenses|packages> or explicit shared scan flags after --",
     )?;
     let mut context = prepare_context(&args, scan_args)?;
 
