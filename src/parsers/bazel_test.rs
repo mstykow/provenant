@@ -14,6 +14,7 @@ fn test_parse_build_with_rules() {
 
     assert_eq!(pkg.package_type, Some(PackageType::Bazel));
     assert_eq!(pkg.name, Some("hello-greet".to_string()));
+    assert_eq!(pkg.purl.as_deref(), Some("pkg:bazel/hello-greet"));
     // No licenses field in this BUILD file
     assert_eq!(pkg.extracted_license_statement, None);
 }
@@ -53,6 +54,7 @@ cc_binary(
     let pkg = BazelBuildParser::extract_first_package(&build_path);
     assert_eq!(pkg.package_type, Some(PackageType::Bazel));
     assert_eq!(pkg.name, Some("hello-world".to_string()));
+    assert_eq!(pkg.purl.as_deref(), Some("pkg:bazel/hello-world"));
 }
 
 #[test]
@@ -71,6 +73,7 @@ cc_library(
     let pkg = BazelBuildParser::extract_first_package(&build_path);
     assert_eq!(pkg.package_type, Some(PackageType::Bazel));
     assert_eq!(pkg.name, Some("hello-greet".to_string()));
+    assert_eq!(pkg.purl.as_deref(), Some("pkg:bazel/hello-greet"));
 }
 
 #[test]
@@ -296,8 +299,11 @@ cc_library(
     let packages = BazelBuildParser::extract_packages(&build_path);
     assert_eq!(packages.len(), 3);
     assert_eq!(packages[0].name, Some("lib1".to_string()));
+    assert_eq!(packages[0].purl.as_deref(), Some("pkg:bazel/lib1"));
     assert_eq!(packages[1].name, Some("bin1".to_string()));
+    assert_eq!(packages[1].purl.as_deref(), Some("pkg:bazel/bin1"));
     assert_eq!(packages[2].name, Some("lib2".to_string()));
+    assert_eq!(packages[2].purl.as_deref(), Some("pkg:bazel/lib2"));
 }
 
 #[test]

@@ -1,7 +1,9 @@
 #[cfg(test)]
 mod tests {
     use super::super::assemble;
-    use crate::models::{DatasourceId, Dependency, FileInfo, FileType, Package, PackageData};
+    use crate::models::{
+        DatasourceId, Dependency, FileInfo, FileType, Package, PackageData, PackageType,
+    };
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -100,6 +102,61 @@ mod tests {
         let mut dependency = create_test_dependency(purl, extracted_requirement, extra_data);
         dependency.scope = Some("package_version".to_string());
         dependency
+    }
+
+    #[test]
+    fn test_assemble_prunes_orphan_bazel_packages_after_npm_assignment() {
+        let mut npm_file = create_test_file_info(
+            "repo/package.json",
+            DatasourceId::NpmPackageJson,
+            Some("pkg:npm/demo@1.0.0"),
+            Some("demo"),
+            Some("1.0.0"),
+            vec![],
+        );
+        npm_file.package_data[0].package_type = Some(PackageType::Npm);
+
+        let mut bazel_file = create_test_file_info(
+            "repo/closure/BUILD",
+            DatasourceId::BazelBuild,
+            Some("pkg:bazel/abstractspellchecker"),
+            Some("abstractspellchecker"),
+            None,
+            vec![],
+        );
+        bazel_file.package_data[0].package_type = Some(PackageType::Bazel);
+
+        let mut files = vec![npm_file, bazel_file];
+        let result = assemble(&mut files);
+
+        assert_eq!(result.packages.len(), 1);
+        let package = &result.packages[0];
+        assert_eq!(package.package_type, Some(PackageType::Npm));
+        assert_eq!(package.name.as_deref(), Some("demo"));
+        assert_eq!(files[0].for_packages, vec![package.package_uid.clone()]);
+        assert_eq!(files[1].for_packages, vec![package.package_uid.clone()]);
+    }
+
+    #[test]
+    fn test_assemble_keeps_bazel_package_when_it_owns_files() {
+        let mut bazel_file = create_test_file_info(
+            "repo/protobuf/BUILD",
+            DatasourceId::BazelBuild,
+            Some("pkg:bazel/parent_proto"),
+            Some("parent_proto"),
+            None,
+            vec![],
+        );
+        bazel_file.package_data[0].package_type = Some(PackageType::Bazel);
+
+        let mut files = vec![bazel_file];
+        let result = assemble(&mut files);
+
+        assert_eq!(result.packages.len(), 1);
+        let package = &result.packages[0];
+        assert_eq!(package.package_type, Some(PackageType::Bazel));
+        assert_eq!(package.name.as_deref(), Some("parent_proto"));
+        assert_eq!(files[0].for_packages, vec![package.package_uid.clone()]);
     }
 
     #[test]

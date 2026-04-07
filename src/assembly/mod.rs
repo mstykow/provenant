@@ -3,6 +3,8 @@ mod assemblers;
 mod assembly_golden_test;
 #[cfg(test)]
 mod assembly_test;
+mod bazel_merge;
+mod bazel_prune;
 mod cargo_resource_assign;
 mod cargo_workspace_merge;
 mod composer_resource_assign;
@@ -120,7 +122,7 @@ pub fn assemble(files: &mut [FileInfo]) -> AssemblyResult {
             }
 
             if let Some(special_merger) = assemblers::special_directory_merger_for(config_key) {
-                let results = special_merger.run(files, file_indices);
+                let results = special_merger.run(config, files, file_indices);
                 apply_directory_merge_results(files, &mut packages, &mut dependencies, results);
                 continue;
             }

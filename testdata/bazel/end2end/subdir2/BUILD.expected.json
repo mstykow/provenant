@@ -2,6 +2,7 @@
   {
     "type": "bazel",
     "name": "subdir2",
+    "purl": "pkg:bazel/subdir2",
     "parties": [],
     "datasource_id": "bazel_build"
   }

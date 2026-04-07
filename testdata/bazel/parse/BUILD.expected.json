@@ -2,6 +2,7 @@
   {
     "type": "bazel",
     "name": "hello-greet",
+    "purl": "pkg:bazel/hello-greet",
     "parties": [],
     "datasource_id": "bazel_build"
   }

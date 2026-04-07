@@ -675,6 +675,17 @@ mod tests {
     }
 
     #[test]
+    fn test_assembly_bazel_build_chromium() {
+        match run_assembly_golden_test("bazel-build-chromium") {
+            Ok(_) => (),
+            Err(e) => panic!(
+                "Assembly golden test failed for bazel-build-chromium: {}",
+                e
+            ),
+        }
+    }
+
+    #[test]
     fn test_assembly_cargo_workspace() {
         match run_assembly_golden_test("cargo-workspace") {
             Ok(_) => (),

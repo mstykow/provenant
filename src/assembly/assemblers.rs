@@ -5,15 +5,16 @@ use crate::models::{DatasourceId, FileInfo, Package, TopLevelDependency};
 use strum::EnumIter;
 
 use super::{
-    AssemblerConfig, AssemblyMode, DirectoryMergeOutput, cargo_resource_assign,
-    composer_resource_assign, conda_rootfs_merge, file_ref_resolve, hackage_merge,
-    npm_resource_assign, nuget_cpm_resolve, python_requirements_assign, ruby_resource_assign,
-    swift_merge, topology,
+    AssemblerConfig, AssemblyMode, DirectoryMergeOutput, bazel_merge, bazel_prune,
+    cargo_resource_assign, composer_resource_assign, conda_rootfs_merge, file_ref_resolve,
+    hackage_merge, npm_resource_assign, nuget_cpm_resolve, python_requirements_assign,
+    ruby_resource_assign, swift_merge, topology,
 };
 
 #[derive(Clone, Copy)]
 pub(super) enum SpecialDirectoryMergerKind {
     Skip,
+    Bazel,
     Hackage,
 }
 
@@ -31,12 +32,14 @@ pub(super) enum PostAssemblyPassKind {
     CargoResourceAssign,
     ComposerResourceAssign,
     RubyResourceAssign,
+    BazelPrune,
 }
 
 pub(super) fn special_directory_merger_for(
     config_key: DatasourceId,
 ) -> Option<SpecialDirectoryMergerKind> {
     match config_key {
+        DatasourceId::BazelBuild => Some(SpecialDirectoryMergerKind::Bazel),
         DatasourceId::HackageCabal => Some(SpecialDirectoryMergerKind::Hackage),
         DatasourceId::SwiftPackageManifestJson => Some(SpecialDirectoryMergerKind::Skip),
         _ => None,
@@ -56,6 +59,7 @@ pub(super) static POST_ASSEMBLY_PASSES: &[PostAssemblyPassKind] = &[
     PostAssemblyPassKind::CargoResourceAssign,
     PostAssemblyPassKind::ComposerResourceAssign,
     PostAssemblyPassKind::RubyResourceAssign,
+    PostAssemblyPassKind::BazelPrune,
 ];
 
 const SWIFT_POST_ASSEMBLY_DATASOURCE_IDS: &[DatasourceId] = &[
@@ -175,11 +179,13 @@ impl PostAssemblyInputs {
 impl SpecialDirectoryMergerKind {
     pub(super) fn run(
         self,
+        config: &AssemblerConfig,
         files: &[FileInfo],
         file_indices: &[usize],
     ) -> Vec<DirectoryMergeOutput> {
         match self {
             Self::Skip => Vec::new(),
+            Self::Bazel => bazel_merge::assemble_bazel_packages(config, files, file_indices),
             Self::Hackage => hackage_merge::assemble_hackage_packages(files, file_indices),
         }
     }
@@ -215,6 +221,7 @@ impl PostAssemblyPassKind {
             Self::CargoResourceAssign => inputs.has_package_type(PackageType::Cargo),
             Self::ComposerResourceAssign => inputs.has_package_type(PackageType::Composer),
             Self::RubyResourceAssign => inputs.has_package_type(PackageType::Gem),
+            Self::BazelPrune => inputs.has_package_type(PackageType::Bazel),
         }
     }
 
@@ -261,6 +268,9 @@ impl PostAssemblyPassKind {
             }
             Self::RubyResourceAssign => {
                 ruby_resource_assign::assign_ruby_package_resources(files, packages)
+            }
+            Self::BazelPrune => {
+                bazel_prune::prune_unused_bazel_packages(files, packages, dependencies)
             }
         }
     }
@@ -807,6 +817,7 @@ pub static UNASSEMBLED_DATASOURCE_IDS: &[DatasourceId] = &[
     DatasourceId::DebianCopyrightInPackage,
     DatasourceId::DebianCopyrightStandalone,
     DatasourceId::GoBinary,
+    DatasourceId::WindowsExecutable,
     DatasourceId::DebianSourceControlDsc,
     DatasourceId::Dockerfile,
     DatasourceId::HexMixLock,
