@@ -83,4 +83,31 @@ mod tests {
         assert_eq!(urls.len(), 1, "urls: {urls:#?}");
         assert_eq!(urls[0].url, "http://ftp.gnu.org/gnu/tar/");
     }
+
+    #[test]
+    fn test_find_urls_splits_literal_escaped_newline_separated_urls() {
+        let text = "https://docs.celeryq.dev/en/latest/userguide/workers.html#concurrency\\nhttps://docs.celeryq.dev/en/latest/userguide/concurrency/eventlet.html";
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        let values: Vec<_> = urls.into_iter().map(|url| url.url).collect();
+        assert_eq!(
+            values,
+            vec![
+                "https://docs.celeryq.dev/en/latest/userguide/workers.html#concurrency".to_string(),
+                "https://docs.celeryq.dev/en/latest/userguide/concurrency/eventlet.html"
+                    .to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_find_urls_strips_template_credentials_from_git_urls() {
+        let text = "Repo: https://user:{ACCESS_TOKEN}@github.com/apache/airflow.git";
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        assert_eq!(urls.len(), 1, "urls: {urls:#?}");
+        assert_eq!(urls[0].url, "https://github.com/apache/airflow.git");
+    }
 }

@@ -41,11 +41,7 @@ fn is_filterable(url: &str) -> bool {
 }
 
 fn verbatim_crlf_url_cleaner(url: &str) -> String {
-    if url.ends_with('/') {
-        return url.to_string();
-    }
-
-    url.replace("\\n", "").replace("\\r", "")
+    url.to_string()
 }
 
 fn end_of_url_cleaner(url: &str) -> String {
@@ -81,11 +77,30 @@ fn remove_user_password(url: &str) -> Option<String> {
         return Some(url.to_string());
     }
 
-    let mut parsed = Url::parse(url).ok()?;
-    parsed.set_username("").ok()?;
-    parsed.set_password(None).ok()?;
-    parsed.host_str()?;
-    Some(parsed.to_string())
+    if let Ok(mut parsed) = Url::parse(url) {
+        parsed.set_username("").ok()?;
+        parsed.set_password(None).ok()?;
+        parsed.host_str()?;
+        return Some(parsed.to_string());
+    }
+
+    strip_manual_userinfo(url)
+}
+
+fn strip_manual_userinfo(url: &str) -> Option<String> {
+    let scheme_end = url.find("://")?;
+    let authority_and_rest = &url[scheme_end + 3..];
+    let authority_end = authority_and_rest
+        .find(['/', '?', '#'])
+        .unwrap_or(authority_and_rest.len());
+    let authority = &authority_and_rest[..authority_end];
+    let at_index = authority.rfind('@')?;
+
+    let mut rebuilt = String::with_capacity(url.len());
+    rebuilt.push_str(&url[..scheme_end + 3]);
+    rebuilt.push_str(&authority[at_index + 1..]);
+    rebuilt.push_str(&authority_and_rest[authority_end..]);
+    Some(rebuilt)
 }
 
 fn canonical_url(url: &str) -> Option<String> {
@@ -100,43 +115,46 @@ pub fn find_urls(text: &str, config: &DetectionConfig) -> Vec<UrlDetection> {
 
     for (line_index, line) in text.lines().enumerate() {
         let line_number = line_index + 1;
+        let normalized_line = line.replace("\\r\\n", "\\n").replace("\\r", "\\n");
 
-        for matched in URLS_REGEX.find_iter(line) {
-            let mut candidate = matched.as_str().to_string();
+        for segment in normalized_line.split("\\n") {
+            for matched in URLS_REGEX.find_iter(segment) {
+                let mut candidate = matched.as_str().to_string();
 
-            candidate = verbatim_crlf_url_cleaner(&candidate);
-            candidate = end_of_url_cleaner(&candidate);
+                candidate = verbatim_crlf_url_cleaner(&candidate);
+                candidate = end_of_url_cleaner(&candidate);
 
-            let candidate_lower = candidate.to_ascii_lowercase();
-            if candidate.is_empty() || EMPTY_URLS.contains(&candidate_lower.as_str()) {
-                continue;
+                let candidate_lower = candidate.to_ascii_lowercase();
+                if candidate.is_empty() || EMPTY_URLS.contains(&candidate_lower.as_str()) {
+                    continue;
+                }
+
+                candidate = add_fake_scheme(&candidate);
+
+                let Some(candidate) = remove_user_password(&candidate) else {
+                    continue;
+                };
+                if INVALID_URLS_PATTERN.is_match(&candidate) {
+                    continue;
+                }
+
+                let Some(candidate) = canonical_url(&candidate) else {
+                    continue;
+                };
+
+                if is_filterable(&candidate) && !is_good_url_host_domain(&candidate) {
+                    continue;
+                }
+                if !classify_url(&candidate.to_ascii_lowercase()) {
+                    continue;
+                }
+
+                detections.push(UrlDetection {
+                    url: candidate,
+                    start_line: line_number,
+                    end_line: line_number,
+                });
             }
-
-            candidate = add_fake_scheme(&candidate);
-
-            let Some(candidate) = remove_user_password(&candidate) else {
-                continue;
-            };
-            if INVALID_URLS_PATTERN.is_match(&candidate) {
-                continue;
-            }
-
-            let Some(candidate) = canonical_url(&candidate) else {
-                continue;
-            };
-
-            if is_filterable(&candidate) && !is_good_url_host_domain(&candidate) {
-                continue;
-            }
-            if !classify_url(&candidate.to_ascii_lowercase()) {
-                continue;
-            }
-
-            detections.push(UrlDetection {
-                url: candidate,
-                start_line: line_number,
-                end_line: line_number,
-            });
         }
     }
 
