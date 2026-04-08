@@ -1,0 +1,2 @@
+Celery docs: https://docs.celeryq.dev/en/latest/userguide/workers.html#concurrency\nhttps://docs.celeryq.dev/en/latest/userguide/concurrency/eventlet.html
+Repo: https://user:{ACCESS_TOKEN}@github.com/apache/airflow.git
