@@ -90,7 +90,8 @@ pub(super) fn compute_summary_with_options(
     let declared_license_expression = package_declared_license_expression
         .clone()
         .or_else(|| score_declared_license_expression.clone());
-    if score_clarity.ambiguous_compound_licensing
+    if !include_summary_fields
+        && score_clarity.ambiguous_compound_licensing
         && package_declared_license_expression.is_some()
         && package_declared_license_expression == declared_license_expression
     {

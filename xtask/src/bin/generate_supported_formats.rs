@@ -22,6 +22,14 @@ fn main() -> Result<()> {
                     return Ok(());
                 }
 
+                if let Some((line_number, existing_line, generated_line)) =
+                    first_normalized_diff(&existing, &output)
+                {
+                    eprintln!("first normalized diff at line {}", line_number);
+                    eprintln!("existing : {}", existing_line);
+                    eprintln!("generated: {}", generated_line);
+                }
+
                 eprintln!("✗ docs/SUPPORTED_FORMATS.md is out of date");
                 eprintln!(
                     "Run: cargo run --manifest-path xtask/Cargo.toml --bin generate-supported-formats"
@@ -102,7 +110,7 @@ fn normalize_markdown_for_compare(input: &str) -> String {
                 let cells: Vec<String> = trimmed
                     .trim_matches('|')
                     .split('|')
-                    .map(|cell| cell.trim().to_string())
+                    .map(|cell| normalize_markdown_text(cell.trim()))
                     .collect();
 
                 let is_separator_row = cells
@@ -115,9 +123,42 @@ fn normalize_markdown_for_compare(input: &str) -> String {
 
                 format!("| {} |", cells.join(" | "))
             } else {
-                trimmed.to_string()
+                normalize_markdown_text(trimmed)
             }
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn normalize_markdown_text(input: &str) -> String {
+    let collapsed = input.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut normalized = String::with_capacity(collapsed.len());
+    let mut chars = collapsed.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\\' && chars.peek().is_some_and(|next| next.is_ascii_punctuation()) {
+            continue;
+        }
+        normalized.push(ch);
+    }
+
+    normalized
+}
+
+fn first_normalized_diff(existing: &str, generated: &str) -> Option<(usize, String, String)> {
+    let existing_lines = normalize_markdown_for_compare(existing)
+        .lines()
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    let generated_lines = normalize_markdown_for_compare(generated)
+        .lines()
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    let max_len = existing_lines.len().max(generated_lines.len());
+
+    (0..max_len).find_map(|index| {
+        let existing_line = existing_lines.get(index).cloned().unwrap_or_default();
+        let generated_line = generated_lines.get(index).cloned().unwrap_or_default();
+        (existing_line != generated_line).then_some((index + 1, existing_line, generated_line))
+    })
 }
