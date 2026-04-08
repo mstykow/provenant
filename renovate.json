@@ -34,7 +34,17 @@
     "minimumReleaseAge": null
   },
   "osvVulnerabilityAlerts": true,
-  "customManagers": [],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)rust-toolchain\\.toml$/"],
+      "matchStrings": ["channel\\s*=\\s*\"(?<currentValue>[^\"]+)\""],
+      "packageNameTemplate": "rust-lang/rust",
+      "depNameTemplate": "rust",
+      "datasourceTemplate": "github-tags",
+      "versioningTemplate": "rust-release-channel"
+    }
+  ],
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": ["before 6am on monday"],
@@ -69,11 +79,6 @@
       "matchPackageNames": ["node"],
       "matchUpdateTypes": ["minor", "patch"],
       "enabled": false
-    },
-    {
-      "description": "Pin Cargo dependency updates to exact versions to avoid artifact drift",
-      "matchManagers": ["cargo"],
-      "rangeStrategy": "pin"
     },
     {
       "description": "Automerge non-major updates after release age",
