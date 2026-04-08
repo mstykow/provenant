@@ -1,0 +1,316 @@
+{
+  "summary": {
+    "declared_license_expression": "mit",
+    "license_clarity_score": {
+      "score": 100,
+      "declared_license": true,
+      "identification_precision": true,
+      "has_license_text": true,
+      "declared_copyrights": true,
+      "conflicting_license_categories": false,
+      "ambiguous_compound_licensing": false
+    },
+    "declared_holder": "Example Corp.",
+    "primary_language": null,
+    "other_license_expressions": [
+      {
+        "value": "bsd-new",
+        "count": 1
+      }
+    ],
+    "other_holders": [],
+    "other_languages": []
+  },
+  "tallies": {
+    "detected_license_expression": [
+      {
+        "value": "mit",
+        "count": 2
+      },
+      {
+        "value": "bsd-new",
+        "count": 1
+      }
+    ],
+    "copyrights": [],
+    "holders": [],
+    "authors": [],
+    "programming_language": []
+  },
+  "tallies_of_key_files": {
+    "detected_license_expression": [
+      {
+        "value": "mit",
+        "count": 1
+      }
+    ],
+    "copyrights": [],
+    "holders": [],
+    "authors": [],
+    "programming_language": []
+  },
+  "license_detections": [
+    {
+      "identifier": "bsd_new-9104ae58-f743-5137-378f-601e4986a37b",
+      "license_expression": "bsd-new",
+      "license_expression_spdx": "BSD-3-Clause",
+      "detection_count": 1,
+      "detection_log": [],
+      "reference_matches": [
+        {
+          "from_file": "third_party/LICENSE",
+          "license_expression": "bsd-new",
+          "license_expression_spdx": "BSD-3-Clause",
+          "rule_identifier": "bsd-new_1145.RULE"
+        }
+      ]
+    },
+    {
+      "identifier": "mit-0417f034-29de-3369-3be1-60a79938d91c",
+      "license_expression": "mit",
+      "license_expression_spdx": "MIT",
+      "detection_count": 1,
+      "detection_log": [],
+      "reference_matches": [
+        {
+          "from_file": "LICENSE",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit_14.RULE"
+        },
+        {
+          "from_file": "LICENSE",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit.LICENSE"
+        }
+      ]
+    },
+    {
+      "identifier": "mit-b0bf4d45-8b58-07e5-270d-947243447803",
+      "license_expression": "mit",
+      "license_expression_spdx": "MIT",
+      "detection_count": 1,
+      "detection_log": ["unknown-reference-to-local-file"],
+      "reference_matches": [
+        {
+          "from_file": "src/README.md",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit_1471.RULE"
+        },
+        {
+          "from_file": "LICENSE",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit_14.RULE"
+        },
+        {
+          "from_file": "LICENSE",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit.LICENSE"
+        }
+      ]
+    }
+  ],
+  "license_references": [
+    {
+      "key": "bsd-new",
+      "language": "en",
+      "short_name": "BSD-3-Clause",
+      "name": "BSD-3-Clause",
+      "owner": "Regents of the University of California",
+      "homepage_url": "http://www.opensource.org/licenses/BSD-3-Clause",
+      "spdx_license_key": "BSD-3-Clause",
+      "osi_license_key": "BSD-3-Clause",
+      "text_urls": ["http://www.opensource.org/licenses/BSD-3-Clause"],
+      "osi_url": "http://www.opensource.org/licenses/BSD-3-Clause",
+      "faq_url": null,
+      "other_urls": [
+        "http://framework.zend.com/license/new-bsd",
+        "https://opensource.org/licenses/BSD-3-Clause",
+        "https://www.eclipse.org/org/documents/edl-v10.php"
+      ],
+      "category": "Permissive",
+      "is_exception": false,
+      "is_unknown": false,
+      "is_generic": false,
+      "minimum_coverage": null,
+      "standard_notice": null
+    },
+    {
+      "key": "mit",
+      "language": "en",
+      "short_name": "MIT License",
+      "name": "MIT License",
+      "owner": "MIT",
+      "homepage_url": "http://opensource.org/licenses/mit-license.php",
+      "spdx_license_key": "MIT",
+      "osi_license_key": null,
+      "text_urls": ["http://opensource.org/licenses/mit-license.php"],
+      "osi_url": "http://www.opensource.org/licenses/MIT",
+      "faq_url": "https://ieeexplore.ieee.org/document/9263265",
+      "other_urls": [
+        "https://opensource.com/article/18/3/patent-grant-mit-license",
+        "https://opensource.com/article/19/4/history-mit-license",
+        "https://opensource.org/licenses/MIT"
+      ],
+      "category": "Permissive",
+      "is_exception": false,
+      "is_unknown": false,
+      "is_generic": false,
+      "minimum_coverage": null,
+      "standard_notice": null
+    }
+  ],
+  "license_rule_references": [
+    {
+      "identifier": "bsd-new_1145.RULE",
+      "license_expression": "bsd-new",
+      "language": null,
+      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_1145.RULE",
+      "is_synthetic": false,
+      "length": 230,
+      "referenced_filenames": []
+    },
+    {
+      "identifier": "mit.LICENSE",
+      "license_expression": "mit",
+      "language": null,
+      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE",
+      "is_synthetic": false,
+      "length": 161,
+      "referenced_filenames": []
+    },
+    {
+      "identifier": "mit_14.RULE",
+      "license_expression": "mit",
+      "language": null,
+      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_14.RULE",
+      "is_synthetic": false,
+      "length": 2,
+      "referenced_filenames": []
+    },
+    {
+      "identifier": "mit_1471.RULE",
+      "license_expression": "mit",
+      "language": null,
+      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_1471.RULE",
+      "is_synthetic": false,
+      "length": 14,
+      "referenced_filenames": ["LICENSE"]
+    }
+  ],
+  "packages": [],
+  "files": [
+    {
+      "path": "LICENSE",
+      "type": "file",
+      "is_top_level": true,
+      "is_key_file": true,
+      "is_manifest": false,
+      "detected_license_expression": null,
+      "detected_license_expression_spdx": "MIT",
+      "license_detections": [
+        {
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "detection_log": [],
+          "identifier": "mit-0417f034-29de-3369-3be1-60a79938d91c",
+          "matches": [
+            {
+              "from_file": "LICENSE",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit_14.RULE",
+              "referenced_filenames": []
+            },
+            {
+              "from_file": "LICENSE",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit.LICENSE",
+              "referenced_filenames": []
+            }
+          ]
+        }
+      ],
+      "package_data": []
+    },
+    {
+      "path": "src/README.md",
+      "type": "file",
+      "is_top_level": false,
+      "is_key_file": false,
+      "is_manifest": false,
+      "detected_license_expression": null,
+      "detected_license_expression_spdx": "mit",
+      "license_detections": [
+        {
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "detection_log": ["unknown-reference-to-local-file"],
+          "identifier": "mit-b0bf4d45-8b58-07e5-270d-947243447803",
+          "matches": [
+            {
+              "from_file": "src/README.md",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit_1471.RULE",
+              "referenced_filenames": ["LICENSE"]
+            },
+            {
+              "from_file": "LICENSE",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit_14.RULE",
+              "referenced_filenames": []
+            },
+            {
+              "from_file": "LICENSE",
+              "matched_text": null,
+              "license_expression": "mit",
+              "license_expression_spdx": "MIT",
+              "rule_identifier": "mit.LICENSE",
+              "referenced_filenames": []
+            }
+          ]
+        }
+      ],
+      "package_data": []
+    },
+    {
+      "path": "third_party/LICENSE",
+      "type": "file",
+      "is_top_level": false,
+      "is_key_file": false,
+      "is_manifest": false,
+      "detected_license_expression": null,
+      "detected_license_expression_spdx": "BSD-3-Clause",
+      "license_detections": [
+        {
+          "license_expression": "bsd-new",
+          "license_expression_spdx": "BSD-3-Clause",
+          "detection_log": [],
+          "identifier": "bsd_new-9104ae58-f743-5137-378f-601e4986a37b",
+          "matches": [
+            {
+              "from_file": "third_party/LICENSE",
+              "matched_text": null,
+              "license_expression": "bsd-new",
+              "license_expression_spdx": "BSD-3-Clause",
+              "rule_identifier": "bsd-new_1145.RULE",
+              "referenced_filenames": []
+            }
+          ]
+        }
+      ],
+      "package_data": []
+    }
+  ]
+}

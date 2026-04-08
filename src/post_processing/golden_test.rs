@@ -455,4 +455,12 @@ Copyright - split out libs\0\xff",
             "testdata/summarycode-golden/reference_following/root_fallback_no_package/expected.json",
         );
     }
+
+    #[test]
+    fn test_golden_reference_follow_root_license_preferred_over_top_level_sibling() {
+        assert_reference_follow_fixture_matches_expected(
+            "testdata/summarycode-golden/reference_following/root_license_preferred_over_top_level_sibling",
+            "testdata/summarycode-golden/reference_following-expected/root_license_preferred_over_top_level_sibling.expected.json",
+        );
+    }
 }
