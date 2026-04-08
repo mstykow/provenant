@@ -2429,9 +2429,9 @@ dependencies = [
 
 [[package]]
 name = "pdf_oxide"
-version = "0.3.20"
+version = "0.3.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9259bb7f8da7011beb7270b6a168bfecc9c1fd6c73ac57c90e2462d57a4b7b4e"
+checksum = "e1e897d45ae245e8d6fcb409d60fa505206871dc7d6bf981c20b95248b5b8a86"
 dependencies = [
  "aes",
  "base64",
@@ -2808,7 +2808,7 @@ dependencies = [
 
 [[package]]
 name = "provenant-cli"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anyhow",
  "ar",
@@ -4514,9 +4514,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "8.5.0"
+version = "8.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2726508a48f38dceb22b35ecbbd2430efe34ff05c62bd3285f965d7911b33464"
+checksum = "dcab981e19633ebcf0b001ddd37dd802996098bc1864f90b7c5d970ce76c1d59"
 dependencies = [
  "aes",
  "bzip2",
