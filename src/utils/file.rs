@@ -1224,12 +1224,27 @@ fn sample_has_promising_printable_strings(bytes: &[u8]) -> bool {
         windows.push(&bytes[len - SAMPLE_WINDOW_BYTES..]);
     }
 
-    windows
-        .into_iter()
+    let promising_windows = windows
+        .iter()
         .filter(|window| has_promising_printable_run(window, MIN_PROMISING_RUN))
-        .take(MIN_PROMISING_WINDOWS)
-        .count()
-        >= MIN_PROMISING_WINDOWS
+        .count();
+
+    promising_windows >= MIN_PROMISING_WINDOWS
+        || windows
+            .iter()
+            .any(|window| has_strong_structured_text_signal(window))
+}
+
+fn has_strong_structured_text_signal(bytes: &[u8]) -> bool {
+    let strings = extract_printable_strings(bytes);
+    if strings.is_empty() {
+        return false;
+    }
+
+    let email_markers = strings.matches('@').count();
+    let url_markers = strings.matches("http://").count() + strings.matches("https://").count();
+
+    email_markers + url_markers >= 3
 }
 
 fn has_promising_printable_run(bytes: &[u8], min_run: usize) -> bool {
