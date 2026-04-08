@@ -659,7 +659,7 @@ fn detect_python_sdist_archive_format(path: &Path) -> Option<PythonSdistArchiveF
     if file_name.ends_with(".tar.gz") {
         Some(PythonSdistArchiveFormat::TarGz)
     } else if file_name.ends_with(".tgz") {
-        Some(PythonSdistArchiveFormat::Tgz)
+        tgz_sdist_contains_pkg_info(path).then_some(PythonSdistArchiveFormat::Tgz)
     } else if file_name.ends_with(".tar.bz2") {
         Some(PythonSdistArchiveFormat::TarBz2)
     } else if file_name.ends_with(".tar.xz") {
@@ -669,6 +669,27 @@ fn detect_python_sdist_archive_format(path: &Path) -> Option<PythonSdistArchiveF
     } else {
         None
     }
+}
+
+fn tgz_sdist_contains_pkg_info(path: &Path) -> bool {
+    if !path.is_file() {
+        return true;
+    }
+
+    let compressed_size = match std::fs::metadata(path) {
+        Ok(metadata) => metadata.len(),
+        Err(_) => return false,
+    };
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(_) => return false,
+    };
+    let decoder = GzDecoder::new(file);
+    let Some(entries) = collect_tar_sdist_entries(path, decoder, "tgz", compressed_size) else {
+        return false;
+    };
+
+    select_sdist_pkginfo_entry(path, &entries).is_some()
 }
 
 fn zip_sdist_contains_pkg_info(path: &Path) -> bool {
@@ -796,6 +817,20 @@ fn extract_from_tar_sdist_archive<R: Read>(
     archive_type: &str,
     compressed_size: u64,
 ) -> PackageData {
+    let Some(entries) = collect_tar_sdist_entries(path, reader, archive_type, compressed_size)
+    else {
+        return default_package_data(path);
+    };
+
+    build_sdist_package_data(path, entries)
+}
+
+fn collect_tar_sdist_entries<R: Read>(
+    path: &Path,
+    reader: R,
+    archive_type: &str,
+    compressed_size: u64,
+) -> Option<Vec<(String, String)>> {
     let mut archive = Archive::new(reader);
     let archive_entries = match archive.entries() {
         Ok(entries) => entries,
@@ -804,7 +839,7 @@ fn extract_from_tar_sdist_archive<R: Read>(
                 "Failed to read {} sdist archive {:?}: {}",
                 archive_type, path, e
             );
-            return default_package_data(path);
+            return None;
         }
     };
 
@@ -838,7 +873,7 @@ fn extract_from_tar_sdist_archive<R: Read>(
                 "Total extracted size exceeds limit for {} sdist {:?}",
                 archive_type, path
             );
-            return default_package_data(path);
+            return None;
         }
 
         if compressed_size > 0 {
@@ -848,7 +883,7 @@ fn extract_from_tar_sdist_archive<R: Read>(
                     "Suspicious compression ratio in {} sdist {:?}: {:.2}:1",
                     archive_type, path, ratio
                 );
-                return default_package_data(path);
+                return None;
             }
         }
 
@@ -881,7 +916,7 @@ fn extract_from_tar_sdist_archive<R: Read>(
         }
     }
 
-    build_sdist_package_data(path, entries)
+    Some(entries)
 }
 
 fn extract_from_zip_sdist_archive(path: &Path) -> PackageData {
