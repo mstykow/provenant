@@ -1691,6 +1691,39 @@ Test package description.
     }
 
     #[test]
+    fn test_is_match_tgz_sdist_requires_pkg_info_for_real_file() {
+        let (_temp_dir, archive_path) = create_temp_tar_gz(
+            &[(
+                "postgresql/Chart.yaml",
+                "apiVersion: v2\nname: postgresql\nversion: 13.2.24\n",
+            )],
+            "postgresql-13.2.24.tgz",
+        );
+
+        assert!(!PythonParser::is_match(&archive_path));
+        assert!(try_parse_file(&archive_path).is_none());
+    }
+
+    #[test]
+    fn test_extract_from_tgz_sdist_archive_with_pkg_info() {
+        let (_temp_dir, archive_path) = create_temp_tar_gz(
+            &[(
+                "demo-1.0.0/PKG-INFO",
+                "Metadata-Version: 2.1\nName: demo\nVersion: 1.0.0\nSummary: tgz demo\n",
+            )],
+            "demo-1.0.0.tgz",
+        );
+
+        assert!(PythonParser::is_match(&archive_path));
+
+        let package_data = PythonParser::extract_first_package(&archive_path);
+
+        assert_eq!(package_data.name.as_deref(), Some("demo"));
+        assert_eq!(package_data.version.as_deref(), Some("1.0.0"));
+        assert_eq!(package_data.datasource_id, Some(DatasourceId::PypiSdist));
+    }
+
+    #[test]
     fn test_extract_from_sdist_tar_bz2_archive() {
         let (_temp_dir, archive_path) = create_temp_tar_bz2(
             &[(
