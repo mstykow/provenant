@@ -133,6 +133,20 @@ mod golden_tests {
     }
 
     #[test]
+    fn test_golden_demo_tgz_sdist_archive() {
+        let test_file = PathBuf::from("testdata/python/golden/archives/demo-1.0.0.tgz");
+        let expected_file =
+            PathBuf::from("testdata/python/golden/archives/demo-1.0.0.tar.gz-expected.json");
+
+        let package_data = PythonParser::extract_first_package(&test_file);
+
+        match compare_package_data_parser_only(&package_data, &expected_file) {
+            Ok(_) => (),
+            Err(e) => panic!("Golden test failed: {}", e),
+        }
+    }
+
+    #[test]
     fn test_golden_pip_cache_origin_json() {
         let test_file =
             PathBuf::from("testdata/python/golden/pip_cache/wheels/construct/origin.json");
