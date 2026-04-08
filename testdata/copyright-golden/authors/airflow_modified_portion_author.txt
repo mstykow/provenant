@@ -1,0 +1,2 @@
+# This product contains a modified portion of 'Flask App Builder' developed by Daniel Vaz Gaspar.
+# (https://github.com/dpgaspar/Flask-AppBuilder).
