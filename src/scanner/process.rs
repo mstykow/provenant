@@ -1581,7 +1581,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_file_surfaces_terminal_pdf_extraction_failure_as_scan_error() {
+    fn test_process_file_suppresses_non_actionable_pdf_extraction_failure() {
         let dir = tempdir().expect("tempdir");
         let path = dir.path().join("broken.pdf");
         fs::write(&path, b"%PDF-1.7\nthis is not a valid pdf object graph\n")
@@ -1598,8 +1598,7 @@ mod tests {
             &TextDetectionOptions::default(),
         );
 
-        assert_eq!(file_info.scan_errors.len(), 1);
-        assert!(file_info.scan_errors[0].contains("PDF text extraction failed after"));
+        assert!(file_info.scan_errors.is_empty());
     }
 
     #[test]

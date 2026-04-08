@@ -46,7 +46,7 @@ pub(super) fn compute_summary_with_options(
 ) -> Option<Summary> {
     let summary_index = SummaryIndex::build(files, packages, indexes);
     let declared_holders = compute_declared_holders(files, packages, indexes);
-    let (score_declared_license_expression, score_clarity) =
+    let (score_declared_license_expression, mut score_clarity) =
         compute_license_score(files, &summary_index);
 
     let declared_holder = if include_summary_fields && !declared_holders.is_empty() {
@@ -80,7 +80,9 @@ pub(super) fn compute_summary_with_options(
         return None;
     }
 
-    let package_declared_license_expression = if include_summary_fields {
+    let package_declared_license_expression = if include_summary_fields
+        || (include_license_clarity_score && score_declared_license_expression.is_some())
+    {
         package_declared_license_expression(packages, files, indexes, &summary_index)
     } else {
         None
@@ -88,6 +90,13 @@ pub(super) fn compute_summary_with_options(
     let declared_license_expression = package_declared_license_expression
         .clone()
         .or_else(|| score_declared_license_expression.clone());
+    if score_clarity.ambiguous_compound_licensing
+        && package_declared_license_expression.is_some()
+        && package_declared_license_expression == declared_license_expression
+    {
+        score_clarity.ambiguous_compound_licensing = false;
+        score_clarity.score += 10;
+    }
     let other_license_expressions = remove_tally_value(
         declared_license_expression.as_deref(),
         &tallies.detected_license_expression,
@@ -120,7 +129,6 @@ pub(super) fn compute_summary_with_options(
     }
 
     let license_clarity_score = if include_license_clarity_score {
-        let mut score_clarity = score_clarity;
         if !score_clarity.declared_copyrights
             && ((!declared_holders.is_empty()
                 && files.iter().any(|file| {
