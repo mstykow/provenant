@@ -301,6 +301,31 @@ pub(crate) fn select_matches_for_expression(
         if has_concrete_match {
             filtered.retain(|match_item| !is_unknown_reference_like_match(match_item));
         }
+
+        let local_reference_sources = filtered
+            .iter()
+            .filter(|match_item| is_local_file_reference_match(match_item))
+            .filter_map(|match_item| match_item.from_file.as_deref())
+            .collect::<HashSet<_>>();
+        let has_resolved_concrete_match = !local_reference_sources.is_empty()
+            && filtered.iter().any(|match_item| {
+                !is_local_file_reference_match(match_item)
+                    && !is_unknown_reference_like_match(match_item)
+                    && match_item
+                        .from_file
+                        .as_deref()
+                        .is_some_and(|path| !local_reference_sources.contains(path))
+            });
+        if has_resolved_concrete_match {
+            let without_imperfect_reference_fragments: Vec<_> = filtered
+                .iter()
+                .filter(|match_item| !is_imperfect_local_file_reference_match(match_item))
+                .cloned()
+                .collect();
+            if !without_imperfect_reference_fragments.is_empty() {
+                filtered = without_imperfect_reference_fragments;
+            }
+        }
     }
 
     if filtered.is_empty() {
@@ -308,6 +333,21 @@ pub(crate) fn select_matches_for_expression(
     } else {
         filtered
     }
+}
+
+fn is_local_file_reference_match(
+    match_item: &crate::license_detection::models::LicenseMatch,
+) -> bool {
+    match_item
+        .referenced_filenames
+        .as_ref()
+        .is_some_and(|filenames| !filenames.is_empty())
+}
+
+fn is_imperfect_local_file_reference_match(
+    match_item: &crate::license_detection::models::LicenseMatch,
+) -> bool {
+    is_local_file_reference_match(match_item) && match_item.coverage() < 100.0
 }
 
 fn is_unknown_reference_follow_log(log_category: &str) -> bool {
@@ -663,6 +703,33 @@ mod tests {
         );
 
         assert_eq!(selected, vec![referenced]);
+    }
+
+    #[test]
+    fn select_matches_for_expression_drops_imperfect_local_reference_fragments_during_post_scan() {
+        let mut referenced_notice = create_test_match(1, 8, "3-seq", "gpl-1.0-plus_or_mit_2.RULE");
+        referenced_notice.license_expression = "gpl-1.0-plus OR mit".to_string();
+        referenced_notice.license_expression_spdx = Some("GPL-1.0-or-later OR MIT".to_string());
+        referenced_notice.referenced_filenames = Some(vec!["LICENSE".to_string()]);
+        referenced_notice.match_coverage = 41.79;
+        referenced_notice.score = 41.79;
+
+        let mut referenced_license =
+            create_test_match(1, 582, "1-hash", "npsl-exception-0.95.LICENSE");
+        referenced_license.license_expression = "npsl-exception-0.95".to_string();
+        referenced_license.license_expression_spdx =
+            Some("LicenseRef-scancode-npsl-exception-0.95".to_string());
+        referenced_license.from_file = Some("LICENSE".to_string());
+        referenced_license.match_coverage = 100.0;
+        referenced_license.score = 100.0;
+
+        let selected = select_matches_for_expression(
+            &[referenced_notice, referenced_license.clone()],
+            "unknown-reference-to-local-file",
+            true,
+        );
+
+        assert_eq!(selected, vec![referenced_license]);
     }
 
     fn create_test_license() -> License {
