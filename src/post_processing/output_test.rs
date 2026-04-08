@@ -631,6 +631,131 @@ fn apply_local_file_reference_following_prefers_root_license_for_imperfect_subdi
 }
 
 #[test]
+fn apply_local_file_reference_following_does_not_reuse_followed_license_as_second_hop_source() {
+    let mut root_license = file("project/LICENSE");
+    root_license.license_expression = Some("mit".to_string());
+    root_license.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: Some("project/LICENSE".to_string()),
+            start_line: 1,
+            end_line: 20,
+            matcher: Some("1-hash".to_string()),
+            score: 100.0,
+            matched_length: Some(100),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("mit.LICENSE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("root-license".to_string()),
+    }];
+
+    let mut followed_license = file("project/ncat/LICENSE");
+    followed_license.license_expression = Some("mit".to_string());
+    followed_license.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![
+            Match {
+                license_expression: "unknown-license-reference".to_string(),
+                license_expression_spdx: "LicenseRef-scancode-unknown-license-reference"
+                    .to_string(),
+                from_file: Some("project/ncat/LICENSE".to_string()),
+                start_line: 1,
+                end_line: 1,
+                matcher: Some("2-aho".to_string()),
+                score: 100.0,
+                matched_length: Some(2),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: Some("unknown-license-reference_see-license_1.RULE".to_string()),
+                rule_url: None,
+                matched_text: Some("See LICENSE".to_string()),
+                referenced_filenames: Some(vec!["LICENSE".to_string()]),
+                matched_text_diagnostics: None,
+            },
+            Match {
+                license_expression: "mit".to_string(),
+                license_expression_spdx: "MIT".to_string(),
+                from_file: Some("project/LICENSE".to_string()),
+                start_line: 1,
+                end_line: 20,
+                matcher: Some("1-hash".to_string()),
+                score: 100.0,
+                matched_length: Some(100),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: Some("mit.LICENSE".to_string()),
+                rule_url: None,
+                matched_text: None,
+                referenced_filenames: None,
+                matched_text_diagnostics: None,
+            },
+        ],
+        detection_log: vec!["unknown-reference-to-local-file".to_string()],
+        identifier: Some("followed-license".to_string()),
+    }];
+
+    let mut source = file("project/ncat/ncat_core.h");
+    source.license_expression = Some("unknown-license-reference".to_string());
+    source.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "unknown-license-reference".to_string(),
+        license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
+        matches: vec![Match {
+            license_expression: "unknown-license-reference".to_string(),
+            license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
+            from_file: Some("project/ncat/ncat_core.h".to_string()),
+            start_line: 1,
+            end_line: 1,
+            matcher: Some("2-aho".to_string()),
+            score: 100.0,
+            matched_length: Some(2),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("unknown-license-reference_see-license_1.RULE".to_string()),
+            rule_url: None,
+            matched_text: Some("See LICENSE".to_string()),
+            referenced_filenames: Some(vec!["LICENSE".to_string()]),
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("second-hop-source".to_string()),
+    }];
+
+    let mut files = vec![
+        dir("project"),
+        dir("project/ncat"),
+        root_license,
+        followed_license,
+        source,
+    ];
+    let mut packages = Vec::new();
+    apply_package_reference_following(&mut files, &mut packages);
+
+    let source = files
+        .iter()
+        .find(|file| file.path == "project/ncat/ncat_core.h")
+        .expect("source file should exist");
+    assert_eq!(
+        source.license_expression.as_deref(),
+        Some("unknown-license-reference")
+    );
+    assert_eq!(
+        source.license_detections[0].detection_log,
+        Vec::<String>::new()
+    );
+    assert_eq!(source.license_detections[0].matches.len(), 1);
+}
+
+#[test]
 fn apply_local_file_reference_following_requires_exact_filename_match() {
     let mut license = file("project/LICENSE");
     license.license_expression = Some("mit".to_string());
@@ -697,6 +822,76 @@ fn apply_local_file_reference_following_requires_exact_filename_match() {
         Some("unknown-license-reference")
     );
     assert_eq!(notice.license_detections[0].matches.len(), 1);
+}
+
+#[test]
+fn apply_local_file_reference_following_does_not_search_unrelated_top_level_directories() {
+    let mut nested_copying = file("libssh2/COPYING");
+    nested_copying.license_expression = Some("bsd-new".to_string());
+    nested_copying.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "bsd-new".to_string(),
+        license_expression_spdx: "BSD-3-Clause".to_string(),
+        matches: vec![Match {
+            license_expression: "bsd-new".to_string(),
+            license_expression_spdx: "BSD-3-Clause".to_string(),
+            from_file: Some("libssh2/COPYING".to_string()),
+            start_line: 1,
+            end_line: 20,
+            matcher: Some("1-hash".to_string()),
+            score: 100.0,
+            matched_length: Some(100),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("bsd-new.LICENSE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("nested-copying".to_string()),
+    }];
+
+    let mut notice = file("docs/3rd-party-licenses.txt");
+    notice.license_expression = Some("unknown-license-reference".to_string());
+    notice.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "unknown-license-reference".to_string(),
+        license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
+        matches: vec![Match {
+            license_expression: "unknown-license-reference".to_string(),
+            license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
+            from_file: Some("docs/3rd-party-licenses.txt".to_string()),
+            start_line: 10,
+            end_line: 10,
+            matcher: Some("2-aho".to_string()),
+            score: 100.0,
+            matched_length: Some(2),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("unknown-license-reference_see-license_1.RULE".to_string()),
+            rule_url: None,
+            matched_text: Some("See COPYING".to_string()),
+            referenced_filenames: Some(vec!["COPYING".to_string()]),
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("docs-copying-ref".to_string()),
+    }];
+
+    let mut files = vec![dir("docs"), dir("libssh2"), nested_copying, notice];
+    let mut packages = Vec::new();
+    apply_package_reference_following(&mut files, &mut packages);
+
+    let notice = files
+        .iter()
+        .find(|file| file.path == "docs/3rd-party-licenses.txt")
+        .expect("notice file should exist");
+    assert_eq!(
+        notice.license_expression.as_deref(),
+        Some("unknown-license-reference")
+    );
+    assert_eq!(notice.license_detections[0].matches.len(), 1);
+    assert!(notice.license_detections[0].detection_log.is_empty());
 }
 
 #[test]

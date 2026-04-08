@@ -31,6 +31,7 @@ pub(super) struct ResolvedReferenceTarget {
 
 #[derive(Debug, Clone)]
 pub(super) struct ReferenceFollowSnapshot {
+    all_file_paths: HashSet<String>,
     files_by_path: HashMap<String, ResolvedReferenceTarget>,
     package_targets_by_uid: HashMap<String, ResolvedReferenceTarget>,
     package_manifest_dirs_by_uid: HashMap<String, Vec<String>>,
@@ -185,9 +186,16 @@ pub(super) fn build_reference_follow_snapshot(
     files: &[FileInfo],
     packages: &[Package],
 ) -> ReferenceFollowSnapshot {
+    let all_file_paths = files
+        .iter()
+        .filter(|file| file.file_type == FileType::File)
+        .map(|file| file.path.clone())
+        .collect();
+
     let files_by_path = files
         .iter()
         .filter(|file| file.file_type == FileType::File)
+        .filter(|file| can_be_reference_source(&file.license_detections))
         .map(|file| {
             (
                 file.path.clone(),
@@ -203,6 +211,10 @@ pub(super) fn build_reference_follow_snapshot(
     let package_targets_by_uid = packages
         .iter()
         .filter_map(|package| {
+            if !can_be_reference_source(&package.license_detections) {
+                return None;
+            }
+
             let package_expression = combine_detection_expressions(&package.license_detections)?;
             if !is_resolved_package_context_expression(&package_expression) {
                 return None;
@@ -245,6 +257,7 @@ pub(super) fn build_reference_follow_snapshot(
     let root_license_targets_by_root = build_root_license_targets(files, &root_paths);
 
     ReferenceFollowSnapshot {
+        all_file_paths,
         files_by_path,
         package_targets_by_uid,
         package_manifest_dirs_by_uid,
@@ -263,6 +276,7 @@ fn build_same_directory_legal_targets(
         if file.file_type != FileType::File
             || file.license_detections.is_empty()
             || !is_same_directory_legal_target(file)
+            || !can_be_reference_source(&file.license_detections)
         {
             continue;
         }
@@ -306,6 +320,7 @@ fn build_root_license_targets(
         let mut targets: Vec<_> = files
             .iter()
             .filter(|file| is_root_license_target(file, root))
+            .filter(|file| can_be_reference_source(&file.license_detections))
             .filter_map(|file| {
                 let expression = combine_detection_expressions(&file.license_detections)?;
                 if !is_resolved_package_context_expression(&expression) {
@@ -392,6 +407,21 @@ fn combine_detection_expressions(detections: &[LicenseDetection]) -> Option<Stri
 
 fn is_resolved_package_context_expression(expression: &str) -> bool {
     !expression.contains("unknown-license-reference") && !expression.contains("free-unknown")
+}
+
+fn can_be_reference_source(detections: &[LicenseDetection]) -> bool {
+    !detections.iter().any(detection_was_followed_from_reference)
+}
+
+fn detection_was_followed_from_reference(detection: &LicenseDetection) -> bool {
+    detection.detection_log.iter().any(|entry| {
+        matches!(
+            entry.as_str(),
+            DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE
+                | DETECTION_LOG_UNKNOWN_REFERENCE_IN_FILE_TO_PACKAGE
+                | DETECTION_LOG_UNKNOWN_REFERENCE_IN_FILE_TO_NONEXISTENT_PACKAGE
+        )
+    })
 }
 
 fn top_level_root_paths(files: &[FileInfo]) -> Vec<String> {
@@ -918,13 +948,29 @@ pub(super) fn resolve_referenced_resource(
         }
     }
 
-    for root in &snapshot.root_paths {
+    if let Some(root) = explicit_reference_root(snapshot) {
         candidates.push(join_reference_candidate(root, &referenced_filename));
     }
 
-    candidates
-        .into_iter()
-        .find_map(|candidate| snapshot.files_by_path.get(&candidate).cloned())
+    for candidate in candidates {
+        if let Some(target) = snapshot.files_by_path.get(&candidate) {
+            return Some(target.clone());
+        }
+
+        if snapshot.all_file_paths.contains(&candidate) {
+            return None;
+        }
+    }
+
+    None
+}
+
+fn explicit_reference_root(snapshot: &ReferenceFollowSnapshot) -> Option<&str> {
+    match snapshot.root_paths.as_slice() {
+        [] => None,
+        [single_root] => Some(single_root.as_str()),
+        _ => Some(""),
+    }
 }
 
 fn resolve_package_reference_targets(
