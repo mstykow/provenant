@@ -699,4 +699,16 @@ mod golden_tests {
         )
         .unwrap();
     }
+
+    #[test]
+    fn test_golden_nmap_reference_notice_regression() {
+        run_explicit_golden(
+            Path::new("testdata/license-golden/provenant-regressions/nmap-reference-notice.txt"),
+            Path::new(
+                "testdata/license-golden/provenant-regressions/nmap-reference-notice.txt.yml",
+            ),
+            false,
+        )
+        .unwrap();
+    }
 }
