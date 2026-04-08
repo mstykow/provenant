@@ -415,10 +415,10 @@ fn top_level_root_paths(files: &[FileInfo]) -> Vec<String> {
         .cloned()
         .collect();
 
-    if roots.is_empty()
-        && files
-            .iter()
-            .any(|file| file.file_type == FileType::File && !file.path.contains('/'))
+    if files
+        .iter()
+        .any(|file| file.file_type == FileType::File && !file.path.contains('/'))
+        && !roots.iter().any(String::is_empty)
     {
         roots.push(String::new());
     }
@@ -963,14 +963,22 @@ fn resolve_root_package_context_target(
     current_path: &str,
     snapshot: &ReferenceFollowSnapshot,
 ) -> Option<Vec<ResolvedReferenceTarget>> {
-    let root = snapshot
+    let mut candidate_roots = snapshot
         .root_paths
         .iter()
         .filter(|root| path_is_within_root(current_path, root))
-        .max_by_key(|root| root.len())?;
+        .collect::<Vec<_>>();
+    candidate_roots.sort_by_key(|root| std::cmp::Reverse(root.len()));
 
-    let targets = snapshot.root_license_targets_by_root.get(root)?.clone();
-    collapse_equivalent_reference_targets(targets)
+    for root in candidate_roots {
+        if let Some(targets) = snapshot.root_license_targets_by_root.get(root)
+            && let Some(collapsed) = collapse_equivalent_reference_targets(targets.clone())
+        {
+            return Some(collapsed);
+        }
+    }
+
+    None
 }
 
 fn collapse_equivalent_reference_targets(

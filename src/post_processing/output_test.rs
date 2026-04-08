@@ -518,6 +518,119 @@ fn apply_local_file_reference_following_resolves_root_license_file() {
 }
 
 #[test]
+fn apply_local_file_reference_following_prefers_root_license_for_imperfect_subdir_reference() {
+    let mut root_license = file("LICENSE");
+    root_license.license_expression = Some("npsl-exception-0.95".to_string());
+    root_license.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "npsl-exception-0.95".to_string(),
+        license_expression_spdx: "LicenseRef-scancode-npsl-exception-0.95".to_string(),
+        matches: vec![Match {
+            license_expression: "npsl-exception-0.95".to_string(),
+            license_expression_spdx: "LicenseRef-scancode-npsl-exception-0.95".to_string(),
+            from_file: Some("LICENSE".to_string()),
+            start_line: 1,
+            end_line: 582,
+            matcher: Some("1-hash".to_string()),
+            score: 100.0,
+            matched_length: Some(4720),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("npsl-exception-0.95.LICENSE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("npsl-license".to_string()),
+    }];
+
+    let mut sibling_license = file("third_party/LICENSE");
+    sibling_license.license_expression = Some("bsd-new".to_string());
+    sibling_license.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "bsd-new".to_string(),
+        license_expression_spdx: "BSD-3-Clause".to_string(),
+        matches: vec![Match {
+            license_expression: "bsd-new".to_string(),
+            license_expression_spdx: "BSD-3-Clause".to_string(),
+            from_file: Some("third_party/LICENSE".to_string()),
+            start_line: 1,
+            end_line: 30,
+            matcher: Some("1-hash".to_string()),
+            score: 100.0,
+            matched_length: Some(150),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("bsd-new.LICENSE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("bsd-license".to_string()),
+    }];
+
+    let mut header = file("src/FPEngine.h");
+    header.license_expression = Some("gpl-1.0-plus OR mit".to_string());
+    header.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "gpl-1.0-plus OR mit".to_string(),
+        license_expression_spdx: "GPL-1.0-or-later OR MIT".to_string(),
+        matches: vec![Match {
+            license_expression: "gpl-1.0-plus OR mit".to_string(),
+            license_expression_spdx: "GPL-1.0-or-later OR MIT".to_string(),
+            from_file: Some("src/FPEngine.h".to_string()),
+            start_line: 49,
+            end_line: 57,
+            matcher: Some("3-seq".to_string()),
+            score: 41.79,
+            matched_length: Some(28),
+            match_coverage: Some(41.79),
+            rule_relevance: Some(100),
+            rule_identifier: Some("gpl-1.0-plus_or_mit_2.RULE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: Some(vec!["LICENSE".to_string()]),
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("nmap-header-ref".to_string()),
+    }];
+
+    let mut files = vec![
+        dir("src"),
+        dir("third_party"),
+        root_license,
+        sibling_license,
+        header,
+    ];
+    let mut packages = Vec::new();
+    apply_package_reference_following(&mut files, &mut packages);
+
+    let header = files
+        .iter()
+        .find(|file| file.path == "src/FPEngine.h")
+        .expect("header file should exist");
+    assert_eq!(
+        header.license_expression.as_deref(),
+        Some("npsl-exception-0.95")
+    );
+    assert_eq!(
+        header.license_detections[0].license_expression_spdx,
+        "LicenseRef-scancode-npsl-exception-0.95"
+    );
+    assert_eq!(
+        header.license_detections[0].detection_log,
+        vec!["unknown-reference-to-local-file"]
+    );
+    assert_eq!(header.license_detections[0].matches.len(), 2);
+    assert_eq!(
+        header.license_detections[0].matches[1].from_file.as_deref(),
+        Some("LICENSE")
+    );
+}
+
+#[test]
 fn apply_local_file_reference_following_requires_exact_filename_match() {
     let mut license = file("project/LICENSE");
     license.license_expression = Some("mit".to_string());
@@ -1016,6 +1129,81 @@ fn apply_package_reference_following_falls_back_to_root_when_package_missing() {
     assert_eq!(
         po.license_detections[0].detection_log,
         vec!["unknown-reference-to-local-file"]
+    );
+}
+
+#[test]
+fn apply_package_reference_following_falls_back_past_nested_root_to_repo_root() {
+    let mut root_license = file("LICENSE");
+    root_license.license_expression = Some("mit".to_string());
+    root_license.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: Some("LICENSE".to_string()),
+            start_line: 1,
+            end_line: 20,
+            matcher: Some("1-hash".to_string()),
+            score: 100.0,
+            matched_length: Some(100),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("mit.LICENSE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("mit-root".to_string()),
+    }];
+
+    let mut manpage = file("docs/man-xlate/nmap-id.1");
+    manpage.license_expression = Some("unknown-license-reference".to_string());
+    manpage.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "unknown-license-reference".to_string(),
+        license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
+        matches: vec![Match {
+            license_expression: "unknown-license-reference".to_string(),
+            license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
+            from_file: Some("docs/man-xlate/nmap-id.1".to_string()),
+            start_line: 100,
+            end_line: 100,
+            matcher: Some("2-aho".to_string()),
+            score: 100.0,
+            matched_length: Some(2),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("unknown-license-reference_see-license_1.RULE".to_string()),
+            rule_url: None,
+            matched_text: Some("See LICENSE".to_string()),
+            referenced_filenames: Some(vec!["LICENSE".to_string()]),
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("manpage-ref".to_string()),
+    }];
+
+    let mut files = vec![dir("docs"), dir("docs/man-xlate"), root_license, manpage];
+    let mut packages = Vec::new();
+    apply_package_reference_following(&mut files, &mut packages);
+
+    let manpage = files
+        .iter()
+        .find(|file| file.path == "docs/man-xlate/nmap-id.1")
+        .expect("manpage file should exist");
+    assert_eq!(manpage.license_expression.as_deref(), Some("mit"));
+    assert_eq!(
+        manpage.license_detections[0].detection_log,
+        vec!["unknown-reference-to-local-file"]
+    );
+    assert_eq!(
+        manpage.license_detections[0].matches[1]
+            .from_file
+            .as_deref(),
+        Some("LICENSE")
     );
 }
 
