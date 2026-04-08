@@ -560,7 +560,9 @@ pub use self::pylock_toml::PylockTomlParser;
 pub use self::python::PythonParser;
 pub use self::readme::ReadmeParser;
 pub use self::requirements_txt::RequirementsTxtParser;
-pub use self::rpm_db::{RpmBdbDatabaseParser, RpmNdbDatabaseParser, RpmSqliteDatabaseParser};
+#[cfg(feature = "rpm-sqlite")]
+pub use self::rpm_db::RpmSqliteDatabaseParser;
+pub use self::rpm_db::{RpmBdbDatabaseParser, RpmNdbDatabaseParser};
 pub use self::rpm_license_files::RpmLicenseFilesParser;
 pub use self::rpm_mariner_manifest::RpmMarinerManifestParser;
 pub use self::rpm_parser::RpmParser;
@@ -585,11 +587,12 @@ pub use self::yarn_pnp::YarnPnpParser;
 /// more specific parsers if checked first.
 macro_rules! register_package_handlers {
     (
-        parsers: [$($parser:ty),* $(,)?],
+        parsers: [$($(#[$parser_meta:meta])* $parser:ty),* $(,)?],
         recognizers: [$($recognizer:ty),* $(,)?] $(,)?
     ) => {
         pub fn try_parse_file(path: &Path) -> Option<ParsePackagesResult> {
             $(
+                $(#[$parser_meta])*
                 if <$parser>::is_match(path) {
                     return Some(capture_parser_diagnostics(
                         || <$parser>::extract_packages(path),
@@ -616,6 +619,7 @@ macro_rules! register_package_handlers {
         pub fn parse_by_type_name(type_name: &str, path: &Path) -> Option<PackageData> {
             match type_name {
                 $(
+                    $(#[$parser_meta])*
                     stringify!($parser) => Some(<$parser>::extract_first_package(path)),
                 )*
                 $(
@@ -631,6 +635,7 @@ macro_rules! register_package_handlers {
         pub fn list_parser_types() -> Vec<&'static str> {
             vec![
                 $(
+                    $(#[$parser_meta])*
                     stringify!($parser),
                 )*
                 $(
@@ -762,6 +767,7 @@ register_package_handlers! {
         RpmNdbDatabaseParser,
         RpmParser,
         RpmSpecfileParser,
+        #[cfg(feature = "rpm-sqlite")]
         RpmSqliteDatabaseParser,
         RpmYumdbParser,
         SbtParser,

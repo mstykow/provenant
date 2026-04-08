@@ -129,8 +129,10 @@ impl PackageParser for RpmNdbDatabaseParser {
     }
 }
 
+#[cfg(feature = "rpm-sqlite")]
 pub struct RpmSqliteDatabaseParser;
 
+#[cfg(feature = "rpm-sqlite")]
 impl PackageParser for RpmSqliteDatabaseParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
@@ -627,6 +629,7 @@ mod tests {
         )));
     }
 
+    #[cfg(feature = "rpm-sqlite")]
     #[test]
     fn test_sqlite_parser_is_match() {
         assert!(RpmSqliteDatabaseParser::is_match(&PathBuf::from(
@@ -666,6 +669,7 @@ mod tests {
         assert_eq!(build_evr_version(0, "", ""), None);
     }
 
+    #[cfg(feature = "rpm-sqlite")]
     #[test]
     fn test_parse_rpm_database_sqlite() {
         let test_file = PathBuf::from("testdata/rpm/rpmdb.sqlite");
@@ -680,6 +684,7 @@ mod tests {
         assert!(pkg.name.is_some());
     }
 
+    #[cfg(feature = "rpm-sqlite")]
     #[test]
     fn test_parse_rpm_database_sqlite_preserves_release_in_version() {
         let test_file = PathBuf::from("testdata/rpm/rpmdb.sqlite");
@@ -883,6 +888,7 @@ __END__
     }
 }
 
+#[cfg(feature = "rpm-sqlite")]
 crate::register_parser!(
     "RPM installed package database (requires `rpm` CLI at runtime)",
     &[
@@ -890,6 +896,15 @@ crate::register_parser!(
         "**/var/lib/rpm/Packages.db",
         "**/var/lib/rpm/rpmdb.sqlite"
     ],
+    "rpm",
+    "",
+    Some("https://rpm.org/"),
+);
+
+#[cfg(not(feature = "rpm-sqlite"))]
+crate::register_parser!(
+    "RPM installed package database (requires `rpm` CLI at runtime)",
+    &["**/var/lib/rpm/Packages", "**/var/lib/rpm/Packages.db"],
     "rpm",
     "",
     Some("https://rpm.org/"),

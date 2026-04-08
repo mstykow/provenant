@@ -2,6 +2,7 @@ mod bdb;
 mod entry;
 mod ndb;
 mod package;
+#[cfg(feature = "rpm-sqlite")]
 mod sqlite;
 mod tags;
 
@@ -14,6 +15,7 @@ use self::entry::HeaderBlob;
 use self::ndb::NdbDatabase;
 pub(crate) use self::package::InstalledRpmPackage;
 use self::package::parse_installed_rpm_package;
+#[cfg(feature = "rpm-sqlite")]
 use self::sqlite::SqliteDatabase;
 
 pub(crate) enum InstalledRpmDbKind {
@@ -33,7 +35,18 @@ pub(crate) fn read_installed_rpm_packages(
     let mut reader: Box<dyn BlobReader> = match kind {
         InstalledRpmDbKind::Bdb => Box::new(BdbDatabase::open(path)?),
         InstalledRpmDbKind::Ndb => Box::new(NdbDatabase::open(path)?),
-        InstalledRpmDbKind::Sqlite => Box::new(SqliteDatabase::open(path)?),
+        InstalledRpmDbKind::Sqlite => {
+            #[cfg(feature = "rpm-sqlite")]
+            {
+                Box::new(SqliteDatabase::open(path)?)
+            }
+            #[cfg(not(feature = "rpm-sqlite"))]
+            {
+                return Err(anyhow::anyhow!(
+                    "RPM SQLite support is disabled at compile time; enable the `rpm-sqlite` feature"
+                ));
+            }
+        }
     };
 
     reader
@@ -49,14 +62,20 @@ pub(crate) fn read_installed_rpm_packages(
 
 #[cfg(test)]
 mod tests {
-    use std::fs::{self, File};
+    #[cfg(feature = "rpm-sqlite")]
+    use std::fs;
+    use std::fs::File;
+    #[cfg(feature = "rpm-sqlite")]
     use std::io::Write;
+    #[cfg(feature = "rpm-sqlite")]
     use std::path::Path;
 
     use liblzma::read::XzDecoder;
-    use rusqlite::Connection;
     use tar::Archive;
     use tempfile::tempdir;
+
+    #[cfg(feature = "rpm-sqlite")]
+    use rusqlite::Connection;
 
     use super::{InstalledRpmDbKind, read_installed_rpm_packages};
 
@@ -80,6 +99,7 @@ mod tests {
         assert!(packages.iter().any(|package| package.name == "libgcc"));
     }
 
+    #[cfg(feature = "rpm-sqlite")]
     #[test]
     fn test_read_installed_rpm_packages_from_synthetic_ndb_fixture() {
         let temp_dir = tempdir().expect("temporary fixture dir should exist");
@@ -93,6 +113,7 @@ mod tests {
         assert_eq!(packages[0].name, "libgcc");
     }
 
+    #[cfg(feature = "rpm-sqlite")]
     #[test]
     fn test_read_installed_rpm_packages_from_sqlite_fixture() {
         let packages = read_installed_rpm_packages(
@@ -105,6 +126,7 @@ mod tests {
         assert!(packages.iter().any(|package| package.name == "libgcc"));
     }
 
+    #[cfg(feature = "rpm-sqlite")]
     fn write_synthetic_ndb_fixture(path: &Path) -> anyhow::Result<()> {
         const HEADER_MAGIC: u32 =
             ('R' as u32) | ('p' as u32) << 8 | ('m' as u32) << 16 | ('P' as u32) << 24;
@@ -164,6 +186,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(feature = "rpm-sqlite")]
     fn push_u32_le(buffer: &mut Vec<u8>, value: u32) {
         buffer
             .write_all(&value.to_le_bytes())
