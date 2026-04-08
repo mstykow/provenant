@@ -70,8 +70,10 @@ pub fn filter_contained_matches(
             }
 
             if current.qspan_eq(&next) {
-                if has_referenced_filenames(&current) != has_referenced_filenames(&next) {
-                    if has_referenced_filenames(&current) {
+                if is_generic_license_reference_notice(&current)
+                    != is_generic_license_reference_notice(&next)
+                {
+                    if is_generic_license_reference_notice(&current) {
                         discarded.push(matches.remove(j));
                         continue;
                     }
@@ -120,11 +122,15 @@ fn licensing_contains_match(current: &LicenseMatch, other: &LicenseMatch) -> boo
     licensing_contains(&current.license_expression, &other.license_expression)
 }
 
-fn has_referenced_filenames(match_item: &LicenseMatch) -> bool {
+fn is_generic_license_reference_notice(match_item: &LicenseMatch) -> bool {
     match_item
         .referenced_filenames
         .as_ref()
-        .is_some_and(|filenames| !filenames.is_empty())
+        .is_some_and(|filenames| {
+            filenames.len() == 1
+                && filenames[0].eq_ignore_ascii_case("LICENSE")
+                && match_item.license_expression.contains(" OR ")
+        })
 }
 
 /// Filter overlapping matches based on overlap ratios and license expressions.
@@ -207,8 +213,9 @@ pub fn filter_overlapping_matches(
             let next_len_val = matches[j].len();
             let current_hilen = matches[i].hilen();
             let next_hilen = matches[j].hilen();
-            let current_has_references = has_referenced_filenames(&matches[i]);
-            let next_has_references = has_referenced_filenames(&matches[j]);
+            let current_is_generic_license_notice =
+                is_generic_license_reference_notice(&matches[i]);
+            let next_is_generic_license_notice = is_generic_license_reference_notice(&matches[j]);
 
             // Note: We do NOT use candidate_resemblance for tie-breaking here.
             // candidate_resemblance is a GLOBAL measure based on multiset intersection
@@ -224,9 +231,9 @@ pub fn filter_overlapping_matches(
             if extra_large_next
                 && extra_large_current
                 && current_len_val == next_len_val
-                && current_has_references != next_has_references
+                && current_is_generic_license_notice != next_is_generic_license_notice
             {
-                if current_has_references {
+                if current_is_generic_license_notice {
                     discarded.push(matches.remove(j));
                     continue;
                 }
@@ -780,6 +787,27 @@ mod tests {
 
         assert_eq!(filtered, vec![referenced]);
         assert_eq!(discarded, vec![plain]);
+    }
+
+    #[test]
+    fn test_filter_contained_matches_does_not_prefer_non_license_filename_reference() {
+        let mut referenced = create_test_match("ruby_or_gpl_1.RULE", 1, 1, 86.83, 86.83, 100);
+        referenced.license_expression = "ruby OR gpl-2.0".to_string();
+        referenced.license_expression_spdx = Some("Ruby OR GPL-2.0-only".to_string());
+        referenced.matched_length = 323;
+        referenced.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 324));
+        referenced.referenced_filenames = Some(vec!["COPYING.txt".to_string()]);
+
+        let mut plain = create_test_match("ruby_1.RULE", 1, 1, 95.0, 95.0, 100);
+        plain.license_expression = "ruby".to_string();
+        plain.license_expression_spdx = Some("Ruby".to_string());
+        plain.matched_length = 323;
+        plain.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 324));
+
+        let (filtered, discarded) = filter_contained_matches(&[referenced, plain.clone()]);
+
+        assert_eq!(filtered, vec![plain]);
+        assert_eq!(discarded.len(), 1);
     }
 
     #[test]
