@@ -253,6 +253,23 @@ fn test_developed_by_phrase_author_is_extracted() {
 }
 
 #[test]
+fn test_modified_portion_developed_by_author_with_url_is_extracted() {
+    let input = concat!(
+        "# This product contains a modified portion of 'Flask App Builder' developed by Daniel Vaz Gaspar.\n",
+        "# (https://github.com/dpgaspar/Flask-AppBuilder).\n",
+    );
+
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+    assert!(
+        authors.iter().any(
+            |a| a.author == "Daniel Vaz Gaspar. (https://github.com/dpgaspar/Flask-AppBuilder)"
+        ),
+        "authors: {:?}",
+        authors.iter().map(|a| &a.author).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn test_copyright_prefix_preserved_multiline_debian() {
     let input = "Copyright:\n\n    Copyright \u{00A9} 1999-2009  Red Hat, Inc.\n    Copyright \u{00A9} 1998       Tom Tromey\n    Copyright \u{00A9} 1999       Free Software Foundation, Inc.";
     let (c, _h, _a) = detect_copyrights_from_text(input);

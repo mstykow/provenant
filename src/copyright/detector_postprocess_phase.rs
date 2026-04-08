@@ -46,6 +46,7 @@ pub(super) fn run_phase_postprocess(
     );
     super::author_heuristics::extract_multiline_written_by_author_blocks(prepared_cache, authors);
     super::author_heuristics::extract_json_excerpt_developed_by_authors(content, authors);
+    super::author_heuristics::extract_modified_portion_developed_by_authors(content, authors);
     super::author_heuristics::extract_was_developed_by_author_blocks(prepared_cache, authors);
     super::author_heuristics::extract_developed_by_sentence_authors(prepared_cache, authors);
     super::author_heuristics::extract_developed_by_phrase_authors(prepared_cache, authors);
