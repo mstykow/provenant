@@ -22,6 +22,7 @@ fn test_spdx_empty_matches_local_python_golden() {
             &OutputWriteConfig {
                 format: OutputFormat::SpdxTv,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("scan".to_string()),
             },
         )
@@ -44,6 +45,7 @@ fn test_cyclonedx_empty_matches_local_python_golden_core_fields() {
             &OutputWriteConfig {
                 format: OutputFormat::CycloneDxJson,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("scan".to_string()),
             },
         )
@@ -77,6 +79,7 @@ fn test_json_lines_contract_shape_matches_python_fixture_structure() {
             &OutputWriteConfig {
                 format: OutputFormat::JsonLines,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("simple".to_string()),
             },
         )
@@ -144,6 +147,7 @@ fn test_debian_output_matches_local_expected_fixture() {
             &OutputWriteConfig {
                 format: OutputFormat::Debian,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("scan".to_string()),
             },
         )
@@ -341,6 +345,7 @@ fn test_json_lines_matches_local_fixture_file_semantics() {
             &OutputWriteConfig {
                 format: OutputFormat::JsonLines,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("simple".to_string()),
             },
         )
@@ -375,6 +380,7 @@ fn test_yaml_matches_local_fixture_file_semantics() {
             &OutputWriteConfig {
                 format: OutputFormat::Yaml,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("simple".to_string()),
             },
         )
@@ -414,6 +420,7 @@ fn test_html_report_contract_contains_python_style_sections() {
             &OutputWriteConfig {
                 format: OutputFormat::Html,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("scan".to_string()),
             },
         )
@@ -439,6 +446,7 @@ fn test_html_report_matches_local_fixture_after_normalization() {
             &OutputWriteConfig {
                 format: OutputFormat::Html,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("simple".to_string()),
             },
         )
@@ -463,6 +471,7 @@ fn test_spdx_simple_contract_matches_local_python_fixture_after_normalization() 
             &OutputWriteConfig {
                 format: OutputFormat::SpdxTv,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("simple".to_string()),
             },
         )
@@ -486,6 +495,7 @@ fn test_spdx_rdf_contract_contains_python_semantic_markers() {
             &OutputWriteConfig {
                 format: OutputFormat::SpdxRdf,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("simple".to_string()),
             },
         )
@@ -668,6 +678,7 @@ fn test_spdx_rdf_semantics_match_fixture_map() {
             &OutputWriteConfig {
                 format: OutputFormat::SpdxRdf,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("simple".to_string()),
             },
         )
@@ -696,6 +707,7 @@ fn test_cyclonedx_rich_output_contains_enriched_fields_json_and_xml() {
             &OutputWriteConfig {
                 format: OutputFormat::CycloneDxJson,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("scan".to_string()),
             },
         )
@@ -726,6 +738,7 @@ fn test_cyclonedx_rich_output_contains_enriched_fields_json_and_xml() {
             &OutputWriteConfig {
                 format: OutputFormat::CycloneDxXml,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("scan".to_string()),
             },
         )
@@ -750,6 +763,7 @@ fn test_cyclonedx_json_matches_local_fixture_after_normalization() {
             &OutputWriteConfig {
                 format: OutputFormat::CycloneDxJson,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("scan".to_string()),
             },
         )
@@ -775,6 +789,7 @@ fn test_cyclonedx_json_dependency_graph_matches_local_fixture_after_normalizatio
             &OutputWriteConfig {
                 format: OutputFormat::CycloneDxJson,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("scan".to_string()),
             },
         )
@@ -801,6 +816,7 @@ fn test_cyclonedx_xml_dependency_graph_matches_local_fixture_after_normalization
             &OutputWriteConfig {
                 format: OutputFormat::CycloneDxXml,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("scan".to_string()),
             },
         )
@@ -839,6 +855,7 @@ fn test_cyclonedx_xml_matches_local_fixture_after_normalization() {
             &OutputWriteConfig {
                 format: OutputFormat::CycloneDxXml,
                 custom_template: None,
+                file_scan_timings: None,
                 scanned_path: Some("scan".to_string()),
             },
         )

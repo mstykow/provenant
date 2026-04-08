@@ -1,7 +1,14 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
+use std::sync::Arc;
 
-use crate::models::Output;
+use serde::Serialize;
+use serde::ser::{Error as SerError, SerializeMap, SerializeSeq};
+use serde_json::{Map, Value, json};
+
+use crate::models::{FileInfo, Output};
+use crate::progress::FileScanTiming;
 
 mod cyclonedx;
 mod debian;
@@ -35,6 +42,7 @@ pub enum OutputFormat {
 pub struct OutputWriteConfig {
     pub format: OutputFormat,
     pub custom_template: Option<String>,
+    pub file_scan_timings: Option<Arc<HashMap<String, FileScanTiming>>>,
     pub scanned_path: Option<String>,
 }
 
@@ -63,16 +71,10 @@ impl OutputWriter for FormatWriter {
         config: &OutputWriteConfig,
     ) -> io::Result<()> {
         match self.format {
-            OutputFormat::Json => {
-                serde_json::to_writer(&mut *writer, output).map_err(shared::io_other)?;
-                writer.write_all(b"\n")
-            }
-            OutputFormat::JsonPretty => {
-                serde_json::to_writer_pretty(&mut *writer, output).map_err(shared::io_other)?;
-                writer.write_all(b"\n")
-            }
+            OutputFormat::Json => write_json(output, writer, config, false),
+            OutputFormat::JsonPretty => write_json(output, writer, config, true),
             OutputFormat::Yaml => write_yaml(output, writer),
-            OutputFormat::JsonLines => jsonl::write_json_lines(output, writer),
+            OutputFormat::JsonLines => jsonl::write_json_lines(output, writer, config),
             OutputFormat::Debian => debian::write_debian_copyright(output, writer),
             OutputFormat::Html => html::write_html_report(output, writer),
             OutputFormat::CustomTemplate => template::write_custom_template(output, writer, config),
@@ -103,6 +105,149 @@ pub fn write_output_file(
     writer.flush()
 }
 
+fn write_json(
+    output: &Output,
+    writer: &mut dyn Write,
+    config: &OutputWriteConfig,
+    pretty: bool,
+) -> io::Result<()> {
+    let serializable = JsonOutputWithTimings {
+        output,
+        file_scan_timings: config.file_scan_timings.as_deref(),
+    };
+
+    if pretty {
+        let mut serializer = serde_json::Serializer::pretty(&mut *writer);
+        serializable
+            .serialize(&mut serializer)
+            .map_err(shared::io_other)?;
+    } else {
+        let mut serializer = serde_json::Serializer::new(&mut *writer);
+        serializable
+            .serialize(&mut serializer)
+            .map_err(shared::io_other)?;
+    }
+
+    writer.write_all(b"\n")
+}
+
+struct JsonOutputWithTimings<'a> {
+    output: &'a Output,
+    file_scan_timings: Option<&'a HashMap<String, FileScanTiming>>,
+}
+
+impl Serialize for JsonOutputWithTimings<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut map = serializer.serialize_map(None)?;
+
+        if let Some(summary) = &self.output.summary {
+            map.serialize_entry("summary", summary)?;
+        }
+        if let Some(tallies) = &self.output.tallies {
+            map.serialize_entry("tallies", tallies)?;
+        }
+        if let Some(tallies_of_key_files) = &self.output.tallies_of_key_files {
+            map.serialize_entry("tallies_of_key_files", tallies_of_key_files)?;
+        }
+        if let Some(tallies_by_facet) = &self.output.tallies_by_facet {
+            map.serialize_entry("tallies_by_facet", tallies_by_facet)?;
+        }
+
+        map.serialize_entry("headers", &self.output.headers)?;
+        map.serialize_entry("packages", &self.output.packages)?;
+        map.serialize_entry("dependencies", &self.output.dependencies)?;
+        if !self.output.license_detections.is_empty() {
+            map.serialize_entry("license_detections", &self.output.license_detections)?;
+        }
+        map.serialize_entry(
+            "files",
+            &TimedFiles {
+                files: &self.output.files,
+                file_scan_timings: self.file_scan_timings,
+            },
+        )?;
+        map.serialize_entry("license_references", &self.output.license_references)?;
+        map.serialize_entry(
+            "license_rule_references",
+            &self.output.license_rule_references,
+        )?;
+        map.end()
+    }
+}
+
+struct TimedFiles<'a> {
+    files: &'a [FileInfo],
+    file_scan_timings: Option<&'a HashMap<String, FileScanTiming>>,
+}
+
+impl Serialize for TimedFiles<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(self.files.len()))?;
+        let include_timings = self.file_scan_timings.is_some();
+
+        for file in self.files {
+            let file_scan_timing = self
+                .file_scan_timings
+                .and_then(|timings| timings.get(&file.path));
+            seq.serialize_element(&TimedFileInfo {
+                file,
+                file_scan_timing,
+                include_timings,
+            })?;
+        }
+
+        seq.end()
+    }
+}
+
+pub(crate) struct TimedFileInfo<'a> {
+    pub file: &'a FileInfo,
+    pub file_scan_timing: Option<&'a FileScanTiming>,
+    pub include_timings: bool,
+}
+
+impl Serialize for TimedFileInfo<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        timed_file_json_value(self.file, self.file_scan_timing, self.include_timings)
+            .map_err(S::Error::custom)?
+            .serialize(serializer)
+    }
+}
+
+pub(crate) fn timed_file_json_value(
+    file: &FileInfo,
+    file_scan_timing: Option<&FileScanTiming>,
+    include_timings: bool,
+) -> serde_json::Result<Value> {
+    let mut value = serde_json::to_value(file)?;
+    let object = value
+        .as_object_mut()
+        .expect("file serialization should produce an object");
+
+    if include_timings {
+        if let Some(file_scan_timing) = file_scan_timing {
+            object.insert("scan_time".to_string(), json!(file_scan_timing.scan_time));
+            object.insert(
+                "scan_timings".to_string(),
+                serde_json::to_value(&file_scan_timing.scan_timings)?,
+            );
+        } else {
+            object.insert("scan_timings".to_string(), Value::Object(Map::new()));
+        }
+    }
+
+    Ok(value)
+}
+
 fn write_yaml(output: &Output, writer: &mut dyn Write) -> io::Result<()> {
     yaml_serde::to_writer(&mut *writer, output).map_err(shared::io_other)?;
     writer.write_all(b"\n")
@@ -112,6 +257,7 @@ fn write_yaml(output: &Output, writer: &mut dyn Write) -> io::Result<()> {
 mod tests {
     use super::*;
     use serde_json::Value;
+    use std::collections::{BTreeMap, HashMap};
     use std::fs;
 
     use crate::models::{
@@ -374,6 +520,7 @@ mod tests {
                 &OutputWriteConfig {
                     format: OutputFormat::SpdxTv,
                     custom_template: None,
+                    file_scan_timings: None,
                     scanned_path: Some("scan".to_string()),
                 },
             )
@@ -395,6 +542,7 @@ mod tests {
                 &OutputWriteConfig {
                     format: OutputFormat::SpdxRdf,
                     custom_template: None,
+                    file_scan_timings: None,
                     scanned_path: Some("scan".to_string()),
                 },
             )
@@ -417,6 +565,7 @@ mod tests {
                 &OutputWriteConfig {
                     format: OutputFormat::SpdxTv,
                     custom_template: None,
+                    file_scan_timings: None,
                     scanned_path: Some("scan".to_string()),
                 },
             )
@@ -436,6 +585,7 @@ mod tests {
                 &OutputWriteConfig {
                     format: OutputFormat::SpdxRdf,
                     custom_template: None,
+                    file_scan_timings: None,
                     scanned_path: Some("scan".to_string()),
                 },
             )
@@ -521,6 +671,7 @@ mod tests {
                 &OutputWriteConfig {
                     format: OutputFormat::SpdxTv,
                     custom_template: None,
+                    file_scan_timings: None,
                     scanned_path: Some("scan".to_string()),
                 },
             )
@@ -548,6 +699,7 @@ mod tests {
                 &OutputWriteConfig {
                     format: OutputFormat::SpdxRdf,
                     custom_template: None,
+                    file_scan_timings: None,
                     scanned_path: Some("scan".to_string()),
                 },
             )
@@ -689,6 +841,52 @@ mod tests {
             .expect("json-lines write should succeed");
         let rendered = String::from_utf8(jsonl_bytes).expect("json-lines should be utf-8");
         assert!(rendered.lines().any(|line| line.contains("\"tallies\"")));
+    }
+
+    #[test]
+    fn test_json_and_json_lines_writers_include_file_scan_timings_when_configured() {
+        let output = sample_output();
+        let mut scan_timings = BTreeMap::new();
+        scan_timings.insert("info".to_string(), 0.01);
+        scan_timings.insert("licenses".to_string(), 0.02);
+
+        let config = OutputWriteConfig {
+            format: OutputFormat::Json,
+            custom_template: None,
+            file_scan_timings: Some(Arc::new(HashMap::from([(
+                "src/main.rs".to_string(),
+                FileScanTiming {
+                    scan_time: 0.03,
+                    scan_timings,
+                },
+            )]))),
+            scanned_path: None,
+        };
+
+        let mut json_bytes = Vec::new();
+        writer_for_format(OutputFormat::Json)
+            .write(&output, &mut json_bytes, &config)
+            .expect("json write should succeed");
+        let json_value: Value =
+            serde_json::from_slice(&json_bytes).expect("json output should parse");
+        assert_eq!(json_value["files"][0]["scan_time"], 0.03);
+        assert_eq!(json_value["files"][0]["scan_timings"]["info"], 0.01);
+        assert_eq!(json_value["files"][0]["scan_timings"]["licenses"], 0.02);
+
+        let mut jsonl_bytes = Vec::new();
+        writer_for_format(OutputFormat::JsonLines)
+            .write(&output, &mut jsonl_bytes, &config)
+            .expect("json-lines write should succeed");
+        let rendered = String::from_utf8(jsonl_bytes).expect("json-lines should be utf-8");
+        let file_line = rendered
+            .lines()
+            .find(|line| line.contains("\"files\""))
+            .expect("json-lines should include a file line");
+        let file_value: Value =
+            serde_json::from_str(file_line).expect("file json line should parse");
+        assert_eq!(file_value["files"][0]["scan_time"], 0.03);
+        assert_eq!(file_value["files"][0]["scan_timings"]["info"], 0.01);
+        assert_eq!(file_value["files"][0]["scan_timings"]["licenses"], 0.02);
     }
 
     #[test]
@@ -1078,6 +1276,7 @@ mod tests {
                 &OutputWriteConfig {
                     format: OutputFormat::SpdxTv,
                     custom_template: None,
+                    file_scan_timings: None,
                     scanned_path: Some("scan".to_string()),
                 },
             )
@@ -1110,6 +1309,7 @@ mod tests {
                 &OutputWriteConfig {
                     format: OutputFormat::SpdxRdf,
                     custom_template: None,
+                    file_scan_timings: None,
                     scanned_path: Some("scan".to_string()),
                 },
             )
@@ -1150,6 +1350,7 @@ mod tests {
                 &OutputWriteConfig {
                     format: OutputFormat::CustomTemplate,
                     custom_template: Some(template_path.to_string_lossy().to_string()),
+                    file_scan_timings: None,
                     scanned_path: None,
                 },
             )

@@ -165,6 +165,10 @@ pub struct Cli {
     #[arg(long, default_value_t = 120.0)]
     pub timeout: f64,
 
+    /// Include per-file total and per-scanner timing details in JSON outputs.
+    #[arg(long)]
+    pub timing: bool,
+
     #[arg(short, long, conflicts_with = "verbose")]
     pub quiet: bool,
 

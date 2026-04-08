@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use env_logger::Env;
@@ -39,6 +40,12 @@ pub struct ScanStats {
     pub incremental_reused: usize,
 }
 
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct FileScanTiming {
+    pub scan_time: f64,
+    pub scan_timings: BTreeMap<String, f64>,
+}
+
 pub struct ScanProgress {
     mode: ProgressMode,
     multi: MultiProgress,
@@ -46,6 +53,8 @@ pub struct ScanProgress {
     stats: Mutex<ScanStats>,
     phase_starts: Mutex<HashMap<&'static str, Instant>>,
     phase_spinner: Mutex<Option<ProgressBar>>,
+    record_file_timings: AtomicBool,
+    file_scan_timings: Mutex<HashMap<String, FileScanTiming>>,
     stderr_is_tty: bool,
 }
 
@@ -84,6 +93,8 @@ impl ScanProgress {
             stats: Mutex::new(ScanStats::default()),
             phase_starts: Mutex::new(HashMap::new()),
             phase_spinner: Mutex::new(None),
+            record_file_timings: AtomicBool::new(false),
+            file_scan_timings: Mutex::new(HashMap::new()),
             stderr_is_tty,
         }
     }
@@ -104,6 +115,51 @@ impl ScanProgress {
     pub fn set_scan_names(&self, scan_names: String) {
         let mut stats = self.stats.lock().expect("stats lock poisoned");
         stats.scan_names = scan_names;
+    }
+
+    pub fn set_record_file_timings(&self, enabled: bool) {
+        self.record_file_timings.store(enabled, Ordering::Relaxed);
+        if !enabled {
+            self.file_scan_timings
+                .lock()
+                .expect("file scan timings lock poisoned")
+                .clear();
+        }
+    }
+
+    pub fn record_file_timings_enabled(&self) -> bool {
+        self.record_file_timings.load(Ordering::Relaxed)
+    }
+
+    pub fn record_file_scan_timing(
+        &self,
+        path: &Path,
+        scan_time: f64,
+        scan_timings: BTreeMap<String, f64>,
+    ) {
+        if !self.record_file_timings_enabled() {
+            return;
+        }
+
+        self.file_scan_timings
+            .lock()
+            .expect("file scan timings lock poisoned")
+            .insert(
+                path.to_string_lossy().to_string(),
+                FileScanTiming {
+                    scan_time,
+                    scan_timings,
+                },
+            );
+    }
+
+    pub fn take_file_scan_timings(&self) -> HashMap<String, FileScanTiming> {
+        std::mem::take(
+            &mut *self
+                .file_scan_timings
+                .lock()
+                .expect("file scan timings lock poisoned"),
+        )
     }
 
     pub fn init_logging_bridge(&self) {

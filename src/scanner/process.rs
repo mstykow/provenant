@@ -10,7 +10,7 @@ use crate::utils::text::{
 };
 use anyhow::Error;
 use rayon::prelude::*;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
@@ -261,6 +261,7 @@ fn process_file(
     let license_enabled = license_engine.is_some();
 
     let started = Instant::now();
+    let mut file_scan_timings = progress.record_file_timings_enabled().then(BTreeMap::new);
 
     let mut generated_flag = None;
     let mut is_source_file = false;
@@ -272,6 +273,7 @@ fn process_file(
         license_engine,
         license_options,
         text_options,
+        &mut file_scan_timings,
     ) {
         Ok((is_generated, sha256, is_source)) => {
             generated_flag = is_generated;
@@ -326,6 +328,10 @@ fn process_file(
         file_info.percentage_of_license_text = Some(0.0);
     }
 
+    if let Some(file_scan_timings) = file_scan_timings {
+        progress.record_file_scan_timing(path, started.elapsed().as_secs_f64(), file_scan_timings);
+    }
+
     file_info
 }
 
@@ -337,8 +343,10 @@ fn extract_information_from_content(
     license_engine: Option<Arc<LicenseDetectionEngine>>,
     license_options: LicenseScanOptions,
     text_options: &TextDetectionOptions,
+    file_scan_timings: &mut Option<BTreeMap<String, f64>>,
 ) -> Result<(Option<bool>, String, bool), Error> {
     let started = Instant::now();
+    let info_started = text_options.collect_info.then(Instant::now);
     let buffer = fs::read(path)?;
     let license_enabled = license_engine.is_some();
 
@@ -373,6 +381,13 @@ fn extract_information_from_content(
             .files_count(Some(0))
             .dirs_count(Some(0))
             .size_count(Some(0));
+        if let Some(info_started) = info_started {
+            record_optional_file_scan_timing(
+                file_scan_timings,
+                "info",
+                info_started.elapsed().as_secs_f64(),
+            );
+        }
     }
 
     if should_skip_text_detection(path, &buffer) {
@@ -426,7 +441,9 @@ fn extract_information_from_content(
             file_info_builder.package_data(packages);
             scan_errors.extend(parse_result.scan_errors);
         }
-        progress.record_detail_timing("scan:packages", started.elapsed().as_secs_f64());
+        let elapsed = started.elapsed().as_secs_f64();
+        progress.record_detail_timing("scan:packages", elapsed);
+        record_optional_file_scan_timing(file_scan_timings, "packages", elapsed);
     }
 
     if is_timeout_exceeded(started, text_options.timeout_seconds) {
@@ -455,6 +472,7 @@ fn extract_information_from_content(
     }
 
     if text_options.detect_copyrights {
+        let started = Instant::now();
         extract_copyright_information(
             file_info_builder,
             path,
@@ -462,12 +480,18 @@ fn extract_information_from_content(
             text_options.timeout_seconds,
             from_binary_strings,
         );
+        record_optional_file_scan_timing(
+            file_scan_timings,
+            "copyrights",
+            started.elapsed().as_secs_f64(),
+        );
     }
     extract_email_url_information(
         file_info_builder,
         &text_content,
         text_options,
         from_binary_strings,
+        file_scan_timings,
     );
 
     if is_timeout_exceeded(started, text_options.timeout_seconds) {
@@ -505,7 +529,9 @@ fn extract_information_from_content(
             license_options,
             from_binary_strings,
         )?;
-        progress.record_detail_timing("scan:licenses", started.elapsed().as_secs_f64());
+        let elapsed = started.elapsed().as_secs_f64();
+        progress.record_detail_timing("scan:licenses", elapsed);
+        record_optional_file_scan_timing(file_scan_timings, "licenses", elapsed);
     } else {
         extract_license_information(
             file_info_builder,
@@ -525,6 +551,16 @@ fn is_timeout_exceeded(started: Instant, timeout_seconds: f64) -> bool {
     timeout_seconds.is_finite()
         && timeout_seconds > 0.0
         && started.elapsed().as_secs_f64() > timeout_seconds
+}
+
+fn record_optional_file_scan_timing(
+    file_scan_timings: &mut Option<BTreeMap<String, f64>>,
+    name: &str,
+    duration: f64,
+) {
+    if let Some(file_scan_timings) = file_scan_timings {
+        file_scan_timings.insert(name.to_string(), duration);
+    }
 }
 
 fn maybe_record_processing_timeout(
@@ -922,12 +958,14 @@ fn extract_email_url_information(
     text_content: &str,
     text_options: &TextDetectionOptions,
     from_binary_strings: bool,
+    file_scan_timings: &mut Option<BTreeMap<String, f64>>,
 ) {
     if !text_options.detect_emails && !text_options.detect_urls {
         return;
     }
 
     if text_options.detect_emails {
+        let started = Instant::now();
         let config = DetectionConfig {
             max_emails: text_options.max_emails,
             max_urls: text_options.max_urls,
@@ -943,9 +981,15 @@ fn extract_email_url_information(
             })
             .collect::<Vec<_>>();
         file_info_builder.emails(emails);
+        record_optional_file_scan_timing(
+            file_scan_timings,
+            "emails",
+            started.elapsed().as_secs_f64(),
+        );
     }
 
     if text_options.detect_urls {
+        let started = Instant::now();
         let config = DetectionConfig {
             max_emails: text_options.max_emails,
             max_urls: text_options.max_urls,
@@ -961,6 +1005,11 @@ fn extract_email_url_information(
             })
             .collect::<Vec<_>>();
         file_info_builder.urls(urls);
+        record_optional_file_scan_timing(
+            file_scan_timings,
+            "urls",
+            started.elapsed().as_secs_f64(),
+        );
     }
 }
 
@@ -1602,6 +1651,49 @@ mod tests {
     }
 
     #[test]
+    fn test_process_file_records_enabled_per_file_scan_timings() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("sample.txt");
+        fs::write(
+            &path,
+            "Copyright (c) Example Org\ncontact@example.com\nhttps://example.com\n",
+        )
+        .expect("write sample text");
+        let metadata = fs::metadata(&path).expect("metadata");
+        let progress = ScanProgress::new(ProgressMode::Quiet);
+        progress.set_record_file_timings(true);
+        let text_options = TextDetectionOptions {
+            collect_info: true,
+            detect_packages: false,
+            detect_copyrights: true,
+            detect_emails: true,
+            detect_urls: true,
+            ..TextDetectionOptions::default()
+        };
+
+        let file_info = process_file(
+            &path,
+            &metadata,
+            &progress,
+            None,
+            LicenseScanOptions::default(),
+            &text_options,
+        );
+
+        assert!(file_info.scan_errors.is_empty());
+
+        let timings = progress.take_file_scan_timings();
+        let entry = timings
+            .get(&path.to_string_lossy().to_string())
+            .expect("timings should be recorded for the file");
+        assert!(entry.scan_time >= 0.0);
+        assert!(entry.scan_timings.contains_key("info"));
+        assert!(entry.scan_timings.contains_key("copyrights"));
+        assert!(entry.scan_timings.contains_key("emails"));
+        assert!(entry.scan_timings.contains_key("urls"));
+    }
+
+    #[test]
     fn test_processing_timeout_is_not_duplicated_after_stage_specific_timeout() {
         let started = Instant::now() - Duration::from_secs(2);
         let mut scan_errors = vec!["Timeout before license scan (> 1.00s)".to_string()];
@@ -1720,12 +1812,14 @@ mod tests {
             max_urls: 50,
             timeout_seconds: 120.0,
         };
+        let mut file_scan_timings = None;
 
         extract_email_url_information(
             &mut builder,
             "contact 6h@fo.lwft and visit http://gmail.com/",
             &options,
             true,
+            &mut file_scan_timings,
         );
 
         let file = builder
@@ -1759,12 +1853,14 @@ mod tests {
             max_urls: 50,
             timeout_seconds: 120.0,
         };
+        let mut file_scan_timings = None;
 
         extract_email_url_information(
             &mut builder,
             "report bugs to bug-coreutils@gnu.org and see https://www.gnu.org/software/coreutils/",
             &options,
             true,
+            &mut file_scan_timings,
         );
 
         let file = builder
@@ -1800,12 +1896,14 @@ mod tests {
             max_urls: 50,
             timeout_seconds: 120.0,
         };
+        let mut file_scan_timings = None;
 
         extract_email_url_information(
             &mut builder,
             "first jakub@redhat.com second jakub@redhat.com third contyk@redhat.com",
             &options,
             true,
+            &mut file_scan_timings,
         );
 
         let file = builder

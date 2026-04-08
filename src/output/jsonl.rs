@@ -4,9 +4,16 @@ use serde_json::{Value, json};
 
 use crate::models::Output;
 
-use super::shared::{io_other, sorted_files};
+use super::{
+    OutputWriteConfig, TimedFileInfo,
+    shared::{io_other, sorted_files},
+};
 
-pub(crate) fn write_json_lines(output: &Output, writer: &mut dyn Write) -> io::Result<()> {
+pub(crate) fn write_json_lines(
+    output: &Output,
+    writer: &mut dyn Write,
+    config: &OutputWriteConfig,
+) -> io::Result<()> {
     write_jsonl_line(writer, &json!({ "headers": output.headers }))?;
 
     if let Some(summary) = &output.summary {
@@ -57,8 +64,19 @@ pub(crate) fn write_json_lines(output: &Output, writer: &mut dyn Write) -> io::R
         )?;
     }
 
+    let include_timings = config.file_scan_timings.is_some();
     for file in sorted_files(&output.files) {
-        write_jsonl_line(writer, &json!({ "files": [file] }))?;
+        let file_scan_timing = config
+            .file_scan_timings
+            .as_deref()
+            .and_then(|timings| timings.get(&file.path));
+        let timed_file = serde_json::to_value(TimedFileInfo {
+            file,
+            file_scan_timing,
+            include_timings,
+        })
+        .map_err(io_other)?;
+        write_jsonl_line(writer, &json!({ "files": [timed_file] }))?;
     }
 
     Ok(())

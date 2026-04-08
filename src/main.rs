@@ -73,6 +73,7 @@ fn run() -> Result<()> {
 
     let start_time = Utc::now();
     let progress = Arc::new(ScanProgress::new(progress_mode_from_cli(&cli)));
+    progress.set_record_file_timings(cli.timing);
     progress.set_processes(resolve_thread_count(cli.processes));
     progress.set_scan_names(configured_scan_names(&cli));
     progress.init_logging_bridge();
@@ -511,11 +512,18 @@ fn run() -> Result<()> {
     });
     progress.finish_finalize();
 
+    let file_scan_timings = if cli.timing {
+        Some(Arc::new(progress.take_file_scan_timings()))
+    } else {
+        None
+    };
+
     progress.start_output();
     for target in cli.output_targets() {
         let output_config = OutputWriteConfig {
             format: target.format,
             custom_template: target.custom_template.clone(),
+            file_scan_timings: file_scan_timings.clone(),
             scanned_path: if cli.dir_path.len() == 1 {
                 cli.dir_path.first().cloned()
             } else {
