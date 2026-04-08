@@ -3,9 +3,9 @@ mod golden_tests {
     use crate::models::{DatasourceId, PackageType};
     use crate::parsers::PackageParser;
     use crate::parsers::golden_test_utils::compare_package_data_parser_only;
-    use crate::parsers::rpm_db::{
-        RpmBdbDatabaseParser, RpmNdbDatabaseParser, RpmSqliteDatabaseParser,
-    };
+    #[cfg(feature = "rpm-sqlite")]
+    use crate::parsers::rpm_db::RpmSqliteDatabaseParser;
+    use crate::parsers::rpm_db::{RpmBdbDatabaseParser, RpmNdbDatabaseParser};
     use crate::parsers::rpm_license_files::RpmLicenseFilesParser;
     use crate::parsers::rpm_mariner_manifest::RpmMarinerManifestParser;
     use crate::parsers::rpm_parser::*;
@@ -60,6 +60,7 @@ mod golden_tests {
         }
     }
 
+    #[cfg(feature = "rpm-sqlite")]
     #[test]
     fn test_golden_rpm_sqlite_db() {
         let test_file = PathBuf::from("testdata/rpm/rpmdb.sqlite");

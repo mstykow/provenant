@@ -2,13 +2,16 @@
 mod tests {
     use super::super::scan_test_utils::scan_and_assemble;
     use crate::models::{DatasourceId, PackageType};
-    use std::fs;
     use std::fs::File;
     use std::path::Path;
+
+    #[cfg(feature = "rpm-sqlite")]
+    use std::fs;
 
     use liblzma::read::XzDecoder;
     use tar::Archive;
 
+    #[cfg(feature = "rpm-sqlite")]
     #[test]
     fn test_rpm_sqlite_scan_assigns_referenced_files_from_rootfs_layout() {
         let temp_dir = tempfile::TempDir::new().expect("create temp dir");
