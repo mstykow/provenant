@@ -70,6 +70,17 @@ pub fn filter_contained_matches(
             }
 
             if current.qspan_eq(&next) {
+                if has_referenced_filenames(&current) != has_referenced_filenames(&next) {
+                    if has_referenced_filenames(&current) {
+                        discarded.push(matches.remove(j));
+                        continue;
+                    }
+
+                    discarded.push(matches.remove(i));
+                    i = i.saturating_sub(1);
+                    break;
+                }
+
                 if current.coverage() >= next.coverage() {
                     discarded.push(matches.remove(j));
                     continue;
@@ -107,6 +118,13 @@ fn licensing_contains_match(current: &LicenseMatch, other: &LicenseMatch) -> boo
         return false;
     }
     licensing_contains(&current.license_expression, &other.license_expression)
+}
+
+fn has_referenced_filenames(match_item: &LicenseMatch) -> bool {
+    match_item
+        .referenced_filenames
+        .as_ref()
+        .is_some_and(|filenames| !filenames.is_empty())
 }
 
 /// Filter overlapping matches based on overlap ratios and license expressions.
@@ -189,6 +207,8 @@ pub fn filter_overlapping_matches(
             let next_len_val = matches[j].len();
             let current_hilen = matches[i].hilen();
             let next_hilen = matches[j].hilen();
+            let current_has_references = has_referenced_filenames(&matches[i]);
+            let next_has_references = has_referenced_filenames(&matches[j]);
 
             // Note: We do NOT use candidate_resemblance for tie-breaking here.
             // candidate_resemblance is a GLOBAL measure based on multiset intersection
@@ -201,6 +221,21 @@ pub fn filter_overlapping_matches(
             // This ensures that for matches with identical qspan, the one with better
             // coverage is kept. See: gfdl-1.1 vs gfdl-1.1-plus where both match the
             // same text but gfdl-1.1 has higher coverage.
+            if extra_large_next
+                && extra_large_current
+                && current_len_val == next_len_val
+                && current_has_references != next_has_references
+            {
+                if current_has_references {
+                    discarded.push(matches.remove(j));
+                    continue;
+                }
+
+                discarded.push(matches.remove(i));
+                i = i.saturating_sub(1);
+                break;
+            }
+
             if extra_large_next && current_len_val >= next_len_val {
                 // If lengths are equal, prefer higher coverage
                 if current_len_val == next_len_val && matches[i].coverage() < matches[j].coverage()
@@ -726,6 +761,28 @@ mod tests {
     }
 
     #[test]
+    fn test_filter_contained_matches_prefers_reference_rule_for_same_qspan() {
+        let mut referenced =
+            create_test_match("gpl-1.0-plus_or_mit_2.RULE", 1, 1, 50.75, 50.75, 100);
+        referenced.license_expression = "gpl-1.0-plus OR mit".to_string();
+        referenced.license_expression_spdx = Some("GPL-1.0-or-later OR MIT".to_string());
+        referenced.matched_length = 34;
+        referenced.coordinates = MatchCoordinates::query_region(PositionSpan::range(2166, 2200));
+        referenced.referenced_filenames = Some(vec!["LICENSE".to_string()]);
+
+        let mut plain = create_test_match("gpl-2.0_290.RULE", 1, 1, 60.71, 60.71, 100);
+        plain.license_expression = "gpl-2.0".to_string();
+        plain.license_expression_spdx = Some("GPL-2.0-only".to_string());
+        plain.matched_length = 34;
+        plain.coordinates = MatchCoordinates::query_region(PositionSpan::range(2166, 2200));
+
+        let (filtered, discarded) = filter_contained_matches(&[referenced.clone(), plain.clone()]);
+
+        assert_eq!(filtered, vec![referenced]);
+        assert_eq!(discarded, vec![plain]);
+    }
+
+    #[test]
     fn test_filter_overlapping_matches_empty() {
         let index = LicenseIndex::with_legalese_count(10);
         let matches: Vec<LicenseMatch> = vec![];
@@ -1140,5 +1197,32 @@ mod tests {
         assert_eq!(kept.len(), 1);
         assert_eq!(kept[0].rule_identifier, "gfdl-1.1_13.RULE");
         assert!(kept[0].match_coverage > 70.0);
+    }
+
+    #[test]
+    fn test_filter_overlapping_matches_prefers_reference_rule_over_plain_overlap() {
+        let index = LicenseIndex::with_legalese_count(10);
+
+        let mut referenced =
+            create_test_match("gpl-1.0-plus_or_mit_2.RULE", 1, 1, 50.75, 50.75, 100);
+        referenced.license_expression = "gpl-1.0-plus OR mit".to_string();
+        referenced.license_expression_spdx = Some("GPL-1.0-or-later OR MIT".to_string());
+        referenced.matched_length = 34;
+        referenced.matcher = crate::license_detection::models::MatcherKind::Seq;
+        referenced.coordinates = MatchCoordinates::query_region(PositionSpan::range(2166, 2200));
+        referenced.referenced_filenames = Some(vec!["LICENSE".to_string()]);
+
+        let mut plain = create_test_match("gpl-2.0_290.RULE", 1, 1, 60.71, 60.71, 100);
+        plain.license_expression = "gpl-2.0".to_string();
+        plain.license_expression_spdx = Some("GPL-2.0-only".to_string());
+        plain.matched_length = 34;
+        plain.matcher = crate::license_detection::models::MatcherKind::Seq;
+        plain.coordinates = MatchCoordinates::query_region(PositionSpan::range(2166, 2200));
+
+        let (kept, discarded) =
+            filter_overlapping_matches(vec![referenced.clone(), plain.clone()], &index);
+
+        assert_eq!(kept, vec![referenced]);
+        assert_eq!(discarded, vec![plain]);
     }
 }
