@@ -420,6 +420,53 @@ pub(super) fn extract_json_excerpt_developed_by_authors(
     }
 }
 
+pub(super) fn extract_modified_portion_developed_by_authors(
+    content: &str,
+    authors: &mut Vec<AuthorDetection>,
+) {
+    if content.is_empty() {
+        return;
+    }
+
+    static MODIFIED_PORTION_DEVELOPED_BY_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r#"(?ims)^[^\n]*modified\s+portion[^\n]*developed\s+by\s+(?P<who>[A-Z][A-Za-z0-9.&+'-]*(?:\s+[A-Z][A-Za-z0-9.&+'-]*){0,4})\.\s*(?:\r?\n\s*(?:#|//|/\*+|\*|--)?\s*\((?P<url>https?://[^)\s]+)\)\.?)?"#,
+        )
+        .unwrap()
+    });
+
+    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+
+    for cap in MODIFIED_PORTION_DEVELOPED_BY_RE.captures_iter(content) {
+        let Some(full) = cap.get(0) else {
+            continue;
+        };
+        let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
+        if who.is_empty() {
+            continue;
+        }
+
+        let mut author = who.to_string();
+        if let Some(url) = cap.name("url").map(|m| m.as_str().trim())
+            && !url.is_empty()
+        {
+            author.push_str(". (");
+            author.push_str(url);
+            author.push(')');
+        }
+
+        if seen.insert(author.clone()) {
+            let start_line = line_number_for_offset(content, full.start());
+            let end_line = line_number_for_offset(content, full.end());
+            authors.push(AuthorDetection {
+                author,
+                start_line,
+                end_line,
+            });
+        }
+    }
+}
+
 pub(super) fn extract_module_author_macros(
     content: &str,
     copyrights: &[CopyrightDetection],
