@@ -2330,6 +2330,70 @@ docs = ["sphinx>=5.0"]
     }
 
     #[test]
+    fn test_pyproject_array_dependencies_preserve_requirement_shape() {
+        let content = r#"
+[project]
+name = "test-package"
+version = "1.0.0"
+dependencies = [
+    "requests>=2.32",
+    "mypy==1.19.1",
+    'ninja; sys_platform != "emscripten"',
+]
+
+[project.optional-dependencies]
+dev = ["typing_extensions", "helper[cli]==1.2.3"]
+"#;
+
+        let (_temp_dir, file_path) = create_temp_file(content, "pyproject.toml");
+        let package_data = PythonParser::extract_first_package(&file_path);
+
+        let requests = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:pypi/requests"))
+            .expect("requests dependency");
+        assert_eq!(requests.extracted_requirement.as_deref(), Some(">=2.32"));
+        assert_eq!(requests.is_pinned, Some(false));
+
+        let mypy = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:pypi/mypy@1.19.1"))
+            .expect("mypy dependency");
+        assert_eq!(mypy.extracted_requirement.as_deref(), Some("==1.19.1"));
+        assert_eq!(mypy.is_pinned, Some(true));
+
+        let ninja = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:pypi/ninja"))
+            .expect("ninja dependency");
+        assert_eq!(ninja.extracted_requirement, None);
+        let ninja_extra = ninja.extra_data.as_ref().expect("ninja marker data");
+        assert_eq!(
+            ninja_extra.get("marker"),
+            Some(&serde_json::Value::String(
+                "sys_platform != \"emscripten\"".to_string()
+            ))
+        );
+
+        let helper = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:pypi/helper@1.2.3"))
+            .expect("helper dependency");
+        assert_eq!(helper.extracted_requirement.as_deref(), Some("==1.2.3"));
+        let helper_extra = helper.extra_data.as_ref().expect("helper extras data");
+        assert_eq!(
+            helper_extra.get("extras"),
+            Some(&serde_json::Value::Array(vec![serde_json::Value::String(
+                "cli".to_string()
+            )]))
+        );
+    }
+
+    #[test]
     fn test_pyproject_extracts_uv_dependency_groups_and_tool_config() {
         let content = r#"
 [project]

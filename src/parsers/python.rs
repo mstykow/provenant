@@ -62,6 +62,7 @@ use super::license_normalization::{
     DeclaredLicenseMatchMetadata, build_declared_license_data, normalize_spdx_declared_license,
     normalize_spdx_expression,
 };
+use super::pep508::parse_pep508_requirement;
 
 // Field constants for pyproject.toml
 const FIELD_PROJECT: &str = "project";
@@ -2586,35 +2587,78 @@ fn parse_dependency_array(
         .iter()
         .filter_map(|dep| {
             let dep_str = dep.as_str()?;
-
-            let mut parts = dep_str.split(['>', '=', '<', '~']);
-            let name = parts.next()?.trim().to_string();
-
-            let version = parts.next().map(|v| v.trim().to_string());
-
-            let mut package_url = match PackageUrl::new(PythonParser::PACKAGE_TYPE.as_str(), &name)
-            {
-                Ok(purl) => purl,
-                Err(_) => return None,
-            };
-
-            if let Some(ref v) = version {
-                package_url.with_version(v).ok()?;
-            }
-
-            Some(Dependency {
-                purl: Some(package_url.to_string()),
-                extracted_requirement: None,
-                scope: scope.map(|s| s.to_string()),
-                is_runtime: Some(!is_optional),
-                is_optional: Some(is_optional),
-                is_pinned: None,
-                is_direct: Some(true),
-                resolved_package: None,
-                extra_data: None,
-            })
+            build_pyproject_array_dependency(dep_str, is_optional, scope)
         })
         .collect()
+}
+
+fn build_pyproject_array_dependency(
+    dep_str: &str,
+    is_optional: bool,
+    scope: Option<&str>,
+) -> Option<Dependency> {
+    let parsed = parse_pep508_requirement(dep_str)?;
+    let name = normalize_python_package_name(&parsed.name);
+    let pinned_version = parsed
+        .specifiers
+        .as_deref()
+        .and_then(extract_exact_pinned_version);
+
+    let mut package_url = PackageUrl::new(PythonParser::PACKAGE_TYPE.as_str(), &name).ok()?;
+    if let Some(version) = pinned_version.as_deref() {
+        package_url.with_version(version).ok()?;
+    }
+
+    let mut extra_data = HashMap::new();
+    if let Some(marker) = parsed.marker {
+        extra_data.insert("marker".to_string(), JsonValue::String(marker));
+    }
+    if !parsed.extras.is_empty() {
+        extra_data.insert(
+            "extras".to_string(),
+            JsonValue::Array(parsed.extras.into_iter().map(JsonValue::String).collect()),
+        );
+    }
+
+    let extracted_requirement = parsed.specifiers.or(parsed.url);
+
+    Some(Dependency {
+        purl: Some(package_url.to_string()),
+        extracted_requirement: extracted_requirement.clone(),
+        scope: scope.map(|s| s.to_string()),
+        is_runtime: Some(!is_optional),
+        is_optional: Some(is_optional),
+        is_pinned: Some(pinned_version.is_some()),
+        is_direct: Some(true),
+        resolved_package: None,
+        extra_data: if extra_data.is_empty() {
+            None
+        } else {
+            Some(extra_data)
+        },
+    })
+}
+
+fn extract_exact_pinned_version(specifiers: &str) -> Option<String> {
+    let trimmed = specifiers.trim();
+    if trimmed.contains(',') {
+        return None;
+    }
+
+    let stripped = if let Some(version) = trimmed.strip_prefix("===") {
+        version
+    } else if let Some(version) = trimmed.strip_prefix("==") {
+        version
+    } else {
+        return None;
+    };
+
+    let version = stripped.trim();
+    if version.is_empty() || version.contains('*') {
+        None
+    } else {
+        Some(version.to_string())
+    }
 }
 
 #[derive(Debug, Clone)]
