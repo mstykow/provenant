@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
 
-use crate::models::Output;
+use crate::models::{Output, Sha1Digest};
 
 mod cyclonedx;
 mod debian;
@@ -11,7 +11,10 @@ mod shared;
 mod spdx;
 mod template;
 
-pub(crate) const EMPTY_SHA1: &str = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
+pub(crate) const EMPTY_SHA1_DIGEST: Sha1Digest = Sha1Digest::from_bytes([
+    0xda, 0x39, 0xa3, 0xee, 0x5e, 0x6b, 0x4b, 0x0d, 0x32, 0x55, 0xbf, 0xef, 0x95, 0x60, 0x18, 0x90,
+    0xaf, 0xd8, 0x07, 0x09,
+]);
 pub(crate) const SPDX_DOCUMENT_NOTICE: &str = "Generated with Provenant and provided on an \"AS IS\" BASIS, WITHOUT WARRANTIES\nOR CONDITIONS OF ANY KIND, either express or implied. No content created from\nProvenant should be considered or used as legal advice. Consult an attorney\nfor legal advice.\nProvenant is a free software code scanning tool.\nVisit https://github.com/mstykow/provenant/ for support and download.\nSPDX License List: 3.27";
 const OUTPUT_BUFFER_SIZE: usize = 1024 * 1024;
 
@@ -115,8 +118,9 @@ mod tests {
     use std::fs;
 
     use crate::models::{
-        Author, Copyright, ExtraData, FileInfo, FileType, Header, Holder, LicenseDetection, Match,
-        OutputEmail, OutputURL, PackageData, SystemEnvironment,
+        Author, Copyright, ExtraData, FileInfo, FileType, GitSha1, Header, Holder,
+        LicenseDetection, Match, Md5Digest, OutputEmail, OutputURL, PackageData, Sha256Digest,
+        SystemEnvironment,
     };
 
     #[test]
@@ -299,9 +303,14 @@ mod tests {
             Some("text".to_string()),
             42,
             Some("2026-01-01T00:00:00Z".to_string()),
-            Some(EMPTY_SHA1.to_string()),
-            Some("d41d8cd98f00b204e9800998ecf8427e".to_string()),
-            Some("e3b0c44298fc1c149afbf4c8996fb924".to_string()),
+            Some(EMPTY_SHA1_DIGEST),
+            Some(Md5Digest::from_hex("d41d8cd98f00b204e9800998ecf8427e").unwrap()),
+            Some(
+                Sha256Digest::from_hex(
+                    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                )
+                .unwrap(),
+            ),
             Some("Rust".to_string()),
             vec![],
             None,
@@ -316,7 +325,7 @@ mod tests {
             vec![],
         );
         file.license_policy = Some(vec![]);
-        file.sha1_git = Some(EMPTY_SHA1.to_string());
+        file.sha1_git = Some(GitSha1::from_bytes(*EMPTY_SHA1_DIGEST.as_bytes()));
         file.is_binary = Some(false);
         file.is_text = Some(true);
         file.is_archive = Some(false);
@@ -1197,9 +1206,14 @@ mod tests {
                 None,
                 42,
                 None,
-                Some(EMPTY_SHA1.to_string()),
-                Some("d41d8cd98f00b204e9800998ecf8427e".to_string()),
-                Some("e3b0c44298fc1c149afbf4c8996fb924".to_string()),
+                Some(EMPTY_SHA1_DIGEST),
+                Some(Md5Digest::from_hex("d41d8cd98f00b204e9800998ecf8427e").unwrap()),
+                Some(
+                    Sha256Digest::from_hex(
+                        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                    )
+                    .unwrap(),
+                ),
                 Some("Rust".to_string()),
                 vec![PackageData::default()],
                 None,

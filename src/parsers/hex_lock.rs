@@ -6,7 +6,9 @@ use crate::parser_warn as warn;
 use packageurl::PackageUrl;
 use serde_json::Value as JsonValue;
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
+use crate::models::{
+    DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha256Digest,
+};
 
 use super::PackageParser;
 
@@ -123,7 +125,7 @@ fn build_dependency_from_lock_entry(
         primary_language: Some("Elixir".to_string()),
         download_url: None,
         sha1: None,
-        sha256: Some(inner_checksum),
+        sha256: Sha256Digest::from_hex(&inner_checksum).ok(),
         sha512: None,
         md5: None,
         is_virtual: true,

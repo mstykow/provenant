@@ -7,7 +7,10 @@ use crate::parser_warn as warn;
 use packageurl::PackageUrl;
 use serde_json::{Map as JsonMap, Value};
 
-use crate::models::{DatasourceId, Dependency, FileReference, PackageData, PackageType};
+use crate::models::{
+    DatasourceId, Dependency, FileReference, Md5Digest, PackageData, PackageType, Sha1Digest,
+    Sha256Digest, Sha512Digest,
+};
 
 use super::PackageParser;
 
@@ -23,10 +26,10 @@ const FIELD_AVAILABLE_AT: &str = "available-at";
 
 type ArtifactHashes = (
     Option<u64>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
+    Option<Sha1Digest>,
+    Option<Md5Digest>,
+    Option<Sha256Digest>,
+    Option<Sha512Digest>,
 );
 
 type ExtractedVariantData = (
@@ -548,16 +551,16 @@ fn extract_file_hashes(file: &JsonMap<String, Value>) -> ArtifactHashes {
         file.get("size").and_then(Value::as_u64),
         file.get("sha1")
             .and_then(Value::as_str)
-            .map(|value| value.to_string()),
+            .and_then(|value| Sha1Digest::from_hex(value).ok()),
         file.get("md5")
             .and_then(Value::as_str)
-            .map(|value| value.to_string()),
+            .and_then(|value| Md5Digest::from_hex(value).ok()),
         file.get("sha256")
             .and_then(Value::as_str)
-            .map(|value| value.to_string()),
+            .and_then(|value| Sha256Digest::from_hex(value).ok()),
         file.get("sha512")
             .and_then(Value::as_str)
-            .map(|value| value.to_string()),
+            .and_then(|value| Sha512Digest::from_hex(value).ok()),
     )
 }
 

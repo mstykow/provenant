@@ -5,7 +5,7 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use crate::models::{DatasourceId, PackageType};
+    use crate::models::{DatasourceId, Md5Digest, PackageType, Sha1Digest, Sha256Digest};
     use crate::parsers::{GradleModuleParser, PackageParser};
 
     #[test]
@@ -60,21 +60,23 @@ mod tests {
 
         assert_eq!(package_data.dependencies.len(), 3);
         assert_eq!(
-            package_data.sha1.as_deref(),
-            Some("08f4a93a381be223a5bbaacd46eaab92381ab6a8")
+            package_data.sha1,
+            Some(Sha1Digest::from_hex("08f4a93a381be223a5bbaacd46eaab92381ab6a8").unwrap())
         );
         assert_eq!(
-            package_data.md5.as_deref(),
-            Some("3287103cfb083fb998a35ef8a1983c58")
+            package_data.md5,
+            Some(Md5Digest::from_hex("3287103cfb083fb998a35ef8a1983c58").unwrap())
         );
         assert_eq!(
-            package_data.sha256.as_deref(),
-            Some("6cc2359979269e4d9eddce7d84682d2bb06a35a14edce806bf0da6e8d4d31806")
+            package_data.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "6cc2359979269e4d9eddce7d84682d2bb06a35a14edce806bf0da6e8d4d31806"
+                )
+                .unwrap()
+            )
         );
-        assert_eq!(
-            package_data.sha512.as_deref(),
-            Some("7630aacb9e3073b2064397ed080b8d5bf7db06ba2022d6c927e05b7d53c5787d")
-        );
+        assert_eq!(package_data.sha512, None);
         assert_eq!(package_data.file_references.len(), 1);
 
         let annotation = package_data

@@ -2,6 +2,7 @@
 mod tests {
     use crate::models::DatasourceId;
     use crate::models::PackageType;
+    use crate::models::Sha1Digest;
     use std::path::PathBuf;
 
     use crate::parsers::{PackageParser, PodfileLockParser};
@@ -51,8 +52,8 @@ mod tests {
         assert_eq!(resolved.version, "1.0.6");
         assert!(resolved.namespace.is_empty());
         assert_eq!(
-            resolved.sha1.as_deref(),
-            Some("3b6bd90a64b9a1dcb0b70aa0e10a7f8f631667d5")
+            resolved.sha1,
+            Some(Sha1Digest::from_hex("3b6bd90a64b9a1dcb0b70aa0e10a7f8f631667d5").unwrap())
         );
         assert!(resolved.is_virtual);
         let res_extra = resolved.extra_data.as_ref().unwrap();
@@ -95,8 +96,8 @@ mod tests {
         assert_eq!(xcbeautify.is_direct, Some(true));
         let resolved = xcbeautify.resolved_package.as_ref().unwrap();
         assert_eq!(
-            resolved.sha1.as_deref(),
-            Some("a3b03e4a38eb1a5766a83a7a3c53915a233572e3")
+            resolved.sha1,
+            Some(Sha1Digest::from_hex("a3b03e4a38eb1a5766a83a7a3c53915a233572e3").unwrap())
         );
     }
 
@@ -123,8 +124,8 @@ mod tests {
         assert_eq!(aerodramus.is_direct, Some(true));
         let resolved = aerodramus.resolved_package.as_ref().unwrap();
         assert_eq!(
-            resolved.sha1.as_deref(),
-            Some("a22de7451c8fc85ae5d974f5d6a656f59046fffc")
+            resolved.sha1,
+            Some(Sha1Digest::from_hex("a22de7451c8fc85ae5d974f5d6a656f59046fffc").unwrap())
         );
         let res_extra = resolved.extra_data.as_ref().unwrap();
         assert_eq!(res_extra["spec_repo"], "https://github.com/artsy/Specs.git");
@@ -294,8 +295,8 @@ mod tests {
         let ohhttpstubs = &pkg.dependencies[3];
         let resolved = ohhttpstubs.resolved_package.as_ref().unwrap();
         assert_eq!(
-            resolved.sha1.as_deref(),
-            Some("cb29d2a9d09a828ecb93349a2b0c64f99e0db89f")
+            resolved.sha1,
+            Some(Sha1Digest::from_hex("cb29d2a9d09a828ecb93349a2b0c64f99e0db89f").unwrap())
         );
 
         let ohhttpstubs_core = &pkg.dependencies[4];

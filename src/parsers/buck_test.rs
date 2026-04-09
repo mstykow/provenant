@@ -1,6 +1,6 @@
 //! Tests for Buck BUILD and METADATA.bzl parsers
 
-use crate::models::PackageType;
+use crate::models::{PackageType, Sha1Digest};
 
 use std::path::PathBuf;
 
@@ -290,7 +290,7 @@ fn test_metadata_bzl_with_download_url() {
 METADATA = {
     "name": "example",
     "download_url": "https://example.com/download.tar.gz",
-    "download_archive_sha1": "abc123",
+    "download_archive_sha1": "abc123def456789012345678901234567890abcd",
 }
 "#;
     let temp_dir = tempfile::tempdir().unwrap();
@@ -302,7 +302,10 @@ METADATA = {
         pkg.download_url,
         Some("https://example.com/download.tar.gz".to_string())
     );
-    assert_eq!(pkg.sha1, Some("abc123".to_string()));
+    assert_eq!(
+        pkg.sha1,
+        Some(Sha1Digest::from_hex("abc123def456789012345678901234567890abcd").unwrap())
+    );
 }
 
 #[test]

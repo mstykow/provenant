@@ -28,7 +28,9 @@ use crate::parser_warn as warn;
 use packageurl::PackageUrl;
 use yaml_serde::{Mapping, Value};
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
+use crate::models::{
+    DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha256Digest,
+};
 
 use super::PackageParser;
 
@@ -322,7 +324,7 @@ fn extract_lock_dependencies(lock_data: &Value) -> Vec<Dependency> {
             .is_some_and(|value| !value.trim().is_empty());
 
         let purl = build_dependency_purl(name, version.as_deref());
-        let sha256 = extract_sha256(details);
+        let sha256 = extract_sha256(details).and_then(|h| Sha256Digest::from_hex(&h).ok());
         let resolved_dependencies = extract_lock_package_dependencies(details);
         let resolved_package = build_resolved_package(
             name,
@@ -407,7 +409,7 @@ fn extract_sha256(details: &Mapping) -> Option<String> {
 fn build_resolved_package(
     name: &str,
     version: &Option<String>,
-    sha256: Option<String>,
+    sha256: Option<Sha256Digest>,
     extra_data: Option<HashMap<String, serde_json::Value>>,
     dependencies: Vec<Dependency>,
 ) -> ResolvedPackage {

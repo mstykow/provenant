@@ -5,7 +5,7 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use crate::models::{DatasourceId, PackageType};
+    use crate::models::{DatasourceId, Md5Digest, PackageType, Sha256Digest};
     use crate::parsers::{PackageParser, PylockTomlParser};
 
     #[test]
@@ -77,7 +77,15 @@ mod tests {
             .resolved_package
             .as_ref()
             .expect("requests should have resolved package");
-        assert_eq!(requests_resolved.sha256.as_deref(), Some("reqwheelhash"));
+        assert_eq!(
+            requests_resolved.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "aabb0000000000000000000000000000000000000000000000000000000000aa"
+                )
+                .unwrap()
+            )
+        );
         assert!(requests_resolved.dependencies.iter().any(|dep| {
             dep.purl.as_deref() == Some("pkg:pypi/urllib3@2.2.3") && dep.is_direct == Some(true)
         }));
@@ -383,7 +391,7 @@ version = "1.0.0"
 [packages.archive]
 url = "https://example.com/archivepkg-1.0.0.zip"
 size = 1234
-hashes = { sha256 = "archivehash", md5 = "archivemd5" }
+hashes = { sha256 = "aaa10000000000000000000000000000000000000000000000000000000000a1", md5 = "bb11bb22bb33bb44bb55bb66bb77bb88" }
 
 [[packages]]
 name = "sdistpkg"
@@ -392,7 +400,7 @@ version = "2.0.0"
 [packages.sdist]
 name = "sdistpkg-2.0.0.tar.gz"
 url = "https://files.pythonhosted.org/packages/sdistpkg-2.0.0.tar.gz"
-hashes = { sha256 = "sdisthash" }
+hashes = { sha256 = "aaa20000000000000000000000000000000000000000000000000000000000a2" }
 
 [[packages]]
 name = "wheelpkg"
@@ -401,12 +409,12 @@ version = "3.0.0"
 [[packages.wheels]]
 name = "wheelpkg-3.0.0-py3-none-any.whl"
 url = "https://files.pythonhosted.org/packages/wheelpkg-3.0.0-py3-none-any.whl"
-hashes = { sha256 = "wheelhash1" }
+hashes = { sha256 = "aaa30000000000000000000000000000000000000000000000000000000000a3" }
 
 [[packages.wheels]]
 name = "wheelpkg-3.0.0-py3-none-any-manylinux.whl"
 url = "https://files.pythonhosted.org/packages/wheelpkg-3.0.0-py3-none-any-manylinux.whl"
-hashes = { sha256 = "wheelhash2" }
+hashes = { sha256 = "aaa40000000000000000000000000000000000000000000000000000000000a4" }
 
 [[packages]]
 name = "dirpkg"
@@ -445,8 +453,19 @@ editable = true
             archive_resolved.download_url.as_deref(),
             Some("https://example.com/archivepkg-1.0.0.zip")
         );
-        assert_eq!(archive_resolved.sha256.as_deref(), Some("archivehash"));
-        assert_eq!(archive_resolved.md5.as_deref(), Some("archivemd5"));
+        assert_eq!(
+            archive_resolved.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "aaa10000000000000000000000000000000000000000000000000000000000a1"
+                )
+                .unwrap()
+            )
+        );
+        assert_eq!(
+            archive_resolved.md5,
+            Some(Md5Digest::from_hex("bb11bb22bb33bb44bb55bb66bb77bb88").unwrap())
+        );
 
         let sdistpkg = package_data
             .dependencies
@@ -457,7 +476,15 @@ editable = true
             .resolved_package
             .as_ref()
             .expect("sdistpkg should have resolved package");
-        assert_eq!(sdist_resolved.sha256.as_deref(), Some("sdisthash"));
+        assert_eq!(
+            sdist_resolved.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "aaa20000000000000000000000000000000000000000000000000000000000a2"
+                )
+                .unwrap()
+            )
+        );
 
         let wheelpkg = package_data
             .dependencies
@@ -468,7 +495,15 @@ editable = true
             .resolved_package
             .as_ref()
             .expect("wheelpkg should have resolved package");
-        assert_eq!(wheel_resolved.sha256.as_deref(), Some("wheelhash1"));
+        assert_eq!(
+            wheel_resolved.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "aaa30000000000000000000000000000000000000000000000000000000000a3"
+                )
+                .unwrap()
+            )
+        );
         let wheel_extra = wheel_resolved
             .extra_data
             .as_ref()
@@ -511,7 +546,7 @@ dependencies = [
 name = "requests-2.32.3-py3-none-any.whl"
 url = "https://files.pythonhosted.org/packages/requests-2.32.3-py3-none-any.whl"
 size = 62574
-hashes = { sha256 = "reqwheelhash" }
+hashes = { sha256 = "aabb0000000000000000000000000000000000000000000000000000000000aa" }
 
 [[packages]]
 name = "urllib3"
@@ -521,7 +556,7 @@ version = "2.2.3"
 name = "urllib3-2.2.3-py3-none-any.whl"
 url = "https://files.pythonhosted.org/packages/urllib3-2.2.3-py3-none-any.whl"
 size = 12345
-hashes = { sha256 = "urllib3wheelhash" }
+hashes = { sha256 = "bbcc0000000000000000000000000000000000000000000000000000000000bb" }
 
 [[packages]]
 name = "pytest"
@@ -535,7 +570,7 @@ dependencies = [
 name = "pytest-8.3.5-py3-none-any.whl"
 url = "https://files.pythonhosted.org/packages/pytest-8.3.5-py3-none-any.whl"
 size = 55555
-hashes = { sha256 = "pytestwheelhash" }
+hashes = { sha256 = "ccdd0000000000000000000000000000000000000000000000000000000000cc" }
 
 [[packages]]
 name = "pluggy"
@@ -546,7 +581,7 @@ marker = "'dev' in dependency_groups"
 name = "pluggy-1.5.0-py3-none-any.whl"
 url = "https://files.pythonhosted.org/packages/pluggy-1.5.0-py3-none-any.whl"
 size = 44444
-hashes = { sha256 = "pluggywheelhash" }
+hashes = { sha256 = "ddee0000000000000000000000000000000000000000000000000000000000dd" }
 
 [[packages]]
 name = "sphinx"
@@ -560,7 +595,7 @@ dependencies = [
 name = "sphinx-8.2.3-py3-none-any.whl"
 url = "https://files.pythonhosted.org/packages/sphinx-8.2.3-py3-none-any.whl"
 size = 33333
-hashes = { sha256 = "sphinxwheelhash" }
+hashes = { sha256 = "eeff0000000000000000000000000000000000000000000000000000000000ee" }
 
 [[packages]]
 name = "jinja2"
@@ -571,7 +606,7 @@ marker = "'docs' in extras"
 name = "jinja2-3.1.6-py3-none-any.whl"
 url = "https://files.pythonhosted.org/packages/jinja2-3.1.6-py3-none-any.whl"
 size = 22222
-hashes = { sha256 = "jinja2wheelhash" }
+hashes = { sha256 = "ff110000000000000000000000000000000000000000000000000000000000ff" }
 
 [[packages]]
 name = "local-editable"

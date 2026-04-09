@@ -16,7 +16,7 @@
 //! - Located in conda-meta/ directory in rootfs
 //! - Spec: https://docs.conda.io/
 
-use crate::models::{DatasourceId, FileReference, PackageType};
+use crate::models::{DatasourceId, FileReference, Md5Digest, PackageType, Sha256Digest};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -159,8 +159,10 @@ pub(crate) fn parse_conda_meta_json_with_path(content: &str, _path: Option<&Path
         extracted_license_statement: metadata.license,
         download_url: metadata.url,
         size: metadata.size,
-        md5: metadata.md5,
-        sha256: metadata.sha256,
+        md5: metadata.md5.and_then(|h| Md5Digest::from_hex(&h).ok()),
+        sha256: metadata
+            .sha256
+            .and_then(|h| Sha256Digest::from_hex(&h).ok()),
         extra_data: extra_data_opt,
         file_references,
         datasource_id: Some(DatasourceId::CondaMetaJson),

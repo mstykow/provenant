@@ -18,7 +18,10 @@
 //! - Namespace format: `@org` for scoped packages (e.g., `@babel/core`)
 //! - Graceful error handling: logs warnings and returns default on parse failure
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
+use crate::models::{
+    DatasourceId, Dependency, PackageData, PackageType, Party, Sha1Digest, Sha256Digest,
+    Sha512Digest,
+};
 use crate::parser_warn as warn;
 use crate::parsers::utils::{npm_purl, parse_sri};
 use serde_json::Value;
@@ -179,10 +182,10 @@ impl PackageParser for NpmParser {
             homepage_url: extract_homepage_url(&json),
             download_url,
             size: None,
-            sha1: dist_sha1,
+            sha1: dist_sha1.and_then(|h| Sha1Digest::from_hex(&h).ok()),
             md5: None,
-            sha256: dist_sha256,
-            sha512: dist_sha512,
+            sha256: dist_sha256.and_then(|h| Sha256Digest::from_hex(&h).ok()),
+            sha512: dist_sha512.and_then(|h| Sha512Digest::from_hex(&h).ok()),
             bug_tracking_url: extract_bugs(&json),
             code_view_url: None,
             vcs_url,

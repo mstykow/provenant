@@ -1,5 +1,5 @@
 use super::*;
-use crate::models::{FileReference, FileType, PackageData, PackageType};
+use crate::models::{FileReference, FileType, Md5Digest, PackageData, PackageType};
 use strum::IntoEnumIterator;
 
 #[test]
@@ -2374,7 +2374,7 @@ fn test_resolve_debian_installed_file_references_from_status_db() {
                     path: "bin/bash".to_string(),
                     size: None,
                     sha1: None,
-                    md5: Some("77506afebd3b7e19e937a678a185b62e".to_string()),
+                    md5: Some(Md5Digest::from_hex("77506afebd3b7e19e937a678a185b62e").unwrap()),
                     sha256: None,
                     sha512: None,
                     extra_data: None,

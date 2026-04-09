@@ -1,5 +1,6 @@
 #[cfg(all(test, feature = "golden-tests"))]
 mod golden_tests {
+    use crate::models::Sha256Digest;
     use crate::parsers::golden_test_utils::compare_package_data_parser_only;
     use crate::parsers::{PackageParser, PipfileLockParser};
     use std::path::PathBuf;
@@ -14,8 +15,13 @@ mod golden_tests {
 
         assert_eq!(package_data.dependencies.len(), 9);
         assert_eq!(
-            package_data.sha256.as_deref(),
-            Some("813f8e1b624fd42eee7d681228d7aca1fce209e1d60bf21c3eb33a73f7268d57")
+            package_data.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "813f8e1b624fd42eee7d681228d7aca1fce209e1d60bf21c3eb33a73f7268d57"
+                )
+                .unwrap()
+            )
         );
         assert!(
             package_data

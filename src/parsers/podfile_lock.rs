@@ -26,7 +26,9 @@ use std::path::Path;
 use crate::parser_warn as warn;
 use yaml_serde::Value;
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
+use crate::models::{
+    DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha1Digest,
+};
 
 use super::PackageParser;
 
@@ -273,7 +275,7 @@ fn build_pod_dependency(
     let resolved_package = ResolvedPackage {
         primary_language: Some(PRIMARY_LANGUAGE.to_string()),
         download_url: None,
-        sha1: checksum,
+        sha1: checksum.and_then(|h| Sha1Digest::from_hex(&h).ok()),
         sha256: None,
         sha512: None,
         md5: None,

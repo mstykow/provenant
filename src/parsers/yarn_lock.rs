@@ -20,7 +20,9 @@
 //! - All lockfile versions are pinned (`is_pinned: Some(true)`)
 //! - Graceful error handling with `warn!()` logs
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
+use crate::models::{
+    DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha512Digest,
+};
 use crate::parser_warn as warn;
 use crate::parsers::utils::{npm_purl, parse_sri};
 use serde_json::Value as JsonValue;
@@ -152,7 +154,7 @@ fn parse_yarn_v2(
             download_url: None,
             sha1: None,
             sha256: None,
-            sha512: checksum,
+            sha512: checksum.and_then(|h| Sha512Digest::from_hex(&h).ok()),
             md5: None,
             is_virtual: true,
             extra_data: resolved_extra_data,
@@ -462,7 +464,7 @@ fn parse_yarn_v1_block(
         },
         sha1: None,
         sha256: None,
-        sha512,
+        sha512: sha512.and_then(|h| Sha512Digest::from_hex(&h).ok()),
         md5: None,
         is_virtual: true,
         extra_data: None,

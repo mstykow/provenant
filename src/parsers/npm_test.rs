@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::models::{DatasourceId, PackageType};
+    use crate::models::{DatasourceId, PackageType, Sha1Digest, Sha256Digest, Sha512Digest};
     use crate::parsers::{NpmParser, PackageParser};
     use serde_json::Value;
     use std::fs;
@@ -1046,7 +1046,12 @@ mod tests {
 
         assert_eq!(
             package_data.sha256,
-            Some("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string())
+            Some(
+                Sha256Digest::from_hex(
+                    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                )
+                .unwrap()
+            )
         );
 
         assert!(package_data.sha512.is_none());
@@ -1072,7 +1077,7 @@ mod tests {
 
         assert_eq!(
             package_data.sha512,
-            Some("cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e".to_string())
+            Some(Sha512Digest::from_hex("cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e").unwrap())
         );
 
         assert_eq!(
@@ -1114,7 +1119,7 @@ mod tests {
 
         assert_eq!(
             package_data.sha512,
-            Some("ee26b0dd4af7e749aa1a8ee3c10ae9923f618980772e473f8819a5d4940e0db27ac185f8a0e1d5f84f88bc887fd67b143732c304cc5fa9ad8e6f57f50028a8ff".to_string())
+            Some(Sha512Digest::from_hex("ee26b0dd4af7e749aa1a8ee3c10ae9923f618980772e473f8819a5d4940e0db27ac185f8a0e1d5f84f88bc887fd67b143732c304cc5fa9ad8e6f57f50028a8ff").unwrap())
         );
 
         assert_eq!(
@@ -2482,8 +2487,8 @@ mod tests {
         let package_data = NpmParser::extract_first_package(&package_path);
 
         assert_eq!(
-            package_data.sha1.as_deref(),
-            Some("d35a0754c8587b0502874e3636cf0f19565d09b7")
+            package_data.sha1,
+            Some(Sha1Digest::from_hex("d35a0754c8587b0502874e3636cf0f19565d09b7").unwrap())
         );
         assert!(package_data.sha512.is_some());
     }

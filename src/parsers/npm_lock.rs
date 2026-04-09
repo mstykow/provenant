@@ -19,7 +19,9 @@
 //! - v2+: Flat dependency structure with `node_modules/` prefix for nesting
 //! - Direct dependencies determined by top-level `dependencies` and `devDependencies`
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
+use crate::models::{
+    DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha1Digest, Sha512Digest,
+};
 use crate::parser_warn as warn;
 use crate::parsers::utils::{npm_purl, parse_sri};
 use serde_json::Value;
@@ -712,9 +714,9 @@ fn build_npm_dependency(
     let resolved_package = ResolvedPackage {
         primary_language: Some("JavaScript".to_string()),
         download_url,
-        sha1,
+        sha1: sha1.and_then(|h| Sha1Digest::from_hex(&h).ok()),
         sha256: None,
-        sha512: sha512_from_integrity,
+        sha512: sha512_from_integrity.and_then(|h| Sha512Digest::from_hex(&h).ok()),
         md5: None,
         is_virtual: true,
         extra_data: None,

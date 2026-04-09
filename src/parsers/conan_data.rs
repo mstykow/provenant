@@ -18,7 +18,7 @@
 //! - Patches section contains version→[{patch_file, patch_description, patch_type}]
 //! - Spec: https://docs.conan.io/2/tutorial/creating_packages/handle_sources_in_packages.html
 
-use crate::models::{DatasourceId, PackageType};
+use crate::models::{DatasourceId, PackageType, Sha256Digest};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -155,7 +155,9 @@ pub(crate) fn parse_conandata_yml(content: &str) -> Vec<PackageData> {
             primary_language: Some("C++".to_string()),
             version: Some(version),
             download_url,
-            sha256: source_info.sha256,
+            sha256: source_info
+                .sha256
+                .and_then(|h| Sha256Digest::from_hex(&h).ok()),
             extra_data: if extra_data.is_empty() {
                 None
             } else {

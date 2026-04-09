@@ -7,7 +7,7 @@ use sha1::{Digest, Sha1};
 use crate::models::{FileInfo, FileType, Match, Output};
 
 use super::shared::{sorted_files, xml_escape};
-use super::{EMPTY_SHA1, OutputWriteConfig, SPDX_DOCUMENT_NOTICE};
+use super::{EMPTY_SHA1_DIGEST, OutputWriteConfig, SPDX_DOCUMENT_NOTICE};
 
 struct ExtractedLicenseInfo {
     license_id: String,
@@ -71,7 +71,7 @@ pub(crate) fn write_spdx_tag_value(
 
     let mut file_index = 1usize;
     for file in files {
-        let sha1 = file.sha1.as_deref().unwrap_or(EMPTY_SHA1);
+        let sha1 = file.sha1.as_ref().unwrap_or(&EMPTY_SHA1_DIGEST);
         let file_license_info = spdx_file_license_info(file);
         writeln!(writer, "FileName: ./{}", file.path)?;
         writeln!(writer, "SPDXID: SPDXRef-{}", file_index)?;
@@ -199,7 +199,9 @@ pub(crate) fn write_spdx_rdf_xml(
         }
         xml.push_str("<spdx:checksum><spdx:Checksum><spdx:algorithm rdf:resource=\"http://spdx.org/rdf/terms#checksumAlgorithm_sha1\"/>");
         xml.push_str("<spdx:checksumValue>");
-        xml.push_str(&xml_escape(file.sha1.as_deref().unwrap_or(EMPTY_SHA1)));
+        xml.push_str(&xml_escape(
+            &file.sha1.as_ref().unwrap_or(&EMPTY_SHA1_DIGEST).as_hex(),
+        ));
         xml.push_str("</spdx:checksumValue></spdx:Checksum></spdx:checksum>");
         xml.push_str("<spdx:fileName>");
         xml.push_str(&xml_escape(&format!("./{}", file.path)));
@@ -311,7 +313,7 @@ fn spdx_files(output: &Output) -> Vec<&FileInfo> {
 fn spdx_package_verification_code(files: &[&FileInfo]) -> String {
     let mut file_sha1s = files
         .iter()
-        .map(|f| f.sha1.clone().unwrap_or_else(|| EMPTY_SHA1.to_string()))
+        .map(|f| f.sha1.unwrap_or(EMPTY_SHA1_DIGEST))
         .collect::<Vec<_>>();
     file_sha1s.sort_unstable();
 

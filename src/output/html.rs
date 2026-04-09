@@ -30,8 +30,20 @@ pub(crate) fn write_html_report(output: &Output, writer: &mut dyn Write) -> io::
         file_row.insert("name".to_string(), file.name.clone());
         file_row.insert("extension".to_string(), file.extension.clone());
         file_row.insert("size".to_string(), file.size.to_string());
-        file_row.insert("sha1".to_string(), html_opt(file.sha1.as_deref()));
-        file_row.insert("md5".to_string(), html_opt(file.md5.as_deref()));
+        file_row.insert(
+            "sha1".to_string(),
+            file.sha1
+                .as_ref()
+                .map(|d| d.as_hex())
+                .unwrap_or("None".to_string()),
+        );
+        file_row.insert(
+            "md5".to_string(),
+            file.md5
+                .as_ref()
+                .map(|d| d.as_hex())
+                .unwrap_or("None".to_string()),
+        );
         file_row.insert("files_count".to_string(), String::new());
         file_row.insert("mime_type".to_string(), html_opt(file.mime_type.as_deref()));
         file_row.insert(

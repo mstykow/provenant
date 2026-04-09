@@ -27,7 +27,9 @@ use packageurl::PackageUrl;
 use toml::Value as TomlValue;
 use toml::map::Map as TomlMap;
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
+use crate::models::{
+    DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha256Digest,
+};
 use crate::parsers::python::{build_pypi_urls, read_toml_file};
 
 use super::PackageParser;
@@ -226,7 +228,7 @@ fn build_resolved_package(
         primary_language: Some("Python".to_string()),
         download_url: None,
         sha1: None,
-        sha256,
+        sha256: sha256.and_then(|h| Sha256Digest::from_hex(&h).ok()),
         sha512: None,
         md5: None,
         is_virtual: true,

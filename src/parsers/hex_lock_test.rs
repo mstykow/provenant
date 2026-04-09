@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::models::{DatasourceId, PackageType};
+use crate::models::{DatasourceId, PackageType, Sha256Digest};
 
 use super::PackageParser;
 use super::hex_lock::HexLockParser;
@@ -43,8 +43,13 @@ fn test_parse_hex_mix_lock_basic() {
     assert_eq!(resolved.version, "1.18.1");
     assert_eq!(resolved.package_type, PackageType::Hex);
     assert_eq!(
-        resolved.sha256.as_deref(),
-        Some("5067f26f7745b7e31bc3368bc1a2b818b9779faa959b49c934c17730efc911cf")
+        resolved.sha256,
+        Some(
+            Sha256Digest::from_hex(
+                "5067f26f7745b7e31bc3368bc1a2b818b9779faa959b49c934c17730efc911cf"
+            )
+            .unwrap()
+        )
     );
     let extra = resolved
         .extra_data

@@ -18,7 +18,7 @@
 //! - Direct dependencies determined from root package's dependency list
 //! - Uses TOML parsing for structured data extraction
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
+use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Sha256Digest};
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
 use serde_json::json;
@@ -111,7 +111,7 @@ impl PackageParser for CargoLockParser {
             size: None,
             sha1: None,
             md5: None,
-            sha256: checksum,
+            sha256: checksum.and_then(|h| Sha256Digest::from_hex(&h).ok()),
             sha512: None,
             bug_tracking_url: None,
             code_view_url: None,

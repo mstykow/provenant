@@ -20,7 +20,10 @@
 //! - v5: Similar to v6 but with different dependency structure
 //! - Direct dependencies tracked via `importers['.'].dependencies`
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
+use crate::models::{
+    DatasourceId, Dependency, Md5Digest, PackageData, PackageType, ResolvedPackage, Sha1Digest,
+    Sha256Digest, Sha512Digest,
+};
 use crate::parsers::utils::npm_purl;
 use std::fs;
 use std::path::Path;
@@ -530,10 +533,10 @@ pub fn extract_dependency(
     let resolved_package = ResolvedPackage {
         primary_language: Some("JavaScript".to_string()),
         download_url: None,
-        sha1,
-        sha256,
-        sha512,
-        md5,
+        sha1: sha1.and_then(|h| Sha1Digest::from_hex(&h).ok()),
+        sha256: sha256.and_then(|h| Sha256Digest::from_hex(&h).ok()),
+        sha512: sha512.and_then(|h| Sha512Digest::from_hex(&h).ok()),
+        md5: md5.and_then(|h| Md5Digest::from_hex(&h).ok()),
         is_virtual: true,
         extra_data: None,
         dependencies: all_dependencies,

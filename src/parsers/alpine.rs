@@ -26,6 +26,7 @@ use crate::utils::magic;
 
 use crate::models::{
     DatasourceId, Dependency, FileReference, LicenseDetection, PackageData, PackageType, Party,
+    Sha1Digest,
 };
 use crate::parsers::utils::{read_file_to_string, split_name_email};
 
@@ -655,12 +656,14 @@ fn extract_file_references(raw_text: &str) -> Vec<FileReference> {
                         use base64::Engine;
                         if let Ok(decoded) =
                             base64::engine::general_purpose::STANDARD.decode(&value[2..])
+                            && let Ok(digest) = Sha1Digest::from_hex(
+                                &decoded
+                                    .iter()
+                                    .map(|b| format!("{:02x}", b))
+                                    .collect::<String>(),
+                            )
                         {
-                            let hex_string = decoded
-                                .iter()
-                                .map(|b| format!("{:02x}", b))
-                                .collect::<String>();
-                            file.sha1 = Some(hex_string);
+                            file.sha1 = Some(digest);
                         }
                     }
                 }

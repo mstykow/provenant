@@ -904,16 +904,16 @@ fn merge_file_references(
                 existing.size = file_ref.size;
             }
             if existing.sha1.is_none() {
-                existing.sha1 = file_ref.sha1.clone();
+                existing.sha1 = file_ref.sha1;
             }
             if existing.md5.is_none() {
-                existing.md5 = file_ref.md5.clone();
+                existing.md5 = file_ref.md5;
             }
             if existing.sha256.is_none() {
-                existing.sha256 = file_ref.sha256.clone();
+                existing.sha256 = file_ref.sha256;
             }
             if existing.sha512.is_none() {
-                existing.sha512 = file_ref.sha512.clone();
+                existing.sha512 = file_ref.sha512;
             }
             if existing.extra_data.is_none() {
                 existing.extra_data = file_ref.extra_data.clone();

@@ -1,6 +1,7 @@
 mod tests {
     use crate::models::Dependency;
     use crate::models::PackageType;
+    use crate::models::Sha256Digest;
     use crate::parsers::{PackageParser, PubspecLockParser, PubspecYamlParser};
     use std::fs;
     use std::path::PathBuf;
@@ -124,7 +125,7 @@ packages:
     description:
       name: foo
       url: "https://pub.dev"
-      sha256: "abc123"
+      sha256: "abc1230000000000000000000000000000000000000000000000000000000000"
     source: hosted
     version: "1.0.0"
   bar:
@@ -132,7 +133,7 @@ packages:
     description:
       name: bar
       url: "https://pub.dev"
-      sha256: "def456"
+      sha256: "def4560000000000000000000000000000000000000000000000000000000000"
     source: hosted
     version: "2.0.0"
 "#;
@@ -146,7 +147,15 @@ packages:
             .resolved_package
             .as_ref()
             .expect("foo should have resolved package");
-        assert_eq!(foo_resolved.sha256.as_deref(), Some("abc123"));
+        assert_eq!(
+            foo_resolved.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "abc1230000000000000000000000000000000000000000000000000000000000"
+                )
+                .unwrap()
+            )
+        );
 
         let bar_dep = find_dependency(&package_data.dependencies, "bar")
             .expect("bar dependency should be present");
@@ -154,7 +163,15 @@ packages:
             .resolved_package
             .as_ref()
             .expect("bar should have resolved package");
-        assert_eq!(bar_resolved.sha256.as_deref(), Some("def456"));
+        assert_eq!(
+            bar_resolved.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "def4560000000000000000000000000000000000000000000000000000000000"
+                )
+                .unwrap()
+            )
+        );
     }
 
     #[test]

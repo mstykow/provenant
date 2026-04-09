@@ -5,7 +5,9 @@ use crate::parser_warn as warn;
 use base64::Engine;
 use serde_json::Value as JsonValue;
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
+use crate::models::{
+    DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha512Digest,
+};
 use crate::parsers::utils::{npm_purl, parse_sri};
 
 use super::PackageParser;
@@ -406,7 +408,8 @@ fn build_resolved_package(
         sha512: package
             .integrity
             .as_ref()
-            .and_then(|s| parse_sri(s).and_then(|(alg, hash)| (alg == "sha512").then_some(hash))),
+            .and_then(|s| parse_sri(s).and_then(|(alg, hash)| (alg == "sha512").then_some(hash)))
+            .and_then(|h| Sha512Digest::from_hex(&h).ok()),
         md5: None,
         is_virtual: true,
         extra_data: None,

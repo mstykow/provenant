@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::models::PackageType;
-    use crate::models::{DatasourceId, Dependency};
+    use crate::models::{DatasourceId, Dependency, Sha256Digest};
     use crate::parsers::{PackageParser, PythonParser, try_parse_file};
     use std::fs;
     use std::path::PathBuf;
@@ -2026,8 +2026,13 @@ Test package description.
             )
         );
         assert_eq!(
-            package_data.sha256.as_deref(),
-            Some("a5488a3dd1fd021ce33f969780b88fe0f7eebb76eb20996d7318f307612a045b")
+            package_data.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "a5488a3dd1fd021ce33f969780b88fe0f7eebb76eb20996d7318f307612a045b"
+                )
+                .unwrap()
+            )
         );
         assert_eq!(
             package_data.purl.as_deref(),
@@ -2663,13 +2668,13 @@ classifiers = ["Private :: Do Not Upload"]
       "packagetype": "bdist_wheel",
       "url": "https://files.pythonhosted.org/packages/example/attrs-24.1.0-py3-none-any.whl",
       "size": 12345,
-      "digests": {"sha256": "wheelhash"}
+      "digests": {"sha256": "aaaa0000000000000000000000000000000000000000000000000000000000ww"}
     },
     {
       "packagetype": "sdist",
       "url": "https://files.pythonhosted.org/packages/source/a/attrs/attrs-24.1.0.tar.gz",
       "size": 67890,
-      "digests": {"sha256": "sdisthash"}
+      "digests": {"sha256": "aaaa0000000000000000000000000000000000000000000000000000000000ss"}
     }
   ]
 }
@@ -2703,7 +2708,15 @@ classifiers = ["Private :: Do Not Upload"]
                     .to_string()
             )
         );
-        assert_eq!(package_data.sha256, Some("sdisthash".to_string()));
+        assert_eq!(
+            package_data.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "aaaa0000000000000000000000000000000000000000000000000000000000ss"
+                )
+                .unwrap()
+            )
+        );
         assert_eq!(package_data.size, Some(67890));
         assert_eq!(
             package_data.keywords,

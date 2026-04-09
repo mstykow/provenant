@@ -24,7 +24,7 @@ use starlark_syntax::syntax::ast;
 use starlark_syntax::syntax::module::AstModuleFields;
 use starlark_syntax::syntax::{AstModule, Dialect};
 
-use crate::models::{DatasourceId, PackageData, PackageType, Party};
+use crate::models::{DatasourceId, PackageData, PackageType, Party, Sha1Digest};
 
 use super::PackageParser;
 
@@ -304,7 +304,7 @@ fn build_package_from_metadata(fields: HashMap<String, MetadataValue>) -> Packag
 
     // Extract sha1 (download_archive_sha1)
     if let Some(MetadataValue::String(s)) = fields.get("download_archive_sha1") {
-        pkg.sha1 = Some(s.clone());
+        pkg.sha1 = Sha1Digest::from_hex(s).ok();
     }
 
     // Extract maintainers

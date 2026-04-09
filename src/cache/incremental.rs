@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::io::write_bytes_atomically;
 use super::locking::with_exclusive_cache_lock;
-use crate::models::FileInfo;
+use crate::models::{FileInfo, Sha256Digest};
 use crate::utils::hash::calculate_sha256;
 
 const INCREMENTAL_MANIFEST_VERSION: u32 = 1;
@@ -24,7 +24,7 @@ pub struct FileStateFingerprint {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IncrementalManifestEntry {
     pub state: FileStateFingerprint,
-    pub content_sha256: String,
+    pub content_sha256: Sha256Digest,
     pub file_info: FileInfo,
 }
 
@@ -138,8 +138,10 @@ mod tests {
                     modified_seconds: 10,
                     modified_nanos: 20,
                 },
-                content_sha256: "f2ca1bb6c7e907d06dafe4687e579fce9f2b2c8a179a4e7c1f6c5052d4f7d070"
-                    .to_string(),
+                content_sha256: Sha256Digest::from_hex(
+                    "f2ca1bb6c7e907d06dafe4687e579fce9f2b2c8a179a4e7c1f6c5052d4f7d070",
+                )
+                .unwrap(),
                 file_info: FileInfo::new(
                     "main.rs".to_string(),
                     "main".to_string(),
@@ -214,7 +216,8 @@ mod tests {
 
         let entry = IncrementalManifestEntry {
             state: metadata_fingerprint(&metadata).expect("fingerprint"),
-            content_sha256: "not-the-real-hash".to_string(),
+            content_sha256: Sha256Digest::from_hex("not-the-real-hash")
+                .unwrap_or(Sha256Digest::EMPTY),
             file_info: FileInfo::new(
                 "main.rs".to_string(),
                 "main".to_string(),

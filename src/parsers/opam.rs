@@ -25,7 +25,10 @@ use std::path::Path;
 use crate::parser_warn as warn;
 use regex::Regex;
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
+use crate::models::{
+    DatasourceId, Dependency, Md5Digest, PackageData, PackageType, Party, Sha1Digest, Sha256Digest,
+    Sha512Digest,
+};
 use crate::parsers::PackageParser;
 
 use super::license_normalization::{
@@ -73,10 +76,10 @@ struct OpamData {
     authors: Vec<String>,
     maintainers: Vec<String>,
     license: Option<String>,
-    sha1: Option<String>,
-    md5: Option<String>,
-    sha256: Option<String>,
-    sha512: Option<String>,
+    sha1: Option<Sha1Digest>,
+    md5: Option<Md5Digest>,
+    sha256: Option<Sha256Digest>,
+    sha512: Option<Sha512Digest>,
     dependencies: Vec<(String, String)>, // (name, version_constraint)
 }
 
@@ -428,10 +431,10 @@ fn parse_checksums(lines: &[&str], i: &mut usize, data: &mut OpamData) {
         if !inline.is_empty() && inline != "[" {
             if let Some((key, value)) = parse_checksum_line(inline) {
                 match key.as_str() {
-                    "sha1" => data.sha1 = Some(value),
-                    "md5" => data.md5 = Some(value),
-                    "sha256" => data.sha256 = Some(value),
-                    "sha512" => data.sha512 = Some(value),
+                    "sha1" => data.sha1 = Sha1Digest::from_hex(&value).ok(),
+                    "md5" => data.md5 = Md5Digest::from_hex(&value).ok(),
+                    "sha256" => data.sha256 = Sha256Digest::from_hex(&value).ok(),
+                    "sha512" => data.sha512 = Sha512Digest::from_hex(&value).ok(),
                     _ => {}
                 }
             }
@@ -449,10 +452,10 @@ fn parse_checksums(lines: &[&str], i: &mut usize, data: &mut OpamData) {
 
         if let Some((key, value)) = parse_checksum_line(line) {
             match key.as_str() {
-                "sha1" => data.sha1 = Some(value),
-                "md5" => data.md5 = Some(value),
-                "sha256" => data.sha256 = Some(value),
-                "sha512" => data.sha512 = Some(value),
+                "sha1" => data.sha1 = Sha1Digest::from_hex(&value).ok(),
+                "md5" => data.md5 = Md5Digest::from_hex(&value).ok(),
+                "sha256" => data.sha256 = Sha256Digest::from_hex(&value).ok(),
+                "sha512" => data.sha512 = Sha512Digest::from_hex(&value).ok(),
                 _ => {}
             }
         }

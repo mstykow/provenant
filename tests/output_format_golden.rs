@@ -1,7 +1,7 @@
 use provenant::models::{
-    Copyright, DatasourceId, ExtraData, FacetTallies, FileInfo, FileType, Header, Holder, Output,
-    Package, PackageData, PackageType, Party, ResolvedPackage, SystemEnvironment, Tallies,
-    TallyEntry, TopLevelDependency,
+    Copyright, DatasourceId, ExtraData, FacetTallies, FileInfo, FileType, Header, Holder,
+    Md5Digest, Output, Package, PackageData, PackageType, Party, ResolvedPackage, Sha1Digest,
+    SystemEnvironment, Tallies, TallyEntry, TopLevelDependency,
 };
 use provenant::{OutputFormat, OutputWriteConfig, OutputWriter, writer_for_format};
 use regex::Regex;
@@ -1533,7 +1533,7 @@ fn sample_plain_text_file(
         None,
         size,
         None,
-        Some(sha1.to_string()),
+        Some(Sha1Digest::from_hex(sha1).unwrap()),
         None,
         None,
         None,
@@ -1583,8 +1583,8 @@ fn sample_html_simple_output() -> Output {
         None,
         55,
         None,
-        Some("e2466d5b764d27fb301ceb439ffb5da22e43ab1d".to_string()),
-        Some("bdf7c572beb4094c2059508fa73c05a4".to_string()),
+        Some(Sha1Digest::from_hex("e2466d5b764d27fb301ceb439ffb5da22e43ab1d").unwrap()),
+        Some(Md5Digest::from_hex("bdf7c572beb4094c2059508fa73c05a4").unwrap()),
         None,
         Some("C".to_string()),
         vec![],
@@ -1648,7 +1648,7 @@ fn sample_cyclonedx_rich_output() -> Output {
         version: Some("2.13.5".to_string()),
         description: Some("a package manager for JavaScript".to_string()),
         purl: Some("pkg:npm/npm@2.13.5".to_string()),
-        sha1: Some("a124386bce4a90506f28ad4b1d1a804a17baaf32".to_string()),
+        sha1: Some(Sha1Digest::from_hex("a124386bce4a90506f28ad4b1d1a804a17baaf32").unwrap()),
         declared_license_expression_spdx: Some("Artistic-2.0".to_string()),
         homepage_url: Some("https://docs.npmjs.com/".to_string()),
         repository_homepage_url: Some("https://www.npmjs.com/package/npm".to_string()),

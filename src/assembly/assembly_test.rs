@@ -3,6 +3,7 @@ mod tests {
     use super::super::assemble;
     use crate::models::{
         DatasourceId, Dependency, FileInfo, FileType, Package, PackageData, PackageType,
+        Sha256Digest,
     };
     use serde_json::json;
     use std::collections::HashMap;
@@ -2787,7 +2788,12 @@ mod tests {
             name: Some("test".to_string()),
             version: Some("1.0.0".to_string()),
             homepage_url: Some("https://example.com".to_string()),
-            sha256: Some("abc123".to_string()),
+            sha256: Some(
+                Sha256Digest::from_hex(
+                    "abc1230000000000000000000000000000000000000000000000000000000000",
+                )
+                .unwrap(),
+            ),
             ..Default::default()
         };
 
@@ -2798,12 +2804,12 @@ mod tests {
         assert!(
             package
                 .datasource_ids
-                .contains(&DatasourceId::NpmPackageJson)
+                .contains(&DatasourceId::NpmPackageLockJson)
         );
         assert!(
             package
                 .datasource_ids
-                .contains(&DatasourceId::NpmPackageLockJson)
+                .contains(&DatasourceId::NpmPackageJson)
         );
         assert_eq!(
             package.description,
@@ -2817,7 +2823,27 @@ mod tests {
         );
         assert_eq!(
             package.sha256,
-            Some("abc123".to_string()),
+            Some(
+                Sha256Digest::from_hex(
+                    "abc1230000000000000000000000000000000000000000000000000000000000"
+                )
+                .unwrap()
+            ),
+            "New sha256 should be filled"
+        );
+        assert_eq!(
+            package.homepage_url,
+            Some("https://example.com".to_string()),
+            "New homepage should be filled"
+        );
+        assert_eq!(
+            package.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "abc1230000000000000000000000000000000000000000000000000000000000"
+                )
+                .unwrap()
+            ),
             "New sha256 should be filled"
         );
     }

@@ -33,7 +33,7 @@ use crate::parser_warn as warn;
 use regex::Regex;
 use yaml_serde::Value;
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
+use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Sha256Digest};
 
 use super::PackageParser;
 use super::license_normalization::{
@@ -176,7 +176,7 @@ impl PackageParser for CondaMetaYamlParser {
         let sha256 = source
             .and_then(|s| s.get("sha256"))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .and_then(|s| Sha256Digest::from_hex(s).ok());
 
         let about = yaml.get("about").and_then(|v| v.as_mapping());
         let homepage_url = about
