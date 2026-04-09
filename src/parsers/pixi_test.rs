@@ -321,6 +321,98 @@ sha256 = "pypi-hash"
     }
 
     #[test]
+    fn test_extract_from_pixi_lock_yaml_v6() {
+        let content = r#"
+version: 6
+
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.12.7-h2628c8c_0_cpython.conda
+        - pypi: https://files.pythonhosted.org/packages/example/requests-2.32.5-py3-none-any.whl
+  test:
+    packages:
+      osx-arm64:
+        - pypi: https://files.pythonhosted.org/packages/example/requests-2.32.5-py3-none-any.whl
+
+packages:
+  - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.12.7-h2628c8c_0_cpython.conda
+    version: 3.12.7
+    sha256: conda-hash
+    depends:
+      - openssl >=3.0
+  - pypi: https://files.pythonhosted.org/packages/example/requests-2.32.5-py3-none-any.whl
+    name: requests
+    version: 2.32.5
+    requires_python: '>=3.9'
+    requires_dist:
+      - urllib3>=2
+    sha256: pypi-hash
+        "#;
+
+        let (_temp_dir, path) = create_temp_file("pixi.lock", content);
+        let package_data = PixiLockParser::extract_first_package(&path);
+
+        assert_eq!(package_data.package_type, Some(PackageType::Pixi));
+        assert_eq!(package_data.datasource_id, Some(DatasourceId::PixiLock));
+        assert_eq!(package_data.primary_language.as_deref(), Some("YAML"));
+        assert_eq!(package_data.dependencies.len(), 2);
+        assert_eq!(
+            package_data
+                .extra_data
+                .as_ref()
+                .and_then(|value| value.get("lock_version"))
+                .and_then(|value| value.as_i64()),
+            Some(6)
+        );
+
+        let python = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:conda/python@3.12.7"))
+            .expect("python conda dep missing");
+        assert_eq!(python.is_pinned, Some(true));
+        assert_eq!(python.is_direct, None);
+        assert!(
+            python
+                .extra_data
+                .as_ref()
+                .and_then(|value| value.get("lock_references"))
+                .is_some()
+        );
+
+        let requests = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:pypi/requests@2.32.5"))
+            .expect("requests pypi dep missing");
+        assert_eq!(requests.is_pinned, Some(true));
+        assert_eq!(requests.is_direct, None);
+        assert_eq!(
+            requests
+                .extra_data
+                .as_ref()
+                .and_then(|value| value.get("sha256"))
+                .and_then(|value| value.as_str()),
+            Some("pypi-hash")
+        );
+        assert_eq!(
+            requests
+                .extra_data
+                .as_ref()
+                .and_then(|value| value.get("lock_references"))
+                .and_then(|value| value.as_array())
+                .map(Vec::len),
+            Some(2)
+        );
+    }
+
+    #[test]
     fn test_extract_from_pixi_lock_v4() {
         let content = r#"
 version = 4
