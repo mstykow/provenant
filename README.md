@@ -20,7 +20,8 @@ Prefer release binaries? Download precompiled archives from [GitHub Releases](ht
 
 ## Why Provenant?
 
-- Native scanning with benchmark-backed package-detection speedups that are frequently about an order of magnitude faster than ScanCode on recorded compare runs
+- Benchmark-backed package-detection speedups that are frequently about an order of magnitude faster than ScanCode on recorded runs
+- Single self-contained binary for simpler installation and CI use
 - ScanCode-compatible workflows and output formats, including ScanCode-style JSON, SPDX, CycloneDX, YAML, JSON Lines, HTML, and custom templates
 - Broad package-manifest and lockfile coverage across many ecosystems
 - Security-first static parsing with explicit safeguards and compatibility-focused tradeoffs where needed
