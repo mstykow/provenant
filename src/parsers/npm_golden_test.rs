@@ -171,6 +171,20 @@ mod golden_tests {
     }
 
     #[test]
+    fn test_golden_npm_lock_v1_unnamed_root() {
+        let test_file = PathBuf::from("testdata/npm/package-lock-v1-unnamed-root.json");
+        let expected_file =
+            PathBuf::from("testdata/npm/package-lock-v1-unnamed-root.json.expected.json");
+
+        let package_data = NpmLockParser::extract_first_package(&test_file);
+
+        match compare_package_data_parser_only(&package_data, &expected_file) {
+            Ok(_) => (),
+            Err(e) => panic!("Golden test failed: {}", e),
+        }
+    }
+
+    #[test]
     fn test_golden_npm_workspace() {
         let test_file = PathBuf::from("testdata/npm-workspace/basic.yaml");
         let expected_file = PathBuf::from("testdata/npm-workspace/basic.yaml.expected.json");
