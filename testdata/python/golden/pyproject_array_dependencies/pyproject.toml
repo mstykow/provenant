@@ -1,0 +1,11 @@
+[project]
+name = "array-demo"
+version = "1.0.0"
+dependencies = [
+    "requests>=2.32",
+    "mypy==1.19.1",
+    'ninja; sys_platform != "emscripten"',
+]
+
+[project.optional-dependencies]
+dev = ["typing_extensions", "helper[cli]==1.2.3"]

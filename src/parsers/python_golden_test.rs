@@ -74,6 +74,22 @@ mod golden_tests {
     }
 
     #[test]
+    fn test_golden_pyproject_array_dependencies() {
+        let test_file =
+            PathBuf::from("testdata/python/golden/pyproject_array_dependencies/pyproject.toml");
+        let expected_file = PathBuf::from(
+            "testdata/python/golden/pyproject_array_dependencies/pyproject.toml-expected.json",
+        );
+
+        let package_data = PythonParser::extract_first_package(&test_file);
+
+        match compare_package_data_parser_only(&package_data, &expected_file) {
+            Ok(_) => (),
+            Err(e) => panic!("Golden test failed: {}", e),
+        }
+    }
+
+    #[test]
     fn test_golden_pypi_json() {
         let test_file = PathBuf::from("testdata/python/pypi.json");
         let expected_file = PathBuf::from("testdata/python/golden/pypi.json-expected.json");

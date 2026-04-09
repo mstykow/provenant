@@ -6,6 +6,7 @@ mod tests {
         assert_dependency_present, assert_file_links_to_package, scan_and_assemble,
     };
     use crate::models::{DatasourceId, PackageType};
+    use serde_json::Value as JsonValue;
 
     #[test]
     fn test_python_metadata_scan_assigns_referenced_site_packages_files() {
@@ -348,5 +349,93 @@ version = "1.0.0"
         );
         assert!(result.packages.is_empty());
         assert!(result.dependencies.is_empty());
+    }
+
+    #[test]
+    fn test_python_pyproject_scan_preserves_dependency_requirement_shapes() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        fs::write(
+            temp_dir.path().join("pyproject.toml"),
+            r#"[project]
+name = "array-demo"
+version = "1.0.0"
+dependencies = [
+    "requests>=2.32",
+    "mypy==1.19.1",
+    'ninja; sys_platform != "emscripten"',
+]
+
+[project.optional-dependencies]
+dev = ["typing_extensions", "helper[cli]==1.2.3"]
+"#,
+        )
+        .expect("write pyproject.toml");
+
+        let (_files, result) = scan_and_assemble(temp_dir.path());
+        let package = result
+            .packages
+            .iter()
+            .find(|package| package.name.as_deref() == Some("array-demo"))
+            .expect("pyproject should assemble into a Python package");
+
+        let requests = result
+            .dependencies
+            .iter()
+            .find(|dep| {
+                dep.purl.as_deref() == Some("pkg:pypi/requests")
+                    && dep.for_package_uid.as_deref() == Some(package.package_uid.as_str())
+            })
+            .expect("requests dependency");
+        assert_eq!(requests.extracted_requirement.as_deref(), Some(">=2.32"));
+        assert_eq!(requests.is_pinned, Some(false));
+
+        let mypy = result
+            .dependencies
+            .iter()
+            .find(|dep| {
+                dep.purl.as_deref() == Some("pkg:pypi/mypy@1.19.1")
+                    && dep.for_package_uid.as_deref() == Some(package.package_uid.as_str())
+            })
+            .expect("mypy dependency");
+        assert_eq!(mypy.extracted_requirement.as_deref(), Some("==1.19.1"));
+        assert_eq!(mypy.is_pinned, Some(true));
+
+        let ninja = result
+            .dependencies
+            .iter()
+            .find(|dep| {
+                dep.purl.as_deref() == Some("pkg:pypi/ninja")
+                    && dep.for_package_uid.as_deref() == Some(package.package_uid.as_str())
+            })
+            .expect("ninja dependency");
+        let ninja_extra = ninja.extra_data.as_ref().expect("ninja marker data");
+        assert_eq!(ninja.extracted_requirement, None);
+        assert_eq!(
+            ninja_extra.get("marker"),
+            Some(&JsonValue::String(
+                "sys_platform != \"emscripten\"".to_string()
+            ))
+        );
+
+        let helper = result
+            .dependencies
+            .iter()
+            .find(|dep| {
+                dep.purl.as_deref() == Some("pkg:pypi/helper@1.2.3")
+                    && dep.for_package_uid.as_deref() == Some(package.package_uid.as_str())
+            })
+            .expect("helper dependency");
+        let helper_extra = helper.extra_data.as_ref().expect("helper extras data");
+        assert_eq!(helper.scope.as_deref(), Some("dev"));
+        assert_eq!(helper.is_runtime, Some(false));
+        assert_eq!(helper.is_optional, Some(true));
+        assert_eq!(helper.extracted_requirement.as_deref(), Some("==1.2.3"));
+        assert_eq!(helper.is_pinned, Some(true));
+        assert_eq!(
+            helper_extra.get("extras"),
+            Some(&JsonValue::Array(vec![JsonValue::String(
+                "cli".to_string()
+            )]))
+        );
     }
 }
