@@ -1,0 +1,26 @@
+version: 6
+
+environments:
+  default:
+    channels:
+      - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+      - https://pypi.org/simple
+    packages:
+      linux-64:
+        - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.12.7-h2628c8c_0_cpython.conda
+        - pypi: https://files.pythonhosted.org/packages/example/requests-2.32.5-py3-none-any.whl
+
+packages:
+  - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.12.7-h2628c8c_0_cpython.conda
+    version: 3.12.7
+    sha256: conda-hash
+    depends:
+      - openssl >=3.0
+  - pypi: https://files.pythonhosted.org/packages/example/requests-2.32.5-py3-none-any.whl
+    name: requests
+    version: 2.32.5
+    requires_python: '>=3.9'
+    requires_dist:
+      - urllib3>=2
+    sha256: pypi-hash

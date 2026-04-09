@@ -32,4 +32,17 @@ mod golden_tests {
             Err(error) => panic!("Golden test failed: {}", error),
         }
     }
+
+    #[test]
+    fn test_golden_pixi_lock_yaml() {
+        let test_file = PathBuf::from("testdata/pixi-golden/yaml-lock/pixi.lock");
+        let expected_file = PathBuf::from("testdata/pixi-golden/yaml-lock/pixi.lock.expected.json");
+
+        let package_data = PixiLockParser::extract_first_package(&test_file);
+
+        match compare_package_data_parser_only(&package_data, &expected_file) {
+            Ok(_) => (),
+            Err(error) => panic!("Golden test failed: {}", error),
+        }
+    }
 }
