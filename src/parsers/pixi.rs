@@ -10,7 +10,7 @@ use toml::map::Map as TomlMap;
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 use crate::parsers::conda::build_purl as build_conda_purl;
 use crate::parsers::python::read_toml_file;
-use crate::parsers::utils::split_name_email;
+use crate::parsers::utils::{read_file_to_string, split_name_email};
 
 use super::PackageParser;
 
@@ -69,7 +69,7 @@ impl PackageParser for PixiLockParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let toml_content = match read_toml_file(path) {
+        let content = match read_file_to_string(path) {
             Ok(content) => content,
             Err(error) => {
                 warn!("Failed to read pixi.lock at {:?}: {}", path, error);
@@ -77,7 +77,15 @@ impl PackageParser for PixiLockParser {
             }
         };
 
-        vec![parse_pixi_lock(&toml_content)]
+        let (lock_content, primary_language) = match parse_pixi_lock_document(&content) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                warn!("Failed to read pixi.lock at {:?}: {}", path, error);
+                return vec![default_package_data(Some(DatasourceId::PixiLock))];
+            }
+        };
+
+        vec![parse_pixi_lock(&lock_content, primary_language)]
     }
 }
 
@@ -128,25 +136,42 @@ fn parse_pixi_toml(toml_content: &TomlValue) -> PackageData {
     package
 }
 
-fn parse_pixi_lock(toml_content: &TomlValue) -> PackageData {
-    let mut package = default_package_data(Some(DatasourceId::PixiLock));
-    package.primary_language = Some("TOML".to_string());
+fn parse_pixi_lock_document(content: &str) -> Result<(JsonValue, &'static str), String> {
+    match toml::from_str::<TomlValue>(content) {
+        Ok(toml_content) => serde_json::to_value(toml_content)
+            .map(|value| (value, "TOML"))
+            .map_err(|error| format!("Failed to convert TOML lockfile: {error}")),
+        Err(toml_error) => yaml_serde::from_str::<JsonValue>(content)
+            .map(|value| (value, "YAML"))
+            .map_err(|yaml_error| {
+                format!(
+                    "Failed to parse Pixi lockfile as TOML ({toml_error}) or YAML ({yaml_error})"
+                )
+            }),
+    }
+}
 
-    let lock_version = toml_content
-        .get(FIELD_VERSION)
-        .and_then(TomlValue::as_integer);
+fn parse_pixi_lock(lock_content: &JsonValue, primary_language: &str) -> PackageData {
+    let mut package = default_package_data(Some(DatasourceId::PixiLock));
+    package.primary_language = Some(primary_language.to_string());
+
+    let lock_version = lock_content.get(FIELD_VERSION).and_then(|value| {
+        value
+            .as_i64()
+            .or_else(|| value.as_str()?.parse::<i64>().ok())
+    });
     let mut extra_data = HashMap::new();
     if let Some(lock_version) = lock_version {
         extra_data.insert("lock_version".to_string(), JsonValue::from(lock_version));
     }
-    if let Some(env_json) = toml_content.get(FIELD_ENVIRONMENTS).and_then(toml_to_json) {
+    if let Some(env_json) = lock_content.get(FIELD_ENVIRONMENTS).cloned() {
         extra_data.insert("lock_environments".to_string(), env_json);
     }
     package.extra_data = (!extra_data.is_empty()).then_some(extra_data);
 
     match lock_version {
-        Some(6) => package.dependencies = extract_v6_lock_dependencies(toml_content),
-        Some(4) => package.dependencies = extract_v4_lock_dependencies(toml_content),
+        Some(6) => package.dependencies = extract_v6_lock_dependencies(lock_content),
+        Some(4) => package.dependencies = extract_v4_lock_dependencies(lock_content),
         Some(_) | None => {}
     }
 
@@ -388,35 +413,35 @@ fn build_manifest_extra_data(
     (!extra_data.is_empty()).then_some(extra_data)
 }
 
-fn extract_v6_lock_dependencies(toml_content: &TomlValue) -> Vec<Dependency> {
-    let environment_refs = collect_v6_package_refs(toml_content);
-    let Some(packages) = toml_content.get("packages").and_then(TomlValue::as_array) else {
+fn extract_v6_lock_dependencies(lock_content: &JsonValue) -> Vec<Dependency> {
+    let environment_refs = collect_v6_package_refs(lock_content);
+    let Some(packages) = lock_content.get("packages").and_then(JsonValue::as_array) else {
         return Vec::new();
     };
 
     packages
         .iter()
-        .filter_map(TomlValue::as_table)
+        .filter_map(JsonValue::as_object)
         .filter_map(|table| build_v6_lock_dependency(table, &environment_refs))
         .collect()
 }
 
-fn collect_v6_package_refs(toml_content: &TomlValue) -> HashMap<String, Vec<JsonValue>> {
+fn collect_v6_package_refs(lock_content: &JsonValue) -> HashMap<String, Vec<JsonValue>> {
     let mut refs = HashMap::new();
-    let Some(environments) = toml_content
+    let Some(environments) = lock_content
         .get(FIELD_ENVIRONMENTS)
-        .and_then(TomlValue::as_table)
+        .and_then(JsonValue::as_object)
     else {
         return refs;
     };
 
     for (env_name, env_value) in environments {
-        let Some(env_table) = env_value.as_table() else {
+        let Some(env_table) = env_value.as_object() else {
             continue;
         };
-        let channels = env_table.get(FIELD_CHANNELS).and_then(toml_to_json);
-        let indexes = env_table.get("indexes").and_then(toml_to_json);
-        let Some(package_platforms) = env_table.get("packages").and_then(TomlValue::as_table)
+        let channels = env_table.get(FIELD_CHANNELS).cloned();
+        let indexes = env_table.get("indexes").cloned();
+        let Some(package_platforms) = env_table.get("packages").and_then(JsonValue::as_object)
         else {
             continue;
         };
@@ -425,11 +450,11 @@ fn collect_v6_package_refs(toml_content: &TomlValue) -> HashMap<String, Vec<Json
                 continue;
             };
             for entry in entries {
-                let Some(table) = entry.as_table() else {
+                let Some(table) = entry.as_object() else {
                     continue;
                 };
                 for (kind, locator_value) in table {
-                    if let Some(locator) = toml_value_to_string(locator_value) {
+                    if let Some(locator) = json_value_to_string(locator_value) {
                         let mut data = JsonMap::new();
                         data.insert(
                             "environment".to_string(),
@@ -456,25 +481,25 @@ fn collect_v6_package_refs(toml_content: &TomlValue) -> HashMap<String, Vec<Json
 }
 
 fn build_v6_lock_dependency(
-    table: &TomlMap<String, TomlValue>,
+    table: &JsonMap<String, JsonValue>,
     refs: &HashMap<String, Vec<JsonValue>>,
 ) -> Option<Dependency> {
-    if let Some(locator) = table.get("pypi").and_then(toml_value_to_string) {
+    if let Some(locator) = table.get("pypi").and_then(json_value_to_string) {
         let name = table
             .get(FIELD_NAME)
-            .and_then(TomlValue::as_str)
+            .and_then(JsonValue::as_str)
             .map(normalize_pypi_name)?;
-        let version = table.get(FIELD_VERSION).and_then(toml_value_to_string)?;
+        let version = table.get(FIELD_VERSION).and_then(json_value_to_string)?;
         let mut extra = HashMap::new();
         extra.insert("source".to_string(), JsonValue::String(locator.clone()));
-        if let Some(val) = table.get("requires_dist").and_then(toml_to_json) {
+        if let Some(val) = table.get("requires_dist").cloned() {
             extra.insert("requires_dist".to_string(), val);
         }
-        if let Some(val) = table.get("requires_python").and_then(toml_to_json) {
+        if let Some(val) = table.get("requires_python").cloned() {
             extra.insert("requires_python".to_string(), val);
         }
         for key in ["sha256", "md5"] {
-            if let Some(val) = table.get(key).and_then(toml_to_json) {
+            if let Some(val) = table.get(key).cloned() {
                 extra.insert(key.to_string(), val);
             }
         }
@@ -499,9 +524,9 @@ fn build_v6_lock_dependency(
         });
     }
 
-    if let Some(locator) = table.get("conda").and_then(toml_value_to_string) {
+    if let Some(locator) = table.get("conda").and_then(json_value_to_string) {
         let name = conda_name_from_locator(&locator)?;
-        let version = table.get(FIELD_VERSION).and_then(toml_value_to_string);
+        let version = table.get(FIELD_VERSION).and_then(json_value_to_string);
         let mut extra = HashMap::new();
         extra.insert("source".to_string(), JsonValue::String(locator.clone()));
         for key in [
@@ -513,7 +538,7 @@ fn build_v6_lock_dependency(
             "constrains",
             "purls",
         ] {
-            if let Some(val) = table.get(key).and_then(toml_to_json) {
+            if let Some(val) = table.get(key).cloned() {
                 extra.insert(key.to_string(), val);
             }
         }
@@ -541,22 +566,22 @@ fn build_v6_lock_dependency(
     None
 }
 
-fn extract_v4_lock_dependencies(toml_content: &TomlValue) -> Vec<Dependency> {
-    let Some(packages) = toml_content.get("packages").and_then(TomlValue::as_array) else {
+fn extract_v4_lock_dependencies(lock_content: &JsonValue) -> Vec<Dependency> {
+    let Some(packages) = lock_content.get("packages").and_then(JsonValue::as_array) else {
         return Vec::new();
     };
 
     packages
         .iter()
-        .filter_map(TomlValue::as_table)
+        .filter_map(JsonValue::as_object)
         .filter_map(build_v4_lock_dependency)
         .collect()
 }
 
-fn build_v4_lock_dependency(table: &TomlMap<String, TomlValue>) -> Option<Dependency> {
-    let kind = table.get("kind").and_then(TomlValue::as_str)?;
-    let name = table.get(FIELD_NAME).and_then(toml_value_to_string)?;
-    let version = table.get(FIELD_VERSION).and_then(toml_value_to_string);
+fn build_v4_lock_dependency(table: &JsonMap<String, JsonValue>) -> Option<Dependency> {
+    let kind = table.get("kind").and_then(JsonValue::as_str)?;
+    let name = table.get(FIELD_NAME).and_then(json_value_to_string)?;
+    let version = table.get(FIELD_VERSION).and_then(json_value_to_string);
     let mut extra = HashMap::new();
     for key in [
         "url",
@@ -571,7 +596,7 @@ fn build_v4_lock_dependency(table: &TomlMap<String, TomlValue>) -> Option<Depend
         "depends",
         "requires_dist",
     ] {
-        if let Some(val) = table.get(key).and_then(toml_to_json) {
+        if let Some(val) = table.get(key).cloned() {
             extra.insert(key.replace('-', "_"), val);
         }
     }
@@ -629,6 +654,15 @@ fn toml_value_to_string(value: &TomlValue) -> Option<String> {
 
 fn toml_to_json(value: &TomlValue) -> Option<JsonValue> {
     serde_json::to_value(value).ok()
+}
+
+fn json_value_to_string(value: &JsonValue) -> Option<String> {
+    match value {
+        JsonValue::String(value) => Some(value.clone()),
+        JsonValue::Number(value) => Some(value.to_string()),
+        JsonValue::Bool(value) => Some(value.to_string()),
+        _ => None,
+    }
 }
 
 fn normalize_pypi_name(name: &str) -> String {
@@ -690,6 +724,6 @@ crate::register_parser!(
     "Pixi workspace manifest and lockfile",
     &["**/pixi.toml", "**/pixi.lock"],
     "pixi",
-    "TOML",
+    "TOML/YAML",
     Some("https://pixi.sh/latest/reference/pixi_manifest/"),
 );
