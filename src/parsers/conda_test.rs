@@ -614,6 +614,16 @@ spec:
     }
 
     #[test]
+    fn test_extract_jinja2_variables_with_selector_comment() {
+        let content = r#"{% set version = "2.0.1" %}  # [unix]"#;
+
+        let vars = extract_jinja2_variables(content);
+
+        assert_eq!(vars.len(), 1);
+        assert_eq!(vars.get("version"), Some(&"2.0.1".to_string()));
+    }
+
+    #[test]
     fn test_apply_jinja2_substitutions_multiple_occurrences() {
         let mut variables = HashMap::new();
         variables.insert("version".to_string(), "1.0".to_string());
@@ -623,6 +633,59 @@ spec:
         let result = apply_jinja2_substitutions(content, &variables);
 
         assert_eq!(result.matches("1.0").count(), 2);
+    }
+
+    #[test]
+    fn test_apply_jinja2_substitutions_skips_selector_commented_jinja_statement() {
+        let content = r#"{% set markers = ["not slow"] %}  # [linux]
+test:
+  commands:
+    - python -V"#;
+
+        let result = apply_jinja2_substitutions(content, &HashMap::new());
+
+        assert!(!result.contains("{% set markers"));
+        assert!(result.contains("test:"));
+        assert!(result.contains("- python -V"));
+    }
+
+    #[test]
+    fn test_extract_meta_yaml_with_selector_commented_jinja_statements() {
+        let temp_dir = TempDir::new().unwrap();
+        let meta_path = temp_dir.path().join("meta.yaml");
+        fs::write(
+            &meta_path,
+            r#"{% set version = "2.0.1" %}
+
+package:
+  name: pandas
+  version: {{ version }}
+
+requirements:
+  host:
+    - python
+    - numpy >=1.23
+
+test:
+  commands:
+    {% set markers = ["not slow"] %}   # [linux]
+    - python -V
+
+about:
+  license: BSD-3-Clause
+  summary: Powerful data structures for data analysis"#,
+        )
+        .unwrap();
+
+        let package_data = CondaMetaYamlParser::extract_first_package(&meta_path);
+
+        assert_eq!(package_data.package_type, Some(PackageType::Conda));
+        assert_eq!(package_data.name.as_deref(), Some("pandas"));
+        assert_eq!(package_data.version.as_deref(), Some("2.0.1"));
+        assert_eq!(
+            package_data.extracted_license_statement.as_deref(),
+            Some("BSD-3-Clause")
+        );
     }
 
     #[test]
