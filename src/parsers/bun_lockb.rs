@@ -14,6 +14,8 @@ pub struct BunLockbParser;
 
 const HEADER_BYTES: &[u8] = b"#!/usr/bin/env bun\nbun-lockfile-format-v0\n";
 const SUPPORTED_FORMAT_VERSION: u32 = 2;
+const FIELD_COUNT_WITHOUT_SCRIPTS: usize = 7;
+const FIELD_COUNT_WITH_SCRIPTS: usize = 8;
 const PACKAGE_FIELD_LENGTHS: [usize; 8] = [8, 8, 64, 8, 8, 88, 20, 48];
 const DEPENDENCY_ENTRY_SIZE: usize = 26;
 
@@ -125,10 +127,10 @@ pub(crate) fn parse_bun_lockb(bytes: &[u8]) -> Result<PackageData, String> {
     }
 
     let field_count = cursor.read_u64()? as usize;
-    if field_count != PACKAGE_FIELD_LENGTHS.len() {
+    if field_count != FIELD_COUNT_WITHOUT_SCRIPTS && field_count != FIELD_COUNT_WITH_SCRIPTS {
         return Err(format!(
-            "Unexpected bun.lockb package field count {}",
-            field_count
+            "Unexpected bun.lockb package field count {} (supported: {} or {})",
+            field_count, FIELD_COUNT_WITHOUT_SCRIPTS, FIELD_COUNT_WITH_SCRIPTS
         ));
     }
 
@@ -141,7 +143,7 @@ pub(crate) fn parse_bun_lockb(bytes: &[u8]) -> Result<PackageData, String> {
         return Err("Invalid bun.lockb package section bounds".to_string());
     }
 
-    let mut packages = parse_packages(bytes, list_len, packages_begin, packages_end)?;
+    let mut packages = parse_packages(bytes, list_len, field_count, packages_begin, packages_end)?;
     cursor.pos = packages_end;
     let buffers = parse_buffers(bytes, &mut cursor, total_buffer_size)?;
     materialize_packages(&mut packages, buffers.string_bytes)?;
@@ -152,6 +154,7 @@ pub(crate) fn parse_bun_lockb(bytes: &[u8]) -> Result<PackageData, String> {
 fn parse_packages(
     bytes: &[u8],
     list_len: usize,
+    field_count: usize,
     packages_begin: usize,
     packages_end: usize,
 ) -> Result<Vec<BunLockbPackage>, String> {
@@ -175,7 +178,8 @@ fn parse_packages(
         .get(packages_begin..packages_end)
         .ok_or_else(|| "Invalid bun.lockb package region".to_string())?;
 
-    let expected_size: usize = PACKAGE_FIELD_LENGTHS.iter().sum::<usize>() * list_len;
+    let expected_size: usize =
+        PACKAGE_FIELD_LENGTHS[..field_count].iter().sum::<usize>() * list_len;
     if package_region.len() < expected_size {
         return Err("bun.lockb package region is truncated".to_string());
     }
@@ -213,7 +217,14 @@ fn parse_packages(
         field_offset += 88;
     }
 
-    let _ = field_offset + 20 * list_len + 48 * list_len;
+    field_offset += 20 * list_len;
+    if field_count == FIELD_COUNT_WITH_SCRIPTS {
+        field_offset += 48 * list_len;
+    }
+
+    if field_offset != expected_size {
+        return Err("bun.lockb package region layout is malformed".to_string());
+    }
 
     Ok(packages)
 }
