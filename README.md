@@ -20,7 +20,7 @@ Prefer release binaries? Download precompiled archives from [GitHub Releases](ht
 
 ## Why Provenant?
 
-- Native scanning with parallel execution and a single self-contained binary
+- Native scanning with benchmark-backed package-detection speedups that are frequently about an order of magnitude faster than ScanCode on recorded compare runs
 - ScanCode-compatible workflows and output formats, including ScanCode-style JSON, SPDX, CycloneDX, YAML, JSON Lines, HTML, and custom templates
 - Broad package-manifest and lockfile coverage across many ecosystems
 - Security-first static parsing with explicit safeguards and compatibility-focused tradeoffs where needed
@@ -174,7 +174,9 @@ For the generated package-format support matrix, see [Supported Formats](docs/SU
 
 ## Performance
 
-`Provenant` is designed for efficient native scanning and parallel processing. See [Architecture: Performance Characteristics](docs/ARCHITECTURE.md#performance-characteristics) for implementation details.
+`Provenant` has maintained package-detection benchmarks against ScanCode on specific recorded targets. Across those same-host recorded runs, Provenant is frequently about an order of magnitude faster while also delivering broader package and dependency extraction, cleaner normalization, or other documented end-state improvements on many listed targets. See [Package Detection Benchmarks](docs/BENCHMARKS.md) for the exact targets, timings, machine context, and benchmark scope.
+
+These results apply only to those recorded package-detection runs; they are not a blanket claim about every scan mode, target, or environment. For implementation details, see [Architecture: Performance Characteristics](docs/ARCHITECTURE.md#performance-characteristics).
 
 ## Output Formats
 

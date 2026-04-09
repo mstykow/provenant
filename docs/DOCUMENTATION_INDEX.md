@@ -7,6 +7,7 @@ This index helps you find the right documentation for your needs.
 - **[README.md](../README.md)** - Installation, usage, and quick start
 - **[CLI_GUIDE.md](CLI_GUIDE.md)** - Command-line workflows and important flag combinations
 - **[SCANCODE_COMPARISON.md](SCANCODE_COMPARISON.md)** - Provenant's relationship to ScanCode Toolkit and high-level comparison notes
+- **[BENCHMARKS.md](BENCHMARKS.md)** - Maintained package-detection compare-run record, timing methodology, and Provenant-vs-ScanCode outcomes
 - **[SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md)** - Generated support matrix for package and package-adjacent detection surfaces
 - **[NOTICE](../NOTICE)** - Upstream attribution and licensing details for included ScanCode-derived materials
 - **[ACKNOWLEDGEMENTS.md](../ACKNOWLEDGEMENTS.md)** - Project support and acknowledgements, including employer and infrastructure support
@@ -39,6 +40,7 @@ This index helps you find the right documentation for your needs.
 ```text
 docs/
 ├── SCANCODE_COMPARISON.md             # Evergreen: Provenant vs. ScanCode positioning
+├── BENCHMARKS.md                      # Evergreen: Benchmark methodology and recorded compare runs
 ├── CLI_GUIDE.md                       # Evergreen: User-facing CLI workflows
 ├── ARCHITECTURE.md                    # Evergreen: System design
 ├── LICENSE_DETECTION_ARCHITECTURE.md  # Evergreen: License-detection subsystem
@@ -111,6 +113,7 @@ docs/
 - **ARCHITECTURE.md** - Updated as architecture evolves
 - **CLI_GUIDE.md** - Updated as the public CLI workflows evolve
 - **SCANCODE_COMPARISON.md** - Updated as positioning, trust model, or comparison guidance evolves
+- **BENCHMARKS.md** - Updated as maintained benchmark examples and methodology evolve
 - **LICENSE_DETECTION_ARCHITECTURE.md** - Updated as the license-detection subsystem evolves
 - **RELEASING.md** - Updated as the release workflow changes
 - **HOW_TO_ADD_A_PARSER.md** - Updated as parser patterns change
