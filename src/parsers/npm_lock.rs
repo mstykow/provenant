@@ -130,8 +130,8 @@ fn parse_lockfile_v2_plus(
     };
 
     let (root_name, root_version) = extract_root_package_identity(json, root_name, root_version);
-    let (namespace, name) = extract_namespace_and_name(&root_name);
-    let purl = create_purl(&namespace, &name, Some(root_version.as_str()));
+    let (namespace, name, version, purl) =
+        normalize_root_package_metadata(&root_name, &root_version);
 
     // Collect root-level dependencies from top-level sections
     let mut root_deps = std::collections::HashSet::new();
@@ -233,9 +233,9 @@ fn parse_lockfile_v2_plus(
 
     PackageData {
         package_type: Some(NpmLockParser::PACKAGE_TYPE),
-        namespace: Some(namespace),
-        name: Some(name),
-        version: Some(root_version),
+        namespace: namespace.clone(),
+        name,
+        version,
         qualifiers: None,
         subpath: None,
         primary_language: None,
@@ -292,16 +292,16 @@ fn parse_lockfile_v1(
         }
     };
 
-    let (namespace, name) = extract_namespace_and_name(&root_name);
-    let purl = create_purl(&namespace, &name, Some(root_version.as_str()));
+    let (namespace, name, version, purl) =
+        normalize_root_package_metadata(&root_name, &root_version);
 
     let dependencies = parse_dependencies_v1(dependencies_obj);
 
     PackageData {
         package_type: Some(NpmLockParser::PACKAGE_TYPE),
-        namespace: Some(namespace),
-        name: Some(name),
-        version: Some(root_version),
+        namespace: namespace.clone(),
+        name,
+        version,
         qualifiers: None,
         subpath: None,
         primary_language: None,
@@ -468,6 +468,37 @@ fn create_purl(namespace: &str, name: &str, version: Option<&str>) -> Option<Str
         format!("{}/{}", namespace, name)
     };
     npm_purl(&full_name, version.filter(|value| !value.is_empty()))
+}
+
+fn normalize_root_package_metadata(
+    root_name: &str,
+    root_version: &str,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
+    let (namespace, name) = extract_namespace_and_name(root_name);
+    let normalized_name = non_empty_string(&name);
+    let normalized_namespace = normalized_name.as_ref().map(|_| namespace);
+    let normalized_version = normalized_name
+        .as_ref()
+        .and_then(|_| non_empty_string(root_version));
+    let purl = normalized_name.as_deref().and_then(|name| {
+        create_purl(
+            normalized_namespace.as_deref().unwrap_or(""),
+            name,
+            normalized_version.as_deref(),
+        )
+    });
+
+    (
+        normalized_namespace,
+        normalized_name,
+        normalized_version,
+        purl,
+    )
 }
 
 fn extract_root_package_identity(

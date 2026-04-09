@@ -188,6 +188,35 @@ mod tests {
         assert!(package_data.dependencies.is_empty());
     }
 
+    #[test]
+    fn test_v1_lockfile_without_root_name_keeps_dependencies_but_no_identity() {
+        let content = r#"{
+            "requires": true,
+            "lockfileVersion": 1,
+            "version": "9.9.9",
+            "dependencies": {
+                "minimist": {
+                    "version": "1.0.0",
+                    "resolved": "https://registry.npmjs.org/minimist/-/minimist-1.0.0.tgz",
+                    "integrity": "sha1-lCnE+D4NIlkKdq62EABtzD+Jxw8="
+                }
+            }
+        }"#;
+
+        let (_temp, path) = create_temp_lock_file(content);
+        let package_data = NpmLockParser::extract_first_package(&path);
+
+        assert_eq!(package_data.package_type, Some(PackageType::Npm));
+        assert_eq!(package_data.name, None);
+        assert_eq!(package_data.version, None);
+        assert_eq!(package_data.purl, None);
+        assert_eq!(package_data.dependencies.len(), 1);
+        assert_eq!(
+            package_data.dependencies[0].purl.as_deref(),
+            Some("pkg:npm/minimist@1.0.0")
+        );
+    }
+
     // ===== Integrity Parsing Tests =====
 
     #[test]
