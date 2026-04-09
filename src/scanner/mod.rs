@@ -106,7 +106,10 @@ pub fn scan_options_fingerprint(
 
 pub use self::collect::{CollectedPaths, collect_paths};
 #[allow(unused_imports)]
-pub use self::process::{process_collected, process_collected_with_memory_limit};
+pub use self::process::{
+    process_collected, process_collected_sequential, process_collected_with_memory_limit,
+    process_collected_with_memory_limit_sequential,
+};
 
 #[cfg(test)]
 mod tests {
