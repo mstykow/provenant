@@ -314,6 +314,113 @@ stdenv.mkDerivation rec {
     }
 
     #[test]
+    fn test_extract_flake_with_relative_paths_in_outputs() {
+        let (_temp_dir, path) = create_named_manifest(
+            "rnp-flake",
+            "flake.nix",
+            r#"{
+  description = "High performance C++ OpenPGP library, fully compliant to RFC 4880";
+
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs";
+    flake-utils.url = "github:numtide/flake-utils";
+  };
+
+  outputs = { self, nixpkgs, flake-utils }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = nixpkgs.legacyPackages.${system};
+        thePackage = pkgs.callPackage ./default.nix { };
+      in
+      rec {
+        defaultApp = flake-utils.lib.mkApp {
+          drv = defaultPackage;
+        };
+        defaultPackage = thePackage;
+      });
+}
+"#,
+        );
+
+        let package = NixFlakeParser::extract_first_package(&path);
+
+        assert_eq!(package.package_type, Some(PackageType::Nix));
+        assert_eq!(package.datasource_id, Some(DatasourceId::NixFlakeNix));
+        assert_eq!(package.name.as_deref(), Some("rnp-flake"));
+        assert_eq!(
+            package.description.as_deref(),
+            Some("High performance C++ OpenPGP library, fully compliant to RFC 4880")
+        );
+        assert_eq!(package.dependencies.len(), 2);
+    }
+
+    #[test]
+    fn test_extract_default_nix_with_string_interpolation() {
+        let (_temp_dir, path) = create_named_manifest(
+            "rnp-default",
+            "default.nix",
+            r#"{ pkgs ? import <nixpkgs> { }
+, lib ? pkgs.lib
+, stdenv ? pkgs.stdenv
+}:
+
+stdenv.mkDerivation rec {
+  pname = "rnp";
+  version = "unstable";
+
+  src = ./.;
+
+  buildInputs = with pkgs; [ zlib bzip2 json_c botan2 ];
+
+  cmakeFlags = [
+    "-DCMAKE_INSTALL_PREFIX=${placeholder "out"}"
+    "-DBUILD_SHARED_LIBS=on"
+  ];
+
+  nativeBuildInputs = with pkgs; [ asciidoctor cmake pkg-config python3 ];
+
+  meta = with lib; {
+    homepage = "https://github.com/rnpgp/rnp";
+    description = "High performance C++ OpenPGP library, fully compliant to RFC 4880";
+    license = licenses.bsd2;
+  };
+}
+"#,
+        );
+
+        let package = NixDefaultParser::extract_first_package(&path);
+
+        assert_eq!(package.package_type, Some(PackageType::Nix));
+        assert_eq!(package.datasource_id, Some(DatasourceId::NixDefaultNix));
+        assert_eq!(package.name.as_deref(), Some("rnp"));
+        assert_eq!(package.version.as_deref(), Some("unstable"));
+        assert_eq!(
+            package.description.as_deref(),
+            Some("High performance C++ OpenPGP library, fully compliant to RFC 4880")
+        );
+        assert_eq!(
+            package.homepage_url.as_deref(),
+            Some("https://github.com/rnpgp/rnp")
+        );
+        assert_eq!(
+            package.extracted_license_statement.as_deref(),
+            Some("licenses.bsd2")
+        );
+        assert!(
+            package
+                .dependencies
+                .iter()
+                .any(|dep| dep.purl.as_deref() == Some("pkg:nix/zlib"))
+        );
+        assert!(
+            package
+                .dependencies
+                .iter()
+                .any(|dep| dep.purl.as_deref() == Some("pkg:nix/asciidoctor"))
+        );
+    }
+
+    #[test]
     fn test_invalid_nix_inputs_preserve_datasource_identity() {
         let (_flake_dir, flake_path) =
             create_named_manifest("broken-flake", "flake.nix", "{ description = ; }");

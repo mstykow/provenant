@@ -1,0 +1,31 @@
+[
+  {
+    "type": "nix",
+    "name": "rnp-flake",
+    "primary_language": "Nix",
+    "description": "High performance C++ OpenPGP library, fully compliant to RFC 4880",
+    "parties": [],
+    "datasource_id": "nix_flake_nix",
+    "purl": "pkg:nix/rnp-flake",
+    "dependencies": [
+      {
+        "purl": "pkg:nix/flake-utils",
+        "extracted_requirement": "github:numtide/flake-utils",
+        "scope": "inputs",
+        "is_runtime": false,
+        "is_optional": false,
+        "is_pinned": false,
+        "is_direct": true
+      },
+      {
+        "purl": "pkg:nix/nixpkgs",
+        "extracted_requirement": "github:nixos/nixpkgs",
+        "scope": "inputs",
+        "is_runtime": false,
+        "is_optional": false,
+        "is_pinned": false,
+        "is_direct": true
+      }
+    ]
+  }
+]

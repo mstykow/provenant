@@ -168,6 +168,15 @@ impl Lexer {
             }
 
             match ch {
+                '$' if self.peek_n(1) == Some('{') => {
+                    tokens.push(Token::Ident(self.read_interpolation_literal()?));
+                }
+                '.' if self.peek_n(1) == Some('/') => {
+                    tokens.push(Token::Ident(self.read_path_literal()?));
+                }
+                '.' if self.peek_n(1) == Some('.') && self.peek_n(2) == Some('/') => {
+                    tokens.push(Token::Ident(self.read_path_literal()?));
+                }
                 '{' => {
                     self.index += 1;
                     tokens.push(Token::LBrace);
@@ -277,6 +286,35 @@ impl Lexer {
                 continue;
             }
 
+            if ch == '$' && self.peek() == Some('{') {
+                result.push(ch);
+                result.push('{');
+                self.index += 1;
+                let mut interpolation_depth = 1usize;
+
+                while let Some(inner) = self.peek() {
+                    self.index += 1;
+                    result.push(inner);
+
+                    match inner {
+                        '{' => interpolation_depth += 1,
+                        '}' => {
+                            interpolation_depth = interpolation_depth.saturating_sub(1);
+                            if interpolation_depth == 0 {
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                if interpolation_depth != 0 {
+                    return Err("unterminated string interpolation".to_string());
+                }
+
+                continue;
+            }
+
             if ch == '"' {
                 return Ok(result);
             }
@@ -285,6 +323,58 @@ impl Lexer {
         }
 
         Err("unterminated string".to_string())
+    }
+
+    fn read_path_literal(&mut self) -> Result<String, String> {
+        let start = self.index;
+
+        while let Some(ch) = self.peek() {
+            if ch.is_whitespace()
+                || matches!(
+                    ch,
+                    '{' | '}' | '[' | ']' | '(' | ')' | '=' | ';' | ':' | ',' | '"'
+                )
+                || (ch == '\'' && self.peek_n(1) == Some('\''))
+                || ch == '#'
+            {
+                break;
+            }
+
+            if ch == '/' && self.peek_n(1) == Some('*') {
+                break;
+            }
+
+            self.index += 1;
+        }
+
+        if self.index == start {
+            return Err("unexpected token".to_string());
+        }
+
+        Ok(self.chars[start..self.index].iter().collect())
+    }
+
+    fn read_interpolation_literal(&mut self) -> Result<String, String> {
+        let start = self.index;
+        self.index += 2;
+        let mut depth = 1usize;
+
+        while let Some(ch) = self.peek() {
+            self.index += 1;
+
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        return Ok(self.chars[start..self.index].iter().collect());
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Err("unterminated interpolation literal".to_string())
     }
 
     fn read_indented_string(&mut self) -> Result<String, String> {

@@ -22,6 +22,14 @@ mod golden_tests {
     }
 
     #[test]
+    fn test_golden_flake_manifest_with_relative_paths() {
+        run_golden::<NixFlakeParser>(
+            "testdata/nix-golden/rnp-flake/flake.nix",
+            "testdata/nix-golden/rnp-flake/flake.nix.expected.json",
+        );
+    }
+
+    #[test]
     fn test_golden_flake_lock() {
         run_golden::<NixFlakeLockParser>(
             "testdata/nix-golden/lock-demo/flake.lock",

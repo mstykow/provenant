@@ -51,4 +51,99 @@ mod tests {
             DatasourceId::NixFlakeLock,
         );
     }
+
+    #[test]
+    fn test_nix_scan_handles_mongodb_style_vendored_nix_files_without_scan_errors() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        let root = temp_dir.path().join("vendor-nix");
+        fs::create_dir_all(&root).expect("create nix fixture dir");
+
+        fs::write(
+            root.join("flake.nix"),
+            r#"{
+  description = "High performance C++ OpenPGP library, fully compliant to RFC 4880";
+
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs";
+    flake-utils.url = "github:numtide/flake-utils";
+  };
+
+  outputs = { self, nixpkgs, flake-utils }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = nixpkgs.legacyPackages.${system};
+        thePackage = pkgs.callPackage ./default.nix { };
+      in
+      rec {
+        defaultApp = flake-utils.lib.mkApp {
+          drv = defaultPackage;
+        };
+        defaultPackage = thePackage;
+      });
+}
+"#,
+        )
+        .expect("write flake.nix");
+
+        fs::write(
+            root.join("default.nix"),
+            r#"{ pkgs ? import <nixpkgs> { }
+, lib ? pkgs.lib
+, stdenv ? pkgs.stdenv
+}:
+
+stdenv.mkDerivation rec {
+  pname = "rnp";
+  version = "unstable";
+
+  src = ./.;
+
+  buildInputs = with pkgs; [ zlib bzip2 json_c botan2 ];
+
+  cmakeFlags = [
+    "-DCMAKE_INSTALL_PREFIX=${placeholder "out"}"
+    "-DBUILD_SHARED_LIBS=on"
+  ];
+
+  nativeBuildInputs = with pkgs; [ asciidoctor cmake pkg-config python3 ];
+
+  meta = with lib; {
+    homepage = "https://github.com/rnpgp/rnp";
+    description = "High performance C++ OpenPGP library, fully compliant to RFC 4880";
+    license = licenses.bsd2;
+  };
+}
+"#,
+        )
+        .expect("write default.nix");
+
+        let (files, result) = scan_and_assemble(temp_dir.path());
+
+        let flake_file = files
+            .iter()
+            .find(|file| file.path.ends_with("/flake.nix"))
+            .expect("flake.nix should be scanned");
+        assert!(
+            flake_file.scan_errors.is_empty(),
+            "{:?}",
+            flake_file.scan_errors
+        );
+
+        let default_file = files
+            .iter()
+            .find(|file| file.path.ends_with("/default.nix"))
+            .expect("default.nix should be scanned");
+        assert!(
+            default_file.scan_errors.is_empty(),
+            "{:?}",
+            default_file.scan_errors
+        );
+
+        let package = result
+            .packages
+            .iter()
+            .find(|package| package.package_type == Some(PackageType::Nix))
+            .expect("nix package should be assembled");
+        assert_eq!(package.name.as_deref(), Some("rnp"));
+    }
 }
