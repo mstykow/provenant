@@ -22,7 +22,7 @@
           "name": "assert",
           "version": "1.0.19",
           "primary_language": "TypeScript",
-          "sha256": "asserthash",
+          "sha256": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
           "is_virtual": true,
           "dependencies": [
             {
@@ -52,7 +52,7 @@
           "name": "chalk",
           "version": "5.6.2",
           "primary_language": "JavaScript",
-          "sha512": "sha512-chalkhash",
+          "sha512": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
           "is_virtual": true,
           "dependencies": [],
           "datasource_id": "deno_lock",
@@ -72,7 +72,7 @@
           "name": "internal",
           "version": "1.0.12",
           "primary_language": "TypeScript",
-          "sha256": "internalhash",
+          "sha256": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
           "is_virtual": true,
           "dependencies": [],
           "datasource_id": "deno_lock",
@@ -93,7 +93,7 @@
           "version": "",
           "primary_language": "TypeScript",
           "download_url": "https://deno.land/x/oak@v17.2.0/mod.ts",
-          "sha256": "oakmodhash",
+          "sha256": "aaa0000000000000000000000000000000000000000000000000000000000aaa",
           "is_virtual": true,
           "extra_data": {
             "redirect_source": "https://deno.land/x/oak/mod.ts"

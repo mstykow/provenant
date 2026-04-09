@@ -1,6 +1,5 @@
 mod tests {
-    use crate::models::Dependency;
-    use crate::models::PackageType;
+    use crate::models::{Dependency, PackageType, Sha1Digest};
     use crate::parsers::{ComposerJsonParser, ComposerLockParser, PackageParser};
     use serde_json::Value;
     use std::fs;
@@ -554,8 +553,8 @@ mod tests {
             .as_ref()
             .expect("Expected resolved package for lock dependency");
         assert_eq!(
-            resolved.sha1.as_deref(),
-            Some("cccccccccccccccccccccccccccccccccccccccc")
+            resolved.sha1,
+            Some(Sha1Digest::from_hex("cccccccccccccccccccccccccccccccccccccccc").unwrap())
         );
 
         let extra_data = runtime_dep

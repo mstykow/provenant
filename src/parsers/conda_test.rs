@@ -6,6 +6,7 @@ mod tests {
         extract_jinja2_variables, parse_conda_requirement,
     };
     use crate::models::PackageType;
+    use crate::models::Sha256Digest;
     use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
@@ -335,7 +336,12 @@ spec:
         // SHA256
         assert_eq!(
             package_data.sha256,
-            Some("bc7512f2eef785b037d836f4cc6faded457ac277f75c6e34eccd12da7c85258f".to_string())
+            Some(
+                Sha256Digest::from_hex(
+                    "bc7512f2eef785b037d836f4cc6faded457ac277f75c6e34eccd12da7c85258f"
+                )
+                .unwrap()
+            )
         );
 
         // License

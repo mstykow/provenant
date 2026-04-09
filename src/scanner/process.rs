@@ -26,7 +26,7 @@ use crate::license_detection::models::LicenseMatch as InternalLicenseMatch;
 use crate::license_detection::query::Query;
 use crate::models::{
     Author, Copyright, DatasourceId, FileInfo, FileInfoBuilder, FileType, Holder, LicenseDetection,
-    Match, OutputEmail, OutputURL,
+    Match, OutputEmail, OutputURL, Sha256Digest,
 };
 use crate::parsers::utils::split_name_email;
 use crate::progress::ScanProgress;
@@ -455,7 +455,7 @@ fn extract_information_from_content(
     license_engine: Option<Arc<LicenseDetectionEngine>>,
     license_options: LicenseScanOptions,
     text_options: &TextDetectionOptions,
-) -> Result<(Option<bool>, String, bool), Error> {
+) -> Result<(Option<bool>, Sha256Digest, bool), Error> {
     let started = Instant::now();
     let buffer = fs::read(path)?;
     let license_enabled = license_engine.is_some();
@@ -477,7 +477,7 @@ fn extract_information_from_content(
         file_info_builder
             .sha1(Some(calculate_sha1(&buffer)))
             .md5(Some(calculate_md5(&buffer)))
-            .sha256(Some(sha256.clone()))
+            .sha256(Some(sha256))
             .programming_language(classification.programming_language.clone())
             .mime_type(Some(classification.mime_type.clone()))
             .file_type_label(Some(classification.file_type.clone()))

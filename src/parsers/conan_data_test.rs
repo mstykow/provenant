@@ -4,6 +4,7 @@ mod tests {
     use super::super::conan_data::*;
     use crate::models::DatasourceId;
     use crate::models::PackageType;
+    use crate::models::Sha256Digest;
     use std::path::PathBuf;
 
     #[test]
@@ -25,10 +26,10 @@ mod tests {
 sources:
   "1.0.0":
     url: "https://example.com/package-1.0.0.tar.gz"
-    sha256: "abc123def456"
+    sha256: "abc1230000000000000000000000000000000000000000000000000000000000"
   "2.0.0":
     url: "https://example.com/package-2.0.0.tar.gz"
-    sha256: "def456abc789"
+    sha256: "def4560000000000000000000000000000000000000000000000000000000000"
 "#;
         let packages = parse_conandata_yml(content);
         assert_eq!(packages.len(), 2);
@@ -45,7 +46,15 @@ sources:
             pkg1.download_url.as_deref(),
             Some("https://example.com/package-1.0.0.tar.gz")
         );
-        assert_eq!(pkg1.sha256.as_deref(), Some("abc123def456"));
+        assert_eq!(
+            pkg1.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "abc1230000000000000000000000000000000000000000000000000000000000"
+                )
+                .unwrap()
+            )
+        );
         assert_eq!(pkg1.datasource_id, Some(DatasourceId::ConanConanDataYml));
 
         // Check second package
@@ -58,7 +67,15 @@ sources:
             pkg2.download_url.as_deref(),
             Some("https://example.com/package-2.0.0.tar.gz")
         );
-        assert_eq!(pkg2.sha256.as_deref(), Some("def456abc789"));
+        assert_eq!(
+            pkg2.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "def4560000000000000000000000000000000000000000000000000000000000"
+                )
+                .unwrap()
+            )
+        );
     }
 
     #[test]
@@ -69,7 +86,7 @@ sources:
     url:
       - "https://mirror1.com/package-1.5.0.tar.gz"
       - "https://mirror2.com/package-1.5.0.tar.gz"
-    sha256: "xyz789"
+    sha256: "abc7890000000000000000000000000000000000000000000000000000000000"
 "#;
         let packages = parse_conandata_yml(content);
         assert_eq!(packages.len(), 1);
@@ -80,7 +97,15 @@ sources:
             pkg.download_url.as_deref(),
             Some("https://mirror1.com/package-1.5.0.tar.gz")
         );
-        assert_eq!(pkg.sha256.as_deref(), Some("xyz789"));
+        assert_eq!(
+            pkg.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "abc7890000000000000000000000000000000000000000000000000000000000"
+                )
+                .unwrap()
+            )
+        );
     }
 
     #[test]
@@ -112,7 +137,7 @@ sources:
         assert!(pkg2.is_some());
         let pkg2 = pkg2.unwrap();
         assert_eq!(pkg2.download_url, None);
-        assert_eq!(pkg2.sha256.as_deref(), Some("onlyhash"));
+        assert_eq!(pkg2.sha256, None);
     }
 
     #[test]

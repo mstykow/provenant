@@ -38,7 +38,8 @@ use packageurl::PackageUrl;
 use regex::Regex;
 
 use crate::models::{
-    DatasourceId, Dependency, FileReference, LicenseDetection, PackageData, PackageType, Party,
+    DatasourceId, Dependency, FileReference, LicenseDetection, Md5Digest, PackageData, PackageType,
+    Party,
 };
 use crate::parsers::rfc822::{self, Rfc822Metadata};
 use crate::parsers::utils::{read_file_to_string, split_name_email};
@@ -1248,7 +1249,7 @@ fn parse_debian_file_list(
         }
 
         let (md5sum, path) = if let Some((hash, p)) = line.split_once(' ') {
-            (Some(hash.trim().to_string()), p.trim())
+            (Md5Digest::from_hex(hash.trim()).ok(), p.trim())
         } else {
             (None, line)
         };
@@ -2023,10 +2024,13 @@ fn parse_md5sums_in_package(content: &str, package_name: Option<&str>) -> Packag
             continue;
         }
 
-        let (md5sum, filepath): (Option<String>, &str) = if let Some(idx) = line.find("  ") {
-            (Some(line[..idx].trim().to_string()), line[idx + 2..].trim())
+        let (md5sum, filepath): (Option<Md5Digest>, &str) = if let Some(idx) = line.find("  ") {
+            (
+                Md5Digest::from_hex(line[..idx].trim()).ok(),
+                line[idx + 2..].trim(),
+            )
         } else if let Some((hash, path)) = line.split_once(' ') {
-            (Some(hash.trim().to_string()), path.trim())
+            (Md5Digest::from_hex(hash.trim()).ok(), path.trim())
         } else {
             (None, line)
         };
@@ -3096,12 +3100,12 @@ f55e3a16959b0bb8915cb5f219521c80  usr/share/doc/bash/COMPAT.gz
         assert_eq!(pkg.file_references[0].path, "bin/bash");
         assert_eq!(
             pkg.file_references[0].md5,
-            Some("77506afebd3b7e19e937a678a185b62e".to_string())
+            Some(Md5Digest::from_hex("77506afebd3b7e19e937a678a185b62e").unwrap())
         );
         assert_eq!(pkg.file_references[1].path, "usr/bin/bashbug");
         assert_eq!(
             pkg.file_references[1].md5,
-            Some("1c77d2031971b4e4c512ac952102cd85".to_string())
+            Some(Md5Digest::from_hex("1c77d2031971b4e4c512ac952102cd85").unwrap())
         );
     }
 

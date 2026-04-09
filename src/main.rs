@@ -16,7 +16,7 @@ use crate::cache::{
 };
 use crate::cli::Cli;
 use crate::license_detection::LicenseDetectionEngine;
-use crate::models::{FileInfo, FileType};
+use crate::models::{FileInfo, FileType, Sha256Digest};
 use crate::output::{OutputWriteConfig, write_output_file};
 use crate::post_processing::{
     CreateOutputContext, CreateOutputOptions, DEFAULT_LICENSEDB_URL_TEMPLATE,
@@ -721,10 +721,15 @@ fn build_incremental_manifest(
             let relative_path = normalize_relative_scan_path(path, scan_root);
             let state = metadata_fingerprint(metadata)?;
             let file_info = files_by_relative_path.get(&relative_path)?.clone();
-            let content_sha256 = file_info.sha256.clone().unwrap_or_else(|| {
+            let content_sha256 = file_info.sha256.unwrap_or_else(|| {
                 fs::read(path)
                     .map(|bytes| calculate_sha256(&bytes))
-                    .unwrap_or_default()
+                    .unwrap_or_else(|_| {
+                        Sha256Digest::from_hex(
+                            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                        )
+                        .unwrap()
+                    })
             });
             Some((
                 relative_path,
@@ -749,6 +754,7 @@ fn incremental_manifest_key(scan_root: &Path, options_fingerprint: &str) -> Stri
         )
         .as_bytes(),
     )
+    .as_hex()
 }
 
 fn normalize_relative_scan_path(path: &Path, scan_root: &Path) -> String {

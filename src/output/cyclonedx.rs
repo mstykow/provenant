@@ -271,16 +271,16 @@ fn package_author(pkg: &Package) -> Option<String> {
 fn component_hashes(pkg: &Package) -> Vec<(&'static str, String)> {
     let mut hashes = Vec::new();
     if let Some(sha1) = &pkg.sha1 {
-        hashes.push(("SHA-1", sha1.clone()));
+        hashes.push(("SHA-1", sha1.as_hex()));
     }
     if let Some(sha256) = &pkg.sha256 {
-        hashes.push(("SHA-256", sha256.clone()));
+        hashes.push(("SHA-256", sha256.as_hex()));
     }
     if let Some(sha512) = &pkg.sha512 {
-        hashes.push(("SHA-512", sha512.clone()));
+        hashes.push(("SHA-512", sha512.as_hex()));
     }
     if let Some(md5) = &pkg.md5 {
-        hashes.push(("MD5", md5.clone()));
+        hashes.push(("MD5", md5.as_hex()));
     }
     hashes
 }

@@ -1,9 +1,11 @@
 mod datasource_id;
+mod digest;
 pub(crate) mod file_info;
 mod output;
 mod package_type;
 
 pub use datasource_id::DatasourceId;
+pub use digest::{GitSha1, Md5Digest, Sha1Digest, Sha256Digest, Sha512Digest};
 pub use file_info::{
     Author, Copyright, Dependency, FileInfo, FileInfoBuilder, FileReference, FileType, Holder,
     LicenseDetection, LicensePolicyEntry, Match, OutputEmail, OutputURL, Package, PackageData,

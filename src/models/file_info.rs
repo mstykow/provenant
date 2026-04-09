@@ -10,7 +10,12 @@ use uuid::Uuid;
 use sha1::{Digest, Sha1};
 
 use super::DatasourceId;
+use super::GitSha1;
+use super::Md5Digest;
 use super::PackageType;
+use super::Sha1Digest;
+use super::Sha256Digest;
+use super::Sha512Digest;
 use crate::license_detection::tokenize::tokenize_without_stopwords;
 use crate::models::output::Tallies;
 use crate::utils::spdx::combine_license_expressions;
@@ -37,16 +42,16 @@ pub struct FileInfo {
     pub date: Option<String>,
     #[builder(default)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub sha1: Option<String>,
+    pub sha1: Option<Sha1Digest>,
     #[builder(default)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub md5: Option<String>,
+    pub md5: Option<Md5Digest>,
     #[builder(default)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub sha256: Option<String>,
+    pub sha256: Option<Sha256Digest>,
     #[builder(default)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub sha1_git: Option<String>,
+    pub sha1_git: Option<GitSha1>,
     #[builder(default)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub programming_language: Option<String>,
@@ -161,9 +166,9 @@ impl FileInfoBuilder {
             self.file_type_label.clone().flatten(),
             self.size.ok_or("Missing field: size")?,
             self.date.clone().flatten(),
-            self.sha1.clone().flatten(),
-            self.md5.clone().flatten(),
-            self.sha256.clone().flatten(),
+            self.sha1.flatten(),
+            self.md5.flatten(),
+            self.sha256.flatten(),
             self.programming_language.clone().flatten(),
             self.package_data.clone().unwrap_or_default(),
             self.license_expression.clone().flatten(),
@@ -178,7 +183,7 @@ impl FileInfoBuilder {
             self.scan_errors.clone().unwrap_or_default(),
         );
         file_info.license_policy = self.license_policy.clone().flatten();
-        file_info.sha1_git = self.sha1_git.clone().flatten();
+        file_info.sha1_git = self.sha1_git.flatten();
         file_info.is_binary = self.is_binary.flatten();
         file_info.is_text = self.is_text.flatten();
         file_info.is_archive = self.is_archive.flatten();
@@ -206,10 +211,10 @@ impl Serialize for FileInfo {
 
         if self.should_serialize_info_surface() {
             insert_json(&mut map, "date", &self.date)?;
-            insert_json(&mut map, "sha1", &self.sha1)?;
-            insert_json(&mut map, "md5", &self.md5)?;
-            insert_json(&mut map, "sha256", &self.sha256)?;
-            insert_json(&mut map, "sha1_git", &self.sha1_git)?;
+            insert_json(&mut map, "sha1", self.sha1)?;
+            insert_json(&mut map, "md5", self.md5)?;
+            insert_json(&mut map, "sha256", self.sha256)?;
+            insert_json(&mut map, "sha1_git", self.sha1_git)?;
             insert_json(&mut map, "mime_type", &self.mime_type)?;
             insert_json(&mut map, "file_type", &self.file_type_label)?;
             insert_json(&mut map, "programming_language", &self.programming_language)?;
@@ -335,9 +340,9 @@ impl FileInfo {
         file_type_label: Option<String>,
         size: u64,
         date: Option<String>,
-        sha1: Option<String>,
-        md5: Option<String>,
-        sha256: Option<String>,
+        sha1: Option<Sha1Digest>,
+        md5: Option<Md5Digest>,
+        sha256: Option<Sha256Digest>,
         programming_language: Option<String>,
         package_data: Vec<PackageData>,
         mut license_expression: Option<String>,
@@ -581,10 +586,10 @@ pub struct PackageData {
     pub homepage_url: Option<String>,
     pub download_url: Option<String>,
     pub size: Option<u64>,
-    pub sha1: Option<String>,
-    pub md5: Option<String>,
-    pub sha256: Option<String>,
-    pub sha512: Option<String>,
+    pub sha1: Option<Sha1Digest>,
+    pub md5: Option<Md5Digest>,
+    pub sha256: Option<Sha256Digest>,
+    pub sha512: Option<Sha512Digest>,
     pub bug_tracking_url: Option<String>,
     pub code_view_url: Option<String>,
     pub vcs_url: Option<String>,
@@ -753,10 +758,10 @@ pub struct ResolvedPackage {
     pub homepage_url: Option<String>,
     pub download_url: Option<String>,
     pub size: Option<u64>,
-    pub sha1: Option<String>,
-    pub md5: Option<String>,
-    pub sha256: Option<String>,
-    pub sha512: Option<String>,
+    pub sha1: Option<Sha1Digest>,
+    pub md5: Option<Md5Digest>,
+    pub sha256: Option<Sha256Digest>,
+    pub sha512: Option<Sha512Digest>,
     pub bug_tracking_url: Option<String>,
     pub code_view_url: Option<String>,
     pub vcs_url: Option<String>,
@@ -860,10 +865,10 @@ impl ResolvedPackage {
             homepage_url: package_data.homepage_url.clone(),
             download_url: package_data.download_url.clone(),
             size: package_data.size,
-            sha1: package_data.sha1.clone(),
-            md5: package_data.md5.clone(),
-            sha256: package_data.sha256.clone(),
-            sha512: package_data.sha512.clone(),
+            sha1: package_data.sha1,
+            md5: package_data.md5,
+            sha256: package_data.sha256,
+            sha512: package_data.sha512,
             bug_tracking_url: package_data.bug_tracking_url.clone(),
             code_view_url: package_data.code_view_url.clone(),
             vcs_url: package_data.vcs_url.clone(),
@@ -924,13 +929,13 @@ pub struct FileReference {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sha1: Option<String>,
+    pub sha1: Option<Sha1Digest>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub md5: Option<String>,
+    pub md5: Option<Md5Digest>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sha256: Option<String>,
+    pub sha256: Option<Sha256Digest>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sha512: Option<String>,
+    pub sha512: Option<Sha512Digest>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_data: Option<std::collections::HashMap<String, serde_json::Value>>,
 }
@@ -964,10 +969,10 @@ pub struct Package {
     pub homepage_url: Option<String>,
     pub download_url: Option<String>,
     pub size: Option<u64>,
-    pub sha1: Option<String>,
-    pub md5: Option<String>,
-    pub sha256: Option<String>,
-    pub sha512: Option<String>,
+    pub sha1: Option<Sha1Digest>,
+    pub md5: Option<Md5Digest>,
+    pub sha256: Option<Sha256Digest>,
+    pub sha512: Option<Sha512Digest>,
     pub bug_tracking_url: Option<String>,
     pub code_view_url: Option<String>,
     pub vcs_url: Option<String>,
@@ -1033,10 +1038,10 @@ impl Package {
             homepage_url: package_data.homepage_url.clone(),
             download_url: package_data.download_url.clone(),
             size: package_data.size,
-            sha1: package_data.sha1.clone(),
-            md5: package_data.md5.clone(),
-            sha256: package_data.sha256.clone(),
-            sha512: package_data.sha512.clone(),
+            sha1: package_data.sha1,
+            md5: package_data.md5,
+            sha256: package_data.sha256,
+            sha512: package_data.sha512,
             bug_tracking_url: package_data.bug_tracking_url.clone(),
             code_view_url: package_data.code_view_url.clone(),
             vcs_url: package_data.vcs_url.clone(),
@@ -1085,7 +1090,7 @@ impl Package {
         macro_rules! fill_if_empty {
             ($field:ident) => {
                 if self.$field.is_none() {
-                    self.$field = package_data.$field.clone();
+                    self.$field = package_data.$field;
                 }
             };
         }

@@ -7,9 +7,12 @@ use packageurl::PackageUrl;
 use serde_json::Value;
 use url::Url;
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
+use crate::models::{
+    DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha256Digest, Sha512Digest,
+};
 
 use super::PackageParser;
+use super::utils::parse_sri;
 
 const FIELD_VERSION: &str = "version";
 const FIELD_SPECIFIERS: &str = "specifiers";
@@ -121,7 +124,7 @@ fn parse_deno_lock(json: &Value) -> PackageData {
                 .and_then(Value::as_object)
                 .and_then(|remote| remote.get(target_url))
                 .and_then(Value::as_str)
-                .map(|value| value.to_string());
+                .and_then(|value| Sha256Digest::from_hex(value).ok());
 
             let name = remote_name(target_url).unwrap_or_else(|| source.to_string());
             let purl = create_remote_purl(target_url);
@@ -228,7 +231,14 @@ fn build_jsr_dependency(
             sha256: jsr_object
                 .get("integrity")
                 .and_then(Value::as_str)
-                .map(|value| value.to_string()),
+                .and_then(|value| {
+                    parse_sri(value)
+                        .and_then(|(algo, hex)| {
+                            (algo == "sha256").then(|| Sha256Digest::from_hex(&hex).ok())
+                        })
+                        .flatten()
+                        .or_else(|| Sha256Digest::from_hex(value).ok())
+                }),
             sha512: None,
             md5: None,
             is_virtual: true,
@@ -280,7 +290,13 @@ fn build_npm_dependency(
             sha512: npm_object
                 .get("integrity")
                 .and_then(Value::as_str)
-                .map(|value| value.to_string()),
+                .and_then(|value| {
+                    parse_sri(value)
+                        .and_then(|(algo, hex)| {
+                            (algo == "sha512").then(|| Sha512Digest::from_hex(&hex).ok())
+                        })
+                        .flatten()
+                }),
             md5: None,
             is_virtual: true,
             extra_data: None,

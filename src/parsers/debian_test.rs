@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::models::DatasourceId;
+    use crate::models::Md5Digest;
     use crate::models::PackageType;
     use crate::parsers::PackageParser;
     use crate::parsers::debian::*;
@@ -54,7 +55,7 @@ mod tests {
         assert_eq!(first_ref.path, "usr/bin/example");
         assert_eq!(
             first_ref.md5,
-            Some("d41d8cd98f00b204e9800998ecf8427e".to_string())
+            Some(Md5Digest::from_hex("d41d8cd98f00b204e9800998ecf8427e").unwrap())
         );
         assert!(first_ref.sha1.is_none());
         assert!(first_ref.sha256.is_none());
@@ -63,7 +64,7 @@ mod tests {
         assert_eq!(last_ref.path, "usr/share/man/man1/example.1.gz");
         assert_eq!(
             last_ref.md5,
-            Some("9e107d9d372bb6826bd81d3542a419d6".to_string())
+            Some(Md5Digest::from_hex("9e107d9d372bb6826bd81d3542a419d6").unwrap())
         );
     }
 
@@ -93,14 +94,14 @@ mod tests {
         assert_eq!(first_ref.path, "usr/bin/testapp");
         assert_eq!(
             first_ref.md5,
-            Some("5f4dcc3b5aa765d61d8327deb882cf99".to_string())
+            Some(Md5Digest::from_hex("5f4dcc3b5aa765d61d8327deb882cf99").unwrap())
         );
 
         let last_ref = &package.file_references[2];
         assert_eq!(last_ref.path, "usr/lib/testpkg/libtest.so");
         assert_eq!(
             last_ref.md5,
-            Some("ad0234829205b9033196ba818f7a872b".to_string())
+            Some(Md5Digest::from_hex("ad0234829205b9033196ba818f7a872b").unwrap())
         );
     }
 

@@ -29,7 +29,7 @@ use serde_json::Value as JsonValue;
 use toml::Value as TomlValue;
 use toml::map::Map as TomlMap;
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
+use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Sha256Digest};
 use crate::parsers::python::read_toml_file;
 
 use super::PackageParser;
@@ -112,13 +112,13 @@ fn parse_pipfile_lock(json_content: &JsonValue) -> PackageData {
     package_data
 }
 
-fn extract_lockfile_sha256(json_content: &JsonValue) -> Option<String> {
+fn extract_lockfile_sha256(json_content: &JsonValue) -> Option<Sha256Digest> {
     json_content
         .get(FIELD_META)
         .and_then(|meta| meta.get(FIELD_HASH))
         .and_then(|hash| hash.get(FIELD_SHA256))
         .and_then(|value| value.as_str())
-        .map(|value| value.to_string())
+        .and_then(|s| Sha256Digest::from_hex(s).ok())
 }
 
 fn extract_lockfile_dependencies(

@@ -4,7 +4,10 @@
     "name": "test-project",
     "version": "0.1.0",
     "parties": [],
-    "sha256": "abc123def456",
+    "sha256": null,
+    "extra_data": {
+      "checksum": "abc123def456"
+    },
     "dependencies": [
       {
         "purl": "pkg:cargo/serde@1.0.228",

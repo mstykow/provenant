@@ -3,7 +3,9 @@ mod tests {
     use super::super::PackageParser;
     use super::super::conda_meta_json::*;
     use crate::models::DatasourceId;
+    use crate::models::Md5Digest;
     use crate::models::PackageType;
+    use crate::models::Sha256Digest;
     use std::path::PathBuf;
 
     #[test]
@@ -54,10 +56,18 @@ mod tests {
             )
         );
         assert_eq!(pkg.size, Some(57820));
-        assert_eq!(pkg.md5.as_deref(), Some("5ede4753180c7a550a443c430dc8ab52"));
         assert_eq!(
-            pkg.sha256.as_deref(),
-            Some("f9a18bf43e59e60a28e45c94c8d2f9c7e9bb97e2c8bab08cf5d3f3e93bb10a18")
+            pkg.md5,
+            Some(Md5Digest::from_hex("5ede4753180c7a550a443c430dc8ab52").unwrap())
+        );
+        assert_eq!(
+            pkg.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "f9a18bf43e59e60a28e45c94c8d2f9c7e9bb97e2c8bab08cf5d3f3e93bb10a18"
+                )
+                .unwrap()
+            )
         );
         assert_eq!(pkg.package_type, Some(PackageType::Conda));
         assert_eq!(pkg.primary_language.as_deref(), Some("Python"));

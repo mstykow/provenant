@@ -18,7 +18,7 @@
 //! - Direct dependencies determined from root package's dependency list
 //! - Uses TOML parsing for structured data extraction
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
+use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Sha256Digest};
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
 use serde_json::json;
@@ -78,6 +78,18 @@ impl PackageParser for CargoLockParser {
             .and_then(|v| v.as_str())
             .map(String::from);
 
+        let (sha256, extra_data) = match checksum.as_deref() {
+            Some(h) if h.len() == 64 && Sha256Digest::from_hex(h).is_ok() => {
+                (Sha256Digest::from_hex(h).ok(), None)
+            }
+            Some(h) if hex::decode(h).is_ok() => {
+                let mut map = HashMap::new();
+                map.insert("checksum".to_string(), json!(h));
+                (None, Some(map))
+            }
+            _ => (None, None),
+        };
+
         let dependencies = extract_all_dependencies(packages, root_package);
 
         let purl = match (&name, &version) {
@@ -111,7 +123,7 @@ impl PackageParser for CargoLockParser {
             size: None,
             sha1: None,
             md5: None,
-            sha256: checksum,
+            sha256,
             sha512: None,
             bug_tracking_url: None,
             code_view_url: None,
@@ -130,7 +142,7 @@ impl PackageParser for CargoLockParser {
             file_references: Vec::new(),
             is_private: false,
             is_virtual: false,
-            extra_data: None,
+            extra_data,
             dependencies,
             repository_homepage_url: None,
             repository_download_url: None,

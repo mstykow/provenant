@@ -7,7 +7,10 @@ use crate::parser_warn as warn;
 use packageurl::PackageUrl;
 use serde_json::{Map as JsonMap, Value};
 
-use crate::models::{DatasourceId, Dependency, FileReference, PackageData, PackageType};
+use crate::models::{
+    DatasourceId, Dependency, FileReference, Md5Digest, PackageData, PackageType, Sha1Digest,
+    Sha256Digest, Sha512Digest,
+};
 
 use super::PackageParser;
 
@@ -23,10 +26,10 @@ const FIELD_AVAILABLE_AT: &str = "available-at";
 
 type ArtifactHashes = (
     Option<u64>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
+    Option<Sha1Digest>,
+    Option<Md5Digest>,
+    Option<Sha256Digest>,
+    Option<Sha512Digest>,
 );
 
 type ExtractedVariantData = (
@@ -544,20 +547,31 @@ fn extract_dependency_requirement(version_value: Option<&Value>) -> Option<Strin
 }
 
 fn extract_file_hashes(file: &JsonMap<String, Value>) -> ArtifactHashes {
+    let sha256 = file
+        .get("sha256")
+        .and_then(Value::as_str)
+        .and_then(|value| Sha256Digest::from_hex(value).ok());
+
+    let sha512_field = file.get("sha512").and_then(Value::as_str);
+    let (sha256, sha512) = match sha512_field {
+        Some(hex) if hex.len() == 64 && hex::decode(hex).is_ok() => {
+            let misassigned = Sha256Digest::from_hex(hex).ok();
+            (sha256.or(misassigned), None)
+        }
+        Some(hex) => (sha256, Sha512Digest::from_hex(hex).ok()),
+        None => (sha256, None),
+    };
+
     (
         file.get("size").and_then(Value::as_u64),
         file.get("sha1")
             .and_then(Value::as_str)
-            .map(|value| value.to_string()),
+            .and_then(|value| Sha1Digest::from_hex(value).ok()),
         file.get("md5")
             .and_then(Value::as_str)
-            .map(|value| value.to_string()),
-        file.get("sha256")
-            .and_then(Value::as_str)
-            .map(|value| value.to_string()),
-        file.get("sha512")
-            .and_then(Value::as_str)
-            .map(|value| value.to_string()),
+            .and_then(|value| Md5Digest::from_hex(value).ok()),
+        sha256,
+        sha512,
     )
 }
 

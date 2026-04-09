@@ -6,23 +6,23 @@
   },
   "jsr": {
     "@std/assert@1.0.19": {
-      "integrity": "asserthash",
+      "integrity": "sha256-qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo=",
       "dependencies": ["jsr:@std/internal"]
     },
     "@std/internal@1.0.12": {
-      "integrity": "internalhash"
+      "integrity": "sha256-u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s="
     }
   },
   "npm": {
     "chalk@5.6.2": {
-      "integrity": "sha512-chalkhash"
+      "integrity": "sha512-zMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzA=="
     }
   },
   "redirects": {
     "https://deno.land/x/oak/mod.ts": "https://deno.land/x/oak@v17.2.0/mod.ts"
   },
   "remote": {
-    "https://deno.land/x/oak@v17.2.0/mod.ts": "oakmodhash"
+    "https://deno.land/x/oak@v17.2.0/mod.ts": "ddd00000000000000000000000000000000000000000000000000000000000dd"
   },
   "workspace": {
     "dependencies": [

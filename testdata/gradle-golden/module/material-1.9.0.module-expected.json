@@ -9,14 +9,14 @@
     "sha1": "08f4a93a381be223a5bbaacd46eaab92381ab6a8",
     "md5": "3287103cfb083fb998a35ef8a1983c58",
     "sha256": "6cc2359979269e4d9eddce7d84682d2bb06a35a14edce806bf0da6e8d4d31806",
-    "sha512": "7630aacb9e3073b2064397ed080b8d5bf7db06ba2022d6c927e05b7d53c5787d",
+    "sha512": null,
     "file_references": [
       {
         "path": "material-1.9.0.aar",
         "sha1": "08f4a93a381be223a5bbaacd46eaab92381ab6a8",
         "md5": "3287103cfb083fb998a35ef8a1983c58",
         "sha256": "6cc2359979269e4d9eddce7d84682d2bb06a35a14edce806bf0da6e8d4d31806",
-        "sha512": "7630aacb9e3073b2064397ed080b8d5bf7db06ba2022d6c927e05b7d53c5787d",
+        "sha512": null,
         "extra_data": {
           "name": "material-1.9.0.aar"
         }

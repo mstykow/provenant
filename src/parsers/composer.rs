@@ -27,6 +27,7 @@ use serde_json::Value;
 
 use crate::models::{
     DatasourceId, Dependency, LicenseDetection, PackageData, PackageType, Party, ResolvedPackage,
+    Sha1Digest, Sha256Digest, Sha512Digest,
 };
 
 use super::PackageParser;
@@ -414,9 +415,9 @@ fn build_lock_dependency(
     let resolved_package = ResolvedPackage {
         primary_language: Some("PHP".to_string()),
         download_url: dist_url,
-        sha1,
-        sha256,
-        sha512,
+        sha1: sha1.and_then(|h| Sha1Digest::from_hex(&h).ok()),
+        sha256: sha256.and_then(|h| Sha256Digest::from_hex(&h).ok()),
+        sha512: sha512.and_then(|h| Sha512Digest::from_hex(&h).ok()),
         md5: None,
         is_virtual: true,
         extra_data: None,

@@ -31,7 +31,9 @@
 //! - Direct dependencies: all manifest dependencies are direct
 //! - Graceful fallback on parse errors with warning logs
 
-use crate::models::{DatasourceId, Dependency, FileReference, PackageData, PackageType, Party};
+use crate::models::{
+    DatasourceId, Dependency, FileReference, PackageData, PackageType, Party, Sha256Digest,
+};
 use crate::parser_warn as warn;
 use crate::parsers::utils::{read_file_to_string, split_name_email};
 use base64::Engine;
@@ -403,7 +405,8 @@ fn extract_from_pip_origin_json(path: &Path) -> PackageData {
         version: Some(version),
         datasource_id: Some(DatasourceId::PypiPipOriginJson),
         download_url: Some(download_url.to_string()),
-        sha256: extract_sha256_from_origin_json(&root),
+        sha256: extract_sha256_from_origin_json(&root)
+            .and_then(|h| Sha256Digest::from_hex(&h).ok()),
         repository_homepage_url,
         repository_download_url,
         api_data_url,
@@ -1552,14 +1555,13 @@ pub fn parse_record_csv(content: &str) -> Vec<FileReference> {
                 let sha256 = if !hash_field.is_empty() && hash_field.contains('=') {
                     let parts: Vec<&str> = hash_field.split('=').collect();
                     if parts.len() == 2 && parts[0] == "sha256" {
-                        // Decode base64 to hex
                         match URL_SAFE_NO_PAD.decode(parts[1]) {
                             Ok(decoded) => {
                                 let hex = decoded
                                     .iter()
                                     .map(|b| format!("{:02x}", b))
                                     .collect::<String>();
-                                Some(hex)
+                                Sha256Digest::from_hex(&hex).ok()
                             }
                             Err(_) => None,
                         }
@@ -3939,6 +3941,8 @@ fn extract_from_pypi_json(path: &Path) -> PackageData {
         .map(|urls| select_pypi_json_artifact(urls))
         .unwrap_or((None, None, None));
 
+    let sha256 = sha256.and_then(|h| Sha256Digest::from_hex(&h).ok());
+
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         normalize_spdx_declared_license(license.as_deref());
     let dependencies = info
@@ -4847,7 +4851,7 @@ pub(crate) fn read_toml_file(path: &Path) -> Result<TomlValue, String> {
 /// - `(Some(size), Some(hash))` on success
 /// - `(None, None)` if file cannot be opened
 /// - `(Some(size), None)` if hash calculation fails during read
-fn calculate_file_checksums(path: &Path) -> (Option<u64>, Option<String>) {
+fn calculate_file_checksums(path: &Path) -> (Option<u64>, Option<Sha256Digest>) {
     let mut file = match File::open(path) {
         Ok(f) => f,
         Err(_) => return (None, None),
@@ -4870,7 +4874,7 @@ fn calculate_file_checksums(path: &Path) -> (Option<u64>, Option<String>) {
         }
     }
 
-    let hash = hex::encode(hasher.finalize());
+    let hash = Sha256Digest::from_bytes(hasher.finalize().into());
     (Some(size), Some(hash))
 }
 

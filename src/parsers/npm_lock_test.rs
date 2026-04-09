@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::models::PackageType;
+    use crate::models::Sha1Digest;
     use crate::parsers::{NpmLockParser, PackageParser};
     use std::fs;
     use std::path::PathBuf;
@@ -248,7 +249,7 @@ mod tests {
         // Should have sha512 checksum
         assert!(resolved.sha512.is_some());
         let sha512 = resolved.sha512.as_ref().unwrap();
-        assert_eq!(sha512.len(), 128); // sha512 hex is 128 characters
+        assert_eq!(sha512.as_hex().len(), 128); // sha512 hex is 128 characters
     }
 
     #[test]
@@ -276,8 +277,11 @@ mod tests {
         // Should have sha1 checksum
         assert!(resolved.sha1.is_some());
         let sha1 = resolved.sha1.as_ref().unwrap();
-        assert_eq!(sha1.len(), 40); // sha1 hex is 40 characters
-        assert_eq!(sha1, "c3b33ab5ee360d86e0e628f0468ae7ef27d654df");
+        assert_eq!(sha1.as_hex().len(), 40);
+        assert_eq!(
+            sha1,
+            &Sha1Digest::from_hex("c3b33ab5ee360d86e0e628f0468ae7ef27d654df").unwrap()
+        );
     }
 
     #[test]
@@ -638,7 +642,7 @@ mod tests {
         // Should extract sha1 from URL
         assert_eq!(
             resolved.sha1,
-            Some("c3b33ab5ee360d86e0e628f0468ae7ef27d654df".to_string())
+            Some(Sha1Digest::from_hex("c3b33ab5ee360d86e0e628f0468ae7ef27d654df").unwrap())
         );
     }
 

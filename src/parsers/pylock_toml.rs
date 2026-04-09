@@ -8,7 +8,10 @@ use serde_json::{Map as JsonMap, Value as JsonValue};
 use toml::Value as TomlValue;
 use toml::map::Map as TomlMap;
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
+use crate::models::{
+    DatasourceId, Dependency, Md5Digest, PackageData, PackageType, ResolvedPackage, Sha256Digest,
+    Sha512Digest,
+};
 use crate::parsers::python::read_toml_file;
 
 use super::PackageParser;
@@ -265,9 +268,9 @@ fn build_resolved_package(
         primary_language: Some("Python".to_string()),
         download_url,
         sha1: None,
-        sha256,
-        sha512,
-        md5,
+        sha256: sha256.and_then(|h| Sha256Digest::from_hex(&h).ok()),
+        sha512: sha512.and_then(|h| Sha512Digest::from_hex(&h).ok()),
+        md5: md5.and_then(|h| Md5Digest::from_hex(&h).ok()),
         is_virtual: false,
         extra_data: build_package_extra_data(package_table),
         dependencies: dependency_indices

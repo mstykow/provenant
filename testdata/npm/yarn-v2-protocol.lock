@@ -8,7 +8,7 @@ __metadata:
 "lodash@patch:^4.17.21":
   version: 4.17.21
   resolution: "lodash@patch:lodash@npm%3A4.17.21#~builtin<compat/lodash>"
-  checksum: test
+  checksum: af41feee02385041697bb64e9926a6436810e80f3132df2b099c15f7f0a40b37a717eff2f8cbbf91b60cc5e704be9549c4af08036935e63f7a66e79b56513286
   languageName: node
   linkType: hard
   bin:
