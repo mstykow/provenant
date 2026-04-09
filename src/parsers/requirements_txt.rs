@@ -57,7 +57,8 @@ impl PackageParser for RequirementsTxtParser {
 
         if let Some(name) = filename
             && (is_requirements_txt_filename(name)
-                || (parent_name == Some("requirements") && name.ends_with(".txt")))
+                || (parent_name == Some("requirements")
+                    && (name.ends_with(".txt") || name.ends_with(".in"))))
         {
             return true;
         }
@@ -67,18 +68,18 @@ impl PackageParser for RequirementsTxtParser {
 }
 
 fn is_requirements_txt_filename(name: &str) -> bool {
-    if name == "requirements.txt" {
+    if name == "requirements.txt" || name == "requires.txt" {
         return true;
     }
 
-    let Some(suffix) = name
-        .strip_prefix("requirements")
-        .and_then(|suffix| suffix.strip_suffix(".txt"))
+    let Some(stem) = name
+        .strip_suffix(".txt")
+        .or_else(|| name.strip_suffix(".in"))
     else {
         return false;
     };
 
-    suffix.is_empty() || suffix.starts_with('-') || suffix.starts_with('_')
+    stem == "requirements" || stem.starts_with("requirements") || stem.ends_with("requirements")
 }
 
 struct ParseState {
@@ -683,8 +684,12 @@ crate::register_parser!(
     "pip requirements file",
     &[
         "**/requirements*.txt",
+        "**/*requirements.txt",
         "**/requirements*.in",
-        "**/requirements/*.txt"
+        "**/*requirements.in",
+        "**/requires.txt",
+        "**/requirements/*.txt",
+        "**/requirements/*.in"
     ],
     "pypi",
     "Python",

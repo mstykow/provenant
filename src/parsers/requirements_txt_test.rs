@@ -1,8 +1,20 @@
 mod tests {
+    use std::fs;
     use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use crate::parsers::pep508::parse_pep508_requirement;
     use crate::parsers::{PackageParser, RequirementsTxtParser};
+
+    fn unique_temp_path(filename: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("provenant-requirements-{unique}"));
+        fs::create_dir_all(&dir).expect("Failed to create temp dir");
+        dir.join(filename)
+    }
 
     #[test]
     fn test_pep508_parsing_variants() {
@@ -145,10 +157,70 @@ mod tests {
             "/tmp/requirements_lock_3_11.txt"
         )));
         assert!(RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/requirements.in"
+        )));
+        assert!(RequirementsTxtParser::is_match(&PathBuf::from(
             "/tmp/requirements_build.txt"
+        )));
+        assert!(RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/poetry_requirements.txt"
+        )));
+        assert!(RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/poetry_requirements.in"
+        )));
+        assert!(RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/requirements.bazel.txt"
+        )));
+        assert!(RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/readthedocs-requirements.txt"
+        )));
+        assert!(RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/demo.egg-info/requires.txt"
         )));
         assert!(!RequirementsTxtParser::is_match(&PathBuf::from(
             "/tmp/key-requirements-expected.txt"
         )));
+    }
+
+    #[test]
+    fn test_extract_supports_poetry_and_egg_info_requirement_filenames() {
+        let poetry_requirements = unique_temp_path("poetry_requirements.txt");
+        fs::write(&poetry_requirements, "requests>=2\n").expect("Failed to write poetry file");
+
+        let egg_info_dir = unique_temp_path("demo.egg-info");
+        fs::create_dir_all(&egg_info_dir).expect("Failed to create egg-info dir");
+        let requires_txt = egg_info_dir.join("requires.txt");
+        fs::write(&requires_txt, "pytest>=8\n").expect("Failed to write requires.txt");
+
+        let poetry_package = RequirementsTxtParser::extract_first_package(&poetry_requirements);
+        let egg_info_package = RequirementsTxtParser::extract_first_package(&requires_txt);
+
+        assert!(
+            poetry_package
+                .dependencies
+                .iter()
+                .any(|dependency| dependency.purl.as_deref() == Some("pkg:pypi/requests"))
+        );
+        assert!(
+            egg_info_package
+                .dependencies
+                .iter()
+                .any(|dependency| dependency.purl.as_deref() == Some("pkg:pypi/pytest"))
+        );
+
+        fs::remove_file(&poetry_requirements).expect("Failed to remove poetry file");
+        fs::remove_file(&requires_txt).expect("Failed to remove requires.txt");
+        fs::remove_dir_all(
+            poetry_requirements
+                .parent()
+                .expect("poetry requirements should have a parent"),
+        )
+        .expect("Failed to remove poetry temp dir");
+        fs::remove_dir_all(
+            egg_info_dir
+                .parent()
+                .expect("egg-info dir should have a parent"),
+        )
+        .expect("Failed to remove egg-info temp dir");
     }
 }
