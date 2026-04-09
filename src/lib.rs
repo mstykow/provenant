@@ -34,6 +34,7 @@ pub mod golden_maintenance;
 pub mod license_detection;
 pub mod models;
 pub mod output;
+pub mod output_schema;
 pub mod parsers;
 pub mod progress;
 pub mod scanner;
