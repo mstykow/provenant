@@ -2,7 +2,9 @@
 mod tests {
     use std::fs;
 
-    use super::super::scan_test_utils::{assert_file_links_to_package, scan_and_assemble};
+    use super::super::scan_test_utils::{
+        assert_dependency_present, assert_file_links_to_package, scan_and_assemble,
+    };
     use crate::models::{DatasourceId, PackageType};
 
     #[test]
@@ -266,5 +268,85 @@ version = "1.0.0"
                 && dep.purl.is_some()
                 && dep.for_package_uid.as_deref() == Some(package.package_uid.as_str())
         }));
+    }
+
+    #[test]
+    fn test_python_nested_requirements_subdir_scan_assigns_to_project_package() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        let requirements_dir = temp_dir.path().join("requirements/compiled");
+        fs::create_dir_all(&requirements_dir).expect("create nested requirements dir");
+
+        fs::write(
+            temp_dir.path().join("pyproject.toml"),
+            r#"[project]
+name = "req-demo"
+version = "1.0.0"
+"#,
+        )
+        .expect("write pyproject.toml");
+        fs::write(requirements_dir.join("black.txt"), "black==24.10.0\n")
+            .expect("write requirements/compiled/black.txt");
+
+        let (files, result) = scan_and_assemble(temp_dir.path());
+
+        let package = result
+            .packages
+            .iter()
+            .find(|package| package.name.as_deref() == Some("req-demo"))
+            .expect("pyproject should assemble into a Python package");
+
+        assert!(
+            package
+                .datafile_paths
+                .iter()
+                .any(|path| path.ends_with("requirements/compiled/black.txt"))
+        );
+        assert_file_links_to_package(
+            &files,
+            "/requirements/compiled/black.txt",
+            &package.package_uid,
+            DatasourceId::PipRequirements,
+        );
+        assert_dependency_present(
+            &result.dependencies,
+            "pkg:pypi/black@24.10.0",
+            "requirements/compiled/black.txt",
+        );
+        assert!(result.dependencies.iter().any(|dep| {
+            dep.datafile_path
+                .ends_with("requirements/compiled/black.txt")
+                && dep.for_package_uid.as_deref() == Some(package.package_uid.as_str())
+        }));
+    }
+
+    #[test]
+    fn test_python_requirements_named_subdir_scan_discovers_dependencies() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        let requirements_dir = temp_dir.path().join("test-data/requirements-txt");
+        fs::create_dir_all(&requirements_dir).expect("create requirements-txt dir");
+        fs::write(requirements_dir.join("basic.txt"), "httpx==0.27.0\n")
+            .expect("write requirements-txt/basic.txt");
+
+        let (files, result) = scan_and_assemble(temp_dir.path());
+
+        let requirements_file = files
+            .iter()
+            .find(|file| file.path.ends_with("test-data/requirements-txt/basic.txt"))
+            .expect("requirements-txt/basic.txt should be scanned");
+
+        let package_data = requirements_file
+            .package_data
+            .iter()
+            .find(|package_data| package_data.datasource_id == Some(DatasourceId::PipRequirements))
+            .expect("requirements-txt/basic.txt should have PipRequirements package data");
+
+        assert!(
+            package_data
+                .dependencies
+                .iter()
+                .any(|dependency| dependency.purl.as_deref() == Some("pkg:pypi/httpx@0.27.0"))
+        );
+        assert!(result.packages.is_empty());
+        assert!(result.dependencies.is_empty());
     }
 }

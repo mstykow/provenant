@@ -135,9 +135,11 @@ fn is_requirements_subdir_file(file: &FileInfo) -> bool {
 
     let path = Path::new(&file.path);
     path.parent()
-        .and_then(|parent| parent.file_name())
-        .and_then(|name| name.to_str())
-        == Some("requirements")
+        .into_iter()
+        .flat_map(Path::ancestors)
+        .filter_map(|ancestor| ancestor.file_name())
+        .filter_map(|name| name.to_str())
+        .any(|name| name == "requirements")
 }
 
 fn find_nearest_project_root<'a>(
