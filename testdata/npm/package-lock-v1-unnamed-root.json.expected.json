@@ -1,0 +1,29 @@
+[
+  {
+    "type": "npm",
+    "parties": [],
+    "dependencies": [
+      {
+        "purl": "pkg:npm/minimist@1.0.0",
+        "extracted_requirement": "1.0.0",
+        "scope": "dependencies",
+        "is_runtime": true,
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true,
+        "resolved_package": {
+          "type": "npm",
+          "name": "minimist",
+          "version": "1.0.0",
+          "primary_language": "JavaScript",
+          "download_url": "https://registry.npmjs.org/minimist/-/minimist-1.0.0.tgz",
+          "sha1": "9429c4f83e0d22590a76aeb610006dcc3f89c70f",
+          "is_virtual": true,
+          "dependencies": [],
+          "datasource_id": "npm_package_lock_json"
+        }
+      }
+    ],
+    "datasource_id": "npm_package_lock_json"
+  }
+]
