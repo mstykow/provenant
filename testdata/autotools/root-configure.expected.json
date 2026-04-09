@@ -1,8 +1,8 @@
 [
   {
     "type": "autotools",
-    "name": "another-project",
-    "purl": "pkg:autotools/another-project",
+    "name": "input",
+    "purl": "pkg:autotools/input",
     "parties": [],
     "datasource_id": "autotools_configure"
   }

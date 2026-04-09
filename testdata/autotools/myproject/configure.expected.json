@@ -2,6 +2,7 @@
   {
     "type": "autotools",
     "name": "myproject",
+    "purl": "pkg:autotools/myproject",
     "parties": [],
     "datasource_id": "autotools_configure"
   }
