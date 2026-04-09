@@ -50,20 +50,12 @@ impl PackageParser for RequirementsTxtParser {
 
     fn is_match(path: &Path) -> bool {
         let filename = path.file_name().and_then(|name| name.to_str());
-        let parent_name = path
-            .parent()
-            .and_then(|parent| parent.file_name())
-            .and_then(|name| name.to_str());
+        let Some(name) = filename else {
+            return false;
+        };
 
-        if let Some(name) = filename
-            && (is_requirements_txt_filename(name)
-                || (parent_name == Some("requirements")
-                    && (name.ends_with(".txt") || name.ends_with(".in"))))
-        {
-            return true;
-        }
-
-        false
+        is_requirements_txt_filename(name)
+            || (is_requirements_like_extension(name) && has_requirements_like_ancestor(path))
     }
 }
 
@@ -80,6 +72,23 @@ fn is_requirements_txt_filename(name: &str) -> bool {
     };
 
     stem == "requirements" || stem.starts_with("requirements") || stem.ends_with("requirements")
+}
+
+fn is_requirements_like_extension(name: &str) -> bool {
+    name.ends_with(".txt") || name.ends_with(".in")
+}
+
+fn has_requirements_like_ancestor(path: &Path) -> bool {
+    path.parent()
+        .into_iter()
+        .flat_map(Path::ancestors)
+        .filter_map(|ancestor| ancestor.file_name())
+        .filter_map(|name| name.to_str())
+        .any(is_requirements_like_dir_name)
+}
+
+fn is_requirements_like_dir_name(name: &str) -> bool {
+    name == "requirements" || name.starts_with("requirements") || name.ends_with("requirements")
 }
 
 struct ParseState {
@@ -689,7 +698,13 @@ crate::register_parser!(
         "**/*requirements.in",
         "**/requires.txt",
         "**/requirements/*.txt",
-        "**/requirements/*.in"
+        "**/requirements/*.in",
+        "**/requirements/**/*.txt",
+        "**/requirements/**/*.in",
+        "**/requirements*/*.txt",
+        "**/requirements*/*.in",
+        "**/requirements*/**/*.txt",
+        "**/requirements*/**/*.in"
     ],
     "pypi",
     "Python",

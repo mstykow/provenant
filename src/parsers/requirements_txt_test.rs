@@ -152,7 +152,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_match_supports_underscore_and_lockfile_names() {
+    fn test_is_match_supports_underscore_lockfile_and_nested_directory_names() {
         assert!(RequirementsTxtParser::is_match(&PathBuf::from(
             "/tmp/requirements_lock_3_11.txt"
         )));
@@ -177,8 +177,17 @@ mod tests {
         assert!(RequirementsTxtParser::is_match(&PathBuf::from(
             "/tmp/demo.egg-info/requires.txt"
         )));
+        assert!(RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/test/requirements/backtracking/apache-beam-dill.in"
+        )));
+        assert!(RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/crates/uv-requirements-txt/test-data/requirements-txt/basic.txt"
+        )));
         assert!(!RequirementsTxtParser::is_match(&PathBuf::from(
             "/tmp/key-requirements-expected.txt"
+        )));
+        assert!(!RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/docs/backtracking/apache-beam-dill.in"
         )));
     }
 
