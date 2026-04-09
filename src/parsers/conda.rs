@@ -96,6 +96,15 @@ fn yaml_value_to_string(value: &Value) -> Option<String> {
     }
 }
 
+fn extract_jinja_statement(trimmed_line: &str) -> Option<&str> {
+    if !trimmed_line.starts_with("{%") {
+        return None;
+    }
+
+    let end = trimmed_line.find("%}")?;
+    Some(trimmed_line[2..end].trim())
+}
+
 fn extract_conda_requirement_name(req: &str) -> Option<String> {
     let req = req.trim();
     if req.is_empty() {
@@ -391,21 +400,13 @@ pub fn extract_jinja2_variables(content: &str) -> HashMap<String, String> {
 
     for line in content.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("{%") && trimmed.ends_with("%}") && trimmed.contains('=') {
-            // Strip {% and %}
-            let inner = trimmed
-                .trim_start_matches("{%")
-                .trim_end_matches("%}")
-                .trim()
-                .trim_start_matches("set")
-                .trim();
-
-            // Split on '=' to get key and value
-            if let Some((key, value)) = inner.split_once('=') {
-                let key = key.trim();
-                let value = value.trim().trim_matches('"').trim_matches('\'');
-                variables.insert(key.to_string(), value.to_string());
-            }
+        if let Some(inner) = extract_jinja_statement(trimmed)
+            && let Some(inner) = inner.strip_prefix("set").map(str::trim)
+            && let Some((key, value)) = inner.split_once('=')
+        {
+            let key = key.trim();
+            let value = value.trim().trim_matches('"').trim_matches('\'');
+            variables.insert(key.to_string(), value.to_string());
         }
     }
 
@@ -423,8 +424,7 @@ pub fn apply_jinja2_substitutions(content: &str, variables: &HashMap<String, Str
     for line in content.lines() {
         let trimmed = line.trim();
 
-        // Skip Jinja2 set statements (already extracted)
-        if trimmed.starts_with("{%") && trimmed.ends_with("%}") && trimmed.contains('=') {
+        if extract_jinja_statement(trimmed).is_some() {
             continue;
         }
 
