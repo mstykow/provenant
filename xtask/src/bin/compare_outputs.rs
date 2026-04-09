@@ -75,6 +75,12 @@ struct ContextState {
     scancode_cache_hit: bool,
 }
 
+struct CommandRunOutput {
+    combined: String,
+    log_warning: Option<String>,
+    success: bool,
+}
+
 struct CheckoutGuard {
     cache_dir: Option<PathBuf>,
     target_dir: PathBuf,
@@ -462,6 +468,24 @@ fn run_and_capture_optional_log(
     cwd: Option<&Path>,
     log_path: &Path,
 ) -> Result<(String, Option<String>)> {
+    let output = run_and_capture_optional_log_with_status(program, args, cwd, log_path)?;
+    if !output.success {
+        bail!(build_command_failure_message(
+            program,
+            args,
+            &output.combined,
+            output.log_warning.as_deref()
+        ));
+    }
+    Ok((output.combined, output.log_warning))
+}
+
+fn run_and_capture_optional_log_with_status(
+    program: &str,
+    args: &[String],
+    cwd: Option<&Path>,
+    log_path: &Path,
+) -> Result<CommandRunOutput> {
     let mut command = Command::new(program);
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
@@ -476,15 +500,11 @@ fn run_and_capture_optional_log(
         String::from_utf8_lossy(&output.stderr)
     );
     let log_warning = write_optional_command_log(log_path, &combined);
-    if !output.status.success() {
-        bail!(build_command_failure_message(
-            program,
-            args,
-            &combined,
-            log_warning.as_deref()
-        ));
-    }
-    Ok((combined, log_warning))
+    Ok(CommandRunOutput {
+        combined,
+        log_warning,
+        success: output.status.success(),
+    })
 }
 
 fn build_command_failure_message(
@@ -597,17 +617,145 @@ fn run_scancode(context: &mut ContextState) -> Result<()> {
                 .collect::<Vec<_>>()
         )
     );
-    let (combined, log_warning) =
-        run_and_capture_optional_log("docker", &args, None, &context.scancode_stdout)?;
-    if let Some(log_warning) = log_warning {
+    let output =
+        run_and_capture_optional_log_with_status("docker", &args, None, &context.scancode_stdout)?;
+    if let Some(log_warning) = &output.log_warning {
         println!("  Warning: {log_warning}");
     }
-    for line in combined.lines() {
+    for line in output.combined.lines() {
         println!("  {line}");
+    }
+    if !output.success {
+        let scan_error_count = validate_scancode_output_on_failure(context).map_err(|error| {
+            anyhow::anyhow!(
+                "{}\n--- cached-output validation ---\n{error}",
+                build_command_failure_message(
+                    "docker",
+                    &args,
+                    &output.combined,
+                    output.log_warning.as_deref(),
+                )
+            )
+        })?;
+        println!(
+            "  Warning: ScanCode exited non-zero but wrote valid JSON with {scan_error_count} scan error(s); continuing with captured output."
+        );
     }
     persist_scancode_cache_entry(context)?;
     println!();
     Ok(())
+}
+
+fn validate_scancode_output_on_failure(context: &ContextState) -> Result<usize> {
+    let scancode: Value = serde_json::from_reader(BufReader::new(
+        File::open(&context.scancode_json).with_context(|| {
+            format!(
+                "failed to open ScanCode JSON after non-zero exit {}",
+                context.scancode_json.display()
+            )
+        })?,
+    ))
+    .with_context(|| {
+        format!(
+            "failed to parse ScanCode JSON after non-zero exit {}",
+            context.scancode_json.display()
+        )
+    })?;
+
+    let header = scancode
+        .get("headers")
+        .and_then(Value::as_array)
+        .and_then(|headers| headers.first())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "ScanCode output {} is missing headers[0]",
+                context.scancode_json.display()
+            )
+        })?;
+
+    if header
+        .get("message")
+        .and_then(Value::as_str)
+        .is_some_and(|message| !message.trim().is_empty())
+    {
+        bail!(
+            "ScanCode exited non-zero with a non-empty header message in {}",
+            context.scancode_json.display()
+        );
+    }
+
+    let errors = header
+        .get("errors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "ScanCode exited non-zero but output {} is missing headers[0].errors",
+                context.scancode_json.display()
+            )
+        })?;
+
+    if errors.is_empty() {
+        bail!(
+            "ScanCode exited non-zero but produced no header-level scan errors in {}",
+            context.scancode_json.display()
+        );
+    }
+
+    let error_paths = errors
+        .iter()
+        .map(|error| {
+            let message = error
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("ScanCode error entries must be strings"))?;
+            message
+                .strip_prefix("Path: ")
+                .map(normalize_scancode_error_path)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "ScanCode exited non-zero with a non-scan-error header entry in {}: {}",
+                        context.scancode_json.display(),
+                        message
+                    )
+                })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let files = scancode
+        .get("files")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "ScanCode exited non-zero but output {} is missing a files array",
+                context.scancode_json.display()
+            )
+        })?;
+
+    if let Some(unmatched_path) = error_paths.iter().find(|path| {
+        !files.iter().any(|file| {
+            file.get("path")
+                .and_then(Value::as_str)
+                .is_some_and(|file_path| normalize_scancode_error_path(file_path) == **path)
+                && file
+                    .get("scan_errors")
+                    .and_then(Value::as_array)
+                    .is_some_and(|scan_errors| !scan_errors.is_empty())
+        })
+    }) {
+        bail!(
+            "ScanCode exited non-zero but header error path {} had no matching file scan_errors in {}",
+            unmatched_path,
+            context.scancode_json.display()
+        );
+    }
+
+    Ok(errors.len())
+}
+
+fn normalize_scancode_error_path(path: &str) -> String {
+    path.trim()
+        .trim_start_matches("/input/")
+        .trim_start_matches("input/")
+        .to_string()
 }
 
 fn run_provenant(context: &ContextState) -> Result<()> {
@@ -1899,6 +2047,119 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("failed to parse ScanCode cache manifest"));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn validate_scancode_output_on_failure_accepts_header_errors() {
+        let temp_root = unique_temp_dir("scancode-failure-json-ok");
+        let raw_dir = temp_root.join("raw");
+        fs::create_dir_all(&raw_dir).unwrap();
+
+        let mut context = test_context();
+        context.scancode_json = raw_dir.join("scancode.json");
+        fs::write(
+            &context.scancode_json,
+            r#"{"headers":[{"errors":["Path: input/package.json","Path: input/package-lock.json"]}],"files":[{"path":"package.json","scan_errors":["workspace assembly failed"]},{"path":"package-lock.json","scan_errors":["workspace assembly failed"]}],"packages":[]}"#,
+        )
+        .unwrap();
+
+        let scan_error_count = validate_scancode_output_on_failure(&context).unwrap();
+
+        assert_eq!(scan_error_count, 2);
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn validate_scancode_output_on_failure_rejects_missing_header_errors() {
+        let temp_root = unique_temp_dir("scancode-failure-json-no-errors");
+        let raw_dir = temp_root.join("raw");
+        fs::create_dir_all(&raw_dir).unwrap();
+
+        let mut context = test_context();
+        context.scancode_json = raw_dir.join("scancode.json");
+        fs::write(
+            &context.scancode_json,
+            r#"{"headers":[{"errors":[]}],"files":[],"packages":[]}"#,
+        )
+        .unwrap();
+
+        let error = validate_scancode_output_on_failure(&context)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("produced no header-level scan errors"));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn validate_scancode_output_on_failure_rejects_non_path_header_errors() {
+        let temp_root = unique_temp_dir("scancode-failure-json-bad-error-kind");
+        let raw_dir = temp_root.join("raw");
+        fs::create_dir_all(&raw_dir).unwrap();
+
+        let mut context = test_context();
+        context.scancode_json = raw_dir.join("scancode.json");
+        fs::write(
+            &context.scancode_json,
+            r#"{"headers":[{"errors":["Path: input/package.json","fatal docker failure"]}],"files":[],"packages":[]}"#,
+        )
+        .unwrap();
+
+        let error = validate_scancode_output_on_failure(&context)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("non-scan-error header entry"));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn validate_scancode_output_on_failure_rejects_non_empty_header_message() {
+        let temp_root = unique_temp_dir("scancode-failure-json-header-message");
+        let raw_dir = temp_root.join("raw");
+        fs::create_dir_all(&raw_dir).unwrap();
+
+        let mut context = test_context();
+        context.scancode_json = raw_dir.join("scancode.json");
+        fs::write(
+            &context.scancode_json,
+            r#"{"headers":[{"message":"fatal runtime error","errors":["Path: input/package.json"]}],"files":[],"packages":[]}"#,
+        )
+        .unwrap();
+
+        let error = validate_scancode_output_on_failure(&context)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("non-empty header message"));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn validate_scancode_output_on_failure_rejects_unmatched_header_error_path() {
+        let temp_root = unique_temp_dir("scancode-failure-json-unmatched-path");
+        let raw_dir = temp_root.join("raw");
+        fs::create_dir_all(&raw_dir).unwrap();
+
+        let mut context = test_context();
+        context.scancode_json = raw_dir.join("scancode.json");
+        fs::write(
+            &context.scancode_json,
+            r#"{"headers":[{"errors":["Path: input/package.json"]}],"files":[{"path":"package.json","scan_errors":[]}],"packages":[]}"#,
+        )
+        .unwrap();
+
+        let error = validate_scancode_output_on_failure(&context)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("had no matching file scan_errors"));
 
         let _ = fs::remove_dir_all(&temp_root);
     }
