@@ -18,6 +18,7 @@
 
 use crate::models::PackageData;
 use crate::models::{DatasourceId, PackageType};
+use packageurl::PackageUrl;
 use std::path::Path;
 
 use super::PackageParser;
@@ -41,12 +42,24 @@ impl PackageParser for AutotoolsConfigureParser {
             .parent()
             .and_then(|p| p.file_name())
             .and_then(|n| n.to_str())
-            .map(|s| s.to_string());
+            .map(|s| s.to_string())
+            .or_else(|| {
+                path.file_name()
+                    .is_some_and(|name| name == "configure" || name == "configure.ac")
+                    .then_some("input".to_string())
+            });
+
+        let purl = name.as_deref().and_then(|name| {
+            PackageUrl::new(Self::PACKAGE_TYPE.as_str(), name)
+                .ok()
+                .map(|purl| purl.to_string())
+        });
 
         vec![PackageData {
             package_type: Some(Self::PACKAGE_TYPE),
             name,
             datasource_id: Some(DatasourceId::AutotoolsConfigure),
+            purl,
             ..Default::default()
         }]
     }

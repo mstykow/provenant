@@ -51,6 +51,10 @@ fn test_parent_dir_name_extraction() {
 
     assert_eq!(package_data.package_type, Some(PackageType::Autotools));
     assert_eq!(package_data.name, Some("myproject".to_string()));
+    assert_eq!(
+        package_data.purl.as_deref(),
+        Some("pkg:autotools/myproject")
+    );
     assert_eq!(package_data.version, None);
     assert_eq!(package_data.homepage_url, None);
 }
@@ -62,6 +66,10 @@ fn test_configure_ac() {
 
     assert_eq!(package_data.package_type, Some(PackageType::Autotools));
     assert_eq!(package_data.name, Some("another-project".to_string()));
+    assert_eq!(
+        package_data.purl.as_deref(),
+        Some("pkg:autotools/another-project")
+    );
 }
 
 #[test]
@@ -71,15 +79,28 @@ fn test_nested_path() {
 
     assert_eq!(package_data.package_type, Some(PackageType::Autotools));
     assert_eq!(package_data.name, Some("my-awesome-project".to_string()));
+    assert_eq!(
+        package_data.purl.as_deref(),
+        Some("pkg:autotools/my-awesome-project")
+    );
 }
 
 #[test]
 fn test_root_path_edge_case() {
-    // Edge case: configure at root level (no parent)
     let path = PathBuf::from("configure");
     let package_data = AutotoolsConfigureParser::extract_first_package(&path);
 
     assert_eq!(package_data.package_type, Some(PackageType::Autotools));
-    // When at root level, parent() returns None, so name should be None
-    assert_eq!(package_data.name, None);
+    assert_eq!(package_data.name, Some("input".to_string()));
+    assert_eq!(package_data.purl.as_deref(), Some("pkg:autotools/input"));
+}
+
+#[test]
+fn test_root_configure_ac_uses_input_name() {
+    let path = PathBuf::from("configure.ac");
+    let package_data = AutotoolsConfigureParser::extract_first_package(&path);
+
+    assert_eq!(package_data.package_type, Some(PackageType::Autotools));
+    assert_eq!(package_data.name, Some("input".to_string()));
+    assert_eq!(package_data.purl.as_deref(), Some("pkg:autotools/input"));
 }
