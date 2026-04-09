@@ -29,9 +29,7 @@ pub(crate) fn apply_license_policy_from_file(
         }
         PolicyFileStatus::SoftError(error) => {
             for file in files {
-                if file.file_type == crate::models::FileType::File {
-                    file.license_policy = Some(vec![]);
-                }
+                file.license_policy = Some(vec![]);
             }
             Ok(vec![error])
         }
@@ -75,6 +73,7 @@ fn load_license_policy(policy_path: &Path) -> Result<PolicyFileStatus> {
 fn apply_license_policy(files: &mut [FileInfo], policies: &[LicensePolicyEntry]) -> Result<()> {
     for file in files {
         if file.file_type != crate::models::FileType::File {
+            file.license_policy = Some(vec![]);
             continue;
         }
         let license_keys = file_license_keys(file)?;
@@ -239,7 +238,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_license_policy_skips_directory_resources() {
+    fn apply_license_policy_sets_empty_entries_for_directory_resources() {
         let temp = tempfile::tempdir().expect("temp dir");
         let policy_path = temp.path().join("policy.yml");
         std::fs::write(
@@ -278,6 +277,54 @@ mod tests {
         apply_license_policy_from_file(&mut files, &policy_path)
             .expect("policy application succeeds");
 
-        assert!(files[0].license_policy.is_none());
+        assert_eq!(files[0].license_policy, Some(vec![]));
+    }
+
+    #[test]
+    fn apply_license_policy_sets_empty_entries_for_directories_on_soft_error() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let policy_path = temp.path().join("policy.yml");
+        std::fs::write(
+            &policy_path,
+            "license_policies:\n  - license_key: mit\n    label: Approved\n    color_code: '#00ff00'\n    icon: ok\n  - license_key: mit\n    label: Duplicate\n    color_code: '#ff0000'\n    icon: stop\n",
+        )
+        .expect("policy written");
+
+        let mut files = vec![FileInfo::new(
+            "src".to_string(),
+            "src".to_string(),
+            String::new(),
+            "src".to_string(),
+            FileType::Directory,
+            None,
+            None,
+            0,
+            None,
+            None,
+            None,
+            None,
+            None,
+            vec![],
+            None,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        )];
+
+        let errors = apply_license_policy_from_file(&mut files, &policy_path)
+            .expect("duplicate policy should not abort scan");
+
+        assert_eq!(files[0].license_policy, Some(vec![]));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.contains("duplicate license key"))
+        );
     }
 }
