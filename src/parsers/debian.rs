@@ -38,8 +38,8 @@ use packageurl::PackageUrl;
 use regex::Regex;
 
 use crate::models::{
-    DatasourceId, Dependency, FileReference, LicenseDetection, Md5Digest, PackageData, PackageType,
-    Party,
+    DatasourceId, Dependency, FileReference, LicenseDetection, LineNumber, Md5Digest, PackageData,
+    PackageType, Party,
 };
 use crate::parsers::rfc822::{self, Rfc822Metadata};
 use crate::parsers::utils::{read_file_to_string, split_name_email};
@@ -1595,10 +1595,11 @@ fn build_primary_license_detection(
     line_no: usize,
 ) -> LicenseDetection {
     let normalized = normalize_debian_license_name(license_name);
+    let line = LineNumber::new(line_no).unwrap();
 
     build_declared_license_detection(
         &normalized,
-        DeclaredLicenseMatchMetadata::new(&matched_text, line_no, line_no),
+        DeclaredLicenseMatchMetadata::new(&matched_text, line, line),
     )
 }
 
@@ -3268,8 +3269,8 @@ License: LGPL-2.1
             primary.matches[0].matched_text.as_deref(),
             Some("License: GPL-2+")
         );
-        assert_eq!(primary.matches[0].start_line, 47);
-        assert_eq!(primary.matches[0].end_line, 47);
+        assert_eq!(primary.matches[0].start_line, LineNumber::new(47).unwrap());
+        assert_eq!(primary.matches[0].end_line, LineNumber::new(47).unwrap());
     }
 
     #[test]
@@ -3285,12 +3286,12 @@ License: LGPL-2.1
             primary.matches[0].matched_text.as_deref(),
             Some("License: LGPL-2.1")
         );
-        assert_eq!(primary.matches[0].start_line, 11);
+        assert_eq!(primary.matches[0].start_line, LineNumber::new(11).unwrap());
 
         let ordered_lines: Vec<usize> = pkg
             .other_license_detections
             .iter()
-            .map(|detection| detection.matches[0].start_line)
+            .map(|detection| detection.matches[0].start_line.get())
             .collect();
         assert_eq!(ordered_lines, vec![15, 19, 23, 25]);
 
@@ -3333,8 +3334,11 @@ License: LGPL-2.1
             .rev()
             .find(|detection| detection.matches[0].matched_text.as_deref() == Some("License: Zlib"))
             .expect("bottom standalone Zlib license paragraph should be detected");
-        assert_eq!(last_zlib.matches[0].start_line, 732);
-        assert_eq!(last_zlib.matches[0].end_line, 732);
+        assert_eq!(
+            last_zlib.matches[0].start_line,
+            LineNumber::new(732).unwrap()
+        );
+        assert_eq!(last_zlib.matches[0].end_line, LineNumber::new(732).unwrap());
     }
 
     #[test]
@@ -3349,8 +3353,8 @@ License: LGPL-2.1
             primary.matches[0].matched_text.as_deref(),
             Some("License: LGPL-3+ or GPL-2+")
         );
-        assert_eq!(primary.matches[0].start_line, 8);
-        assert_eq!(primary.matches[0].end_line, 8);
+        assert_eq!(primary.matches[0].start_line, LineNumber::new(8).unwrap());
+        assert_eq!(primary.matches[0].end_line, LineNumber::new(8).unwrap());
 
         assert!(pkg.other_license_detections.iter().any(|detection| {
             detection.matches[0].matched_text.as_deref() == Some("License: GPL-2+")
@@ -3368,7 +3372,7 @@ License: LGPL-2.1
             primary.matches[0].matched_text.as_deref(),
             Some("License: GPL-2+")
         );
-        assert_eq!(primary.matches[0].start_line, 7);
+        assert_eq!(primary.matches[0].start_line, LineNumber::new(7).unwrap());
     }
 
     #[test]

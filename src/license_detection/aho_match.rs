@@ -13,6 +13,7 @@ use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind};
 use crate::license_detection::position_set::PositionSet;
 use crate::license_detection::query::QueryRun;
+use crate::models::LineNumber;
 
 pub const MATCH_AHO: MatcherKind = MatcherKind::Aho;
 
@@ -130,12 +131,15 @@ pub fn aho_match_with_extra_matchables(
                 100.0
             };
 
-            let start_line = query_run.line_for_pos(qstart).unwrap_or(1);
+            let start_line = query_run
+                .line_for_pos(qstart)
+                .and_then(LineNumber::new)
+                .unwrap_or(LineNumber::ONE);
 
             let end_line = if qend > qstart {
-                // qend is exclusive, so the last matched token is at qend-1
                 query_run
                     .line_for_pos(qend.saturating_sub(1))
+                    .and_then(LineNumber::new)
                     .unwrap_or(start_line)
             } else {
                 start_line
@@ -604,8 +608,8 @@ mod tests {
         let matches = aho_match(run.get_index(), &run);
 
         assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].start_line, 5);
-        assert_eq!(matches[0].end_line, 5);
+        assert_eq!(matches[0].start_line, LineNumber::new(5).expect("valid"));
+        assert_eq!(matches[0].end_line, LineNumber::new(5).expect("valid"));
     }
 
     #[test]

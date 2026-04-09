@@ -90,7 +90,12 @@ pub(super) fn is_false_positive(matches: &[LicenseMatch]) -> bool {
         return false;
     }
 
-    let start_line = matches.iter().map(|m| m.start_line).min().unwrap_or(0);
+    let start_line = matches
+        .iter()
+        .map(|m| m.start_line)
+        .min()
+        .map(|ln| ln.get())
+        .unwrap_or(0);
 
     let bare_rules = ["gpl_bare", "freeware_bare", "public-domain_bare"];
     let is_bare_rule = matches.iter().all(|m| {
@@ -533,8 +538,18 @@ fn has_alternative_license_notice(matches: &[LicenseMatch], source_text: Option<
         return false;
     };
 
-    let start_line = matches.iter().map(|m| m.start_line).min().unwrap_or(0);
-    let end_line = matches.iter().map(|m| m.end_line).max().unwrap_or(0);
+    let start_line = matches
+        .iter()
+        .map(|m| m.start_line)
+        .min()
+        .map(|ln| ln.get())
+        .unwrap_or(0);
+    let end_line = matches
+        .iter()
+        .map(|m| m.end_line)
+        .max()
+        .map(|ln| ln.get())
+        .unwrap_or(0);
     if start_line == 0 || end_line < start_line {
         return false;
     }
@@ -597,6 +612,7 @@ mod tests {
     use crate::license_detection::models::{
         LicenseMatch, MatchCoordinates, MatcherKind, PositionSpan,
     };
+    use crate::models::LineNumber;
 
     fn create_test_match(coverage: f32, rule_identifier: &str) -> LicenseMatch {
         LicenseMatch {
@@ -604,8 +620,8 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: Some("test.txt".to_string()),
-            start_line: 1,
-            end_line: 10,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(10).expect("valid line number"),
             start_token: 1,
             end_token: 11,
             matcher: crate::license_detection::models::MatcherKind::Hash,
@@ -640,6 +656,8 @@ mod tests {
         rule_relevance: u8,
         rule_identifier: &str,
     ) -> LicenseMatch {
+        let start_line = LineNumber::new(start_line).expect("valid start_line");
+        let end_line = LineNumber::new(end_line).expect("valid end_line");
         LicenseMatch {
             rid: 0,
             license_expression: license_expression.to_string(),
@@ -647,8 +665,8 @@ mod tests {
             from_file: Some("test.txt".to_string()),
             start_line,
             end_line,
-            start_token: start_line,
-            end_token: end_line + 1,
+            start_token: start_line.get(),
+            end_token: end_line.get() + 1,
             matcher: matcher.parse().expect("invalid test matcher"),
             score,
             matched_length,
@@ -663,8 +681,8 @@ mod tests {
             is_from_license: false,
             rule_start_token: 0,
             coordinates: MatchCoordinates::query_region(PositionSpan::range(
-                start_line,
-                end_line + 1,
+                start_line.get(),
+                end_line.get() + 1,
             )),
             candidate_resemblance: 0.0,
             candidate_containment: 0.0,

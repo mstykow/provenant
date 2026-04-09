@@ -170,6 +170,7 @@ pub fn filter_false_positive_license_lists_matches(
 mod tests {
     use super::*;
     use crate::license_detection::models::{MatchCoordinates, PositionSpan};
+    use crate::models::LineNumber;
 
     #[allow(clippy::too_many_arguments)]
     fn create_test_match_with_flags(
@@ -192,8 +193,8 @@ mod tests {
             license_expression: license_expression.to_string(),
             license_expression_spdx: Some(license_expression.to_string()),
             from_file: None,
-            start_line,
-            end_line,
+            start_line: LineNumber::new(start_line).unwrap(),
+            end_line: LineNumber::new(end_line).unwrap(),
             start_token: 0,
             end_token: 0,
             matcher: matcher.parse().expect("invalid test matcher"),

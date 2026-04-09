@@ -234,7 +234,11 @@ pub(crate) fn get_unique_detections(detections: &[LicenseDetection]) -> Vec<Uniq
             });
 
         for region in &detection.file_regions {
-            let key = (region.path.clone(), region.start_line, region.end_line);
+            let key = (
+                region.path.clone(),
+                region.start_line.get(),
+                region.end_line.get(),
+            );
             if seen_regions.insert(key) {
                 entry.file_regions.push(region.clone());
             }
@@ -443,8 +447,20 @@ pub fn rank_detections(mut detections: Vec<LicenseDetection>) -> Vec<LicenseDete
 /// earlier in the file come first in the results.
 pub fn sort_detections_by_line(mut detections: Vec<LicenseDetection>) -> Vec<LicenseDetection> {
     detections.sort_by(|a, b| {
-        let min_line_a = a.matches.iter().map(|m| m.start_line).min().unwrap_or(0);
-        let min_line_b = b.matches.iter().map(|m| m.start_line).min().unwrap_or(0);
+        let min_line_a = a
+            .matches
+            .iter()
+            .map(|m| m.start_line)
+            .min()
+            .map(|ln| ln.get())
+            .unwrap_or(0);
+        let min_line_b = b
+            .matches
+            .iter()
+            .map(|m| m.start_line)
+            .min()
+            .map(|ln| ln.get())
+            .unwrap_or(0);
         min_line_a
             .cmp(&min_line_b)
             .then_with(|| a.identifier.cmp(&b.identifier))
@@ -568,6 +584,7 @@ mod tests {
     use super::*;
     use crate::license_detection::models::{License, LicenseMatch, MatchCoordinates, PositionSpan};
     use crate::license_detection::spdx_mapping::build_spdx_mapping;
+    use crate::models::LineNumber;
 
     fn create_test_match(
         start_line: usize,
@@ -575,13 +592,15 @@ mod tests {
         matcher: &str,
         rule_identifier: &str,
     ) -> LicenseMatch {
+        let start_line_ln = LineNumber::new(start_line).expect("valid start_line");
+        let end_line_ln = LineNumber::new(end_line).expect("valid end_line");
         LicenseMatch {
             rid: 0,
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: Some("test.txt".to_string()),
-            start_line,
-            end_line,
+            start_line: start_line_ln,
+            end_line: end_line_ln,
             start_token: start_line,
             end_token: end_line + 1,
             matcher: matcher.parse().expect("invalid test matcher"),
@@ -1387,8 +1406,11 @@ mod tests {
             file_regions: Vec::new(),
         };
         let sorted = sort_detections_by_line(vec![d1, d2]);
-        assert_eq!(sorted[0].matches[0].start_line, 1);
-        assert_eq!(sorted[1].matches[0].start_line, 20);
+        assert_eq!(sorted[0].matches[0].start_line, LineNumber::ONE);
+        assert_eq!(
+            sorted[1].matches[0].start_line,
+            LineNumber::new(20).expect("valid")
+        );
     }
 
     #[test]
@@ -1532,8 +1554,14 @@ mod tests {
         );
         assert_eq!(detections[0].file_regions.len(), 1);
         assert_eq!(detections[0].file_regions[0].path, "src/lib.rs");
-        assert_eq!(detections[0].file_regions[0].start_line, 4);
-        assert_eq!(detections[0].file_regions[0].end_line, 8);
+        assert_eq!(
+            detections[0].file_regions[0].start_line,
+            LineNumber::new(4).expect("valid")
+        );
+        assert_eq!(
+            detections[0].file_regions[0].end_line,
+            LineNumber::new(8).expect("valid")
+        );
     }
 
     #[test]
@@ -1555,8 +1583,14 @@ mod tests {
 
         assert_eq!(detections[0].file_regions.len(), 1);
         assert_eq!(detections[0].file_regions[0].path, "src/lib.rs");
-        assert_eq!(detections[0].file_regions[0].start_line, 4);
-        assert_eq!(detections[0].file_regions[0].end_line, 25);
+        assert_eq!(
+            detections[0].file_regions[0].start_line,
+            LineNumber::new(4).expect("valid")
+        );
+        assert_eq!(
+            detections[0].file_regions[0].end_line,
+            LineNumber::new(25).expect("valid")
+        );
     }
 
     #[test]
@@ -1569,8 +1603,8 @@ mod tests {
             identifier: Some("mit-shared".to_string()),
             file_regions: vec![FileRegion {
                 path: "src/one.rs".to_string(),
-                start_line: 1,
-                end_line: 10,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::new(10).expect("valid"),
             }],
         };
         let second = LicenseDetection {
@@ -1581,8 +1615,8 @@ mod tests {
             identifier: Some("mit-shared".to_string()),
             file_regions: vec![FileRegion {
                 path: "src/two.rs".to_string(),
-                start_line: 20,
-                end_line: 30,
+                start_line: LineNumber::new(20).expect("valid"),
+                end_line: LineNumber::new(30).expect("valid"),
             }],
         };
         let third = LicenseDetection {
@@ -1593,8 +1627,8 @@ mod tests {
             identifier: Some("mit-shared".to_string()),
             file_regions: vec![FileRegion {
                 path: "src/two.rs".to_string(),
-                start_line: 20,
-                end_line: 30,
+                start_line: LineNumber::new(20).expect("valid"),
+                end_line: LineNumber::new(30).expect("valid"),
             }],
         };
 
@@ -1615,8 +1649,8 @@ mod tests {
             identifier: None,
             file_regions: vec![FileRegion {
                 path: "src/one.rs".to_string(),
-                start_line: 1,
-                end_line: 10,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::new(10).expect("valid"),
             }],
         };
 
@@ -1635,8 +1669,8 @@ mod tests {
             identifier: Some("mit-shared".to_string()),
             file_regions: vec![FileRegion {
                 path: "src/one.rs".to_string(),
-                start_line: 1,
-                end_line: 10,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::new(10).expect("valid"),
             }],
         };
         let second = LicenseDetection {
@@ -1647,8 +1681,8 @@ mod tests {
             identifier: Some("mit-shared".to_string()),
             file_regions: vec![FileRegion {
                 path: "src/two.rs".to_string(),
-                start_line: 20,
-                end_line: 30,
+                start_line: LineNumber::new(20).expect("valid"),
+                end_line: LineNumber::new(30).expect("valid"),
             }],
         };
 

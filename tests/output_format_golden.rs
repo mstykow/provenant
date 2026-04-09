@@ -1,7 +1,7 @@
 use provenant::models::{
     Copyright, DatasourceId, ExtraData, FacetTallies, FileInfo, FileType, Header, Holder,
-    Md5Digest, Output, Package, PackageData, PackageType, Party, ResolvedPackage, Sha1Digest,
-    SystemEnvironment, Tallies, TallyEntry, TopLevelDependency,
+    LineNumber, Md5Digest, Output, Package, PackageData, PackageType, Party, ResolvedPackage,
+    Sha1Digest, SystemEnvironment, Tallies, TallyEntry, TopLevelDependency,
 };
 use provenant::{OutputFormat, OutputWriteConfig, OutputWriter, writer_for_format};
 use regex::Regex;
@@ -107,8 +107,8 @@ fn test_debian_output_matches_local_expected_fixture() {
     );
     file.holders = vec![Holder {
         holder: "Example Org".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     file.license_expression = Some("MIT".to_string());
     file.license_detections = vec![provenant::models::LicenseDetection {
@@ -118,8 +118,8 @@ fn test_debian_output_matches_local_expected_fixture() {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("scan/src/main.rs".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(1),
@@ -1600,13 +1600,13 @@ fn sample_html_simple_output() -> Output {
         vec![],
         vec![Copyright {
             copyright: "Copyright (c) 2000 ACME, Inc.".to_string(),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
         }],
         vec![Holder {
             holder: "ACME, Inc.".to_string(),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
         }],
         vec![],
         vec![],

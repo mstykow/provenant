@@ -11,6 +11,7 @@ use sha1::{Digest, Sha1};
 
 use super::DatasourceId;
 use super::GitSha1;
+use super::LineNumber;
 use super::Md5Digest;
 use super::PackageType;
 use super::Sha1Digest;
@@ -677,8 +678,8 @@ pub struct Match {
     pub license_expression_spdx: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from_file: Option<String>,
-    pub start_line: usize,
-    pub end_line: usize,
+    pub start_line: LineNumber,
+    pub end_line: LineNumber,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub matcher: Option<String>,
     pub score: f64,
@@ -702,22 +703,22 @@ pub struct Match {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Copyright {
     pub copyright: String,
-    pub start_line: usize,
-    pub end_line: usize,
+    pub start_line: LineNumber,
+    pub end_line: LineNumber,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Holder {
     pub holder: String,
-    pub start_line: usize,
-    pub end_line: usize,
+    pub start_line: LineNumber,
+    pub end_line: LineNumber,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Author {
     pub author: String,
-    pub start_line: usize,
-    pub end_line: usize,
+    pub start_line: LineNumber,
+    pub end_line: LineNumber,
 }
 
 /// Package dependency information with version constraints.
@@ -1291,8 +1292,8 @@ mod tests {
                     license_expression: "mit".to_string(),
                     license_expression_spdx: "MIT".to_string(),
                     from_file: None,
-                    start_line: 1,
-                    end_line: 1,
+                    start_line: LineNumber::ONE,
+                    end_line: LineNumber::ONE,
                     matcher: Some("parser-declared-license".to_string()),
                     score: 100.0,
                     matched_length: Some(1),
@@ -1369,8 +1370,8 @@ mod tests {
                     license_expression: "mit".to_string(),
                     license_expression_spdx: "MIT".to_string(),
                     from_file: None,
-                    start_line: 1,
-                    end_line: 1,
+                    start_line: LineNumber::ONE,
+                    end_line: LineNumber::ONE,
                     matcher: Some("parser-declared-license".to_string()),
                     score: 100.0,
                     matched_length: Some(1),
@@ -1620,15 +1621,15 @@ pub fn build_package_uid(purl: &str) -> String {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OutputEmail {
     pub email: String,
-    pub start_line: usize,
-    pub end_line: usize,
+    pub start_line: LineNumber,
+    pub end_line: LineNumber,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OutputURL {
     pub url: String,
-    pub start_line: usize,
-    pub end_line: usize,
+    pub start_line: LineNumber,
+    pub end_line: LineNumber,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use crate::license_detection::LicenseDetectionEngine;
 use crate::license_detection::index::LicenseIndex;
-use crate::models::{FileInfo, Match, Package, TopLevelDependency};
+use crate::models::{FileInfo, LineNumber, Match, Package, TopLevelDependency};
 use anyhow::Result;
 
 pub(crate) use json_input::load_and_merge_json_inputs;
@@ -120,8 +120,8 @@ pub(crate) type ClueRuleLookup = HashMap<String, ClueRuleData>;
 
 #[derive(Debug, Clone)]
 struct IgnorableSpan {
-    start_line: usize,
-    end_line: usize,
+    start_line: LineNumber,
+    end_line: LineNumber,
     values: Vec<String>,
     allow_substring: bool,
 }
@@ -396,8 +396,8 @@ fn collect_rule_ignorables(
 
 fn push_ignorable_values(
     target: &mut Vec<IgnorableSpan>,
-    start_line: usize,
-    end_line: usize,
+    start_line: LineNumber,
+    end_line: LineNumber,
     values: &[String],
     trim_slashes: bool,
 ) {
@@ -419,8 +419,8 @@ fn push_ignorable_values(
 
 fn matches_ignorable(
     ignorables: &[IgnorableSpan],
-    start_line: usize,
-    end_line: usize,
+    start_line: LineNumber,
+    end_line: LineNumber,
     value: &str,
     trim_slashes: bool,
 ) -> bool {

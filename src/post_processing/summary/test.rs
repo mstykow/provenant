@@ -5,7 +5,8 @@ use super::super::package_metadata_promotion::promote_package_metadata_from_key_
 use super::super::test_utils::{dir, file, package};
 use super::*;
 use crate::models::{
-    Copyright, DatasourceId, FileReference, Holder, Match, Package, PackageType, TallyEntry,
+    Copyright, DatasourceId, FileReference, Holder, LineNumber, Match, Package, PackageType,
+    TallyEntry,
 };
 
 #[test]
@@ -38,8 +39,8 @@ fn key_file_license_clues_feed_summary_without_mutating_package_license_provenan
             license_expression: "apache-2.0".to_string(),
             license_expression_spdx: "Apache-2.0".to_string(),
             from_file: Some("inspec-6.8.2/inspec-bin/LICENSE".to_string()),
-            start_line: 1,
-            end_line: 20,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(20).unwrap(),
             matcher: None,
             score: 100.0,
             matched_length: Some(161),
@@ -56,13 +57,13 @@ fn key_file_license_clues_feed_summary_without_mutating_package_license_provenan
     }];
     license_file.copyrights = vec![Copyright {
         copyright: "Copyright (c) 2019 Chef Software Inc.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     license_file.holders = vec![Holder {
         holder: "Chef Software Inc.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let mut files = vec![metadata_file, license_file];
@@ -111,8 +112,8 @@ fn manifest_declared_license_survives_into_package_and_summary() {
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
                 from_file: Some("demo/demo.gemspec".to_string()),
-                start_line: 1,
-                end_line: 1,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::ONE,
                 matcher: None,
                 score: 100.0,
                 matched_length: None,
@@ -141,8 +142,8 @@ fn manifest_declared_license_survives_into_package_and_summary() {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("demo/demo.gemspec".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-spdx-id".to_string()),
             score: 100.0,
             matched_length: Some(1),
@@ -194,8 +195,8 @@ fn summary_other_license_expressions_include_license_clues() {
         license_expression: "unknown-spdx".to_string(),
         license_expression_spdx: "LicenseRef-scancode-unknown-spdx".to_string(),
         from_file: Some("project/NOTICE".to_string()),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
         matcher: Some("2-aho".to_string()),
         score: 65.0,
         matched_length: Some(2),
@@ -232,8 +233,8 @@ fn compute_summary_includes_package_other_license_detections_as_other_expression
                 license_expression: "gpl-2.0-only".to_string(),
                 license_expression_spdx: "GPL-2.0-only".to_string(),
                 from_file: Some("project/package.json".to_string()),
-                start_line: 1,
-                end_line: 1,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::ONE,
                 matcher: Some("parser-declared-license".to_string()),
                 score: 100.0,
                 matched_length: Some(1),
@@ -279,8 +280,8 @@ fn compute_summary_uses_manifest_package_license_detections_when_file_detections
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
                 from_file: Some("project/Cargo.toml".to_string()),
-                start_line: 1,
-                end_line: 1,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::ONE,
                 matcher: Some("parser-declared-license".to_string()),
                 score: 100.0,
                 matched_length: Some(1),
@@ -315,8 +316,8 @@ fn compute_summary_prefers_file_license_detections_over_duplicate_package_data_d
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("project/Cargo.toml".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("parser-declared-license".to_string()),
             score: 100.0,
             matched_length: Some(1),
@@ -366,8 +367,8 @@ fn compute_summary_deduplicates_duplicate_other_license_package_data_entries_per
             license_expression: "gpl-2.0-only".to_string(),
             license_expression_spdx: "GPL-2.0-only".to_string(),
             from_file: Some("project/package.json".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("parser-declared-license".to_string()),
             score: 100.0,
             matched_length: Some(1),
@@ -417,8 +418,8 @@ fn compute_summary_deduplicates_duplicate_primary_package_data_entries_per_file(
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("project/Cargo.toml".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("parser-declared-license".to_string()),
             score: 100.0,
             matched_length: Some(1),
@@ -478,8 +479,8 @@ fn compute_summary_uses_root_prefixed_top_level_key_files() {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("project/LICENSE".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(10),
@@ -562,8 +563,8 @@ fn compute_summary_prefers_package_origin_info_and_preserves_other_tallies() {
             license_expression: "apache-2.0".to_string(),
             license_expression_spdx: "Apache-2.0".to_string(),
             from_file: Some("codebase/apache-2.0.LICENSE".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(10),
@@ -591,8 +592,8 @@ fn compute_summary_prefers_package_origin_info_and_preserves_other_tallies() {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("codebase/mit.LICENSE".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(10),
@@ -627,8 +628,8 @@ fn compute_summary_resolves_joined_primary_license_without_ambiguity() {
     readme.license_expression = Some("apache-2.0 AND (apache-2.0 OR mit)".to_string());
     readme.copyrights = vec![Copyright {
         copyright: "Copyright Example Corp.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let mut apache = file("codebase/apache-2.0.LICENSE");
@@ -643,8 +644,8 @@ fn compute_summary_resolves_joined_primary_license_without_ambiguity() {
             license_expression: "apache-2.0".to_string(),
             license_expression_spdx: "Apache-2.0".to_string(),
             from_file: Some("codebase/apache-2.0.LICENSE".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(10),
@@ -672,8 +673,8 @@ fn compute_summary_resolves_joined_primary_license_without_ambiguity() {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("codebase/mit.LICENSE".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(10),
@@ -708,8 +709,8 @@ fn compute_summary_penalizes_conflicting_non_key_licenses_without_false_ambiguit
     readme.is_top_level = true;
     readme.copyrights = vec![Copyright {
         copyright: "Copyright Example Corp.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let mut mit = file("codebase/mit.LICENSE");
@@ -724,8 +725,8 @@ fn compute_summary_penalizes_conflicting_non_key_licenses_without_false_ambiguit
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("codebase/mit.LICENSE".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(10),
@@ -750,8 +751,8 @@ fn compute_summary_penalizes_conflicting_non_key_licenses_without_false_ambiguit
             license_expression: "gpl-2.0-only".to_string(),
             license_expression_spdx: "GPL-2.0-only".to_string(),
             from_file: Some("codebase/tests/test_a.py".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("2-aho".to_string()),
             score: 100.0,
             matched_length: Some(10),
@@ -790,13 +791,13 @@ fn compute_summary_uses_package_datafile_holders_before_global_holder_fallback()
     setup_py.holders = vec![
         Holder {
             holder: "Google".to_string(),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
         },
         Holder {
             holder: "Fraunhofer FKIE".to_string(),
-            start_line: 2,
-            end_line: 2,
+            start_line: LineNumber::new(2).unwrap(),
+            end_line: LineNumber::new(2).unwrap(),
         },
     ];
 
@@ -806,8 +807,8 @@ fn compute_summary_uses_package_datafile_holders_before_global_holder_fallback()
     readme.is_top_level = true;
     readme.holders = vec![Holder {
         holder: "Example Corporation".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let summary = compute_summary(&[setup_py, readme], &[package]).expect("summary exists");
@@ -835,8 +836,8 @@ fn compute_summary_prefers_package_copyright_holders_over_package_resource_holde
     nuspec.for_packages = vec![package.package_uid.clone()];
     nuspec.holders = vec![Holder {
         holder: "Different Holder".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let summary = compute_summary(&[nuspec], &[package]).expect("summary exists");
@@ -870,8 +871,8 @@ fn compute_summary_keeps_null_other_license_expressions_when_declared_expression
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("project/LICENSE".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(10),
@@ -905,16 +906,16 @@ fn compute_summary_keeps_null_other_holders_and_removes_declared_holder_only() {
     readme.is_top_level = true;
     readme.holders = vec![Holder {
         holder: "Example Corp.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let mut authors = file("project/AUTHORS");
     authors.is_community = true;
     authors.holders = vec![Holder {
         holder: "Demo Corp.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let mut license = file("project/LICENSE");
@@ -932,14 +933,14 @@ fn compute_summary_keeps_holder_tallies_when_no_declared_holder_exists() {
     let mut source_one = file("project/src/main.c");
     source_one.holders = vec![Holder {
         holder: "Members of the Gmerlin project".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     let mut source_two = file("project/src/helper.c");
     source_two.holders = vec![Holder {
         holder: "Members of the Gmerlin project".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     let summary = compute_summary(&[source_one, source_two], &[]).expect("summary exists");
     assert_eq!(summary.declared_holder.as_deref(), Some(""));
@@ -954,15 +955,15 @@ fn compute_summary_removes_punctuation_only_holder_variants_from_other_holders()
     readme.is_top_level = true;
     readme.holders = vec![Holder {
         holder: "Example Corp.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let mut notice = file("project/NOTICE");
     notice.holders = vec![Holder {
         holder: "Example Corp".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let mut license = file("project/LICENSE");
@@ -1053,8 +1054,8 @@ fn compute_summary_combines_package_licenses_when_present_datafile_is_not_key_cl
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("codebase/cargo.toml".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-spdx-id".to_string()),
             score: 100.0,
             matched_length: Some(1),
@@ -1096,8 +1097,8 @@ fn compute_summary_serializes_empty_declared_holder_when_none_found() {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("pip-22.0.4/PKG-INFO".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-spdx-id".to_string()),
             score: 100.0,
             matched_length: Some(1),
@@ -1131,8 +1132,8 @@ fn compute_summary_joins_multiple_holders_from_single_top_level_license_file() {
             license_expression: "jetty".to_string(),
             license_expression_spdx: "LicenseRef-scancode-jetty".to_string(),
             from_file: Some("codebase/jetty.LICENSE".to_string()),
-            start_line: 1,
-            end_line: 132,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(132).unwrap(),
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(996),
@@ -1149,19 +1150,19 @@ fn compute_summary_joins_multiple_holders_from_single_top_level_license_file() {
     }];
     license.copyrights = vec![Copyright {
         copyright: "Copyright Mort Bay and Sun Microsystems.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     license.holders = vec![
         Holder {
             holder: "Mort Bay Consulting Pty. Ltd. (Australia) and others".to_string(),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
         },
         Holder {
             holder: "Sun Microsystems".to_string(),
-            start_line: 2,
-            end_line: 2,
+            start_line: LineNumber::new(2).unwrap(),
+            end_line: LineNumber::new(2).unwrap(),
         },
     ];
     let summary = compute_summary(&[license], &[]).expect("summary exists");
@@ -1182,8 +1183,8 @@ fn compute_score_mode_ignores_package_declared_license_without_key_file_license_
     package_json.for_packages = vec![package.package_uid.clone()];
     package_json.copyrights = vec![Copyright {
         copyright: "Copyright Example Corp.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     let files = vec![package_json];
     let indexes = OutputIndexes::build(&files, None, false, OutputIndexMode::Full);
@@ -1205,8 +1206,8 @@ fn compute_score_mode_without_license_text_returns_zero_with_copyright_only() {
     package_json.for_packages = vec![package.package_uid.clone()];
     package_json.copyrights = vec![Copyright {
         copyright: "Copyright Example Corp.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     let files = vec![package_json];
     let indexes = OutputIndexes::build(&files, None, false, OutputIndexMode::Full);
@@ -1247,8 +1248,8 @@ fn compute_score_mode_uses_single_joined_expression_without_ambiguity() {
             license_expression: "mit OR apache-2.0".to_string(),
             license_expression_spdx: "MIT OR Apache-2.0".to_string(),
             from_file: Some("no_license_ambiguity/Cargo.toml".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(5),
@@ -1265,8 +1266,8 @@ fn compute_score_mode_uses_single_joined_expression_without_ambiguity() {
     }];
     cargo.copyrights = vec![Copyright {
         copyright: "Copyright The Rand Project Developers.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     let mut apache = file("no_license_ambiguity/LICENSE-APACHE");
     apache.is_legal = true;
@@ -1280,8 +1281,8 @@ fn compute_score_mode_uses_single_joined_expression_without_ambiguity() {
             license_expression: "apache-2.0".to_string(),
             license_expression_spdx: "Apache-2.0".to_string(),
             from_file: Some("no_license_ambiguity/LICENSE-APACHE".to_string()),
-            start_line: 1,
-            end_line: 176,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(176).unwrap(),
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(1410),
@@ -1308,8 +1309,8 @@ fn compute_score_mode_uses_single_joined_expression_without_ambiguity() {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("no_license_ambiguity/LICENSE-MIT".to_string()),
-            start_line: 1,
-            end_line: 18,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(18).unwrap(),
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(161),
@@ -1361,8 +1362,8 @@ fn compute_score_mode_does_not_treat_with_expression_as_covering_base_license() 
             license_expression: "gpl-2.0 WITH classpath-exception-2.0".to_string(),
             license_expression_spdx: "GPL-2.0-only WITH Classpath-exception-2.0".to_string(),
             from_file: Some("with_exception_ambiguity/Cargo.toml".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(5),
@@ -1379,8 +1380,8 @@ fn compute_score_mode_does_not_treat_with_expression_as_covering_base_license() 
     }];
     manifest.copyrights = vec![Copyright {
         copyright: "Copyright Example Corp.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let mut gpl = file("with_exception_ambiguity/LICENSE-GPL");
@@ -1395,8 +1396,8 @@ fn compute_score_mode_does_not_treat_with_expression_as_covering_base_license() 
             license_expression: "gpl-2.0".to_string(),
             license_expression_spdx: "GPL-2.0-only".to_string(),
             from_file: Some("with_exception_ambiguity/LICENSE-GPL".to_string()),
-            start_line: 1,
-            end_line: 176,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(176).unwrap(),
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(1410),
@@ -1442,8 +1443,8 @@ fn compute_score_mode_scores_nested_manifest_key_file_without_copyright() {
             from_file: Some(
                 "jar/META-INF/maven/org.jboss.logging/jboss-logging/pom.xml".to_string(),
             ),
-            start_line: 1,
-            end_line: 2,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(2).unwrap(),
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(16),
@@ -1470,8 +1471,8 @@ fn compute_score_mode_scores_nested_manifest_key_file_without_copyright() {
             license_expression: "apache-2.0".to_string(),
             license_expression_spdx: "Apache-2.0".to_string(),
             from_file: Some("jar/META-INF/LICENSE.txt".to_string()),
-            start_line: 1,
-            end_line: 176,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(176).unwrap(),
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(1410),

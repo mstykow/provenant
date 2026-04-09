@@ -1,4 +1,5 @@
 use super::prepare::prepare_text_line;
+use crate::models::LineNumber;
 
 pub(super) struct PreparedLineCache<'a> {
     raw_lines: &'a [&'a str],
@@ -78,10 +79,11 @@ impl LineNumberIndex {
         }
     }
 
-    pub(super) fn line_number_at_offset(&self, byte_offset: usize) -> usize {
+    pub(super) fn line_number_at_offset(&self, byte_offset: usize) -> LineNumber {
         let offset = byte_offset.min(self.content_len);
-        1 + self
-            .newline_offsets
-            .partition_point(|&line_break| line_break < offset)
+        LineNumber::from_0_indexed(
+            self.newline_offsets
+                .partition_point(|&line_break| line_break < offset),
+        )
     }
 }

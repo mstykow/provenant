@@ -7,6 +7,7 @@ use std::str::FromStr;
 use crate::license_detection::models::RuleKind;
 use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::position_set::PositionSet;
+use crate::models::LineNumber;
 
 /// Coordinate data for a license match.
 ///
@@ -158,10 +159,10 @@ pub struct LicenseMatch {
     pub from_file: Option<String>,
 
     /// Start line number (1-indexed)
-    pub start_line: usize,
+    pub start_line: LineNumber,
 
     /// End line number (1-indexed)
-    pub end_line: usize,
+    pub end_line: LineNumber,
 
     /// Start token position (0-indexed in query token stream)
     /// Used for dual-criteria match grouping with token gap threshold.
@@ -275,8 +276,8 @@ impl Serialize for LicenseMatch {
             license_expression: &self.license_expression,
             license_expression_spdx: &self.license_expression_spdx,
             from_file: &self.from_file,
-            start_line: self.start_line,
-            end_line: self.end_line,
+            start_line: self.start_line.get(),
+            end_line: self.end_line.get(),
             start_token: self.start_token,
             end_token: self.end_token,
             matcher: self.matcher,
@@ -312,8 +313,8 @@ impl Default for LicenseMatch {
             license_expression: String::new(),
             license_expression_spdx: None,
             from_file: None,
-            start_line: 0,
-            end_line: 0,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             start_token: 0,
             end_token: 0,
             matcher: MatcherKind::default(),

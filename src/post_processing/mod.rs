@@ -550,6 +550,7 @@ fn is_good_match(license_match: &Match) -> bool {
 #[cfg(test)]
 mod tests {
     use super::is_good_match;
+    use crate::models::LineNumber;
     use crate::models::file_info::Match;
 
     fn make_match(score: f64, coverage: Option<f64>, relevance: Option<usize>) -> Match {
@@ -557,8 +558,8 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: None,
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
             score,
             matched_length: Some(3),

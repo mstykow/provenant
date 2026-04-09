@@ -45,6 +45,7 @@ mod tests {
     use crate::license_detection::query::Query;
     use crate::license_detection::test_utils::create_test_index;
     use crate::license_detection::{TokenMultiset, TokenSet};
+    use crate::models::LineNumber;
     use std::collections::HashMap;
 
     pub(super) fn create_seq_match_test_index() -> LicenseIndex {
@@ -277,8 +278,8 @@ mod tests {
             "All matches should be for test-license"
         );
 
-        let start_lines: Vec<usize> = matches.iter().map(|m| m.start_line).collect();
-        let end_lines: Vec<usize> = matches.iter().map(|m| m.end_line).collect();
+        let start_lines: Vec<usize> = matches.iter().map(|m| m.start_line.get()).collect();
+        let end_lines: Vec<usize> = matches.iter().map(|m| m.end_line.get()).collect();
 
         assert!(
             start_lines.iter().all(|&l| l >= 1),
@@ -308,11 +309,13 @@ mod tests {
         let first_match = &matches[0];
 
         assert_eq!(
-            first_match.start_line, 2,
+            first_match.start_line,
+            LineNumber::new(2).unwrap(),
             "Match should start on line 2 (where license tokens are), not line 1"
         );
         assert_eq!(
-            first_match.end_line, 2,
+            first_match.end_line,
+            LineNumber::new(2).unwrap(),
             "Match should end on line 2 (where license tokens are), not line 3"
         );
 
@@ -323,7 +326,8 @@ mod tests {
         );
 
         // Verify we can compute it from the query
-        let matched_text = query.matched_text(first_match.start_line, first_match.end_line);
+        let matched_text =
+            query.matched_text(first_match.start_line.get(), first_match.end_line.get());
         assert!(
             matched_text.contains("license"),
             "Computed matched text should contain 'license'"
@@ -352,11 +356,13 @@ mod tests {
         let first_match = &matches[0];
 
         assert_eq!(
-            first_match.start_line, 2,
+            first_match.start_line,
+            LineNumber::new(2).unwrap(),
             "Partial match should start on line 2"
         );
         assert_eq!(
-            first_match.end_line, 2,
+            first_match.end_line,
+            LineNumber::new(2).unwrap(),
             "Partial match should end on line 2"
         );
 

@@ -8,37 +8,27 @@
 
 use serde::Serialize;
 
-/// A detected copyright statement with source location.
+use crate::models::LineNumber;
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CopyrightDetection {
-    /// The full copyright text (e.g., "Copyright 2024 Acme Inc.").
     pub copyright: String,
-    /// 1-based line number where this detection starts.
-    pub start_line: usize,
-    /// 1-based line number where this detection ends.
-    pub end_line: usize,
+    pub start_line: LineNumber,
+    pub end_line: LineNumber,
 }
 
-/// A detected copyright holder name with source location.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct HolderDetection {
-    /// The holder name (e.g., "Acme Inc.").
     pub holder: String,
-    /// 1-based line number where this detection starts.
-    pub start_line: usize,
-    /// 1-based line number where this detection ends.
-    pub end_line: usize,
+    pub start_line: LineNumber,
+    pub end_line: LineNumber,
 }
 
-/// A detected author name with source location.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct AuthorDetection {
-    /// The author name (e.g., "John Doe").
     pub author: String,
-    /// 1-based line number where this detection starts.
-    pub start_line: usize,
-    /// 1-based line number where this detection ends.
-    pub end_line: usize,
+    pub start_line: LineNumber,
+    pub end_line: LineNumber,
 }
 
 /// Part-of-Speech tag for a token (type-safe, not stringly-typed)
@@ -117,15 +107,11 @@ pub enum PosTag {
     Day,   // Day of week
 }
 
-/// A token with its POS tag and source location.
 #[derive(Debug, Clone)]
 pub struct Token {
-    /// The token text (e.g., "Copyright", "2024", "Acme").
     pub value: String,
-    /// The assigned POS tag.
     pub tag: PosTag,
-    /// 1-based source line number.
-    pub start_line: usize,
+    pub start_line: LineNumber,
 }
 
 /// A node in the parse tree
@@ -185,8 +171,8 @@ mod tests {
     fn test_copyright_detection_creation() {
         let d = CopyrightDetection {
             copyright: "Copyright 2024 Acme Inc.".to_string(),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
         };
         assert_eq!(d.copyright, "Copyright 2024 Acme Inc.");
     }
@@ -196,7 +182,7 @@ mod tests {
         let t = Token {
             value: "Copyright".to_string(),
             tag: PosTag::Copy,
-            start_line: 1,
+            start_line: LineNumber::ONE,
         };
         assert_eq!(t.tag, PosTag::Copy);
     }
@@ -206,7 +192,7 @@ mod tests {
         let node = ParseNode::Leaf(Token {
             value: "2024".to_string(),
             tag: PosTag::Yr,
-            start_line: 5,
+            start_line: LineNumber::new(5).unwrap(),
         });
         assert_eq!(node.tag(), Some(PosTag::Yr));
         assert_eq!(node.label(), None);
@@ -217,7 +203,7 @@ mod tests {
         let child = ParseNode::Leaf(Token {
             value: "2024".to_string(),
             tag: PosTag::Yr,
-            start_line: 3,
+            start_line: LineNumber::new(3).unwrap(),
         });
         let tree = ParseNode::Tree {
             label: TreeLabel::YrRange,

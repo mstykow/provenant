@@ -162,6 +162,7 @@ pub(super) fn compute_detection_coverage(matches: &[LicenseMatch]) -> f32 {
 mod tests {
     use super::*;
     use crate::license_detection::models::{LicenseMatch, MatchCoordinates, PositionSpan};
+    use crate::models::LineNumber;
 
     fn create_test_match() -> LicenseMatch {
         LicenseMatch {
@@ -169,8 +170,8 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: Some("test.txt".to_string()),
-            start_line: 1,
-            end_line: 10,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(10).expect("valid line number"),
             start_token: 1,
             end_token: 11,
             matcher: crate::license_detection::models::MatcherKind::Hash,

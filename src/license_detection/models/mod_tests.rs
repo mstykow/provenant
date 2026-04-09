@@ -7,6 +7,7 @@ mod tests {
         License, LicenseMatch, MatchCoordinates, MatcherKind, Rule, RuleKind,
     };
     use crate::license_detection::position_set::PositionSet;
+    use crate::models::LineNumber;
     use crate::models::Match as OutputMatch;
     use std::collections::HashMap;
 
@@ -95,8 +96,8 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: Some("README.md".to_string()),
-            start_line: 1,
-            end_line: 5,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(5).unwrap(),
             start_token: 0,
             end_token: 100,
             matcher: crate::license_detection::models::MatcherKind::Hash,
@@ -501,8 +502,8 @@ mod tests {
             Some("MIT".to_string())
         );
         assert_eq!(match_result.from_file, Some("README.md".to_string()));
-        assert_eq!(match_result.start_line, 1);
-        assert_eq!(match_result.end_line, 5);
+        assert_eq!(match_result.start_line, LineNumber::ONE);
+        assert_eq!(match_result.end_line, LineNumber::new(5).unwrap());
         assert_eq!(match_result.matcher, MatcherKind::Hash);
         assert!((match_result.score - 0.95).abs() < 0.001);
     }
@@ -514,8 +515,8 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: None,
-            start_line: 0,
-            end_line: 0,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             start_token: 0,
             end_token: 0,
             matcher: MatcherKind::Hash,
@@ -537,7 +538,7 @@ mod tests {
         };
 
         assert!(match_result.from_file.is_none());
-        assert_eq!(match_result.start_line, 0);
+        assert_eq!(match_result.start_line, LineNumber::ONE);
         assert_eq!(match_result.score, 0.0);
         assert!(match_result.matched_text.is_none());
     }
@@ -595,8 +596,8 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: None,
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
             score: 100.0,
             matched_length: Some(3),
@@ -622,8 +623,8 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: Some("README.md".to_string()),
-            start_line: 1,
-            end_line: 5,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(5).unwrap(),
             start_token: 0,
             end_token: 100,
             matcher: crate::license_detection::models::MatcherKind::Hash,
@@ -881,13 +882,13 @@ mod tests {
     #[test]
     fn test_surround_true() {
         let outer = LicenseMatch {
-            start_line: 1,
-            end_line: 20,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(20).unwrap(),
             ..create_license_match()
         };
         let inner = LicenseMatch {
-            start_line: 5,
-            end_line: 15,
+            start_line: LineNumber::new(5).unwrap(),
+            end_line: LineNumber::new(15).unwrap(),
             ..create_license_match()
         };
         assert!(outer.surround(&inner));
@@ -896,16 +897,16 @@ mod tests {
     #[test]
     fn test_surround_false_same_start() {
         let outer = LicenseMatch {
-            start_line: 1,
-            end_line: 20,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(20).unwrap(),
             start_token: 1,
             end_token: 20,
             coordinates: MatchCoordinates::query_region(PositionSpan::range(1, 20)),
             ..create_license_match()
         };
         let inner = LicenseMatch {
-            start_line: 1,
-            end_line: 15,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(15).unwrap(),
             start_token: 1,
             end_token: 15,
             coordinates: MatchCoordinates::query_region(PositionSpan::range(1, 15)),
@@ -917,16 +918,16 @@ mod tests {
     #[test]
     fn test_surround_false_same_end() {
         let outer = LicenseMatch {
-            start_line: 1,
-            end_line: 20,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(20).unwrap(),
             start_token: 1,
             end_token: 20,
             coordinates: MatchCoordinates::query_region(PositionSpan::range(1, 20)),
             ..create_license_match()
         };
         let inner = LicenseMatch {
-            start_line: 5,
-            end_line: 20,
+            start_line: LineNumber::new(5).unwrap(),
+            end_line: LineNumber::new(20).unwrap(),
             start_token: 5,
             end_token: 20,
             coordinates: MatchCoordinates::query_region(PositionSpan::range(5, 20)),
@@ -938,16 +939,16 @@ mod tests {
     #[test]
     fn test_surround_false_reversed() {
         let outer = LicenseMatch {
-            start_line: 5,
-            end_line: 15,
+            start_line: LineNumber::new(5).unwrap(),
+            end_line: LineNumber::new(15).unwrap(),
             start_token: 5,
             end_token: 15,
             coordinates: MatchCoordinates::query_region(PositionSpan::range(5, 15)),
             ..create_license_match()
         };
         let inner = LicenseMatch {
-            start_line: 1,
-            end_line: 20,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(20).unwrap(),
             start_token: 1,
             end_token: 20,
             coordinates: MatchCoordinates::query_region(PositionSpan::range(1, 20)),
@@ -959,16 +960,16 @@ mod tests {
     #[test]
     fn test_surround_false_adjacent() {
         let first = LicenseMatch {
-            start_line: 1,
-            end_line: 10,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(10).unwrap(),
             start_token: 1,
             end_token: 10,
             coordinates: MatchCoordinates::query_region(PositionSpan::range(1, 10)),
             ..create_license_match()
         };
         let second = LicenseMatch {
-            start_line: 11,
-            end_line: 20,
+            start_line: LineNumber::new(11).unwrap(),
+            end_line: LineNumber::new(20).unwrap(),
             start_token: 11,
             end_token: 20,
             coordinates: MatchCoordinates::query_region(PositionSpan::range(11, 20)),

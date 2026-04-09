@@ -1,4 +1,5 @@
 use super::*;
+use crate::models::LineNumber;
 use crate::scan_result_shaping::test_fixtures::json_file;
 use serde_json::json;
 use std::fs;
@@ -88,8 +89,8 @@ fn normalize_loaded_json_scan_applies_strip_root_per_loaded_input() {
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
                 from_file: Some("archive/root/src/main.rs".to_string()),
-                start_line: 1,
-                end_line: 1,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::ONE,
                 matcher: None,
                 score: 100.0,
                 matched_length: None,
@@ -145,8 +146,8 @@ fn normalize_loaded_json_scan_trims_full_root_display_without_absolutizing() {
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
                 from_file: Some("/tmp/archive/root/src/main.rs".to_string()),
-                start_line: 1,
-                end_line: 1,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::ONE,
                 matcher: None,
                 score: 100.0,
                 matched_length: None,

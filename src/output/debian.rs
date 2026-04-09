@@ -118,7 +118,7 @@ fn unique_license_texts(detections: &[crate::models::LicenseDetection]) -> Vec<&
 #[cfg(test)]
 mod tests {
     use super::{detected_license_expression, unique_license_texts};
-    use crate::models::{FileInfo, FileType, LicenseDetection, Match};
+    use crate::models::{FileInfo, FileType, LicenseDetection, LineNumber, Match};
 
     #[test]
     fn unique_license_texts_deduplicates_by_region_and_rule() {
@@ -130,8 +130,8 @@ mod tests {
                     license_expression: "mit".to_string(),
                     license_expression_spdx: "MIT".to_string(),
                     from_file: Some("src/lib.rs".to_string()),
-                    start_line: 1,
-                    end_line: 3,
+                    start_line: LineNumber::ONE,
+                    end_line: LineNumber::new(3).unwrap(),
                     matcher: Some("1-hash".to_string()),
                     score: 100.0,
                     matched_length: Some(3),
@@ -147,8 +147,8 @@ mod tests {
                     license_expression: "mit".to_string(),
                     license_expression_spdx: "MIT".to_string(),
                     from_file: Some("src/lib.rs".to_string()),
-                    start_line: 1,
-                    end_line: 3,
+                    start_line: LineNumber::ONE,
+                    end_line: LineNumber::new(3).unwrap(),
                     matcher: Some("2-aho".to_string()),
                     score: 100.0,
                     matched_length: Some(3),

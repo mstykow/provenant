@@ -8,15 +8,16 @@ use std::time::Instant;
 
 use super::grammar::{GRAMMAR_RULES, GrammarRule, TagMatcher};
 use super::types::{ParseNode, Token};
+use crate::models::LineNumber;
 
-fn first_line(node: &ParseNode) -> Option<usize> {
+fn first_line(node: &ParseNode) -> Option<LineNumber> {
     match node {
         ParseNode::Leaf(t) => Some(t.start_line),
         ParseNode::Tree { children, .. } => children.iter().filter_map(first_line).min(),
     }
 }
 
-fn last_line(node: &ParseNode) -> Option<usize> {
+fn last_line(node: &ParseNode) -> Option<LineNumber> {
     match node {
         ParseNode::Leaf(t) => Some(t.start_line),
         ParseNode::Tree { children, .. } => children.iter().filter_map(last_line).max(),

@@ -1,6 +1,7 @@
 mod datasource_id;
 mod digest;
 pub(crate) mod file_info;
+mod line_number;
 mod output;
 mod package_type;
 
@@ -11,6 +12,7 @@ pub use file_info::{
     LicenseDetection, LicensePolicyEntry, Match, OutputEmail, OutputURL, Package, PackageData,
     Party, ResolvedPackage, TopLevelDependency,
 };
+pub use line_number::LineNumber;
 pub use package_type::PackageType;
 
 #[cfg(test)]

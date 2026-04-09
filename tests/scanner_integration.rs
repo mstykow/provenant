@@ -1,7 +1,7 @@
 use glob::Pattern;
 use once_cell::sync::Lazy;
 use provenant::license_detection::LicenseDetectionEngine;
-use provenant::models::PackageType;
+use provenant::models::{LineNumber, PackageType};
 use provenant::parsers::list_parser_types;
 use provenant::progress::{ProgressMode, ScanProgress};
 use provenant::scanner::LicenseScanOptions;
@@ -577,13 +577,13 @@ fn test_scanner_detects_emails_and_urls_when_enabled() {
 
     assert_eq!(file.emails.len(), 1);
     assert_eq!(file.emails[0].email, "support@many.org");
-    assert_eq!(file.emails[0].start_line, 1);
-    assert_eq!(file.emails[0].end_line, 1);
+    assert_eq!(file.emails[0].start_line, LineNumber::ONE);
+    assert_eq!(file.emails[0].end_line, LineNumber::ONE);
 
     assert_eq!(file.urls.len(), 1);
     assert_eq!(file.urls[0].url, "http://www.acme.dev/docs");
-    assert_eq!(file.urls[0].start_line, 2);
-    assert_eq!(file.urls[0].end_line, 2);
+    assert_eq!(file.urls[0].start_line, LineNumber::new(2).unwrap());
+    assert_eq!(file.urls[0].end_line, LineNumber::new(2).unwrap());
 }
 
 #[test]
@@ -626,13 +626,13 @@ fn test_scanner_detects_copyrights_in_latin1_text() {
         file.copyrights[0].copyright,
         "Copyright 2024 François Müller"
     );
-    assert_eq!(file.copyrights[0].start_line, 1);
-    assert_eq!(file.copyrights[0].end_line, 1);
+    assert_eq!(file.copyrights[0].start_line, LineNumber::ONE);
+    assert_eq!(file.copyrights[0].end_line, LineNumber::ONE);
 
     assert_eq!(file.holders.len(), 1);
     assert_eq!(file.holders[0].holder, "François Müller");
-    assert_eq!(file.holders[0].start_line, 1);
-    assert_eq!(file.holders[0].end_line, 1);
+    assert_eq!(file.holders[0].start_line, LineNumber::ONE);
+    assert_eq!(file.holders[0].end_line, LineNumber::ONE);
 }
 
 #[test]

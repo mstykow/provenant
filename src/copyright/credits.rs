@@ -11,6 +11,7 @@
 use std::path::Path;
 
 use super::types::AuthorDetection;
+use crate::models::LineNumber;
 
 /// Filenames recognized as CREDITS/AUTHORS files (case-insensitive)
 const CREDITS_FILENAMES: &[&str] = &[
@@ -118,8 +119,8 @@ fn process_credit_group(group: &[(usize, &str)]) -> Option<AuthorDetection> {
 
     Some(AuthorDetection {
         author,
-        start_line,
-        end_line,
+        start_line: LineNumber::new(start_line).expect("invalid line number"),
+        end_line: LineNumber::new(end_line).expect("invalid line number"),
     })
 }
 
@@ -154,8 +155,8 @@ W: http://www.randombit.net/
             authors[0].author,
             "Jack Lloyd lloyd@randombit.net http://www.randombit.net/"
         );
-        assert_eq!(authors[0].start_line, 1);
-        assert_eq!(authors[0].end_line, 3);
+        assert_eq!(authors[0].start_line, LineNumber::ONE);
+        assert_eq!(authors[0].end_line, LineNumber::new(3).unwrap());
     }
 
     #[test]

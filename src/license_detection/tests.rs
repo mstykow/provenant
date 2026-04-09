@@ -3,6 +3,7 @@ use once_cell::sync::Lazy;
 use std::sync::Once;
 
 use crate::license_detection::models::{MatchCoordinates, position_span::PositionSpan};
+use crate::models::LineNumber;
 
 static TEST_ENGINE: Lazy<LicenseDetectionEngine> = Lazy::new(|| {
     LicenseDetectionEngine::from_embedded().expect("Should initialize from embedded artifact")
@@ -462,7 +463,7 @@ fn test_engine_matched_text_populated() {
     for detection in &detections {
         for m in &detection.matches {
             assert!(
-                m.start_line > 0,
+                m.start_line >= LineNumber::ONE,
                 "start_line should be populated for matcher {}",
                 m.matcher
             );

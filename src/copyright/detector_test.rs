@@ -1,4 +1,5 @@
 use super::*;
+use crate::models::LineNumber;
 use std::fs;
 use std::path::PathBuf;
 
@@ -20,13 +21,13 @@ fn test_drop_shadowed_year_only_prefix_same_start_line() {
     let mut copyrights = vec![
         CopyrightDetection {
             copyright: "(c) 2001".to_string(),
-            start_line: 5,
-            end_line: 5,
+            start_line: LineNumber::new(5).unwrap(),
+            end_line: LineNumber::new(5).unwrap(),
         },
         CopyrightDetection {
             copyright: "(c) 2001 Foo Bar".to_string(),
-            start_line: 5,
-            end_line: 5,
+            start_line: LineNumber::new(5).unwrap(),
+            end_line: LineNumber::new(5).unwrap(),
         },
     ];
     drop_shadowed_year_only_copyright_prefixes_same_start_line(&mut copyrights);
@@ -735,7 +736,7 @@ fn test_extract_from_tree_nodes_builds_hall_holder_tokens() {
     let mut debug_lines: Vec<String> = Vec::new();
     for (i, node) in tree.iter().enumerate() {
         let leaves = collect_all_leaves(node);
-        let line = leaves.first().map(|t| t.start_line).unwrap_or(0);
+        let line = leaves.first().map(|t| t.start_line.get()).unwrap_or(0);
         let has_2004 = leaves
             .iter()
             .any(|t| t.tag == PosTag::Yr && t.value.starts_with("2004"));
@@ -777,10 +778,10 @@ fn test_extract_from_tree_nodes_builds_hall_holder_tokens() {
     let copy_line = collect_all_leaves(hall_node)
         .iter()
         .filter(|t| t.tag == PosTag::Copy && t.value.eq_ignore_ascii_case("copyright"))
-        .map(|t| t.start_line)
+        .map(|t| t.start_line.get())
         .min();
     let keep_prefix_lines = copy_line
-        .map(|cl| signal_lines_before_copy_line(hall_node, cl))
+        .map(|cl| signal_lines_before_copy_line(hall_node, LineNumber::new(cl).unwrap()))
         .unwrap_or_default();
 
     let node_holder_leaves =
@@ -788,8 +789,9 @@ fn test_extract_from_tree_nodes_builds_hall_holder_tokens() {
     let mut holder_tokens: Vec<&Token> = Vec::new();
     let mut node_holder_leaves = strip_all_rights_reserved(node_holder_leaves);
     if let Some(copy_line) = copy_line {
-        node_holder_leaves
-            .retain(|t| t.start_line >= copy_line || keep_prefix_lines.contains(&t.start_line));
+        node_holder_leaves.retain(|t| {
+            t.start_line.get() >= copy_line || keep_prefix_lines.contains(&t.start_line.get())
+        });
     }
     holder_tokens.extend(node_holder_leaves);
     holder_tokens.extend(&trailing_tokens);
@@ -2034,7 +2036,7 @@ fn test_detect_simple_copyright() {
         "Should contain year: {}",
         c[0].copyright
     );
-    assert_eq!(c[0].start_line, 1);
+    assert_eq!(c[0].start_line, LineNumber::ONE);
     assert!(!h.is_empty(), "Should detect holder");
 }
 
@@ -2231,8 +2233,8 @@ fn test_detect_author() {
     assert!(h.is_empty(), "Should not detect holder");
     assert_eq!(a.len(), 1, "Should detect one author, got: {:?}", a);
     assert_eq!(a[0].author, "John Doe");
-    assert_eq!(a[0].start_line, 1);
-    assert_eq!(a[0].end_line, 1);
+    assert_eq!(a[0].start_line, LineNumber::ONE);
+    assert_eq!(a[0].end_line, LineNumber::ONE);
 }
 
 #[test]
@@ -2244,8 +2246,8 @@ fn test_detect_author_from_xml_author_attribute() {
     assert!(h.is_empty(), "Should not detect holder");
     assert_eq!(a.len(), 1, "Should detect one author, got: {:?}", a);
     assert_eq!(a[0].author, "Vinnie Falco");
-    assert_eq!(a[0].start_line, 1);
-    assert_eq!(a[0].end_line, 1);
+    assert_eq!(a[0].start_line, LineNumber::ONE);
+    assert_eq!(a[0].end_line, LineNumber::ONE);
 }
 
 #[test]
@@ -2337,7 +2339,11 @@ fn test_detect_line_numbers() {
     let text = "Some header\nCopyright 2024 Acme Inc.\nSome footer";
     let (c, _h, _a) = detect_copyrights_from_text(text);
     assert!(!c.is_empty(), "Should detect copyright");
-    assert_eq!(c[0].start_line, 2, "Copyright should be on line 2");
+    assert_eq!(
+        c[0].start_line,
+        LineNumber::new(2).unwrap(),
+        "Copyright should be on line 2"
+    );
 }
 
 #[test]
@@ -2345,11 +2351,11 @@ fn test_detect_copyright_year_range() {
     let (c, h, _a) = detect_copyrights_from_text("Copyright 2020-2024 Foo Corp.");
     assert_eq!(c.len(), 1, "Should detect one copyright, got: {:?}", c);
     assert_eq!(c[0].copyright, "Copyright 2020-2024 Foo Corp.");
-    assert_eq!(c[0].start_line, 1);
-    assert_eq!(c[0].end_line, 1);
+    assert_eq!(c[0].start_line, LineNumber::ONE);
+    assert_eq!(c[0].end_line, LineNumber::ONE);
     assert_eq!(h.len(), 1, "Should detect one holder, got: {:?}", h);
     assert_eq!(h[0].holder, "Foo Corp.");
-    assert_eq!(h[0].start_line, 1);
+    assert_eq!(h[0].start_line, LineNumber::ONE);
 }
 
 #[test]
@@ -2710,12 +2716,12 @@ fn test_detect_copyright_and_author_same_text() {
     let (c, h, a) = detect_copyrights_from_text(text);
     assert_eq!(c.len(), 1, "Should detect one copyright, got: {:?}", c);
     assert_eq!(c[0].copyright, "Copyright 2024 Acme Inc.");
-    assert_eq!(c[0].start_line, 1);
+    assert_eq!(c[0].start_line, LineNumber::ONE);
     assert_eq!(h.len(), 1, "Should detect one holder, got: {:?}", h);
     assert_eq!(h[0].holder, "Acme Inc.");
     assert_eq!(a.len(), 1, "Should detect one author, got: {:?}", a);
     assert_eq!(a[0].author, "Jane Smith");
-    assert_eq!(a[0].start_line, 5);
+    assert_eq!(a[0].start_line, LineNumber::new(5).unwrap());
 }
 
 #[test]
@@ -2723,8 +2729,8 @@ fn test_detect_author_written_by() {
     let (_c, _h, a) = detect_copyrights_from_text("Written by Jane Smith");
     assert_eq!(a.len(), 1, "Should detect one author, got: {:?}", a);
     assert_eq!(a[0].author, "Jane Smith");
-    assert_eq!(a[0].start_line, 1);
-    assert_eq!(a[0].end_line, 1);
+    assert_eq!(a[0].start_line, LineNumber::ONE);
+    assert_eq!(a[0].end_line, LineNumber::ONE);
 }
 
 #[test]
@@ -2732,8 +2738,8 @@ fn test_detect_author_maintained_by() {
     let (_c, _h, a) = detect_copyrights_from_text("Maintained by Bob Jones");
     assert_eq!(a.len(), 1, "Should detect one author, got: {:?}", a);
     assert_eq!(a[0].author, "Bob Jones");
-    assert_eq!(a[0].start_line, 1);
-    assert_eq!(a[0].end_line, 1);
+    assert_eq!(a[0].start_line, LineNumber::ONE);
+    assert_eq!(a[0].end_line, LineNumber::ONE);
 }
 
 #[test]
@@ -2785,10 +2791,10 @@ fn test_detect_copyright_with_company() {
     let (c, h, _a) = detect_copyrights_from_text("Copyright (c) 2024 Google LLC");
     assert_eq!(c.len(), 1, "Should detect one copyright, got: {:?}", c);
     assert_eq!(c[0].copyright, "Copyright (c) 2024 Google LLC");
-    assert_eq!(c[0].start_line, 1);
+    assert_eq!(c[0].start_line, LineNumber::ONE);
     assert_eq!(h.len(), 1, "Should detect one holder, got: {:?}", h);
     assert_eq!(h[0].holder, "Google LLC");
-    assert_eq!(h[0].start_line, 1);
+    assert_eq!(h[0].start_line, LineNumber::ONE);
 }
 
 #[test]
@@ -2799,10 +2805,10 @@ fn test_detect_copyright_all_rights_reserved() {
         c[0].copyright, "Copyright 2024 Apple Inc.",
         "All rights reserved should be stripped from copyright text"
     );
-    assert_eq!(c[0].start_line, 1);
+    assert_eq!(c[0].start_line, LineNumber::ONE);
     assert_eq!(h.len(), 1, "Should detect one holder, got: {:?}", h);
     assert_eq!(h[0].holder, "Apple Inc.");
-    assert_eq!(h[0].start_line, 1);
+    assert_eq!(h[0].start_line, LineNumber::ONE);
 }
 
 // ── strip_all_rights_reserved ────────────────────────────────────
@@ -2813,32 +2819,32 @@ fn test_strip_all_rights_reserved_basic() {
         Token {
             value: "Copyright".to_string(),
             tag: PosTag::Copy,
-            start_line: 1,
+            start_line: LineNumber::ONE,
         },
         Token {
             value: "2024".to_string(),
             tag: PosTag::Yr,
-            start_line: 1,
+            start_line: LineNumber::ONE,
         },
         Token {
             value: "Acme".to_string(),
             tag: PosTag::Nnp,
-            start_line: 1,
+            start_line: LineNumber::ONE,
         },
         Token {
             value: "All".to_string(),
             tag: PosTag::Nn,
-            start_line: 1,
+            start_line: LineNumber::ONE,
         },
         Token {
             value: "Rights".to_string(),
             tag: PosTag::Right,
-            start_line: 1,
+            start_line: LineNumber::ONE,
         },
         Token {
             value: "Reserved".to_string(),
             tag: PosTag::Reserved,
-            start_line: 1,
+            start_line: LineNumber::ONE,
         },
     ];
     let refs: Vec<&Token> = tokens.iter().collect();
@@ -2859,17 +2865,17 @@ fn test_collect_filtered_leaves_filters_pos_tags() {
             ParseNode::Leaf(Token {
                 value: "Copyright".to_string(),
                 tag: PosTag::Copy,
-                start_line: 1,
+                start_line: LineNumber::ONE,
             }),
             ParseNode::Leaf(Token {
                 value: "2024".to_string(),
                 tag: PosTag::Yr,
-                start_line: 1,
+                start_line: LineNumber::ONE,
             }),
             ParseNode::Leaf(Token {
                 value: "Acme".to_string(),
                 tag: PosTag::Nnp,
-                start_line: 1,
+                start_line: LineNumber::ONE,
             }),
         ],
     };
@@ -2887,20 +2893,20 @@ fn test_collect_filtered_leaves_filters_tree_labels() {
             ParseNode::Leaf(Token {
                 value: "Copyright".to_string(),
                 tag: PosTag::Copy,
-                start_line: 1,
+                start_line: LineNumber::ONE,
             }),
             ParseNode::Tree {
                 label: TreeLabel::YrRange,
                 children: vec![ParseNode::Leaf(Token {
                     value: "2024".to_string(),
                     tag: PosTag::Yr,
-                    start_line: 1,
+                    start_line: LineNumber::ONE,
                 })],
             },
             ParseNode::Leaf(Token {
                 value: "Acme".to_string(),
                 tag: PosTag::Nnp,
-                start_line: 1,
+                start_line: LineNumber::ONE,
             }),
         ],
     };
@@ -3067,23 +3073,23 @@ fn test_drop_shadowed_c_sign_variants_unit() {
     let mut c = vec![
         CopyrightDetection {
             copyright: "Copyright 2007, 2010 Linux Foundation".to_string(),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
         },
         CopyrightDetection {
             copyright: "Copyright (c) 2007, 2010 Linux Foundation".to_string(),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
         },
         CopyrightDetection {
             copyright: "Copyright 1995-2010 Jean-loup Gailly and Mark Adler".to_string(),
-            start_line: 10,
-            end_line: 10,
+            start_line: LineNumber::new(10).unwrap(),
+            end_line: LineNumber::new(10).unwrap(),
         },
         CopyrightDetection {
             copyright: "Copyright (c) 1995-2010 Jean-loup Gailly and Mark Adler".to_string(),
-            start_line: 2,
-            end_line: 2,
+            start_line: LineNumber::new(2).unwrap(),
+            end_line: LineNumber::new(2).unwrap(),
         },
     ];
     drop_shadowed_c_sign_variants(&mut c);
@@ -3405,13 +3411,21 @@ fn test_html_anchor_copyright_url_multiline_span_preserved() {
         .iter()
         .find(|cr| cr.copyright == "copyright https://example.com/path")
         .unwrap();
-    assert_eq!((cd.start_line, cd.end_line), (1, 3), "copyrights: {c:?}");
+    assert_eq!(
+        (cd.start_line, cd.end_line),
+        (LineNumber::new(1).unwrap(), LineNumber::new(3).unwrap()),
+        "copyrights: {c:?}"
+    );
 
     let hd = h
         .iter()
         .find(|hr| hr.holder == "https://example.com/path")
         .unwrap();
-    assert_eq!((hd.start_line, hd.end_line), (1, 3), "holders: {h:?}");
+    assert_eq!(
+        (hd.start_line, hd.end_line),
+        (LineNumber::new(1).unwrap(), LineNumber::new(3).unwrap()),
+        "holders: {h:?}"
+    );
 }
 
 #[test]
@@ -4135,8 +4149,8 @@ fn test_boost_style_multiline_holder_continuation_after_year_first_line() {
 
     assert!(
         copyrights.iter().any(|c| {
-            c.start_line == 1
-                && c.end_line == 2
+            c.start_line == LineNumber::ONE
+                && c.end_line == LineNumber::new(2).unwrap()
                 && c.copyright.contains("Peter Dimov")
                 && c.copyright.contains("Vinnie Falco")
         }),
@@ -4145,8 +4159,8 @@ fn test_boost_style_multiline_holder_continuation_after_year_first_line() {
 
     assert!(
         holders.iter().any(|h| {
-            h.start_line == 1
-                && h.end_line == 2
+            h.start_line == LineNumber::ONE
+                && h.end_line == LineNumber::new(2).unwrap()
                 && h.holder.contains("Peter Dimov")
                 && h.holder.contains("Vinnie Falco")
         }),
@@ -4164,8 +4178,8 @@ Jean-Luc.Richier@imag.fr, IMAG-LSR.\n";
 
     assert!(
         copyrights.iter().any(|c| {
-            c.start_line == 1
-                && c.end_line == 1
+            c.start_line == LineNumber::ONE
+                && c.end_line == LineNumber::ONE
                 && c.copyright == "Copyright (c) 1995, 1996, 1997 Francis.Dupont@inria.fr, INRIA"
         }),
         "copyrights: {copyrights:?}"
@@ -4193,7 +4207,7 @@ fn test_extend_copyright_with_following_all_rights_reserved_line() {
     assert!(
         copyrights
             .iter()
-            .any(|c| c.start_line == 1 && c.end_line == 2),
+            .any(|c| c.start_line == LineNumber::ONE && c.end_line == LineNumber::new(2).unwrap()),
         "copyrights: {copyrights:?}"
     );
     assert!(

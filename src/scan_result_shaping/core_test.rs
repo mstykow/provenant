@@ -1,7 +1,7 @@
 use super::*;
 use crate::models::{
-    Author, Copyright, DatasourceId, Dependency, FileReference, OutputEmail, OutputURL, Package,
-    PackageData, TopLevelDependency,
+    Author, Copyright, DatasourceId, Dependency, FileReference, LineNumber, OutputEmail, OutputURL,
+    Package, PackageData, TopLevelDependency,
 };
 use crate::scan_result_shaping::test_fixtures::{dir, file};
 use regex::Regex;
@@ -50,8 +50,8 @@ fn only_findings_keeps_file_with_findings_and_parent_dirs() {
     let mut files = vec![dir("project"), file("project/a.txt"), file("project/b.txt")];
     files[2].copyrights = vec![Copyright {
         copyright: "Copyright Example".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     apply_only_findings_filter(&mut files);
@@ -68,37 +68,37 @@ fn filter_redundant_clues_dedupes_exact_duplicates() {
     files[0].authors = vec![
         Author {
             author: "Jane".to_string(),
-            start_line: 2,
-            end_line: 2,
+            start_line: LineNumber::new(2).unwrap(),
+            end_line: LineNumber::new(2).unwrap(),
         },
         Author {
             author: "Jane".to_string(),
-            start_line: 2,
-            end_line: 2,
+            start_line: LineNumber::new(2).unwrap(),
+            end_line: LineNumber::new(2).unwrap(),
         },
     ];
     files[0].emails = vec![
         OutputEmail {
             email: "a@example.com".to_string(),
-            start_line: 3,
-            end_line: 3,
+            start_line: LineNumber::new(3).unwrap(),
+            end_line: LineNumber::new(3).unwrap(),
         },
         OutputEmail {
             email: "a@example.com".to_string(),
-            start_line: 3,
-            end_line: 3,
+            start_line: LineNumber::new(3).unwrap(),
+            end_line: LineNumber::new(3).unwrap(),
         },
     ];
     files[0].urls = vec![
         OutputURL {
             url: "https://example.com".to_string(),
-            start_line: 4,
-            end_line: 4,
+            start_line: LineNumber::new(4).unwrap(),
+            end_line: LineNumber::new(4).unwrap(),
         },
         OutputURL {
             url: "https://example.com".to_string(),
-            start_line: 4,
-            end_line: 4,
+            start_line: LineNumber::new(4).unwrap(),
+            end_line: LineNumber::new(4).unwrap(),
         },
     ];
 
@@ -115,25 +115,25 @@ fn filter_redundant_clues_keeps_distinct_line_ranges_and_dedupes_copyrights_and_
     files[0].copyrights = vec![
         Copyright {
             copyright: "Copyright Example".to_string(),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
         },
         Copyright {
             copyright: "Copyright Example".to_string(),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
         },
     ];
     files[0].holders = vec![
         crate::models::Holder {
             holder: "Example Corp".to_string(),
-            start_line: 2,
-            end_line: 2,
+            start_line: LineNumber::new(2).unwrap(),
+            end_line: LineNumber::new(2).unwrap(),
         },
         crate::models::Holder {
             holder: "Example Corp".to_string(),
-            start_line: 3,
-            end_line: 3,
+            start_line: LineNumber::new(3).unwrap(),
+            end_line: LineNumber::new(3).unwrap(),
         },
     ];
 
@@ -153,8 +153,8 @@ fn filter_redundant_clues_with_rules_suppresses_ignorable_rule_and_cross_clues()
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: None,
-            start_line: 1,
-            end_line: 5,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(5).unwrap(),
             matcher: Some("2-aho".to_string()),
             score: 100.0,
             matched_length: Some(42),
@@ -171,28 +171,28 @@ fn filter_redundant_clues_with_rules_suppresses_ignorable_rule_and_cross_clues()
     }];
     files[0].copyrights = vec![Copyright {
         copyright: "Copyright Example Corp".to_string(),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
     }];
     files[0].holders = vec![crate::models::Holder {
         holder: "Example Corp".to_string(),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
     }];
     files[0].authors = vec![Author {
         author: "Jane Example".to_string(),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
     }];
     files[0].emails = vec![OutputEmail {
         email: "legal@example.com".to_string(),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
     }];
     files[0].urls = vec![OutputURL {
         url: "https://example.com/".to_string(),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
     }];
 
     let clue_rule_lookup = HashMap::from([(
@@ -225,8 +225,8 @@ fn filter_redundant_clues_with_rules_keeps_non_exact_ignorable_values() {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: None,
-            start_line: 1,
-            end_line: 5,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(5).unwrap(),
             matcher: Some("2-aho".to_string()),
             score: 100.0,
             matched_length: Some(42),
@@ -243,8 +243,8 @@ fn filter_redundant_clues_with_rules_keeps_non_exact_ignorable_values() {
     }];
     files[0].holders = vec![crate::models::Holder {
         holder: "Example Corp".to_string(),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
     }];
 
     let clue_rule_lookup = HashMap::from([(
@@ -266,28 +266,28 @@ fn filter_redundant_clues_suppresses_cross_clues_without_license_rules() {
     let mut files = vec![file("project/a.txt")];
     files[0].copyrights = vec![Copyright {
         copyright: "Copyright Example <legal@example.com> https://example.com".to_string(),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
     }];
     files[0].holders = vec![crate::models::Holder {
         holder: "Jane Example".to_string(),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
     }];
     files[0].authors = vec![Author {
         author: "Jane Example".to_string(),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
     }];
     files[0].emails = vec![OutputEmail {
         email: "legal@example.com".to_string(),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
     }];
     files[0].urls = vec![OutputURL {
         url: "https://example.com/".to_string(),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
     }];
 
     filter_redundant_clues(&mut files);
@@ -310,8 +310,8 @@ fn filter_redundant_clues_with_rules_uses_package_origin_detections() {
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
                 from_file: Some("project/package.json".to_string()),
-                start_line: 1,
-                end_line: 5,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::new(5).unwrap(),
                 matcher: Some("parser-declared-license".to_string()),
                 score: 100.0,
                 matched_length: Some(42),
@@ -330,13 +330,13 @@ fn filter_redundant_clues_with_rules_uses_package_origin_detections() {
     }];
     files[0].emails = vec![OutputEmail {
         email: "legal@example.com".to_string(),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
     }];
     files[0].urls = vec![OutputURL {
         url: "https://example.com/".to_string(),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
     }];
 
     let clue_rule_lookup = HashMap::from([(
@@ -364,8 +364,8 @@ fn filter_redundant_clues_with_rules_ignores_low_coverage_matches() {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: None,
-            start_line: 1,
-            end_line: 5,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(5).unwrap(),
             matcher: Some("2-aho".to_string()),
             score: 100.0,
             matched_length: Some(42),
@@ -382,8 +382,8 @@ fn filter_redundant_clues_with_rules_ignores_low_coverage_matches() {
     }];
     files[0].emails = vec![OutputEmail {
         email: "legal@example.com".to_string(),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
     }];
 
     let clue_rule_lookup = HashMap::from([(
@@ -411,14 +411,14 @@ fn ignore_resource_filter_removes_matching_files_and_preserves_needed_dirs() {
     ];
     files[3].authors = vec![Author {
         author: "Jane Doe".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     files[3].license_expression = Some("mit".to_string());
     files[4].holders = vec![crate::models::Holder {
         holder: "Example Corp".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     files[4].scan_errors = vec!["should still be dropped".to_string()];
 
@@ -504,8 +504,8 @@ fn normalize_paths_updates_license_match_from_file_paths_too() {
         license_expression: "mit".to_string(),
         license_expression_spdx: "MIT".to_string(),
         from_file: Some("project/NOTICE".to_string()),
-        start_line: 1,
-        end_line: 2,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::new(2).unwrap(),
         matcher: Some("2-aho".to_string()),
         score: 100.0,
         matched_length: Some(12),
@@ -524,8 +524,8 @@ fn normalize_paths_updates_license_match_from_file_paths_too() {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("project/LICENSE".to_string()),
-            start_line: 1,
-            end_line: 5,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(5).unwrap(),
             matcher: Some("2-aho".to_string()),
             score: 100.0,
             matched_length: Some(42),
@@ -567,8 +567,8 @@ fn normalize_paths_updates_package_level_license_match_from_file_paths_too() {
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
                 from_file: Some("project/LICENSE".to_string()),
-                start_line: 1,
-                end_line: 5,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::new(5).unwrap(),
                 matcher: Some("2-aho".to_string()),
                 score: 100.0,
                 matched_length: Some(42),
@@ -590,8 +590,8 @@ fn normalize_paths_updates_package_level_license_match_from_file_paths_too() {
                 license_expression: "apache-2.0".to_string(),
                 license_expression_spdx: "Apache-2.0".to_string(),
                 from_file: Some("project/NOTICE".to_string()),
-                start_line: 1,
-                end_line: 3,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::new(3).unwrap(),
                 matcher: Some("2-aho".to_string()),
                 score: 100.0,
                 matched_length: Some(30),
@@ -665,8 +665,8 @@ fn only_findings_keeps_clue_only_files() {
         license_expression: "unknown-license-reference".to_string(),
         license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
         from_file: Some("project/NOTICE".to_string()),
-        start_line: 1,
-        end_line: 2,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::new(2).unwrap(),
         matcher: Some("2-aho".to_string()),
         score: 100.0,
         matched_length: Some(19),

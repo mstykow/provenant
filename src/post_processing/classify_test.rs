@@ -2,7 +2,9 @@ use std::fs;
 
 use super::test_utils::{dir, file, package, scan_and_assemble_with_keyfiles};
 use super::*;
-use crate::models::{Copyright, DatasourceId, FileReference, Holder, Match, Package, PackageType};
+use crate::models::{
+    Copyright, DatasourceId, FileReference, Holder, LineNumber, Match, Package, PackageType,
+};
 
 #[test]
 fn classify_key_files_marks_nested_ruby_license_from_file_references() {
@@ -29,13 +31,13 @@ fn classify_key_files_marks_nested_ruby_license_from_file_references() {
     license_file.license_expression = Some("Apache-2.0".to_string());
     license_file.copyrights = vec![Copyright {
         copyright: "Copyright (c) 2019 Chef Software Inc.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     license_file.holders = vec![Holder {
         holder: "Chef Software Inc.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     license_file.license_detections = vec![crate::models::LicenseDetection {
         license_expression: "apache-2.0".to_string(),
@@ -44,8 +46,8 @@ fn classify_key_files_marks_nested_ruby_license_from_file_references() {
             license_expression: "apache-2.0".to_string(),
             license_expression_spdx: "Apache-2.0".to_string(),
             from_file: Some("inspec-6.8.2/inspec-bin/LICENSE".to_string()),
-            start_line: 1,
-            end_line: 20,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(20).unwrap(),
             matcher: None,
             score: 100.0,
             matched_length: Some(161),

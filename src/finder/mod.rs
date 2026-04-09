@@ -28,6 +28,7 @@ impl Default for DetectionConfig {
 #[cfg(test)]
 mod tests {
     use super::{DetectionConfig, find_emails, find_urls};
+    use crate::models::LineNumber;
 
     #[test]
     fn test_find_emails_threshold() {
@@ -39,7 +40,7 @@ mod tests {
         let emails = find_emails(text, &config);
         assert_eq!(emails.len(), 2);
         assert_eq!(emails[0].email, "a@b.com");
-        assert_eq!(emails[0].start_line, 1);
+        assert_eq!(emails[0].start_line, LineNumber::ONE);
     }
 
     #[test]

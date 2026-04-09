@@ -1,6 +1,8 @@
 use super::test_utils::{dir, file};
 use super::*;
-use crate::models::{Author, Copyright, Holder, Match, PackageData, PackageType, TallyEntry};
+use crate::models::{
+    Author, Copyright, Holder, LineNumber, Match, PackageData, PackageType, TallyEntry,
+};
 
 #[test]
 fn compute_tallies_counts_file_findings_and_missing_values() {
@@ -15,8 +17,8 @@ fn compute_tallies_counts_file_findings_and_missing_values() {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("project/src/lib.rs".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: None,
             score: 100.0,
             matched_length: None,
@@ -33,18 +35,18 @@ fn compute_tallies_counts_file_findings_and_missing_values() {
     }];
     mit_file.copyrights = vec![Copyright {
         copyright: "Copyright (c) Example Corp.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     mit_file.holders = vec![Holder {
         holder: "Example Corp.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     mit_file.authors = vec![Author {
         author: "Alice".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let mut dual_license_file = file("project/src/main.c");
@@ -59,8 +61,8 @@ fn compute_tallies_counts_file_findings_and_missing_values() {
                 license_expression: "apache-2.0".to_string(),
                 license_expression_spdx: "Apache-2.0".to_string(),
                 from_file: Some("project/src/main.c".to_string()),
-                start_line: 1,
-                end_line: 1,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::ONE,
                 matcher: None,
                 score: 100.0,
                 matched_length: None,
@@ -82,8 +84,8 @@ fn compute_tallies_counts_file_findings_and_missing_values() {
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
                 from_file: Some("project/src/main.c".to_string()),
-                start_line: 2,
-                end_line: 2,
+                start_line: LineNumber::new(2).unwrap(),
+                end_line: LineNumber::new(2).unwrap(),
                 matcher: None,
                 score: 100.0,
                 matched_length: None,
@@ -101,18 +103,18 @@ fn compute_tallies_counts_file_findings_and_missing_values() {
     ];
     dual_license_file.copyrights = vec![Copyright {
         copyright: "Copyright (c) Example Corp.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     dual_license_file.holders = vec![Holder {
         holder: "Example Corp.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     dual_license_file.authors = vec![Author {
         author: "Bob".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let empty_file = file("project/README.md");
@@ -150,13 +152,13 @@ fn compute_key_file_tallies_only_counts_key_files_and_drops_missing_values() {
     key_license.license_expression = Some("apache-2.0".to_string());
     key_license.copyrights = vec![Copyright {
         copyright: "Copyright (c) Example Corp.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     key_license.holders = vec![Holder {
         holder: "Example Corp.".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let mut key_readme = file("project/README.md");
@@ -164,8 +166,8 @@ fn compute_key_file_tallies_only_counts_key_files_and_drops_missing_values() {
     key_readme.programming_language = Some("Markdown".to_string());
     key_readme.authors = vec![Author {
         author: "Alice".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let mut non_key_source = file("project/src/lib.rs");
@@ -203,8 +205,8 @@ fn compute_tallies_include_package_other_license_detections() {
                 license_expression: "gpl-2.0-only".to_string(),
                 license_expression_spdx: "GPL-2.0-only".to_string(),
                 from_file: Some("project/package.json".to_string()),
-                start_line: 1,
-                end_line: 1,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::ONE,
                 matcher: Some("parser-declared-license".to_string()),
                 score: 100.0,
                 matched_length: Some(1),
@@ -239,8 +241,8 @@ fn compute_tallies_include_license_clues_in_detected_license_expression() {
         license_expression: "unknown-spdx".to_string(),
         license_expression_spdx: "LicenseRef-scancode-unknown-spdx".to_string(),
         from_file: Some("project/NOTICE".to_string()),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
         matcher: Some("2-aho".to_string()),
         score: 65.0,
         matched_length: Some(2),
@@ -272,8 +274,8 @@ fn compute_key_file_tallies_include_license_clues() {
         license_expression: "unknown-spdx".to_string(),
         license_expression_spdx: "LicenseRef-scancode-unknown-spdx".to_string(),
         from_file: Some("project/NOTICE".to_string()),
-        start_line: 2,
-        end_line: 2,
+        start_line: LineNumber::new(2).unwrap(),
+        end_line: LineNumber::new(2).unwrap(),
         matcher: Some("2-aho".to_string()),
         score: 65.0,
         matched_length: Some(2),
@@ -310,8 +312,8 @@ fn compute_key_file_tallies_include_package_other_license_detections() {
                 license_expression: "gpl-2.0-only".to_string(),
                 license_expression_spdx: "GPL-2.0-only".to_string(),
                 from_file: Some("project/package.json".to_string()),
-                start_line: 1,
-                end_line: 1,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::ONE,
                 matcher: Some("parser-declared-license".to_string()),
                 score: 100.0,
                 matched_length: Some(1),
@@ -349,8 +351,8 @@ fn compute_tallies_include_manifest_package_license_detections() {
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
                 from_file: Some("project/Cargo.toml".to_string()),
-                start_line: 1,
-                end_line: 1,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::ONE,
                 matcher: Some("parser-declared-license".to_string()),
                 score: 100.0,
                 matched_length: Some(1),
@@ -390,8 +392,8 @@ fn compute_key_file_tallies_include_manifest_package_license_detections() {
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
                 from_file: Some("project/Cargo.toml".to_string()),
-                start_line: 1,
-                end_line: 1,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::ONE,
                 matcher: Some("parser-declared-license".to_string()),
                 score: 100.0,
                 matched_length: Some(1),
@@ -426,8 +428,8 @@ fn compute_tallies_do_not_double_count_duplicate_file_and_package_detections() {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("project/Cargo.toml".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("parser-declared-license".to_string()),
             score: 100.0,
             matched_length: Some(1),
@@ -474,8 +476,8 @@ fn compute_tallies_deduplicate_duplicate_package_data_entries_per_file() {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("project/Cargo.toml".to_string()),
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             matcher: Some("parser-declared-license".to_string()),
             score: 100.0,
             matched_length: Some(1),
@@ -536,18 +538,18 @@ fn compute_tallies_ignores_legal_file_copyright_holder_and_author_noise() {
     legal.is_legal = true;
     legal.copyrights = vec![Copyright {
         copyright: "copyright and related or neighboring rights".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     legal.holders = vec![Holder {
         holder: "Related Rights".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     legal.authors = vec![Author {
         author: "be liable for".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let tallies = compute_tallies(&[legal]).expect("tallies exist");
@@ -583,13 +585,13 @@ fn compute_key_file_tallies_excludes_legal_file_copyrights_holders_and_languages
     legal.programming_language = Some("Text".to_string());
     legal.copyrights = vec![Copyright {
         copyright: "copyright and related or neighboring rights".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     legal.holders = vec![Holder {
         holder: "Related Rights".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     assert!(compute_key_file_tallies(&[legal]).is_none());
@@ -600,14 +602,14 @@ fn compute_tallies_normalizes_jboss_style_copyright_and_holder_values() {
     let mut source = file("project/src/lib.java");
     source.copyrights = vec![Copyright {
         copyright: "Copyright 2005, JBoss Inc., and individual contributors as indicated by the @authors tag".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     source.holders = vec![Holder {
         holder: "JBoss Inc., and individual contributors as indicated by the @authors tag"
             .to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let tallies = compute_tallies(&[source]).expect("tallies exist");
@@ -627,8 +629,8 @@ fn compute_tallies_strips_leading_years_from_copyright_tallies() {
     let mut source = file("project/src/zlib.h");
     source.copyrights = vec![Copyright {
         copyright: "Copyright (c) 1995-2013 Jean-loup Gailly and Mark Adler".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let tallies = compute_tallies(&[source]).expect("tallies exist");
@@ -644,8 +646,8 @@ fn compute_tallies_filters_lowercase_author_noise() {
     let mut source = file("project/src/lib.java");
     source.authors = vec![Author {
         author: "be liable for".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
 
     let tallies = compute_tallies(&[source]).expect("tallies exist");
@@ -673,8 +675,8 @@ fn compute_detailed_tallies_assigns_file_and_directory_rollups() {
     files[3].programming_language = Some("Rust".to_string());
     files[3].authors = vec![Author {
         author: "Alice".to_string(),
-        start_line: 1,
-        end_line: 1,
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
     }];
     files[4].programming_language = Some("Markdown".to_string());
 

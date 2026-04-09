@@ -68,8 +68,8 @@ fn scanner_matches_structured_credits_fixture() {
         .into_iter()
         .map(|author| ExpectedAuthor {
             author: author.author,
-            start_line: author.start_line,
-            end_line: author.end_line,
+            start_line: author.start_line.get(),
+            end_line: author.end_line.get(),
         })
         .collect();
 

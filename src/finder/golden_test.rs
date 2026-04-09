@@ -59,8 +59,8 @@ mod tests {
             .into_iter()
             .map(|d| ExpectedEmail {
                 email: d.email,
-                start_line: d.start_line,
-                end_line: d.end_line,
+                start_line: d.start_line.get(),
+                end_line: d.end_line.get(),
             })
             .collect()
     }
@@ -70,8 +70,8 @@ mod tests {
             .into_iter()
             .map(|d| ExpectedUrl {
                 url: d.url,
-                start_line: d.start_line,
-                end_line: d.end_line,
+                start_line: d.start_line.get(),
+                end_line: d.end_line.get(),
             })
             .collect()
     }

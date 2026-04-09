@@ -21,6 +21,7 @@ use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind};
 use crate::license_detection::query::Query;
+use crate::models::LineNumber;
 
 pub const MATCH_SPDX_ID: MatcherKind = MatcherKind::SpdxId;
 
@@ -324,10 +325,14 @@ pub fn spdx_lid_match(index: &LicenseIndex, query: &Query) -> Vec<LicenseMatch> 
             let matched_length = end_token.saturating_sub(*start_token);
             let match_coverage = 100.0;
 
-            let start_line = query.line_for_pos(*start_token).unwrap_or(1);
+            let start_line = query
+                .line_for_pos(*start_token)
+                .and_then(LineNumber::new)
+                .unwrap_or(LineNumber::ONE);
             let end_line = end_token
                 .checked_sub(1)
                 .and_then(|pos| query.line_for_pos(pos))
+                .and_then(LineNumber::new)
                 .unwrap_or(start_line);
 
             let rid = index

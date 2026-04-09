@@ -8,9 +8,10 @@ use crate::copyright::line_tracking::PreparedLineCache;
 use crate::copyright::prepare::prepare_text_line;
 use crate::copyright::refiner::refine_author;
 use crate::copyright::types::{AuthorDetection, CopyrightDetection, HolderDetection};
+use crate::models::LineNumber;
 
-fn line_number_for_offset(content: &str, offset: usize) -> usize {
-    content[..offset].bytes().filter(|b| *b == b'\n').count() + 1
+fn line_number_for_offset(content: &str, offset: usize) -> LineNumber {
+    LineNumber::from_0_indexed(content[..offset].bytes().filter(|b| *b == b'\n').count())
 }
 
 fn decode_markup_entities(value: &str) -> String {
@@ -214,8 +215,8 @@ pub(super) fn extract_multiline_written_by_author_blocks(
             {
                 authors.push(AuthorDetection {
                     author,
-                    start_line: ln,
-                    end_line: ln,
+                    start_line: LineNumber::new(ln).expect("invalid line number"),
+                    end_line: LineNumber::new(ln).expect("invalid line number"),
                 });
             }
         }
@@ -314,11 +315,11 @@ pub(super) fn extract_multiline_written_by_author_blocks(
             if let Some(combined) = refine_author(combined_candidate)
                 && seen.insert(combined.clone())
             {
-                authors.retain(|a| a.start_line < start_line || a.end_line > end_line);
+                authors.retain(|a| a.start_line.get() < start_line || a.end_line.get() > end_line);
                 authors.push(AuthorDetection {
                     author: combined,
-                    start_line,
-                    end_line,
+                    start_line: LineNumber::new(start_line).expect("valid"),
+                    end_line: LineNumber::new(end_line).expect("valid"),
                 });
                 i = j;
                 continue;
@@ -341,8 +342,8 @@ pub(super) fn extract_multiline_written_by_author_blocks(
                         {
                             authors.push(AuthorDetection {
                                 author,
-                                start_line,
-                                end_line,
+                                start_line: LineNumber::new(start_line).expect("valid"),
+                                end_line: LineNumber::new(end_line).expect("valid"),
                             });
                         }
                         extracted_any = true;
@@ -368,11 +369,11 @@ pub(super) fn extract_multiline_written_by_author_blocks(
             if let Some(combined) = refine_author(combined_candidate)
                 && seen.insert(combined.clone())
             {
-                authors.retain(|a| a.start_line < start_line || a.end_line > end_line);
+                authors.retain(|a| a.start_line.get() < start_line || a.end_line.get() > end_line);
                 authors.push(AuthorDetection {
                     author: combined,
-                    start_line,
-                    end_line,
+                    start_line: LineNumber::new(start_line).expect("valid"),
+                    end_line: LineNumber::new(end_line).expect("valid"),
                 });
             }
         }
@@ -413,8 +414,8 @@ pub(super) fn extract_json_excerpt_developed_by_authors(
         if seen.insert(author.clone()) {
             authors.push(AuthorDetection {
                 author,
-                start_line: 1,
-                end_line: 1,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::ONE,
             });
         }
     }
@@ -504,8 +505,8 @@ pub(super) fn extract_module_author_macros(
             if seen.insert(author.clone()) {
                 authors.push(AuthorDetection {
                     author,
-                    start_line: ln,
-                    end_line: ln,
+                    start_line: LineNumber::new(ln).expect("invalid line number"),
+                    end_line: LineNumber::new(ln).expect("invalid line number"),
                 });
             }
         }
@@ -604,8 +605,8 @@ pub(super) fn extract_was_developed_by_author_blocks(
         if seen.insert(author.clone()) {
             authors.push(AuthorDetection {
                 author,
-                start_line: ln,
-                end_line: end_ln,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(end_ln).expect("invalid line number"),
             });
         }
 
@@ -781,11 +782,11 @@ pub(super) fn extract_author_colon_blocks(
         };
 
         if seen.insert(combined.clone()) {
-            authors.retain(|a| a.start_line < start_line || a.end_line > end_line);
+            authors.retain(|a| a.start_line.get() < start_line || a.end_line.get() > end_line);
             authors.push(AuthorDetection {
                 author: combined,
-                start_line,
-                end_line,
+                start_line: LineNumber::new(start_line).expect("valid"),
+                end_line: LineNumber::new(end_line).expect("valid"),
             });
         }
 
@@ -944,8 +945,8 @@ pub(super) fn extract_code_written_by_author_blocks(
         if seen.insert(author.clone()) {
             authors.push(AuthorDetection {
                 author,
-                start_line: ln,
-                end_line: j,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(j).expect("invalid line number"),
             });
         }
 
@@ -1024,8 +1025,8 @@ pub(super) fn extract_developed_and_created_by_authors(
         if seen.insert(author.clone()) {
             authors.push(AuthorDetection {
                 author: author.clone(),
-                start_line: start_idx + 1,
-                end_line: end_idx + 1,
+                start_line: LineNumber::from_0_indexed(start_idx),
+                end_line: LineNumber::from_0_indexed(end_idx),
             });
         }
 
@@ -1064,8 +1065,8 @@ pub(super) fn extract_with_additional_hacking_by_authors(
         {
             authors.push(AuthorDetection {
                 author,
-                start_line: ln,
-                end_line: ln,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
             });
         }
     }
@@ -1139,17 +1140,20 @@ pub(super) fn merge_metadata_author_and_email_lines(
             if seen.insert(combined.clone()) {
                 authors.push(AuthorDetection {
                     author: combined,
-                    start_line: author_ln,
-                    end_line: email_ln,
+                    start_line: LineNumber::new(author_ln).expect("invalid line number"),
+                    end_line: LineNumber::new(email_ln).expect("invalid line number"),
                 });
             }
 
             authors.retain(|a| {
-                if a.start_line == author_ln && a.end_line == author_ln && a.author == name {
+                if a.start_line.get() == author_ln
+                    && a.end_line.get() == author_ln
+                    && a.author == name
+                {
                     return false;
                 }
-                if a.start_line == email_ln
-                    && a.end_line == email_ln
+                if a.start_line.get() == email_ln
+                    && a.end_line.get() == email_ln
                     && a.author.to_ascii_lowercase() == format!("author-email {email}")
                 {
                     return false;
@@ -1217,8 +1221,8 @@ pub(super) fn extract_debian_maintainer_authors(
         if seen.insert(author.clone()) {
             authors.push(AuthorDetection {
                 author,
-                start_line: ln,
-                end_line: ln,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
             });
         }
     }
@@ -1247,8 +1251,8 @@ pub(super) fn extract_created_by_project_author(
             if seen.insert(author.clone()) {
                 authors.push(AuthorDetection {
                     author,
-                    start_line: ln,
-                    end_line: ln,
+                    start_line: LineNumber::new(ln).expect("invalid line number"),
+                    end_line: LineNumber::new(ln).expect("invalid line number"),
                 });
             }
             break;
@@ -1300,8 +1304,8 @@ pub(super) fn extract_created_by_authors(
         if seen.insert(author.clone()) {
             authors.push(AuthorDetection {
                 author: author.clone(),
-                start_line: ln,
-                end_line: ln,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
             });
         }
 
@@ -1344,11 +1348,11 @@ pub(super) fn extract_written_by_comma_and_copyright_authors(
             continue;
         };
         if seen.insert(author.clone()) {
-            authors.retain(|a| !(a.start_line == ln && a.end_line == ln));
+            authors.retain(|a| !(a.start_line.get() == ln && a.end_line.get() == ln));
             authors.push(AuthorDetection {
                 author,
-                start_line: ln,
-                end_line: ln,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
             });
         }
     }
@@ -1403,8 +1407,8 @@ pub(super) fn extract_package_comment_named_authors(
             {
                 authors.push(AuthorDetection {
                     author,
-                    start_line: ln,
-                    end_line: ln,
+                    start_line: LineNumber::new(ln).expect("invalid line number"),
+                    end_line: LineNumber::new(ln).expect("invalid line number"),
                 });
             }
         }
@@ -1465,8 +1469,8 @@ pub(super) fn extract_developed_by_sentence_authors(
         if seen.insert(author.clone()) {
             authors.push(AuthorDetection {
                 author,
-                start_line: ln,
-                end_line: ln,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
             });
         }
     }
@@ -1514,8 +1518,8 @@ pub(super) fn extract_developed_by_phrase_authors(
             if seen.insert(author.clone()) {
                 authors.push(AuthorDetection {
                     author,
-                    start_line: ln,
-                    end_line: ln,
+                    start_line: LineNumber::new(ln).expect("invalid line number"),
+                    end_line: LineNumber::new(ln).expect("invalid line number"),
                 });
             }
         }
@@ -1559,8 +1563,8 @@ pub(super) fn extract_maintained_by_authors(
             if seen.insert(author.clone()) {
                 authors.push(AuthorDetection {
                     author,
-                    start_line: ln,
-                    end_line: ln,
+                    start_line: LineNumber::new(ln).expect("invalid line number"),
+                    end_line: LineNumber::new(ln).expect("invalid line number"),
                 });
             }
         }
@@ -1623,8 +1627,8 @@ pub(super) fn extract_converted_to_by_authors(
         if seen.insert(author.clone()) {
             authors.push(AuthorDetection {
                 author: author.clone(),
-                start_line: ln,
-                end_line: ln,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
             });
         }
         if add_converted_variant {
@@ -1632,8 +1636,8 @@ pub(super) fn extract_converted_to_by_authors(
             if seen.insert(converted.clone()) {
                 authors.push(AuthorDetection {
                     author: converted,
-                    start_line: ln,
-                    end_line: ln,
+                    start_line: LineNumber::new(ln).expect("invalid line number"),
+                    end_line: LineNumber::new(ln).expect("invalid line number"),
                 });
             }
         }
@@ -1679,8 +1683,8 @@ pub(super) fn extract_various_bugfixes_and_enhancements_by_authors(
         if seen.insert(author.clone()) {
             authors.push(AuthorDetection {
                 author,
-                start_line: ln,
-                end_line: ln,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
             });
         }
     }
@@ -1791,10 +1795,12 @@ pub(super) fn drop_ref_markup_authors(authors: &mut Vec<AuthorDetection>) {
 
 pub(super) fn normalize_json_blob_authors(raw_lines: &[&str], authors: &mut Vec<AuthorDetection>) {
     let mut normalized: Vec<AuthorDetection> = Vec::with_capacity(authors.len());
-    let mut seen: HashSet<(usize, usize, String)> = HashSet::new();
+    let mut seen: HashSet<(LineNumber, LineNumber, String)> = HashSet::new();
 
     for author in authors.iter() {
-        let Some(window) = json_author_window(raw_lines, author.start_line, author.end_line) else {
+        let Some(window) =
+            json_author_window(raw_lines, author.start_line.get(), author.end_line.get())
+        else {
             let key = (author.start_line, author.end_line, author.author.clone());
             if seen.insert(key) {
                 normalized.push(author.clone());
@@ -2023,8 +2029,8 @@ pub(super) fn extract_dense_name_email_author_lists(
         if seen.insert(author.clone()) {
             authors.push(AuthorDetection {
                 author,
-                start_line: ln,
-                end_line: ln,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
             });
         }
     }

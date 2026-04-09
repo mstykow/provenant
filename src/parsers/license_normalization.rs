@@ -7,7 +7,7 @@ use crate::license_detection::expression::{
     LicenseExpression, parse_expression, simplify_expression,
 };
 use crate::license_detection::index::LicenseIndex;
-use crate::models::{LicenseDetection, Match, PackageData};
+use crate::models::{LicenseDetection, LineNumber, Match, PackageData};
 use crate::utils::spdx::{ExpressionRelation, combine_license_expressions_with_relation};
 
 pub(crate) const PARSER_DECLARED_MATCHER: &str = "parser-declared-license";
@@ -46,13 +46,13 @@ impl NormalizedDeclaredLicense {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct DeclaredLicenseMatchMetadata<'a> {
     pub(crate) matched_text: &'a str,
-    pub(crate) start_line: usize,
-    pub(crate) end_line: usize,
+    pub(crate) start_line: LineNumber,
+    pub(crate) end_line: LineNumber,
     pub(crate) referenced_filenames: Option<&'a [&'a str]>,
 }
 
 impl<'a> DeclaredLicenseMatchMetadata<'a> {
-    pub(crate) fn new(matched_text: &'a str, start_line: usize, end_line: usize) -> Self {
+    pub(crate) fn new(matched_text: &'a str, start_line: LineNumber, end_line: LineNumber) -> Self {
         Self {
             matched_text,
             start_line,
@@ -67,7 +67,7 @@ impl<'a> DeclaredLicenseMatchMetadata<'a> {
     }
 
     pub(crate) fn single_line(matched_text: &'a str) -> Self {
-        Self::new(matched_text, 1, 1)
+        Self::new(matched_text, LineNumber::ONE, LineNumber::ONE)
     }
 }
 
@@ -298,8 +298,8 @@ pub(crate) fn finalize_package_declared_license_references(package_data: &mut Pa
                 license_expression_spdx: "LicenseRef-scancode-unknown-license-reference"
                     .to_string(),
                 from_file: None,
-                start_line: 1,
-                end_line: 1,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::ONE,
                 matcher: Some(PARSER_DECLARED_MATCHER.to_string()),
                 score: 100.0,
                 matched_length: Some(statement.split_whitespace().count()),
@@ -643,14 +643,21 @@ mod tests {
     fn test_build_declared_license_detection_uses_parser_matcher() {
         let detection = build_declared_license_detection(
             &NormalizedDeclaredLicense::new("mit", "MIT"),
-            DeclaredLicenseMatchMetadata::new("MIT", 4, 4),
+            DeclaredLicenseMatchMetadata::new(
+                "MIT",
+                LineNumber::new(4).unwrap(),
+                LineNumber::new(4).unwrap(),
+            ),
         );
 
         assert_eq!(
             detection.matches[0].matcher.as_deref(),
             Some(PARSER_DECLARED_MATCHER)
         );
-        assert_eq!(detection.matches[0].start_line, 4);
+        assert_eq!(
+            detection.matches[0].start_line,
+            LineNumber::new(4).expect("valid")
+        );
         assert_eq!(detection.matches[0].matched_text.as_deref(), Some("MIT"));
     }
 }

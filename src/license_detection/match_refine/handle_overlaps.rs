@@ -428,6 +428,7 @@ mod tests {
     use super::*;
     use crate::license_detection::models::MatchCoordinates;
     use crate::license_detection::models::position_span::PositionSpan;
+    use crate::models::LineNumber;
 
     fn parse_rule_id(rule_identifier: &str) -> Option<usize> {
         let trimmed = rule_identifier.trim();
@@ -449,13 +450,15 @@ mod tests {
         let matched_len = end_line - start_line + 1;
         let rule_len = matched_len;
         let rid = parse_rule_id(rule_identifier).unwrap_or(0);
+        let start_line_ln = LineNumber::new(start_line).expect("valid start_line");
+        let end_line_ln = LineNumber::new(end_line).expect("valid end_line");
         LicenseMatch {
             rid,
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: None,
-            start_line,
-            end_line,
+            start_line: start_line_ln,
+            end_line: end_line_ln,
             start_token: start_line,
             end_token: end_line + 1,
             matcher: crate::license_detection::models::MatcherKind::Aho,
@@ -492,8 +495,12 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: None,
-            start_line: start_token,
-            end_line: end_token.saturating_sub(1),
+            start_line: LineNumber::from_0_indexed(start_token),
+            end_line: if end_token == 0 {
+                LineNumber::ONE
+            } else {
+                LineNumber::from_0_indexed(end_token - 1)
+            },
             start_token,
             end_token,
             matcher: crate::license_detection::models::MatcherKind::Aho,
@@ -529,8 +536,8 @@ mod tests {
         let (filtered, _) = filter_contained_matches(&matches);
 
         assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].start_line, 1);
-        assert_eq!(filtered[0].end_line, 20);
+        assert_eq!(filtered[0].start_line, LineNumber::ONE);
+        assert_eq!(filtered[0].end_line, LineNumber::new(20).expect("valid"));
     }
 
     #[test]
@@ -544,8 +551,8 @@ mod tests {
         let (filtered, _) = filter_contained_matches(&matches);
 
         assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].start_line, 1);
-        assert_eq!(filtered[0].end_line, 30);
+        assert_eq!(filtered[0].start_line, LineNumber::ONE);
+        assert_eq!(filtered[0].end_line, LineNumber::new(30).expect("valid"));
     }
 
     #[test]
@@ -617,7 +624,7 @@ mod tests {
         let (filtered, _) = filter_contained_matches(&matches);
 
         assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].end_line, 30);
+        assert_eq!(filtered[0].end_line, LineNumber::new(30).expect("valid"));
     }
 
     #[test]
@@ -633,8 +640,8 @@ mod tests {
         let (filtered, _) = filter_contained_matches(&matches);
 
         assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].start_line, 1);
-        assert_eq!(filtered[0].end_line, 50);
+        assert_eq!(filtered[0].start_line, LineNumber::ONE);
+        assert_eq!(filtered[0].end_line, LineNumber::new(50).expect("valid"));
     }
 
     #[test]
@@ -745,12 +752,12 @@ mod tests {
     #[test]
     fn test_filter_contained_matches_gpl_variant_zero_tokens() {
         let mut gpl_1_0 = create_test_match_with_tokens("#20560", 0, 0, 9);
-        gpl_1_0.start_line = 13;
-        gpl_1_0.end_line = 14;
+        gpl_1_0.start_line = LineNumber::new(13).expect("valid");
+        gpl_1_0.end_line = LineNumber::new(14).expect("valid");
 
         let mut gpl_2_0 = create_test_match_with_tokens("#16218", 0, 0, 22);
-        gpl_2_0.start_line = 13;
-        gpl_2_0.end_line = 15;
+        gpl_2_0.start_line = LineNumber::new(13).expect("valid");
+        gpl_2_0.end_line = LineNumber::new(15).expect("valid");
 
         let matches = vec![gpl_1_0.clone(), gpl_2_0.clone()];
 
@@ -934,9 +941,9 @@ mod tests {
         let (kept, _) = filter_overlapping_matches(matches, &index);
 
         assert_eq!(kept.len(), 3);
-        assert_eq!(kept[0].start_line, 1);
-        assert_eq!(kept[1].start_line, 25);
-        assert_eq!(kept[2].start_line, 40);
+        assert_eq!(kept[0].start_line, LineNumber::ONE);
+        assert_eq!(kept[1].start_line, LineNumber::new(25).expect("valid"));
+        assert_eq!(kept[2].start_line, LineNumber::new(40).expect("valid"));
     }
 
     #[test]
@@ -1166,8 +1173,8 @@ mod tests {
 
         assert_eq!(to_keep.len(), 1);
         assert_eq!(to_keep[0].rule_identifier, "#2");
-        assert_eq!(to_keep[0].start_line, 50);
-        assert_eq!(to_keep[0].end_line, 65);
+        assert_eq!(to_keep[0].start_line, LineNumber::new(50).expect("valid"));
+        assert_eq!(to_keep[0].end_line, LineNumber::new(65).expect("valid"));
     }
 
     #[test]

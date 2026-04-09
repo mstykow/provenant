@@ -5,6 +5,7 @@ mod tests {
     use crate::license_detection::query::Query;
     use crate::license_detection::spdx_lid::*;
     use crate::license_detection::test_utils::{create_mock_rule_simple, create_test_index};
+    use crate::models::LineNumber;
 
     fn extract_cleaned_spdx_expressions(text: &str) -> Vec<String> {
         text.lines()
@@ -323,8 +324,8 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].license_expression, "mit");
         assert_eq!(matches[0].license_expression_spdx, Some("MIT".to_string()));
-        assert_eq!(matches[0].start_line, 1);
-        assert_eq!(matches[0].end_line, 1);
+        assert_eq!(matches[0].start_line, LineNumber::ONE);
+        assert_eq!(matches[0].end_line, LineNumber::ONE);
         assert_eq!(matches[0].matcher, MATCH_SPDX_ID);
         assert_eq!(matches[0].matched_length, 4);
         assert_eq!(matches[0].rule_length, 4);
@@ -429,8 +430,8 @@ mod tests {
         let matches = spdx_lid_match(&index, &query);
 
         assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].start_line, 1);
-        assert_eq!(matches[0].end_line, 1);
+        assert_eq!(matches[0].start_line, LineNumber::ONE);
+        assert_eq!(matches[0].end_line, LineNumber::ONE);
         assert_eq!(matches[0].matched_length, 3);
         assert_eq!(matches[0].rule_length, 3);
         assert_eq!(matches[0].score, 100.0);

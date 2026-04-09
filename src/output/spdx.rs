@@ -483,7 +483,7 @@ fn spdx_ids_from_expression(expression: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{LicenseDetection, PackageData, PackageType};
+    use crate::models::{LicenseDetection, LineNumber, PackageData, PackageType};
 
     #[test]
     fn spdx_file_license_info_includes_manifest_package_data_detections() {
@@ -522,8 +522,8 @@ mod tests {
                     license_expression: "mit".to_string(),
                     license_expression_spdx: "MIT".to_string(),
                     from_file: Some("project/Cargo.toml".to_string()),
-                    start_line: 1,
-                    end_line: 1,
+                    start_line: LineNumber::ONE,
+                    end_line: LineNumber::ONE,
                     matcher: Some("parser-declared-license".to_string()),
                     score: 100.0,
                     matched_length: Some(1),

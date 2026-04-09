@@ -78,7 +78,7 @@ pub(super) fn should_group_together(
     cur: &LicenseMatch,
     threshold: usize,
 ) -> bool {
-    let line_gap = cur.start_line.saturating_sub(prev.end_line);
+    let line_gap = cur.start_line.get().saturating_sub(prev.end_line.get());
     line_gap <= threshold
 }
 
@@ -132,6 +132,7 @@ pub(super) fn is_correct_detection(matches: &[LicenseMatch]) -> bool {
 mod tests {
     use super::*;
     use crate::license_detection::models::{LicenseMatch, MatchCoordinates, PositionSpan};
+    use crate::models::LineNumber;
 
     fn create_test_match(
         start_line: usize,
@@ -139,13 +140,15 @@ mod tests {
         matcher: &str,
         rule_identifier: &str,
     ) -> LicenseMatch {
+        let start_line_ln = LineNumber::new(start_line).expect("valid start_line");
+        let end_line_ln = LineNumber::new(end_line).expect("valid end_line");
         LicenseMatch {
             rid: 0,
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: Some("test.txt".to_string()),
-            start_line,
-            end_line,
+            start_line: start_line_ln,
+            end_line: end_line_ln,
             start_token: start_line,
             end_token: end_line + 1,
             matcher: matcher.parse().expect("invalid test matcher"),
@@ -176,13 +179,15 @@ mod tests {
         start_token: usize,
         end_token: usize,
     ) -> LicenseMatch {
+        let start_line_ln = LineNumber::new(start_line).expect("valid start_line");
+        let end_line_ln = LineNumber::new(end_line).expect("valid end_line");
         LicenseMatch {
             rid: 0,
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: Some("test.txt".to_string()),
-            start_line,
-            end_line,
+            start_line: start_line_ln,
+            end_line: end_line_ln,
             start_token,
             end_token,
             matcher: crate::license_detection::models::MatcherKind::Hash,

@@ -179,7 +179,7 @@ fn public_detection_region_key(
         .iter()
         .map(|match_item| match_item.end_line)
         .max()?;
-    Some((owning_path.to_string(), start_line, end_line))
+    Some((owning_path.to_string(), start_line.get(), end_line.get()))
 }
 
 pub(super) fn build_reference_follow_snapshot(
@@ -1217,7 +1217,7 @@ fn internal_match_to_public(
 #[cfg(test)]
 mod tests {
     use super::{apply_package_reference_following, collect_top_level_license_detections};
-    use crate::models::Match;
+    use crate::models::{LineNumber, Match};
     use crate::post_processing::test_utils::file;
 
     #[test]
@@ -1230,8 +1230,8 @@ mod tests {
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
                 from_file: Some("project/src/lib.rs".to_string()),
-                start_line: 1,
-                end_line: 3,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::new(3).unwrap(),
                 matcher: Some("1-hash".to_string()),
                 score: 100.0,
                 matched_length: Some(10),
@@ -1255,8 +1255,8 @@ mod tests {
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
                 from_file: Some("project/src/other.rs".to_string()),
-                start_line: 4,
-                end_line: 6,
+                start_line: LineNumber::new(4).unwrap(),
+                end_line: LineNumber::new(6).unwrap(),
                 matcher: Some("1-hash".to_string()),
                 score: 100.0,
                 matched_length: Some(10),
@@ -1316,8 +1316,8 @@ mod tests {
                 license_expression: "ofl-1.1".to_string(),
                 license_expression_spdx: "OFL-1.1".to_string(),
                 from_file: Some("fonts/OFL.txt".to_string()),
-                start_line: 1,
-                end_line: 3,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::new(3).unwrap(),
                 matcher: Some("2-aho".to_string()),
                 score: 100.0,
                 matched_length: Some(10),

@@ -1,4 +1,5 @@
 use super::*;
+use crate::models::LineNumber;
 
 #[test]
 fn test_simple_copyright_line() {
@@ -8,7 +9,7 @@ fn test_simple_copyright_line() {
 
     assert_eq!(tokens[0].value, "Copyright");
     assert_eq!(tokens[0].tag, PosTag::Copy);
-    assert_eq!(tokens[0].start_line, 1);
+    assert_eq!(tokens[0].start_line, LineNumber::ONE);
 
     assert_eq!(tokens[1].value, "2024");
     assert_eq!(tokens[1].tag, PosTag::Yr);
@@ -109,10 +110,10 @@ fn test_line_numbers_preserved() {
         (11, "Acme Inc.".to_string()),
     ];
     let tokens = get_tokens(&lines);
-    assert_eq!(tokens[0].start_line, 10);
+    assert_eq!(tokens[0].start_line, LineNumber::new(10).unwrap());
     // "Acme" should be on line 11
     let acme = tokens.iter().find(|t| t.value == "Acme").unwrap();
-    assert_eq!(acme.start_line, 11);
+    assert_eq!(acme.start_line, LineNumber::new(11).unwrap());
 }
 
 #[test]

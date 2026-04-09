@@ -5,6 +5,7 @@ use crate::license_detection::index::dictionary::TokenId;
 use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::{LicenseMatch, MatchCoordinates};
 use crate::license_detection::query::QueryRun;
+use crate::models::LineNumber;
 use bit_set::BitSet;
 use std::collections::HashMap;
 
@@ -287,8 +288,14 @@ pub(crate) fn seq_match_with_candidates(
                     let qend = qpos + mlen - 1;
                     let abs_qpos = qpos + query_run.start;
                     let abs_qend = qend + query_run.start;
-                    let start_line = query_run.line_for_pos(abs_qpos).unwrap_or(1);
-                    let end_line = query_run.line_for_pos(abs_qend).unwrap_or(start_line);
+                    let start_line = query_run
+                        .line_for_pos(abs_qpos)
+                        .and_then(LineNumber::new)
+                        .unwrap_or(LineNumber::ONE);
+                    let end_line = query_run
+                        .line_for_pos(abs_qend)
+                        .and_then(LineNumber::new)
+                        .unwrap_or(start_line);
 
                     let qspan =
                         PositionSpan::range(qpos + query_run.start, qpos + mlen + query_run.start);

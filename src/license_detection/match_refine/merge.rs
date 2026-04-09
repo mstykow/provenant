@@ -369,6 +369,7 @@ mod tests {
     use super::*;
     use crate::license_detection::index::LicenseIndex;
     use crate::license_detection::models::PositionSpan;
+    use crate::models::LineNumber;
 
     fn parse_rule_id(rule_identifier: &str) -> Option<usize> {
         let trimmed = rule_identifier.trim();
@@ -398,8 +399,8 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: None,
-            start_line,
-            end_line,
+            start_line: LineNumber::new(start_line).unwrap(),
+            end_line: LineNumber::new(end_line).unwrap(),
             start_token: start_line,
             end_token: end_line + 1,
             matcher: crate::license_detection::models::MatcherKind::Aho,
@@ -434,8 +435,8 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: None,
-            start_line: start_token,
-            end_line: end_token.saturating_sub(1),
+            start_line: LineNumber::from_0_indexed(start_token),
+            end_line: LineNumber::from_0_indexed(end_token.saturating_sub(1)),
             start_token,
             end_token,
             matcher: crate::license_detection::models::MatcherKind::Aho,
@@ -473,8 +474,8 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: None,
-            start_line: start_token,
-            end_line: end_token.saturating_sub(1),
+            start_line: LineNumber::from_0_indexed(start_token),
+            end_line: LineNumber::from_0_indexed(end_token.saturating_sub(1)),
             start_token,
             end_token,
             matcher: crate::license_detection::models::MatcherKind::Aho,
@@ -550,8 +551,8 @@ mod tests {
 
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].rule_identifier, "#1");
-        assert_eq!(merged[0].start_line, 1);
-        assert_eq!(merged[0].end_line, 15);
+        assert_eq!(merged[0].start_line, LineNumber::ONE);
+        assert_eq!(merged[0].end_line, LineNumber::new(15).unwrap());
         assert_eq!(merged[0].score, 0.9);
     }
 
@@ -580,8 +581,8 @@ mod tests {
 
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].rule_identifier, "#1");
-        assert_eq!(merged[0].start_line, 1);
-        assert_eq!(merged[0].end_line, 20);
+        assert_eq!(merged[0].start_line, LineNumber::ONE);
+        assert_eq!(merged[0].end_line, LineNumber::new(20).unwrap());
         assert_eq!(merged[0].score, 0.9);
     }
 
@@ -673,8 +674,8 @@ mod tests {
         let merged = merge_overlapping_matches(&matches);
 
         assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].start_line, 1);
-        assert_eq!(merged[0].end_line, 15);
+        assert_eq!(merged[0].start_line, LineNumber::ONE);
+        assert_eq!(merged[0].end_line, LineNumber::new(15).unwrap());
     }
 
     #[test]
@@ -689,8 +690,8 @@ mod tests {
         let matches = vec![create_test_match("#1", 1, 10, 0.9, 90.0, 100)];
         let merged = merge_overlapping_matches(&matches);
         assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].start_line, 1);
-        assert_eq!(merged[0].end_line, 10);
+        assert_eq!(merged[0].start_line, LineNumber::ONE);
+        assert_eq!(merged[0].end_line, LineNumber::new(10).unwrap());
     }
 
     #[test]
@@ -779,8 +780,8 @@ mod tests {
         let merged = merge_overlapping_matches(&matches);
 
         assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].start_line, 1);
-        assert_eq!(merged[0].end_line, 25);
+        assert_eq!(merged[0].start_line, LineNumber::ONE);
+        assert_eq!(merged[0].end_line, LineNumber::new(25).unwrap());
     }
 
     #[test]
@@ -805,10 +806,10 @@ mod tests {
         let merged = merge_overlapping_matches(&matches);
 
         assert_eq!(merged.len(), 2);
-        assert_eq!(merged[0].start_line, 1);
-        assert_eq!(merged[0].end_line, 10);
-        assert_eq!(merged[1].start_line, 20);
-        assert_eq!(merged[1].end_line, 30);
+        assert_eq!(merged[0].start_line, LineNumber::ONE);
+        assert_eq!(merged[0].end_line, LineNumber::new(10).unwrap());
+        assert_eq!(merged[1].start_line, LineNumber::new(20).unwrap());
+        assert_eq!(merged[1].end_line, LineNumber::new(30).unwrap());
     }
 
     #[test]

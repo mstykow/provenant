@@ -1,6 +1,8 @@
 use regex::Regex;
 use std::sync::LazyLock;
 
+use crate::models::LineNumber;
+
 use super::DetectionConfig;
 use super::host::is_good_email_domain;
 use super::junk_data::classify_email;
@@ -8,8 +10,8 @@ use super::junk_data::classify_email;
 #[derive(Debug, Clone, PartialEq)]
 pub struct EmailDetection {
     pub email: String,
-    pub start_line: usize,
-    pub end_line: usize,
+    pub start_line: LineNumber,
+    pub end_line: LineNumber,
 }
 
 static EMAILS_REGEX: LazyLock<Regex> = LazyLock::new(|| {
@@ -20,7 +22,7 @@ pub fn find_emails(text: &str, config: &DetectionConfig) -> Vec<EmailDetection> 
     let mut detections = Vec::new();
 
     for (line_index, line) in text.lines().enumerate() {
-        let line_number = line_index + 1;
+        let line_number = LineNumber::from_0_indexed(line_index);
         for matched in EMAILS_REGEX.find_iter(line) {
             let email = matched.as_str().to_lowercase();
             if !is_good_email_domain(&email) {

@@ -3,6 +3,8 @@ use std::sync::LazyLock;
 
 use url::Url;
 
+use crate::models::LineNumber;
+
 use super::DetectionConfig;
 use super::host::is_good_url_host_domain;
 use super::junk_data::classify_url;
@@ -10,8 +12,8 @@ use super::junk_data::classify_url;
 #[derive(Debug, Clone, PartialEq)]
 pub struct UrlDetection {
     pub url: String,
-    pub start_line: usize,
-    pub end_line: usize,
+    pub start_line: LineNumber,
+    pub end_line: LineNumber,
 }
 
 static URLS_REGEX: LazyLock<Regex> = LazyLock::new(|| {
@@ -114,7 +116,7 @@ pub fn find_urls(text: &str, config: &DetectionConfig) -> Vec<UrlDetection> {
     let mut detections = Vec::new();
 
     for (line_index, line) in text.lines().enumerate() {
-        let line_number = line_index + 1;
+        let line_number = LineNumber::from_0_indexed(line_index);
         let normalized_line = line.replace("\\r\\n", "\\n").replace("\\r", "\\n");
 
         for segment in normalized_line.split("\\n") {

@@ -115,7 +115,7 @@ pub(crate) fn filter_short_matches_scattered_on_too_many_lines(
                 && rule.is_small
             {
                 let matched_len = m.len();
-                let line_span = m.end_line.saturating_sub(m.start_line) + 1;
+                let line_span = m.end_line.get().saturating_sub(m.start_line.get()) + 1;
 
                 let effective_matched_len = if rule.is_license_tag() {
                     matched_len + 2
@@ -504,7 +504,7 @@ pub(crate) fn filter_invalid_matches_to_single_word_gibberish(
             {
                 let matched_text = match &m.matched_text {
                     Some(text) => text.clone(),
-                    None => query.matched_text(m.start_line, m.end_line),
+                    None => query.matched_text(m.start_line.get(), m.end_line.get()),
                 };
                 let max_diff = if rule.relevance >= 80 { 1 } else { 0 };
 
@@ -551,6 +551,7 @@ mod tests {
     use crate::license_detection::models::Rule;
     use crate::license_detection::models::position_span::PositionSpan;
     use crate::license_detection::unknown_match::MATCH_UNKNOWN;
+    use crate::models::LineNumber;
 
     fn parse_rule_id(rule_identifier: &str) -> Option<usize> {
         let trimmed = rule_identifier.trim();
@@ -572,13 +573,15 @@ mod tests {
         let matched_len = end_line - start_line + 1;
         let rule_len = matched_len;
         let rid = parse_rule_id(rule_identifier).unwrap_or(0);
+        let start_line_ln = LineNumber::new(start_line).expect("valid start_line");
+        let end_line_ln = LineNumber::new(end_line).expect("valid end_line");
         LicenseMatch {
             rid,
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: None,
-            start_line,
-            end_line,
+            start_line: start_line_ln,
+            end_line: end_line_ln,
             start_token: start_line,
             end_token: end_line + 1,
             matcher: crate::license_detection::models::MatcherKind::Aho,
@@ -615,8 +618,12 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: None,
-            start_line: start_token,
-            end_line: end_token.saturating_sub(1),
+            start_line: LineNumber::from_0_indexed(start_token),
+            end_line: if end_token == 0 {
+                LineNumber::ONE
+            } else {
+                LineNumber::from_0_indexed(end_token - 1)
+            },
             start_token,
             end_token,
             matcher: crate::license_detection::models::MatcherKind::Aho,
@@ -1150,12 +1157,11 @@ mod tests {
         });
 
         let mut m = create_test_match_with_tokens("#0", 0, 3, 3);
-        m.start_line = 1;
-        m.end_line = 50;
-
-        let mut m2 = create_test_match_with_tokens("#0", 10, 13, 3);
-        m2.start_line = 1;
-        m2.end_line = 50;
+        m.start_line = LineNumber::ONE;
+        m.end_line = LineNumber::new(50).expect("valid");
+        let mut m2 = create_test_match_with_tokens("#0", 0, 3, 3);
+        m2.start_line = LineNumber::ONE;
+        m2.end_line = LineNumber::new(50).expect("valid");
 
         let matches = vec![m, m2];
         let filtered = filter_short_matches_scattered_on_too_many_lines(&index, &matches);

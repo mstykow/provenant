@@ -331,6 +331,7 @@ mod tests {
     use super::*;
     use crate::license_detection::models::MatchCoordinates;
     use crate::license_detection::models::position_span::PositionSpan;
+    use crate::models::LineNumber;
 
     fn parse_rule_id(rule_identifier: &str) -> Option<usize> {
         let trimmed = rule_identifier.trim();
@@ -357,8 +358,8 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: None,
-            start_line,
-            end_line,
+            start_line: LineNumber::new(start_line).unwrap(),
+            end_line: LineNumber::new(end_line).unwrap(),
             start_token: start_line,
             end_token: end_line + 1,
             matcher: crate::license_detection::models::MatcherKind::Aho,
@@ -425,8 +426,8 @@ mod tests {
         assert_eq!(refined.len(), 2);
 
         let rule1_match = refined.iter().find(|m| m.rule_identifier == "#1").unwrap();
-        assert_eq!(rule1_match.start_line, 1);
-        assert_eq!(rule1_match.end_line, 15);
+        assert_eq!(rule1_match.start_line, LineNumber::ONE);
+        assert_eq!(rule1_match.end_line, LineNumber::new(15).unwrap());
 
         let rule2_match = refined.iter().find(|m| m.rule_identifier == "#2").unwrap();
         assert_eq!(rule2_match.score, 80.0);
@@ -545,8 +546,8 @@ mod tests {
 
         assert_eq!(refined.len(), 1);
         assert_eq!(refined[0].rule_identifier, "#1");
-        assert_eq!(refined[0].start_line, 1);
-        assert_eq!(refined[0].end_line, 20);
+        assert_eq!(refined[0].start_line, LineNumber::ONE);
+        assert_eq!(refined[0].end_line, LineNumber::new(20).unwrap());
     }
 
     #[test]

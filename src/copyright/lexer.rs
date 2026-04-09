@@ -12,6 +12,7 @@ use regex::Regex;
 
 use super::patterns::COMPILED_PATTERNS;
 use super::types::{PosTag, Token};
+use crate::models::LineNumber;
 
 /// Splitter regex: splits on tabs, spaces, equals signs, and semicolons.
 /// Matches Python's `re.compile(r'[\t =;]+').split`.
@@ -47,7 +48,7 @@ pub fn get_tokens(numbered_lines: &[(usize, String)]) -> Vec<Token> {
                 tokens.push(Token {
                     value: "\n".to_string(),
                     tag: PosTag::EmptyLine,
-                    start_line: *start_line,
+                    start_line: LineNumber::new(*start_line).expect("invalid line number"),
                 });
                 last_line.clear();
                 continue;
@@ -78,12 +79,12 @@ pub fn get_tokens(numbered_lines: &[(usize, String)]) -> Vec<Token> {
                     tokens.push(Token {
                         value: base.to_string(),
                         tag,
-                        start_line: *start_line,
+                        start_line: LineNumber::new(*start_line).expect("invalid line number"),
                     });
                     tokens.push(Token {
                         value: ",".to_string(),
                         tag: PosTag::Cc,
-                        start_line: *start_line,
+                        start_line: LineNumber::new(*start_line).expect("invalid line number"),
                     });
                     continue;
                 }
@@ -94,7 +95,7 @@ pub fn get_tokens(numbered_lines: &[(usize, String)]) -> Vec<Token> {
             tokens.push(Token {
                 value: tok,
                 tag,
-                start_line: *start_line,
+                start_line: LineNumber::new(*start_line).expect("invalid line number"),
             });
         }
     }

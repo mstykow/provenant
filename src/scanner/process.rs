@@ -26,7 +26,7 @@ use crate::license_detection::models::LicenseMatch as InternalLicenseMatch;
 use crate::license_detection::query::Query;
 use crate::models::{
     Author, Copyright, DatasourceId, FileInfo, FileInfoBuilder, FileType, Holder, LicenseDetection,
-    Match, OutputEmail, OutputURL, Sha256Digest,
+    LineNumber, Match, OutputEmail, OutputURL, Sha256Digest,
 };
 use crate::parsers::utils::split_name_email;
 use crate::progress::ScanProgress;
@@ -805,7 +805,12 @@ fn prune_binary_string_detections(
     (kept_copyrights, kept_holders, kept_authors)
 }
 
-fn ranges_overlap(a_start: usize, a_end: usize, b_start: usize, b_end: usize) -> bool {
+fn ranges_overlap(
+    a_start: LineNumber,
+    a_end: LineNumber,
+    b_start: LineNumber,
+    b_end: LineNumber,
+) -> bool {
     a_start <= b_end && b_start <= a_end
 }
 
@@ -857,8 +862,8 @@ fn extract_binary_string_author_supplements(text_content: &str) -> Vec<AuthorDet
         if let Some(author) = extract_named_author_from_binary_line(line) {
             authors.push(AuthorDetection {
                 author,
-                start_line: line_index + 1,
-                end_line: line_index + 1,
+                start_line: LineNumber::from_0_indexed(line_index),
+                end_line: LineNumber::from_0_indexed(line_index),
             });
         }
     }
@@ -1352,8 +1357,8 @@ fn convert_match_to_model(
         m.matched_text.clone().or_else(|| {
             Some(crate::license_detection::query::matched_text_from_text(
                 text_content,
-                m.start_line,
-                m.end_line,
+                m.start_line.get(),
+                m.end_line.get(),
             ))
         })
     } else {
@@ -1410,15 +1415,15 @@ fn matched_text_diagnostics_from_match(
     let Some(start_pos) = matched_positions.iter().min() else {
         return crate::license_detection::query::matched_text_from_text(
             &query.text,
-            license_match.start_line,
-            license_match.end_line,
+            license_match.start_line.get(),
+            license_match.end_line.get(),
         );
     };
     let Some(end_pos) = matched_positions.iter().max() else {
         return crate::license_detection::query::matched_text_from_text(
             &query.text,
-            license_match.start_line,
-            license_match.end_line,
+            license_match.start_line.get(),
+            license_match.end_line.get(),
         );
     };
 
@@ -1428,8 +1433,8 @@ fn matched_text_diagnostics_from_match(
         &matched_positions,
         start_pos,
         end_pos,
-        license_match.start_line,
-        license_match.end_line,
+        license_match.start_line.get(),
+        license_match.end_line.get(),
     )
 }
 
@@ -1565,14 +1570,16 @@ mod tests {
 
     use super::maybe_record_processing_timeout;
 
+    use crate::models::LineNumber;
+
     fn make_internal_match(rule_url: &str) -> LicenseMatch {
         LicenseMatch {
             rid: 0,
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: None,
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             start_token: 0,
             end_token: 1,
             matcher: MatcherKind::Hash,
@@ -1777,8 +1784,8 @@ mod tests {
         detection.matches[0].license_expression_spdx = Some("FSFAP".to_string());
         detection.matches[0].rule_identifier = "fsf-ap.LICENSE".to_string();
         detection.matches[0].matched_text = None;
-        detection.matches[0].start_line = 1;
-        detection.matches[0].end_line = 3;
+        detection.matches[0].start_line = LineNumber::ONE;
+        detection.matches[0].end_line = LineNumber::new(3).unwrap();
         detection.matches[0].start_token = 0;
         detection.matches[0].end_token = query.tokens.len();
         detection.matches[0].coordinates =

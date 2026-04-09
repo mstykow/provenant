@@ -1,11 +1,12 @@
 use super::*;
 use crate::copyright::types::{PosTag, TreeLabel};
+use crate::models::LineNumber;
 
 fn make_token(value: &str, tag: PosTag, line: usize) -> Token {
     Token {
         value: value.to_string(),
         tag,
-        start_line: line,
+        start_line: LineNumber::new(line).unwrap(),
     }
 }
 

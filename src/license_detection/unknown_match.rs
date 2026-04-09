@@ -12,6 +12,7 @@ use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKi
 use crate::license_detection::position_set::PositionSet;
 use crate::license_detection::query::Query;
 use crate::license_detection::tokenize::STOPWORDS;
+use crate::models::LineNumber;
 
 pub const MATCH_UNKNOWN: MatcherKind = MatcherKind::Unknown;
 
@@ -238,11 +239,17 @@ fn create_unknown_match_from_qspan(query: &Query, qspan: &PositionSet) -> Option
     let start = qspan.min_pos();
     let end = qspan.max_pos() + 1;
 
-    let start_line = query.line_by_pos.get(start).copied().unwrap_or(1);
+    let start_line = query
+        .line_by_pos
+        .get(start)
+        .copied()
+        .and_then(LineNumber::new)
+        .unwrap_or(LineNumber::ONE);
     let end_line = query
         .line_by_pos
         .get(end.saturating_sub(1))
         .copied()
+        .and_then(LineNumber::new)
         .unwrap_or(start_line);
 
     let qspan_positions: Vec<usize> = qspan.iter().collect();
@@ -288,8 +295,8 @@ fn create_unknown_match_from_qspan(query: &Query, qspan: &PositionSet) -> Option
 fn build_unknown_rule_text(
     query: &Query,
     qspan_positions: &[usize],
-    start_line: usize,
-    end_line: usize,
+    start_line: LineNumber,
+    end_line: LineNumber,
 ) -> String {
     let Some(&start_pos) = qspan_positions.first() else {
         return String::new();
@@ -305,8 +312,8 @@ fn build_unknown_rule_text(
         &matched_positions,
         start_pos,
         end_pos,
-        start_line,
-        end_line,
+        start_line.get(),
+        end_line.get(),
     );
     let line_endings = collect_line_endings(&query.text);
 
@@ -809,8 +816,8 @@ mod tests {
             license_expression: "test".to_string(),
             license_expression_spdx: Some("TEST".to_string()),
             from_file: None,
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             start_token: 0,
             end_token: 10,
             matcher: MatcherKind::Aho,
@@ -858,8 +865,8 @@ mod tests {
             license_expression: "test".to_string(),
             license_expression_spdx: Some("TEST".to_string()),
             from_file: None,
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             start_token: 5,
             end_token: 10,
             matcher: MatcherKind::Aho,
@@ -906,8 +913,8 @@ mod tests {
             license_expression: "test".to_string(),
             license_expression_spdx: Some("TEST".to_string()),
             from_file: None,
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             start_token: 0,
             end_token: 15,
             matcher: MatcherKind::Aho,
@@ -989,8 +996,8 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: Some("MIT".to_string()),
             from_file: None,
-            start_line: 1,
-            end_line: 1,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
             start_token: 0,
             end_token: 5,
             matcher: MatcherKind::Aho,
@@ -1014,7 +1021,7 @@ mod tests {
         let matches = unknown_match(&index, &query, &known_matches);
 
         assert!(
-            matches.is_empty() || matches[0].start_line > 1,
+            matches.is_empty() || matches[0].start_line > LineNumber::ONE,
             "Should not re-detect known regions"
         );
     }

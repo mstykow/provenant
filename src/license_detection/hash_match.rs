@@ -10,6 +10,7 @@ use crate::license_detection::index::dictionary::{TokenId, TokenKind};
 use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind};
 use crate::license_detection::query::QueryRun;
+use crate::models::LineNumber;
 
 pub const MATCH_HASH: MatcherKind = MatcherKind::Hash;
 
@@ -62,9 +63,15 @@ pub fn hash_match(index: &LicenseIndex, query_run: &QueryRun) -> Vec<LicenseMatc
         let matched_length = query_run.tokens().len();
         let match_coverage = 100.0;
 
-        let start_line = query_run.line_for_pos(query_run.start).unwrap_or(1);
+        let start_line = query_run
+            .line_for_pos(query_run.start)
+            .and_then(LineNumber::new)
+            .unwrap_or(LineNumber::ONE);
         let end_line = if let Some(end) = query_run.end {
-            query_run.line_for_pos(end).unwrap_or(start_line)
+            query_run
+                .line_for_pos(end)
+                .and_then(LineNumber::new)
+                .unwrap_or(start_line)
         } else {
             start_line
         };
