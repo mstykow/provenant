@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use base64::Engine;
+
     use crate::models::{DatasourceId, PackageType};
     use crate::parsers::bun_lockb::parse_bun_lockb;
     use crate::parsers::{BunLockbParser, PackageParser};
@@ -18,6 +20,17 @@ mod tests {
         let lock_path = temp_dir.path().join("bun.lockb");
         fs::write(&lock_path, bytes).expect("Failed to write bun.lockb");
         (temp_dir, lock_path)
+    }
+
+    fn bun_lockb_v2_without_scripts_fixture() -> Vec<u8> {
+        let fixture = PathBuf::from("testdata/bun/legacy/bun.lockb.v2-no-scripts.base64");
+        base64::engine::general_purpose::STANDARD
+            .decode(
+                fs::read_to_string(&fixture)
+                    .expect("fixture should be readable")
+                    .trim(),
+            )
+            .expect("fixture should decode")
     }
 
     #[test]
@@ -140,6 +153,26 @@ mod tests {
             .expect("expected workspace dependency");
         assert_eq!(workspace_dep.scope.as_deref(), Some("workspaces"));
         assert_eq!(workspace_dep.is_direct, Some(true));
+    }
+
+    #[test]
+    fn test_parse_bun_lockb_v2_without_scripts_field() {
+        let bytes = bun_lockb_v2_without_scripts_fixture();
+        parse_bun_lockb(&bytes).expect("seven-field bun.lockb should parse");
+
+        let (_temp_dir, lock_path) = create_temp_bun_lockb(&bytes);
+        let package_data = BunLockbParser::extract_first_package(&lock_path);
+
+        assert_eq!(package_data.package_type, Some(PackageType::Npm));
+        assert_eq!(package_data.datasource_id, Some(DatasourceId::BunLockb));
+        assert_eq!(package_data.name.as_deref(), Some("bundle"));
+        assert!(package_data.version.is_none());
+        assert!(
+            package_data
+                .dependencies
+                .iter()
+                .any(|dep| dep.purl.as_deref() == Some("pkg:npm/bun-types@0.5.8"))
+        );
     }
 
     #[test]

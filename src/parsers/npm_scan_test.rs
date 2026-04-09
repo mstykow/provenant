@@ -1,10 +1,24 @@
 #[cfg(test)]
 mod tests {
+    use base64::Engine;
     use std::fs;
     use std::path::Path;
 
-    use super::super::scan_test_utils::{assert_dependency_present, scan_and_assemble};
+    use super::super::scan_test_utils::{
+        assert_dependency_present, assert_file_links_to_package, scan_and_assemble,
+    };
     use crate::models::{DatasourceId, PackageType};
+
+    fn decode_legacy_bun_lockb_fixture() -> Vec<u8> {
+        let fixture = Path::new("testdata/bun/legacy/bun.lockb.v2-no-scripts.base64");
+        base64::engine::general_purpose::STANDARD
+            .decode(
+                fs::read_to_string(fixture)
+                    .expect("legacy bun.lockb fixture should be readable")
+                    .trim(),
+            )
+            .expect("legacy bun.lockb fixture should decode")
+    }
 
     #[test]
     fn test_npm_scoped_package_scan_preserves_namespace_and_leaf_name() {
@@ -66,6 +80,51 @@ mod tests {
                 .package_data
                 .iter()
                 .any(|pkg_data| pkg_data.datasource_id == Some(DatasourceId::BunLock))
+        );
+    }
+
+    #[test]
+    fn test_bun_legacy_lockb_scan_assembles_package_and_dependency() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{
+  "name": "bundle",
+  "devDependencies": {
+    "bun-types": "^0.5.0"
+  }
+}
+"#,
+        )
+        .expect("write package.json");
+        fs::write(
+            temp_dir.path().join("bun.lockb"),
+            decode_legacy_bun_lockb_fixture(),
+        )
+        .expect("write bun.lockb");
+
+        let (files, result) = scan_and_assemble(temp_dir.path());
+
+        let package = result
+            .packages
+            .iter()
+            .find(|package| package.name.as_deref() == Some("bundle"))
+            .expect("legacy bun.lockb package should be assembled");
+
+        assert_eq!(package.package_type, Some(PackageType::Npm));
+        assert_eq!(package.purl.as_deref(), Some("pkg:npm/bundle"));
+        assert_dependency_present(&result.dependencies, "pkg:npm/bun-types", "package.json");
+        assert_file_links_to_package(
+            &files,
+            "/package.json",
+            &package.package_uid,
+            DatasourceId::NpmPackageJson,
+        );
+        assert_file_links_to_package(
+            &files,
+            "/bun.lockb",
+            &package.package_uid,
+            DatasourceId::BunLockb,
         );
     }
 
