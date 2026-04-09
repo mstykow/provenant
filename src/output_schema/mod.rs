@@ -1,6 +1,25 @@
-//! ScanCode-compatible output schema types.
-//!
-//! This module will house the serde-facing types that define the stable JSON
-//! output contract. Internal domain types from [`crate::models`] are converted
-//! into these schema types before serialization, keeping the wire format
-//! separate from the internal representation.
+pub mod author;
+pub mod copyright;
+pub mod email;
+pub mod extra_data;
+pub mod facet_tallies;
+pub mod holder;
+pub mod license_clarity_score;
+pub mod license_policy_entry;
+pub mod system_environment;
+pub mod tallies;
+pub mod tally_entry;
+pub mod url;
+
+pub use author::OutputAuthor;
+pub use copyright::OutputCopyright;
+pub use email::OutputEmail;
+pub use extra_data::OutputExtraData;
+pub use facet_tallies::OutputFacetTallies;
+pub use holder::OutputHolder;
+pub use license_clarity_score::OutputLicenseClarityScore;
+pub use license_policy_entry::OutputLicensePolicyEntry;
+pub use system_environment::OutputSystemEnvironment;
+pub use tallies::OutputTallies;
+pub use tally_entry::OutputTallyEntry;
+pub use url::OutputURL;
