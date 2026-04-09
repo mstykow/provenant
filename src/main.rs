@@ -814,7 +814,10 @@ fn progress_mode_from_cli(cli: &Cli) -> ProgressMode {
 }
 
 fn configured_scan_names(cli: &Cli) -> String {
-    let mut names = vec!["licenses"];
+    let mut names = Vec::new();
+    if cli.license {
+        names.push("licenses");
+    }
     if cli.info {
         names.push("info");
     }

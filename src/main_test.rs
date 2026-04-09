@@ -34,6 +34,55 @@ fn resolve_process_mode_supports_reference_compat_values() {
 }
 
 #[test]
+fn configured_scan_names_only_lists_enabled_non_license_scans() {
+    let package_cli = crate::cli::Cli::try_parse_from([
+        "provenant",
+        "--json-pp",
+        "scan.json",
+        "--package",
+        "README.md",
+    ])
+    .unwrap();
+    assert_eq!(configured_scan_names(&package_cli), "packages");
+
+    let package_only_cli = crate::cli::Cli::try_parse_from([
+        "provenant",
+        "--json-pp",
+        "scan.json",
+        "--package-only",
+        "README.md",
+    ])
+    .unwrap();
+    assert_eq!(configured_scan_names(&package_only_cli), "packages");
+
+    let mixed_cli = crate::cli::Cli::try_parse_from([
+        "provenant",
+        "--json-pp",
+        "scan.json",
+        "--info",
+        "--email",
+        "README.md",
+    ])
+    .unwrap();
+    assert_eq!(configured_scan_names(&mixed_cli), "info, emails");
+}
+
+#[test]
+fn configured_scan_names_keeps_license_first_when_enabled() {
+    let cli = crate::cli::Cli::try_parse_from([
+        "provenant",
+        "--json-pp",
+        "scan.json",
+        "--license",
+        "--package",
+        "README.md",
+    ])
+    .unwrap();
+
+    assert_eq!(configured_scan_names(&cli), "licenses, packages");
+}
+
+#[test]
 fn validate_scan_option_compatibility_rejects_scan_flags_with_from_json() {
     let cli = crate::cli::Cli::try_parse_from([
         "provenant",
