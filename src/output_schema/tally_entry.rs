@@ -14,3 +14,12 @@ impl From<&crate::models::TallyEntry> for OutputTallyEntry {
         }
     }
 }
+
+impl From<&OutputTallyEntry> for crate::models::TallyEntry {
+    fn from(value: &OutputTallyEntry) -> Self {
+        Self {
+            value: value.value.clone(),
+            count: value.count,
+        }
+    }
+}

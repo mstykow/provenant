@@ -39,3 +39,37 @@ impl From<&crate::models::Tallies> for OutputTallies {
         }
     }
 }
+
+impl TryFrom<&OutputTallies> for crate::models::Tallies {
+    type Error = String;
+    fn try_from(value: &OutputTallies) -> Result<Self, Self::Error> {
+        let mut detected_license_expression =
+            Vec::with_capacity(value.detected_license_expression.len());
+        for e in &value.detected_license_expression {
+            detected_license_expression.push(crate::models::TallyEntry::from(e));
+        }
+        let mut copyrights = Vec::with_capacity(value.copyrights.len());
+        for e in &value.copyrights {
+            copyrights.push(crate::models::TallyEntry::from(e));
+        }
+        let mut holders = Vec::with_capacity(value.holders.len());
+        for e in &value.holders {
+            holders.push(crate::models::TallyEntry::from(e));
+        }
+        let mut authors = Vec::with_capacity(value.authors.len());
+        for e in &value.authors {
+            authors.push(crate::models::TallyEntry::from(e));
+        }
+        let mut programming_language = Vec::with_capacity(value.programming_language.len());
+        for e in &value.programming_language {
+            programming_language.push(crate::models::TallyEntry::from(e));
+        }
+        Ok(Self {
+            detected_license_expression,
+            copyrights,
+            holders,
+            authors,
+            programming_language,
+        })
+    }
+}
