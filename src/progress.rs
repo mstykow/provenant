@@ -21,7 +21,7 @@ pub enum ProgressMode {
 
 #[derive(Debug, Default, Clone)]
 pub struct ScanStats {
-    pub processes: usize,
+    pub processes: i32,
     pub scan_names: String,
     pub initial_files: usize,
     pub initial_dirs: usize,
@@ -96,7 +96,7 @@ impl ScanProgress {
         self.finish_top_level_phase("setup");
     }
 
-    pub fn set_processes(&self, processes: usize) {
+    pub fn set_processes(&self, processes: i32) {
         let mut stats = self.stats.lock().expect("stats lock poisoned");
         stats.processes = processes;
     }
@@ -553,11 +553,6 @@ fn build_summary_messages(stats: &ScanStats, scan_start: &str, scan_end: &str) -
         0.0
     };
 
-    let processes = if stats.processes > 0 {
-        stats.processes
-    } else {
-        num_cpus_for_display()
-    };
     let scan_names = if stats.scan_names.is_empty() {
         "scan".to_string()
     } else {
@@ -565,7 +560,10 @@ fn build_summary_messages(stats: &ScanStats, scan_start: &str, scan_end: &str) -
     };
 
     let mut lines = vec![
-        format!("Summary:        {scan_names} with {processes} process(es)"),
+        format!(
+            "Summary:        {scan_names} with {} process(es)",
+            stats.processes
+        ),
         format!("Errors count:   {}", stats.error_count),
         format!(
             "Scan Speed:     {speed_files:.2} files/sec. {}/sec.",
@@ -665,11 +663,6 @@ pub fn format_size(bytes: u64) -> String {
     } else {
         format!("{size:.2} {}", units[idx])
     }
-}
-
-fn num_cpus_for_display() -> usize {
-    let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
-    if cpus > 1 { cpus - 1 } else { 1 }
 }
 
 #[cfg(test)]

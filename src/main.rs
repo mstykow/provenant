@@ -33,7 +33,7 @@ use crate::scan_result_shaping::{
 };
 use crate::scanner::{
     LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected_with_memory_limit,
-    scan_options_fingerprint,
+    process_collected_with_memory_limit_sequential, scan_options_fingerprint,
 };
 use crate::utils::hash::calculate_sha256;
 
@@ -73,7 +73,7 @@ fn run() -> Result<()> {
 
     let start_time = Utc::now();
     let progress = Arc::new(ScanProgress::new(progress_mode_from_cli(&cli)));
-    progress.set_processes(resolve_thread_count(cli.processes));
+    progress.set_processes(cli.processes);
     progress.set_scan_names(configured_scan_names(&cli));
     progress.init_logging_bridge();
 
@@ -193,6 +193,7 @@ fn run() -> Result<()> {
         } else {
             (cli.copyright, cli.email, cli.url, cli.generated)
         };
+        let process_mode = resolve_process_mode(cli.processes);
 
         let text_options = TextDetectionOptions {
             collect_info: cli.info,
@@ -206,7 +207,7 @@ fn run() -> Result<()> {
             detect_urls,
             max_emails: cli.max_email,
             max_urls: cli.max_url,
-            timeout_seconds: cli.timeout,
+            timeout_seconds: effective_timeout_seconds(process_mode, cli.timeout),
         };
 
         let license_options = LicenseScanOptions {
@@ -234,18 +235,32 @@ fn run() -> Result<()> {
             progress.record_incremental_reused(reused_files.len());
         }
 
-        let thread_count = resolve_thread_count(cli.processes);
+        if let Some(message) = process_mode_message(process_mode) {
+            progress.output_written(message);
+        }
         progress.start_scan(collected.file_count());
-        let mut result = run_with_thread_pool(thread_count, || {
-            Ok(process_collected_with_memory_limit(
-                &collected,
-                Arc::clone(&progress),
-                license_engine.clone(),
-                license_options,
-                &text_options,
-                cli.max_in_memory,
-            ))
-        })?;
+        let mut result = match process_mode {
+            ProcessMode::Parallel(thread_count) => run_with_thread_pool(thread_count, || {
+                Ok(process_collected_with_memory_limit(
+                    &collected,
+                    Arc::clone(&progress),
+                    license_engine.clone(),
+                    license_options,
+                    &text_options,
+                    cli.max_in_memory,
+                ))
+            })?,
+            ProcessMode::SequentialWithTimeouts | ProcessMode::SequentialWithoutTimeouts => {
+                process_collected_with_memory_limit_sequential(
+                    &collected,
+                    Arc::clone(&progress),
+                    license_engine.clone(),
+                    license_options,
+                    &text_options,
+                    cli.max_in_memory,
+                )
+            }
+        };
 
         if cli.incremental {
             let manifest_path = incremental_manifest_path(
@@ -754,19 +769,38 @@ fn compile_regex_patterns(option_name: &str, patterns: &[String]) -> Result<Vec<
         .collect()
 }
 
-fn resolve_thread_count(processes: i32) -> usize {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProcessMode {
+    Parallel(usize),
+    SequentialWithTimeouts,
+    SequentialWithoutTimeouts,
+}
+
+fn resolve_process_mode(processes: i32) -> ProcessMode {
     if processes > 0 {
-        processes as usize
+        ProcessMode::Parallel(processes as usize)
     } else if processes == 0 {
-        default_parallel_threads()
+        ProcessMode::SequentialWithTimeouts
     } else {
-        1
+        ProcessMode::SequentialWithoutTimeouts
     }
 }
 
-fn default_parallel_threads() -> usize {
-    let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
-    if cpus > 1 { cpus - 1 } else { 1 }
+fn effective_timeout_seconds(process_mode: ProcessMode, timeout_seconds: f64) -> f64 {
+    match process_mode {
+        ProcessMode::SequentialWithoutTimeouts => 0.0,
+        ProcessMode::Parallel(_) | ProcessMode::SequentialWithTimeouts => timeout_seconds,
+    }
+}
+
+fn process_mode_message(process_mode: ProcessMode) -> Option<&'static str> {
+    match process_mode {
+        ProcessMode::SequentialWithTimeouts => Some("Disabling multi-processing for debugging."),
+        ProcessMode::SequentialWithoutTimeouts => {
+            Some("Disabling multi-processing and multi-threading for debugging.")
+        }
+        ProcessMode::Parallel(_) => None,
+    }
 }
 
 fn progress_mode_from_cli(cli: &Cli) -> ProgressMode {

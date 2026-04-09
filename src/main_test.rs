@@ -16,10 +16,21 @@ use crate::scan_result_shaping::json_input::{
 use crate::scanner::collect_paths;
 
 #[test]
-fn resolve_thread_count_supports_reference_compat_values() {
-    assert_eq!(resolve_thread_count(-1), 1);
-    assert_eq!(resolve_thread_count(0), default_parallel_threads());
-    assert_eq!(resolve_thread_count(4), 4);
+fn resolve_process_mode_supports_reference_compat_values() {
+    assert_eq!(
+        resolve_process_mode(-1),
+        ProcessMode::SequentialWithoutTimeouts
+    );
+    assert_eq!(resolve_process_mode(0), ProcessMode::SequentialWithTimeouts);
+    assert_eq!(resolve_process_mode(4), ProcessMode::Parallel(4));
+    assert_eq!(
+        effective_timeout_seconds(ProcessMode::SequentialWithoutTimeouts, 30.0),
+        0.0
+    );
+    assert_eq!(
+        effective_timeout_seconds(ProcessMode::SequentialWithTimeouts, 30.0),
+        30.0
+    );
 }
 
 #[test]
