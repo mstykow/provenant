@@ -1193,6 +1193,7 @@ mod tests {
                 tool_name: "provenant".to_string(),
                 tool_version: env!("CARGO_PKG_VERSION").to_string(),
                 options: serde_json::Map::new(),
+                notice: crate::models::HEADER_NOTICE.to_string(),
                 start_timestamp: "2026-01-01T00:00:00Z".to_string(),
                 end_timestamp: "2026-01-01T00:00:01Z".to_string(),
                 output_format_version: "4.1.0".to_string(),

@@ -31,7 +31,7 @@ use crate::models::DatasourceId;
 #[cfg(test)]
 use crate::models::Match;
 use crate::models::{
-    ExtraData, FileInfo, FileType, Header, OUTPUT_FORMAT_VERSION, Output, Package,
+    ExtraData, FileInfo, FileType, HEADER_NOTICE, Header, OUTPUT_FORMAT_VERSION, Output, Package,
     SPDX_LICENSE_LIST_VERSION, SystemEnvironment, TOOL_NAME, TopLevelLicenseDetection,
 };
 use crate::progress::format_default_scan_error_from_list;
@@ -210,6 +210,7 @@ pub(crate) fn create_output(
             tool_name: TOOL_NAME.to_string(),
             tool_version: env!("CARGO_PKG_VERSION").to_string(),
             options: context.header_options,
+            notice: HEADER_NOTICE.to_string(),
             start_timestamp: start_time.to_rfc3339(),
             end_timestamp: end_time.to_rfc3339(),
             output_format_version: OUTPUT_FORMAT_VERSION.to_string(),
