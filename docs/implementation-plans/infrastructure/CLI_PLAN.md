@@ -172,7 +172,7 @@ Confirmed remaining gaps:
 | `--no-assemble`      | Skips package assembly after manifest detection     | `Rust-specific` | Provenant-only convenience; Python ScanCode always assembles.                                                                                                                                                                                                                         |
 | `--no-cache`         | Disables Provenant caching                          | `Won't do`      | No longer needed because incremental reuse is opt-in by default.                                                                                                                                                                                                                      |
 | `--incremental`      | Enables unchanged-file reuse on repeated scans      | `Rust-specific` | Beyond-parity feature; kept as the sole repeated-run reuse mechanism.                                                                                                                                                                                                                 |
-| `--show_attribution` | Prints embedded-data attribution notices            | `Rust-specific` | Provenant-only convenience for bundled license-detection data notices.                                                                                                                                                                                                                |
+| `--show-attribution` | Prints embedded-data attribution notices            | `Rust-specific` | Provenant-only convenience for bundled license-detection data notices.                                                                                                                                                                                                                |
 
 ## Key Design Decisions
 
@@ -194,7 +194,7 @@ Confirmed remaining gaps:
 - Thread pool via rayon instead of multiprocessing
 - JSON output structure matches Python (`OUTPUT_FORMAT_VERSION`)
 - `--no-cache` is not a parity requirement (upstream removed it); if retained, it is Rust-specific
-- `--show_attribution` is a Rust-specific convenience flag for printing embedded-data notices
+- `--show-attribution` is a Rust-specific convenience flag for printing embedded-data notices
 
 ## References
 
