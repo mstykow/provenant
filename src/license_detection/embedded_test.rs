@@ -1,6 +1,8 @@
 use super::*;
-use crate::license_detection::embedded::index::load_license_index_from_bytes;
-use crate::license_detection::embedded::schema::{EmbeddedLoaderSnapshot, SCHEMA_VERSION};
+use crate::license_detection::embedded::index::load_embedded_license_index_from_bytes;
+use crate::license_detection::embedded::schema::{
+    EmbeddedArtifactMetadata, EmbeddedLoaderSnapshot, SCHEMA_VERSION,
+};
 use crate::license_detection::models::{LoadedLicense, LoadedRule, RuleKind};
 use once_cell::sync::Lazy;
 use std::path::PathBuf;
@@ -85,6 +87,9 @@ fn serialize_loader_snapshot_to_bytes(
 ) -> Result<Vec<u8>, String> {
     let snapshot = EmbeddedLoaderSnapshot {
         schema_version: SCHEMA_VERSION,
+        metadata: EmbeddedArtifactMetadata {
+            spdx_license_list_version: "3.27".to_string(),
+        },
         rules,
         licenses,
     };
@@ -181,7 +186,8 @@ mod failure_handling {
     fn test_deserialize_corrupted_bytes_fails() {
         let corrupted_bytes: Vec<u8> = vec![0x00, 0x01, 0x02, 0x03, 0xFF, 0xFE];
 
-        let result = load_license_index_from_bytes(&corrupted_bytes);
+        let result =
+            load_embedded_license_index_from_bytes(&corrupted_bytes).map(|loaded| loaded.index);
         assert!(result.is_err());
     }
 
@@ -189,13 +195,18 @@ mod failure_handling {
     fn test_schema_version_mismatch_is_detected() {
         let snapshot = EmbeddedLoaderSnapshot {
             schema_version: 999,
+            metadata: EmbeddedArtifactMetadata {
+                spdx_license_list_version: "3.27".to_string(),
+            },
             rules: vec![create_test_loaded_rule()],
             licenses: vec![create_test_loaded_license()],
         };
         let msgpack = rmp_serde::to_vec(&snapshot).unwrap();
         let bytes = zstd::encode_all(&msgpack[..], 0).unwrap();
 
-        let error = load_license_index_from_bytes(&bytes).unwrap_err();
+        let error = load_embedded_license_index_from_bytes(&bytes)
+            .map(|loaded| loaded.index)
+            .unwrap_err();
         assert!(error.to_string().contains("schema version mismatch"));
     }
 }
@@ -234,5 +245,14 @@ mod packaging {
 
         assert!(!snapshot.rules.is_empty());
         assert!(!snapshot.licenses.is_empty());
+    }
+
+    #[test]
+    fn test_embedded_artifact_metadata_has_spdx_license_list_version() {
+        let artifact_bytes = include_bytes!("../../resources/license_detection/license_index.zst");
+        let decompressed = zstd::decode_all(&artifact_bytes[..]).unwrap();
+        let snapshot: EmbeddedLoaderSnapshot = rmp_serde::from_slice(&decompressed).unwrap();
+
+        assert!(!snapshot.metadata.spdx_license_list_version.is_empty());
     }
 }

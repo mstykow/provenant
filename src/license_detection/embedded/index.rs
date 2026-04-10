@@ -1,5 +1,11 @@
-use super::schema::{EmbeddedLoaderSnapshot, SCHEMA_VERSION};
+use super::schema::{EmbeddedArtifactMetadata, EmbeddedLoaderSnapshot, SCHEMA_VERSION};
 use crate::license_detection::index::{LicenseIndex, build_index_from_loaded};
+
+#[derive(Debug, Clone)]
+pub struct LoadedEmbeddedLicenseIndex {
+    pub index: LicenseIndex,
+    pub metadata: EmbeddedArtifactMetadata,
+}
 
 #[derive(Debug, Clone)]
 pub struct SerializationError(pub String);
@@ -12,7 +18,9 @@ impl std::fmt::Display for SerializationError {
 
 impl std::error::Error for SerializationError {}
 
-pub fn load_license_index_from_bytes(bytes: &[u8]) -> Result<LicenseIndex, SerializationError> {
+fn load_loader_snapshot_from_bytes(
+    bytes: &[u8],
+) -> Result<EmbeddedLoaderSnapshot, SerializationError> {
     if bytes.is_empty() {
         return Err(SerializationError(
             "Embedded license index artifact is empty".to_string(),
@@ -34,11 +42,25 @@ pub fn load_license_index_from_bytes(bytes: &[u8]) -> Result<LicenseIndex, Seria
         )));
     }
 
-    Ok(build_index_from_loaded(
-        snapshot.rules,
-        snapshot.licenses,
-        false,
-    ))
+    Ok(snapshot)
+}
+
+pub fn load_embedded_license_index_from_bytes(
+    bytes: &[u8],
+) -> Result<LoadedEmbeddedLicenseIndex, SerializationError> {
+    let snapshot = load_loader_snapshot_from_bytes(bytes)?;
+    let index = build_index_from_loaded(snapshot.rules, snapshot.licenses, false);
+
+    Ok(LoadedEmbeddedLicenseIndex {
+        index,
+        metadata: snapshot.metadata,
+    })
+}
+
+pub fn load_embedded_artifact_metadata_from_bytes(
+    bytes: &[u8],
+) -> Result<EmbeddedArtifactMetadata, SerializationError> {
+    Ok(load_loader_snapshot_from_bytes(bytes)?.metadata)
 }
 
 #[cfg(test)]
@@ -46,12 +68,19 @@ mod tests {
     use super::*;
     use crate::license_detection::models::{LoadedLicense, LoadedRule};
 
+    fn create_test_metadata() -> EmbeddedArtifactMetadata {
+        EmbeddedArtifactMetadata {
+            spdx_license_list_version: "3.27".to_string(),
+        }
+    }
+
     fn serialize_loader_snapshot_to_bytes(
         rules: Vec<LoadedRule>,
         licenses: Vec<LoadedLicense>,
     ) -> Result<Vec<u8>, SerializationError> {
         let snapshot = EmbeddedLoaderSnapshot {
             schema_version: SCHEMA_VERSION,
+            metadata: create_test_metadata(),
             rules,
             licenses,
         };
@@ -132,7 +161,9 @@ mod tests {
         )
         .expect("Should serialize");
 
-        let index = load_license_index_from_bytes(&bytes).expect("Should deserialize");
+        let index = load_embedded_license_index_from_bytes(&bytes)
+            .expect("Should deserialize")
+            .index;
 
         assert_eq!(index.licenses_by_key.len(), 1);
         assert!(
@@ -152,8 +183,22 @@ mod tests {
     }
 
     #[test]
+    fn test_load_embedded_artifact_metadata_from_bytes_roundtrip() {
+        let bytes = serialize_loader_snapshot_to_bytes(
+            vec![create_test_loaded_rule()],
+            vec![create_test_loaded_license()],
+        )
+        .expect("Should serialize");
+
+        let metadata = load_embedded_artifact_metadata_from_bytes(&bytes)
+            .expect("Should deserialize metadata");
+
+        assert_eq!(metadata.spdx_license_list_version, "3.27");
+    }
+
+    #[test]
     fn test_load_license_index_from_bytes_rejects_empty() {
-        let error = load_license_index_from_bytes(&[]).unwrap_err();
+        let error = load_embedded_license_index_from_bytes(&[]).unwrap_err();
         assert!(error.to_string().contains("artifact is empty"));
     }
 }

@@ -32,7 +32,7 @@ use crate::models::DatasourceId;
 use crate::models::Match;
 use crate::models::{
     ExtraData, FileInfo, FileType, HEADER_NOTICE, Header, OUTPUT_FORMAT_VERSION, Output, Package,
-    SPDX_LICENSE_LIST_VERSION, SystemEnvironment, TOOL_NAME, TopLevelLicenseDetection,
+    SystemEnvironment, TOOL_NAME, TopLevelLicenseDetection,
 };
 use crate::progress::format_default_scan_error_from_list;
 use crate::scanner;
@@ -90,6 +90,7 @@ pub(crate) struct CreateOutputContext<'a> {
     pub(crate) license_detections: Vec<TopLevelLicenseDetection>,
     pub(crate) license_references: Vec<crate::models::LicenseReference>,
     pub(crate) license_rule_references: Vec<crate::models::LicenseRuleReference>,
+    pub(crate) spdx_license_list_version: String,
     pub(crate) extra_errors: Vec<String>,
     pub(crate) extra_warnings: Vec<String>,
     pub(crate) header_options: Map<String, Value>,
@@ -106,7 +107,7 @@ pub(crate) fn create_output(
 
     let extra_data = ExtraData {
         system_environment: current_system_environment(),
-        spdx_license_list_version: SPDX_LICENSE_LIST_VERSION.to_string(),
+        spdx_license_list_version: context.spdx_license_list_version,
         files_count: scan_result
             .files
             .iter()
