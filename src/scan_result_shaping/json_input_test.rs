@@ -15,7 +15,8 @@ fn load_scan_from_json_reads_files_and_metadata_sections() {
     let content = json!({
         "headers": [
             {
-                "errors": ["Path: src/main.rs"]
+                "errors": ["Path: src/main.rs"],
+                "warnings": ["Imported warning"]
             }
         ],
         "files": [
@@ -64,6 +65,7 @@ fn load_scan_from_json_reads_files_and_metadata_sections() {
     assert_eq!(parsed.files[0].path, "src/main.rs");
     assert_eq!(parsed.headers.len(), 1);
     assert_eq!(parsed.headers[0].errors, vec!["Path: src/main.rs"]);
+    assert_eq!(parsed.headers[0].warnings, vec!["Imported warning"]);
     assert_eq!(parsed.license_detections.len(), 1);
     assert_eq!(parsed.license_references.len(), 1);
 
@@ -77,6 +79,7 @@ fn normalize_loaded_json_scan_applies_strip_root_per_loaded_input() {
             errors: vec![
                 "Failed to read or parse package.json: archive/root/src/main.rs".to_string(),
             ],
+            warnings: vec![],
         }],
         files: vec![
             output_json_file("archive/root", crate::models::FileType::Directory),
@@ -134,6 +137,7 @@ fn normalize_loaded_json_scan_trims_full_root_display_without_absolutizing() {
     let mut loaded = JsonScanInput {
         headers: vec![JsonHeaderInput {
             errors: vec!["Path: /tmp/archive/root/src/main.rs".to_string()],
+            warnings: vec![],
         }],
         files: vec![output_json_file(
             "/tmp/archive/root/src/main.rs",
@@ -189,7 +193,8 @@ fn normalize_loaded_json_scan_trims_full_root_display_without_absolutizing() {
 fn into_parts_preserves_imported_header_errors_as_extra_errors() {
     let loaded = JsonScanInput {
         headers: vec![JsonHeaderInput {
-            errors: vec!["Path: src/main.rs".to_string()],
+            errors: vec!["Failed to read directory: src/main.rs".to_string()],
+            warnings: vec!["Imported warning".to_string()],
         }],
         files: vec![output_json_file(
             "src/main.rs",
@@ -206,5 +211,65 @@ fn into_parts_preserves_imported_header_errors_as_extra_errors() {
     let (_process_result, _assembly_result, _dets, _refs, _rule_refs, extra_errors) =
         loaded.into_parts().expect("into_parts should succeed");
 
-    assert_eq!(extra_errors, vec!["Path: src/main.rs"]);
+    assert_eq!(extra_errors, vec!["Failed to read directory: src/main.rs"]);
+}
+
+#[test]
+fn into_parts_drops_imported_warnings_and_file_summary_errors() {
+    let loaded = JsonScanInput {
+        headers: vec![JsonHeaderInput {
+            errors: vec![
+                "Failed to read or parse package.json: src/main.rs".to_string(),
+                "Failed to read directory: src/vendor".to_string(),
+            ],
+            warnings: vec!["Imported warning".to_string()],
+        }],
+        files: vec![{
+            let mut file = output_json_file("src/main.rs", crate::models::FileType::File);
+            file.scan_errors = vec!["Imported file failure detail".to_string()];
+            file
+        }],
+        packages: vec![],
+        dependencies: vec![],
+        license_detections: vec![],
+        license_references: vec![],
+        license_rule_references: vec![],
+        excluded_count: 0,
+    };
+
+    let (_process_result, _assembly_result, _dets, _refs, _rule_refs, extra_errors) =
+        loaded.into_parts().expect("into_parts should succeed");
+
+    assert_eq!(extra_errors, vec!["Failed to read directory: src/vendor"]);
+}
+
+#[test]
+fn normalize_loaded_json_scan_rewrites_verbose_header_error_path_prefix() {
+    let mut loaded = JsonScanInput {
+        headers: vec![JsonHeaderInput {
+            errors: vec![
+                "Failed to parse package.json: /tmp/archive/root/src/main.rs\n  Failed to parse package.json".to_string(),
+            ],
+            warnings: vec![],
+        }],
+        files: vec![output_json_file(
+            "/tmp/archive/root/src/main.rs",
+            crate::models::FileType::File,
+        )],
+        packages: vec![],
+        dependencies: vec![],
+        license_detections: vec![],
+        license_references: vec![],
+        license_rule_references: vec![],
+        excluded_count: 0,
+    };
+
+    normalize_loaded_json_scan(&mut loaded, false, true);
+
+    assert_eq!(
+        loaded.headers[0].errors,
+        vec![
+            "Failed to parse package.json: tmp/archive/root/src/main.rs\n  Failed to parse package.json"
+        ]
+    );
 }

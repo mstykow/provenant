@@ -1179,7 +1179,7 @@ mod tests {
             .expect("custom template write should succeed");
 
         let rendered = String::from_utf8(bytes).expect("template output should be utf-8");
-        assert!(rendered.contains("version=4.0.0"));
+        assert!(rendered.contains("version=4.1.0"));
         assert!(rendered.contains("files=1"));
     }
 
@@ -1190,22 +1190,28 @@ mod tests {
             tallies_of_key_files: None,
             tallies_by_facet: None,
             headers: vec![Header {
+                tool_name: "provenant".to_string(),
+                tool_version: env!("CARGO_PKG_VERSION").to_string(),
+                options: serde_json::Map::new(),
                 start_timestamp: "2026-01-01T00:00:00Z".to_string(),
                 end_timestamp: "2026-01-01T00:00:01Z".to_string(),
+                output_format_version: "4.1.0".to_string(),
                 duration: 1.0,
+                errors: vec![],
+                warnings: vec![],
                 extra_data: ExtraData {
+                    system_environment: SystemEnvironment {
+                        operating_system: "darwin".to_string(),
+                        cpu_architecture: "aarch64".to_string(),
+                        platform: "darwin".to_string(),
+                        platform_version: "26.3.1".to_string(),
+                        rust_version: "1.93.0".to_string(),
+                    },
+                    spdx_license_list_version: "3.27".to_string(),
                     files_count: 1,
                     directories_count: 1,
                     excluded_count: 0,
-                    system_environment: SystemEnvironment {
-                        operating_system: Some("darwin".to_string()),
-                        cpu_architecture: "aarch64".to_string(),
-                        platform: "darwin".to_string(),
-                        rust_version: "1.93.0".to_string(),
-                    },
                 },
-                errors: vec![],
-                output_format_version: "4.0.0".to_string(),
             }],
             packages: vec![],
             dependencies: vec![],

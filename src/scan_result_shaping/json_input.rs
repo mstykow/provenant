@@ -32,6 +32,8 @@ mod json_input_test;
 pub(crate) struct JsonHeaderInput {
     #[serde(default)]
     errors: Vec<String>,
+    #[serde(default)]
+    warnings: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -78,6 +80,11 @@ impl JsonScanInput {
     }
 
     pub(crate) fn into_parts(self) -> Result<JsonInputParts> {
+        let _discarded_warning_count: usize = self
+            .headers
+            .iter()
+            .map(|header| header.warnings.len())
+            .sum();
         let files = self
             .files
             .iter()
@@ -115,6 +122,18 @@ impl JsonScanInput {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| anyhow!("Failed to convert license rule reference from JSON: {}", e))?;
 
+        let preserved_header_errors = self
+            .headers
+            .into_iter()
+            .flat_map(
+                |JsonHeaderInput {
+                     errors,
+                     warnings: _,
+                 }| errors,
+            )
+            .filter(|error| !is_imported_file_summary_error(error, &files))
+            .collect();
+
         Ok((
             ProcessResult {
                 files,
@@ -127,12 +146,22 @@ impl JsonScanInput {
             license_detections,
             license_references,
             license_rule_references,
-            self.headers
-                .into_iter()
-                .flat_map(|header| header.errors)
-                .collect(),
+            preserved_header_errors,
         ))
     }
+}
+
+fn is_imported_file_summary_error(error: &str, files: &[FileInfo]) -> bool {
+    files
+        .iter()
+        .filter(|file| !file.scan_errors.is_empty())
+        .any(|file| header_error_matches_file_summary(error, &file.path))
+}
+
+fn header_error_matches_file_summary(error: &str, path: &str) -> bool {
+    let first_line = error.lines().next().unwrap_or(error).trim();
+
+    first_line == format!("Path: {path}") || first_line.ends_with(&format!(": {path}"))
 }
 
 pub(crate) fn load_and_merge_json_inputs(
@@ -316,6 +345,19 @@ fn normalize_loaded_header_errors(loaded: &mut JsonScanInput, original_paths: &[
     for header in &mut loaded.headers {
         for error in &mut header.errors {
             for (before, after) in &replacements {
+                if let Some(remainder) = error.strip_prefix(&format!("Path: {before}")) {
+                    *error = format!("Path: {after}{remainder}");
+                    break;
+                }
+                if let Some((first_line, remainder)) = error.split_once('\n')
+                    && first_line.ends_with(&format!(": {before}"))
+                {
+                    *error = format!(
+                        "{}: {after}\n{remainder}",
+                        &first_line[..first_line.len() - before.len() - 2]
+                    );
+                    break;
+                }
                 if error.ends_with(before) {
                     let prefix_len = error.len() - before.len();
                     error.replace_range(prefix_len.., after);

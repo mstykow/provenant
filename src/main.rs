@@ -511,6 +511,8 @@ fn run() -> Result<()> {
                 license_references,
                 license_rule_references,
                 extra_errors,
+                extra_warnings: Vec::new(),
+                header_options: cli.output_header_options(),
                 options: CreateOutputOptions {
                     facet_rules: &facet_rules,
                     include_classify: cli.classify,
@@ -521,6 +523,7 @@ fn run() -> Result<()> {
                     include_tallies_with_details: cli.tallies_with_details,
                     include_tallies_by_facet: cli.tallies_by_facet,
                     include_generated: cli.generated,
+                    verbose: cli.verbose,
                 },
             },
         )

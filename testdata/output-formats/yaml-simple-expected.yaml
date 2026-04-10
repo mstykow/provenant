@@ -14,7 +14,7 @@ headers:
       for legal advice.
       Provenant is a free software code scanning tool.
       Visit https://github.com/mstykow/provenant/ for support and download.
-    output_format_version: 4.0.0
+    output_format_version: 4.1.0
     message:
     errors: []
     warnings: []

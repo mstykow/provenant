@@ -1,26 +1,35 @@
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 use super::extra_data::OutputExtraData;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OutputHeader {
+    pub tool_name: String,
+    pub tool_version: String,
+    pub options: Map<String, Value>,
     pub start_timestamp: String,
     pub end_timestamp: String,
-    pub duration: f64,
-    pub extra_data: OutputExtraData,
-    pub errors: Vec<String>,
     pub output_format_version: String,
+    pub duration: f64,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+    pub extra_data: OutputExtraData,
 }
 
 impl From<&crate::models::Header> for OutputHeader {
     fn from(value: &crate::models::Header) -> Self {
         Self {
+            tool_name: value.tool_name.clone(),
+            tool_version: value.tool_version.clone(),
+            options: value.options.clone(),
             start_timestamp: value.start_timestamp.clone(),
             end_timestamp: value.end_timestamp.clone(),
-            duration: value.duration,
-            extra_data: OutputExtraData::from(&value.extra_data),
-            errors: value.errors.clone(),
             output_format_version: value.output_format_version.clone(),
+            duration: value.duration,
+            errors: value.errors.clone(),
+            warnings: value.warnings.clone(),
+            extra_data: OutputExtraData::from(&value.extra_data),
         }
     }
 }

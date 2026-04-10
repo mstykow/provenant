@@ -2133,6 +2133,8 @@ fn create_output_preserves_top_level_license_references_from_context() {
                 text: None,
             }],
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2143,6 +2145,7 @@ fn create_output_preserves_top_level_license_references_from_context() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: false,
+                verbose: false,
             },
         },
     );
@@ -2180,6 +2183,8 @@ fn create_output_projects_file_scan_errors_into_headers_and_serialized_files() {
             license_references: vec![],
             license_rule_references: vec![],
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2190,6 +2195,7 @@ fn create_output_projects_file_scan_errors_into_headers_and_serialized_files() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: false,
+                verbose: false,
             },
         },
     );
@@ -2212,7 +2218,7 @@ fn create_output_projects_file_scan_errors_into_headers_and_serialized_files() {
 }
 
 #[test]
-fn create_output_header_errors_use_first_concise_scan_error_per_file() {
+fn create_output_header_errors_summarize_errored_paths_by_default() {
     let start = Utc::now();
     let end = start;
     let first_error = "Failed to parse package.json at \"project/package.json\": expected value";
@@ -2238,6 +2244,8 @@ fn create_output_header_errors_use_first_concise_scan_error_per_file() {
             license_references: vec![],
             license_rule_references: vec![],
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2248,13 +2256,66 @@ fn create_output_header_errors_use_first_concise_scan_error_per_file() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: false,
+                verbose: false,
             },
         },
     );
 
     assert_eq!(
         output.headers[0].errors,
-        vec!["Timeout before license scan: project/package.json".to_string()]
+        vec!["Timeout before license scan (> 120.00s): project/package.json".to_string()]
+    );
+}
+
+#[test]
+fn create_output_header_errors_expand_scan_error_details_in_verbose_mode() {
+    let start = Utc::now();
+    let end = start;
+    let first_error = "Failed to parse package.json at \"project/package.json\": expected value";
+    let second_error = "Timeout before license scan (> 120.00s)";
+
+    let mut manifest = file("project/package.json");
+    manifest.scan_errors = vec![first_error.to_string(), second_error.to_string()];
+
+    let output = create_output(
+        start,
+        end,
+        crate::scanner::ProcessResult {
+            files: vec![dir("project"), manifest],
+            excluded_count: 0,
+        },
+        CreateOutputContext {
+            total_dirs: 1,
+            assembly_result: assembly::AssemblyResult {
+                packages: vec![],
+                dependencies: vec![],
+            },
+            license_detections: vec![],
+            license_references: vec![],
+            license_rule_references: vec![],
+            extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
+            options: CreateOutputOptions {
+                facet_rules: &[],
+                include_classify: false,
+                include_tallies_by_facet: false,
+                include_summary: false,
+                include_license_clarity_score: false,
+                include_tallies: false,
+                include_tallies_with_details: false,
+                include_tallies_of_key_files: false,
+                include_generated: false,
+                verbose: true,
+            },
+        },
+    );
+
+    assert_eq!(
+        output.headers[0].errors,
+        vec![format!(
+            "Timeout before license scan (> 120.00s): project/package.json\n  {first_error}\n  {second_error}"
+        )]
     );
 }
 
@@ -2280,6 +2341,8 @@ fn create_output_preserves_extra_errors_in_header_summary() {
             license_references: vec![],
             license_rule_references: vec![],
             extra_errors: vec!["Failed to read directory: project/vendor".to_string()],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2290,6 +2353,7 @@ fn create_output_preserves_extra_errors_in_header_summary() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: false,
+                verbose: false,
             },
         },
     );
@@ -2297,6 +2361,51 @@ fn create_output_preserves_extra_errors_in_header_summary() {
     assert_eq!(
         output.headers[0].errors,
         vec!["Failed to read directory: project/vendor".to_string()]
+    );
+}
+
+#[test]
+fn create_output_preserves_extra_warnings_in_header() {
+    let start = Utc::now();
+    let end = start;
+
+    let output = create_output(
+        start,
+        end,
+        crate::scanner::ProcessResult {
+            files: vec![dir("project")],
+            excluded_count: 0,
+        },
+        CreateOutputContext {
+            total_dirs: 1,
+            assembly_result: assembly::AssemblyResult {
+                packages: vec![],
+                dependencies: vec![],
+            },
+            license_detections: vec![],
+            license_references: vec![],
+            license_rule_references: vec![],
+            extra_errors: vec![],
+            extra_warnings: vec!["Imported warning".to_string()],
+            header_options: serde_json::Map::new(),
+            options: CreateOutputOptions {
+                facet_rules: &[],
+                include_classify: false,
+                include_tallies_by_facet: false,
+                include_summary: false,
+                include_license_clarity_score: false,
+                include_tallies: false,
+                include_tallies_with_details: false,
+                include_tallies_of_key_files: false,
+                include_generated: false,
+                verbose: false,
+            },
+        },
+    );
+
+    assert_eq!(
+        output.headers[0].warnings,
+        vec!["Imported warning".to_string()]
     );
 }
 
@@ -2329,6 +2438,8 @@ fn create_output_deduplicates_header_summary_errors() {
             extra_errors: vec![
                 "Failed to read or parse package.json: project/package.json".to_string(),
             ],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2339,6 +2450,7 @@ fn create_output_deduplicates_header_summary_errors() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: false,
+                verbose: false,
             },
         },
     );
@@ -2393,6 +2505,8 @@ fn create_output_preserves_top_level_license_detections_from_context() {
             license_references: vec![],
             license_rule_references: vec![],
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2403,6 +2517,7 @@ fn create_output_preserves_top_level_license_detections_from_context() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: false,
+                verbose: false,
             },
         },
     );
@@ -2438,6 +2553,8 @@ fn create_output_gates_summary_tallies_and_generated_sections() {
             license_references: vec![],
             license_rule_references: vec![],
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2448,6 +2565,7 @@ fn create_output_gates_summary_tallies_and_generated_sections() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: false,
+                verbose: false,
             },
         },
     );
@@ -2505,6 +2623,8 @@ fn create_output_gates_summary_tallies_and_generated_sections() {
             license_references: vec![],
             license_rule_references: vec![],
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2515,6 +2635,7 @@ fn create_output_gates_summary_tallies_and_generated_sections() {
                 include_tallies_with_details: true,
                 include_tallies_of_key_files: true,
                 include_generated: true,
+                verbose: false,
             },
         },
     );
@@ -2561,6 +2682,8 @@ fn create_output_preserves_scanner_generated_flags_without_scan_root() {
             license_references: vec![],
             license_rule_references: vec![],
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2571,6 +2694,7 @@ fn create_output_preserves_scanner_generated_flags_without_scan_root() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: true,
+                verbose: false,
             },
         },
     );
@@ -2639,6 +2763,8 @@ fn create_output_score_only_keeps_clarity_without_full_summary_fields() {
             license_references: vec![],
             license_rule_references: vec![],
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2649,6 +2775,7 @@ fn create_output_score_only_keeps_clarity_without_full_summary_fields() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: false,
+                verbose: false,
             },
         },
     );
@@ -2705,6 +2832,8 @@ fn create_output_preserves_file_level_license_clues_in_json_shape() {
             license_references: vec![],
             license_rule_references: vec![],
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2715,6 +2844,7 @@ fn create_output_preserves_file_level_license_clues_in_json_shape() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: false,
+                verbose: false,
             },
         },
     );
@@ -2769,6 +2899,8 @@ fn create_output_preserves_empty_package_data_license_and_dependency_arrays() {
             license_references: vec![],
             license_rule_references: vec![],
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2779,6 +2911,7 @@ fn create_output_preserves_empty_package_data_license_and_dependency_arrays() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: false,
+                verbose: false,
             },
         },
     );
@@ -2825,6 +2958,8 @@ fn create_output_tallies_by_facet_does_not_leak_resource_tallies() {
             license_references: vec![],
             license_rule_references: vec![],
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &facet_rules,
                 include_classify: false,
@@ -2835,6 +2970,7 @@ fn create_output_tallies_by_facet_does_not_leak_resource_tallies() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: false,
+                verbose: false,
             },
         },
     );
@@ -2883,6 +3019,8 @@ fn create_output_promotes_package_metadata_without_summary_flags() {
             license_references: vec![],
             license_rule_references: vec![],
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2893,6 +3031,7 @@ fn create_output_promotes_package_metadata_without_summary_flags() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: false,
+                verbose: false,
             },
         },
     );
@@ -2965,6 +3104,8 @@ fn create_output_summary_still_resolves_after_strip_root_normalization() {
             license_references: vec![],
             license_rule_references: vec![],
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: false,
@@ -2975,6 +3116,7 @@ fn create_output_summary_still_resolves_after_strip_root_normalization() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: false,
+                verbose: false,
             },
         },
     );
@@ -3009,6 +3151,8 @@ fn create_output_classify_only_sets_key_file_flags() {
             license_references: vec![],
             license_rule_references: vec![],
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &[],
                 include_classify: true,
@@ -3019,6 +3163,7 @@ fn create_output_classify_only_sets_key_file_flags() {
                 include_tallies_with_details: false,
                 include_tallies_of_key_files: false,
                 include_generated: false,
+                verbose: false,
             },
         },
     );
