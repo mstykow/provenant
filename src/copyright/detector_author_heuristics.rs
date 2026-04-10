@@ -149,6 +149,200 @@ pub(super) fn extract_markup_authors(content: &str, authors: &mut Vec<AuthorDete
     }
 }
 
+fn strip_leading_dash_bullet(line: &str) -> &str {
+    line.trim_start()
+        .strip_prefix("- ")
+        .map(str::trim_start)
+        .unwrap_or_else(|| line.trim())
+}
+
+fn trim_attribution_tail(who: &str) -> String {
+    static WITH_HELP_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)\s+with\s+the\s+help\s+of\b.*$").unwrap());
+    static TRAILING_TIMESTAMP_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\s+\d{4}/\d{2}/\d{2}(?:\s+\d{2}:\d{2}:\d{2})?\s*$").unwrap());
+
+    let without_help = WITH_HELP_RE.replace(who, "");
+    let without_timestamp = TRAILING_TIMESTAMP_RE.replace(without_help.as_ref(), "");
+    let trimmed = without_timestamp.trim().trim_end_matches('.').trim();
+    if trimmed.is_empty() {
+        who.trim().to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn extract_dash_bullet_attribution_author(line: &str) -> Option<String> {
+    static DASH_BULLET_BY_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)^(?:(?:written|updated|authored|created|developed|modified)\s+by|added\s+to\s+by|(?:ported|adapted)(?:\s+to\s+[^\r\n]*?)?\s+by|valuable\s+contributions\s+by)\s+(?P<who>.+)$",
+        )
+        .unwrap()
+    });
+
+    let normalized = strip_leading_dash_bullet(line);
+    let captures = DASH_BULLET_BY_RE.captures(normalized)?;
+    let who = captures
+        .name("who")
+        .map(|m| m.as_str())
+        .unwrap_or("")
+        .trim();
+    if who.is_empty() {
+        return None;
+    }
+    let trimmed = trim_attribution_tail(who);
+    refine_author(&trimmed)
+}
+
+pub(super) fn extract_dash_bullet_attribution_authors(
+    prepared_cache: &mut PreparedLineCache<'_>,
+    authors: &mut Vec<AuthorDetection>,
+) {
+    if prepared_cache.is_empty() {
+        return;
+    }
+
+    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+
+    for idx in 0..prepared_cache.len() {
+        let ln = idx + 1;
+        let Some(raw_line) = prepared_cache.raw_by_index(idx) else {
+            continue;
+        };
+        let trimmed = raw_line.trim_start();
+        if !trimmed.starts_with("- ") {
+            continue;
+        }
+        let Some(author) = extract_dash_bullet_attribution_author(trimmed) else {
+            continue;
+        };
+        if seen.insert(author.clone()) {
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
+            });
+        }
+    }
+}
+
+pub(super) fn extract_rst_field_authors(
+    prepared_cache: &mut PreparedLineCache<'_>,
+    authors: &mut Vec<AuthorDetection>,
+) {
+    if prepared_cache.is_empty() {
+        return;
+    }
+
+    static RST_FIELD_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)^:?(?:author(?:\s*&\s*maintainer)?|updated\s+by)\s*:\s*(?P<tail>.+)$")
+            .unwrap()
+    });
+    static ATTRIBUTION_PREFIX_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)^(?:written|updated|authored|created|developed|maintained)\s+by\s+")
+            .unwrap()
+    });
+
+    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+
+    for idx in 0..prepared_cache.len() {
+        let ln = idx + 1;
+        let Some(prepared) = prepared_cache.get_by_index(idx) else {
+            continue;
+        };
+        let line = prepared.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let Some(cap) = RST_FIELD_AUTHOR_RE.captures(line) else {
+            continue;
+        };
+        let tail = cap.name("tail").map(|m| m.as_str()).unwrap_or("").trim();
+        if tail.is_empty() {
+            continue;
+        }
+        let stripped_tail = ATTRIBUTION_PREFIX_RE.replace(tail, "");
+        let trimmed = trim_attribution_tail(stripped_tail.as_ref());
+        let Some(author) = refine_author(&trimmed) else {
+            continue;
+        };
+        if seen.insert(author.clone()) {
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
+            });
+        }
+    }
+}
+
+fn extract_author_colon_bullet_roster(
+    segments: &[String],
+    start_line: usize,
+    authors: &mut Vec<AuthorDetection>,
+    seen: &mut HashSet<String>,
+) -> bool {
+    static BARE_EMAIL_AUTHOR_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^(?P<who>.+?<[^>\s]*@[^>\s]*>)\s*,?$").unwrap());
+
+    if segments.is_empty()
+        || !segments
+            .iter()
+            .any(|segment| segment.trim_start().starts_with('-'))
+    {
+        return false;
+    }
+
+    let mut extracted_any = false;
+    for (offset, segment) in segments.iter().enumerate() {
+        let trimmed = segment.trim();
+        let line_no = start_line + offset;
+
+        if !trimmed.trim_start().starts_with('-') {
+            let lower = trimmed.to_ascii_lowercase();
+            if lower.starts_with("with the help of ") {
+                continue;
+            }
+            return false;
+        }
+
+        if let Some(author) = extract_dash_bullet_attribution_author(trimmed) {
+            if seen.insert(author.clone()) {
+                authors.push(AuthorDetection {
+                    author,
+                    start_line: LineNumber::new(line_no).expect("valid"),
+                    end_line: LineNumber::new(line_no).expect("valid"),
+                });
+            }
+            extracted_any = true;
+            continue;
+        }
+
+        let normalized = strip_leading_dash_bullet(trimmed);
+        let Some(cap) = BARE_EMAIL_AUTHOR_RE.captures(normalized) else {
+            continue;
+        };
+        if offset > 0 && segments[offset - 1].trim_end().ends_with(',') {
+            continue;
+        }
+        let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
+        let Some(author) = refine_author(who) else {
+            continue;
+        };
+        if seen.insert(author.clone()) {
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(line_no).expect("valid"),
+                end_line: LineNumber::new(line_no).expect("valid"),
+            });
+        }
+        extracted_any = true;
+    }
+
+    extracted_any
+}
+
 pub(super) fn extract_multiline_written_by_author_blocks(
     prepared_cache: &mut PreparedLineCache<'_>,
     authors: &mut Vec<AuthorDetection>,
@@ -181,7 +375,7 @@ pub(super) fn extract_multiline_written_by_author_blocks(
         let Some(raw_line) = prepared_cache.raw_by_index(idx) else {
             continue;
         };
-        let line = raw_line.trim();
+        let line = strip_leading_dash_bullet(raw_line.trim());
         if line.is_empty() {
             continue;
         }
@@ -230,9 +424,10 @@ pub(super) fn extract_multiline_written_by_author_blocks(
             continue;
         };
         let line = prepared.trim();
-        let lower = line.to_ascii_lowercase();
+        let normalized_line = strip_leading_dash_bullet(line);
+        let lower = normalized_line.to_ascii_lowercase();
 
-        let is_start = !line.is_empty()
+        let is_start = !normalized_line.is_empty()
             && !lower.starts_with("copyright")
             && !lower.contains("copyright")
             && (lower.starts_with("written by ")
@@ -380,6 +575,25 @@ pub(super) fn extract_multiline_written_by_author_blocks(
 
         i = j;
     }
+}
+
+pub(super) fn drop_merged_dash_bullet_attribution_authors(authors: &mut Vec<AuthorDetection>) {
+    authors.retain(|author| {
+        let lower = author.author.to_ascii_lowercase();
+        !(lower.contains(" - updated by ")
+            || lower.contains(" - added to by ")
+            || lower.contains(" - ported to ")
+            || lower.contains(" - adapted to ")
+            || lower.contains(" - modified by ")
+            || lower.contains(" - valuable contributions by ")
+            || lower.starts_with("mainline integration by ")
+            || lower.starts_with("updated by ")
+            || lower.starts_with("added to by ")
+            || lower.starts_with("ported to ")
+            || lower.starts_with("adapted to ")
+            || lower.starts_with("modified by ")
+            || lower.starts_with("valuable contributions by "))
+    });
 }
 
 pub(super) fn extract_json_excerpt_developed_by_authors(
@@ -623,7 +837,7 @@ pub(super) fn extract_author_colon_blocks(
     }
 
     static AUTHOR_COLON_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?i)^author(?:s|\(s\)|s\(s\))?\s*:\s*(?P<tail>.+)$").unwrap()
+        Regex::new(r"(?i)^author(?:s|\(s\)|s\(s\))?\s*:\s*(?P<tail>.*)$").unwrap()
     });
     static YEAR_ONLY_COPY_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)^copyright\s+\(c\)\s*(?:\d{4}(?:\s*,\s*\d{4})*|\d{4}-\d{4})\s*$").unwrap()
@@ -675,14 +889,6 @@ pub(super) fn extract_author_colon_blocks(
         }
 
         let tail = cap.name("tail").map(|m| m.as_str()).unwrap_or("").trim();
-        if tail.is_empty() {
-            i += 1;
-            continue;
-        }
-        let Some(initial_tail) = sanitize_author_colon_tail(tail) else {
-            i += 1;
-            continue;
-        };
 
         let label_raw = line.split(':').next().unwrap_or("").trim();
         let label_is_all_caps = !label_raw.is_empty()
@@ -693,7 +899,14 @@ pub(super) fn extract_author_colon_blocks(
             continue;
         }
 
-        let mut segments: Vec<String> = vec![initial_tail];
+        let mut segments: Vec<String> = Vec::new();
+        if !tail.is_empty() {
+            let Some(initial_tail) = sanitize_author_colon_tail(tail) else {
+                i += 1;
+                continue;
+            };
+            segments.push(initial_tail);
+        }
         let mut j = i + 1;
         let mut added = 0usize;
         while j < prepared_cache.len() {
@@ -773,8 +986,17 @@ pub(super) fn extract_author_colon_blocks(
             break;
         }
 
+        if segments.is_empty() {
+            i += 1;
+            continue;
+        }
+
         let start_line = ln;
         let end_line = if j == i + 1 { start_line } else { j };
+        if extract_author_colon_bullet_roster(&segments, start_line, authors, &mut seen) {
+            i = j;
+            continue;
+        }
         let combined_raw = segments.join(" ");
         let Some(combined) = refine_author(&combined_raw) else {
             i += 1;
@@ -1967,10 +2189,6 @@ pub(super) fn extract_dense_name_email_author_lists(
     authors: &mut Vec<AuthorDetection>,
 ) {
     if prepared_cache.is_empty() {
-        return;
-    }
-
-    if prepared_cache.contains_ci("copyright") || prepared_cache.contains_ci("(c)") {
         return;
     }
 

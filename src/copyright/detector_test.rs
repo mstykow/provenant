@@ -1849,6 +1849,187 @@ fn test_author_colon_multiline_keeps_emails() {
 }
 
 #[test]
+fn test_author_colon_empty_tail_collects_following_rst_roster_lines() {
+    let input =
+        "Authors:\n\t Richard Walker,\n\t Jamie Honan,\n\t Michael Hunold\n\nGeneral information\n";
+
+    let raw_lines: Vec<&str> = input.lines().collect();
+    let mut prepared_cache = crate::copyright::line_tracking::PreparedLineCache::new(&raw_lines);
+    let mut extracted: Vec<AuthorDetection> = Vec::new();
+    super::author_heuristics::extract_author_colon_blocks(&mut prepared_cache, &mut extracted);
+    assert!(
+        extracted
+            .iter()
+            .any(|ad| { ad.author == "Richard Walker, Jamie Honan, Michael Hunold" }),
+        "Expected empty-tail Authors: block to merge following roster lines, got: {:?}",
+        extracted.iter().map(|ad| &ad.author).collect::<Vec<_>>()
+    );
+
+    let (_c, _h, a) = detect_copyrights_from_text(input);
+    assert!(
+        a.iter()
+            .any(|ad| ad.author == "Richard Walker, Jamie Honan, Michael Hunold"),
+        "Expected pipeline to keep merged roster author block, got: {:?}",
+        a.iter().map(|ad| &ad.author).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_dense_name_email_author_lists_still_extract_with_copyright_present() {
+    let input = "Copyright (C) 2004 BULL SA.\n\nPaul Jackson <pj@sgi.com>\nChristoph Lameter <cl@gentwo.org>\nHidetoshi Seto <seto.hidetoshi@jp.fujitsu.com>\n";
+
+    let (_c, _h, authors) = detect_copyrights_from_text(input);
+    let values: Vec<&str> = authors
+        .iter()
+        .map(|author| author.author.as_str())
+        .collect();
+    assert!(
+        values.contains(&"Paul Jackson <pj@sgi.com>"),
+        "authors: {values:?}"
+    );
+    assert!(
+        values.contains(&"Christoph Lameter <cl@gentwo.org>"),
+        "authors: {values:?}"
+    );
+    assert!(
+        values.contains(&"Hidetoshi Seto <seto.hidetoshi@jp.fujitsu.com>"),
+        "authors: {values:?}"
+    );
+}
+
+#[test]
+fn test_developer_section_prose_is_not_extracted_as_author() {
+    let input = "stable/\n\tThis directory documents the interfaces that the developer has\n\tdefined to be stable.\n\nUsers:\t\tAll users of this interface who wish to be notified when\n\t\tit changes.  This is very important for interfaces in\n\t\tthe \"testing\" stage, so that kernel developers can work\n\t\twith userspace developers to ensure that things do not\n\t\tbreak in ways that are unacceptable.\n";
+
+    let (_c, _h, authors) = detect_copyrights_from_text(input);
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_modified_by_lines_extract_real_authors_without_cpusets_prose_false_positives() {
+    let input = "Written by Simon.Derr@bull.net\n- Modified by Paul Jackson <pj@sgi.com>\n- Modified by Christoph Lameter <cl@gentwo.org>\n- Modified by Paul Menage <menage@google.com>\n- Modified by Hidetoshi Seto <seto.hidetoshi@jp.fujitsu.com>\n\nCPUs and Memory Nodes, and attached tasks, are modified by writing\nto the appropriate file in that cpusets directory.\n\nExcept perhaps as modified by the task's NUMA mempolicy or cpuset\nconfiguration, so long as sufficient free memory pages are available.\n";
+
+    let (_c, _h, authors) = detect_copyrights_from_text(input);
+    let values: Vec<&str> = authors
+        .iter()
+        .map(|author| author.author.as_str())
+        .collect();
+    assert!(
+        values.contains(&"Simon.Derr@bull.net"),
+        "authors: {values:?}"
+    );
+    assert!(
+        values.contains(&"Paul Jackson <pj@sgi.com>"),
+        "authors: {values:?}"
+    );
+    assert!(
+        values.contains(&"Christoph Lameter <cl@gentwo.org>"),
+        "authors: {values:?}"
+    );
+    assert!(
+        values.contains(&"Paul Menage <menage@google.com>"),
+        "authors: {values:?}"
+    );
+    assert!(
+        values.contains(&"Hidetoshi Seto <seto.hidetoshi@jp.fujitsu.com>"),
+        "authors: {values:?}"
+    );
+    assert!(
+        !values
+            .iter()
+            .any(|value| value.contains("writing to the appropriate")),
+        "authors: {values:?}"
+    );
+    assert!(
+        !values.iter().any(|value| value.contains("NUMA mempolicy")),
+        "authors: {values:?}"
+    );
+}
+
+#[test]
+fn test_rst_field_author_and_maintainer_extracts_single_author() {
+    let input = ":License:\t\tGPLv2\n:Author & Maintainer:\tMiguel Ojeda <ojeda@kernel.org>\n:Date:\t\t\t2006-10-27\n";
+
+    let (_c, _h, authors) = detect_copyrights_from_text(input);
+    let values: Vec<&str> = authors
+        .iter()
+        .map(|author| author.author.as_str())
+        .collect();
+    assert!(
+        values.contains(&"Miguel Ojeda <ojeda@kernel.org>"),
+        "authors: {values:?}"
+    );
+}
+
+#[test]
+fn test_dash_bullet_changelog_lines_extract_individual_authors() {
+    let input = "- Written by Mydraal <vulpyne@vulpyne.net>\n- Updated by Adam Sulmicki <adam@cfar.umd.edu>\n- Updated by Jeremy M. Dolan <jmd@turbogeek.org> 2001/01/28 10:15:59\n- Added to by Crutcher Dunnavant <crutcher+kernel@datastacks.com>\n";
+
+    let (_c, _h, authors) = detect_copyrights_from_text(input);
+    let values: Vec<&str> = authors
+        .iter()
+        .map(|author| author.author.as_str())
+        .collect();
+    assert!(
+        values.contains(&"Mydraal <vulpyne@vulpyne.net>"),
+        "authors: {values:?}"
+    );
+    assert!(
+        values.contains(&"Adam Sulmicki <adam@cfar.umd.edu>"),
+        "authors: {values:?}"
+    );
+    assert!(
+        values.contains(&"Jeremy M. Dolan <jmd@turbogeek.org>"),
+        "authors: {values:?}"
+    );
+    assert!(
+        values.contains(&"Crutcher Dunnavant <crutcher+kernel@datastacks.com>"),
+        "authors: {values:?}"
+    );
+    assert!(
+        !values
+            .iter()
+            .any(|value| value.contains("Updated by Adam Sulmicki")),
+        "authors: {values:?}"
+    );
+}
+
+#[test]
+fn test_author_colon_dash_bullet_hwmon_roster_extracts_individual_authors() {
+    let input = "Authors:\n\t- Mark M. Hoffman <mhoffman@lightlink.com>\n\t- Ported to 2.6 by Eric J. Bowersox <ericb@aspsys.com>\n\t- Adapted to 2.6.20 by Carsten Emde <ce@osadl.org>\n\t- Modified for mainline integration by Hans J. Koch <hjk@hansjkoch.de>\n";
+
+    let (_c, _h, authors) = detect_copyrights_from_text(input);
+    let values: Vec<&str> = authors
+        .iter()
+        .map(|author| author.author.as_str())
+        .collect();
+    assert!(
+        values.contains(&"Mark M. Hoffman <mhoffman@lightlink.com>"),
+        "authors: {values:?}"
+    );
+    assert!(
+        values.contains(&"Eric J. Bowersox <ericb@aspsys.com>"),
+        "authors: {values:?}"
+    );
+    assert!(
+        values.contains(&"Carsten Emde <ce@osadl.org>"),
+        "authors: {values:?}"
+    );
+    assert!(
+        values.contains(&"Hans J. Koch <hjk@hansjkoch.de>"),
+        "authors: {values:?}"
+    );
+}
+
+#[test]
+fn test_passive_written_phrase_does_not_create_abi_author_false_positive() {
+    let input = "Description:\tWhen read, this file returns general data like firmware version.\n\t\tWhen written, the device can be reset.\n\t\tBefore reading this file, control has to be written to select\n\t\twhich profile to read.\n";
+
+    let (_c, _h, authors) = detect_copyrights_from_text(input);
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
 fn test_copyright_year_range_only_detected() {
     let input = "Copyright (c) 1995-1999.";
     let (c, _h, _a) = detect_copyrights_from_text(input);
