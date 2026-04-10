@@ -54,7 +54,7 @@ fn classify_key_files_marks_nested_ruby_license_from_file_references() {
             start_line: LineNumber::ONE,
             end_line: LineNumber::new(20).unwrap(),
             matcher: None,
-            score: MatchScore::PERFECT,
+            score: MatchScore::MAX,
             matched_length: Some(161),
             match_coverage: Some(100.0),
             rule_relevance: Some(100),

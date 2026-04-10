@@ -526,7 +526,7 @@ mod tests {
                     start_line: LineNumber::ONE,
                     end_line: LineNumber::ONE,
                     matcher: Some("parser-declared-license".to_string()),
-                    score: MatchScore::PERFECT,
+                    score: MatchScore::MAX,
                     matched_length: Some(1),
                     match_coverage: Some(100.0),
                     rule_relevance: Some(100),
