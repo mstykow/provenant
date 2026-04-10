@@ -9,9 +9,20 @@ use crate::models::{
     FileInfo, FileType, LicenseReference, LicenseRuleReference, Package, TopLevelDependency,
     TopLevelLicenseDetection,
 };
+use crate::output_schema::{
+    OutputFileInfo, OutputLicenseReference, OutputLicenseRuleReference, OutputMatch, OutputPackage,
+    OutputTopLevelDependency, OutputTopLevelLicenseDetection,
+};
 use crate::scanner::ProcessResult;
 
-use super::{normalize_paths, normalize_top_level_output_paths};
+type JsonInputParts = (
+    ProcessResult,
+    assembly::AssemblyResult,
+    Vec<TopLevelLicenseDetection>,
+    Vec<LicenseReference>,
+    Vec<LicenseRuleReference>,
+    Vec<String>,
+);
 
 #[cfg(test)]
 #[path = "json_input_test.rs"]
@@ -28,17 +39,17 @@ pub(crate) struct JsonScanInput {
     #[serde(default)]
     pub(crate) headers: Vec<JsonHeaderInput>,
     #[serde(default)]
-    pub(crate) files: Vec<FileInfo>,
+    pub(crate) files: Vec<OutputFileInfo>,
     #[serde(default)]
-    pub(crate) packages: Vec<Package>,
+    pub(crate) packages: Vec<OutputPackage>,
     #[serde(default)]
-    pub(crate) dependencies: Vec<TopLevelDependency>,
+    pub(crate) dependencies: Vec<OutputTopLevelDependency>,
     #[serde(default)]
-    pub(crate) license_detections: Vec<TopLevelLicenseDetection>,
+    pub(crate) license_detections: Vec<OutputTopLevelLicenseDetection>,
     #[serde(default)]
-    pub(crate) license_references: Vec<LicenseReference>,
+    pub(crate) license_references: Vec<OutputLicenseReference>,
     #[serde(default)]
-    pub(crate) license_rule_references: Vec<LicenseRuleReference>,
+    pub(crate) license_rule_references: Vec<OutputLicenseRuleReference>,
     #[serde(default)]
     pub(crate) excluded_count: usize,
 }
@@ -66,33 +77,61 @@ impl JsonScanInput {
             .sum()
     }
 
-    pub(crate) fn into_parts(
-        self,
-    ) -> (
-        ProcessResult,
-        assembly::AssemblyResult,
-        Vec<TopLevelLicenseDetection>,
-        Vec<LicenseReference>,
-        Vec<LicenseRuleReference>,
-        Vec<String>,
-    ) {
-        (
+    pub(crate) fn into_parts(self) -> Result<JsonInputParts> {
+        let files = self
+            .files
+            .iter()
+            .map(FileInfo::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| anyhow!("Failed to convert file from JSON: {}", e))?;
+        let packages = self
+            .packages
+            .iter()
+            .map(Package::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| anyhow!("Failed to convert package from JSON: {}", e))?;
+        let dependencies = self
+            .dependencies
+            .iter()
+            .map(TopLevelDependency::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| anyhow!("Failed to convert dependency from JSON: {}", e))?;
+        let license_detections = self
+            .license_detections
+            .iter()
+            .map(TopLevelLicenseDetection::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| anyhow!("Failed to convert license detection from JSON: {}", e))?;
+        let license_references = self
+            .license_references
+            .iter()
+            .map(LicenseReference::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| anyhow!("Failed to convert license reference from JSON: {}", e))?;
+        let license_rule_references = self
+            .license_rule_references
+            .iter()
+            .map(LicenseRuleReference::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| anyhow!("Failed to convert license rule reference from JSON: {}", e))?;
+
+        Ok((
             ProcessResult {
-                files: self.files,
+                files,
                 excluded_count: self.excluded_count,
             },
             assembly::AssemblyResult {
-                packages: self.packages,
-                dependencies: self.dependencies,
+                packages,
+                dependencies,
             },
-            self.license_detections,
-            self.license_references,
-            self.license_rule_references,
+            license_detections,
+            license_references,
+            license_rule_references,
             self.headers
                 .into_iter()
                 .flat_map(|header| header.errors)
                 .collect(),
-        )
+        ))
     }
 }
 
@@ -151,9 +190,9 @@ pub(crate) fn normalize_loaded_json_scan(
     if let Some(scan_root) = derive_json_scan_root(&loaded.files)
         && strip_root
     {
-        normalize_paths(&mut loaded.files, &scan_root, true, false);
+        normalize_output_paths(&mut loaded.files, &scan_root, true, false);
         normalize_loaded_top_level_detection_paths(loaded, &scan_root, true, false);
-        normalize_top_level_output_paths(
+        normalize_output_top_level_paths(
             &mut loaded.packages,
             &mut loaded.dependencies,
             &scan_root,
@@ -168,7 +207,7 @@ pub(crate) fn normalize_loaded_json_scan(
     normalize_loaded_header_errors(loaded, &original_paths);
 }
 
-fn derive_json_scan_root(files: &[FileInfo]) -> Option<String> {
+fn derive_json_scan_root(files: &[OutputFileInfo]) -> Option<String> {
     let mut directories: Vec<&str> = files
         .iter()
         .filter(|file| file.file_type == FileType::Directory)
@@ -337,4 +376,165 @@ fn normalize_loaded_detection_path(
     }
 
     None
+}
+
+fn normalize_output_paths(
+    files: &mut [OutputFileInfo],
+    scan_root: &str,
+    strip_root: bool,
+    full_root: bool,
+) {
+    for entry in files.iter_mut() {
+        if let Some(normalized_path) =
+            normalize_path_value(&entry.path, scan_root, strip_root, full_root)
+        {
+            entry.path = normalized_path;
+        }
+
+        normalize_output_match_paths(&mut entry.license_clues, scan_root, strip_root, full_root);
+
+        for detection in &mut entry.license_detections {
+            normalize_output_match_paths(&mut detection.matches, scan_root, strip_root, full_root);
+        }
+
+        for package_data in &mut entry.package_data {
+            for file_reference in &mut package_data.file_references {
+                if let Some(normalized_path) =
+                    normalize_path_value(&file_reference.path, scan_root, strip_root, full_root)
+                {
+                    file_reference.path = normalized_path;
+                }
+            }
+
+            for detection in &mut package_data.license_detections {
+                normalize_output_match_paths(
+                    &mut detection.matches,
+                    scan_root,
+                    strip_root,
+                    full_root,
+                );
+            }
+
+            for detection in &mut package_data.other_license_detections {
+                normalize_output_match_paths(
+                    &mut detection.matches,
+                    scan_root,
+                    strip_root,
+                    full_root,
+                );
+            }
+        }
+    }
+}
+
+fn normalize_output_match_paths(
+    matches: &mut [OutputMatch],
+    scan_root: &str,
+    strip_root: bool,
+    full_root: bool,
+) {
+    for detection_match in matches {
+        if let Some(from_file) = detection_match.from_file.as_mut()
+            && let Some(normalized_path) =
+                normalize_path_value(from_file.as_str(), scan_root, strip_root, full_root)
+        {
+            *from_file = normalized_path;
+        }
+    }
+}
+
+fn normalize_path_value(
+    path: &str,
+    scan_root: &str,
+    strip_root: bool,
+    full_root: bool,
+) -> Option<String> {
+    let current_path = PathBuf::from(path);
+
+    if full_root {
+        let absolute_candidate = if current_path.is_absolute() {
+            current_path.clone()
+        } else {
+            env::current_dir()
+                .map(|cwd| cwd.join(&current_path))
+                .unwrap_or(current_path.clone())
+        };
+        let absolute = absolute_candidate
+            .canonicalize()
+            .unwrap_or(absolute_candidate);
+        return Some(
+            absolute
+                .to_string_lossy()
+                .replace('\\', "/")
+                .trim_matches('/')
+                .to_string(),
+        );
+    }
+
+    if strip_root {
+        let scan_root_path = Path::new(scan_root);
+        let strip_base = if scan_root_path.is_file() {
+            scan_root_path.parent().unwrap_or_else(|| Path::new(""))
+        } else {
+            scan_root_path
+        };
+
+        if current_path == scan_root_path
+            && let Some(file_name) = scan_root_path.file_name().and_then(|name| name.to_str())
+        {
+            return Some(file_name.to_string());
+        }
+
+        if let Some(stripped) = strip_root_prefix(&current_path, strip_base) {
+            return Some(stripped.to_string_lossy().to_string());
+        }
+    }
+
+    None
+}
+
+fn strip_root_prefix(path: &Path, root: &Path) -> Option<PathBuf> {
+    if let Ok(stripped) = path.strip_prefix(root)
+        && !stripped.as_os_str().is_empty()
+    {
+        return Some(stripped.to_path_buf());
+    }
+
+    let canonical_path = path.canonicalize().ok()?;
+    let canonical_root = root.canonicalize().ok()?;
+    let stripped = canonical_path.strip_prefix(canonical_root).ok()?;
+    if stripped.as_os_str().is_empty() {
+        None
+    } else {
+        Some(stripped.to_path_buf())
+    }
+}
+
+fn normalize_output_top_level_paths(
+    packages: &mut [OutputPackage],
+    dependencies: &mut [OutputTopLevelDependency],
+    scan_root: &str,
+    strip_root: bool,
+) {
+    if !strip_root {
+        return;
+    }
+
+    for package in packages {
+        for datafile_path in &mut package.datafile_paths {
+            if let Some(normalized_path) =
+                normalize_path_value(datafile_path, scan_root, true, false)
+            {
+                *datafile_path = normalized_path;
+            }
+        }
+    }
+
+    for dependency in dependencies {
+        if let Some(normalized_path) =
+            normalize_path_value(&dependency.datafile_path, scan_root, true, false)
+        {
+            dependency.datafile_path = normalized_path;
+        }
+    }
 }

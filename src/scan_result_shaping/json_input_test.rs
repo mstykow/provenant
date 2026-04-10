@@ -1,8 +1,13 @@
 use super::*;
-use crate::models::LineNumber;
+use crate::output_schema::{OutputMatch, OutputTopLevelLicenseDetection};
 use crate::scan_result_shaping::test_fixtures::json_file;
 use serde_json::json;
 use std::fs;
+
+fn output_json_file(path: &str, file_type: crate::models::FileType) -> OutputFileInfo {
+    let internal = json_file(path, file_type);
+    OutputFileInfo::from(&internal)
+}
 
 #[test]
 fn load_scan_from_json_reads_files_and_metadata_sections() {
@@ -74,23 +79,23 @@ fn normalize_loaded_json_scan_applies_strip_root_per_loaded_input() {
             ],
         }],
         files: vec![
-            json_file("archive/root", crate::models::FileType::Directory),
-            json_file("archive/root/src/main.rs", crate::models::FileType::File),
+            output_json_file("archive/root", crate::models::FileType::Directory),
+            output_json_file("archive/root/src/main.rs", crate::models::FileType::File),
         ],
         packages: vec![],
         dependencies: vec![],
-        license_detections: vec![crate::models::TopLevelLicenseDetection {
+        license_detections: vec![OutputTopLevelLicenseDetection {
             identifier: "mit-id".to_string(),
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             detection_count: 1,
             detection_log: vec![],
-            reference_matches: vec![crate::models::Match {
+            reference_matches: vec![OutputMatch {
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
                 from_file: Some("archive/root/src/main.rs".to_string()),
-                start_line: LineNumber::ONE,
-                end_line: LineNumber::ONE,
+                start_line: 1,
+                end_line: 1,
                 matcher: None,
                 score: 100.0,
                 matched_length: None,
@@ -99,8 +104,8 @@ fn normalize_loaded_json_scan_applies_strip_root_per_loaded_input() {
                 rule_identifier: None,
                 rule_url: None,
                 matched_text: None,
-                referenced_filenames: None,
                 matched_text_diagnostics: None,
+                referenced_filenames: None,
             }],
         }],
         license_references: vec![],
@@ -130,24 +135,24 @@ fn normalize_loaded_json_scan_trims_full_root_display_without_absolutizing() {
         headers: vec![JsonHeaderInput {
             errors: vec!["Path: /tmp/archive/root/src/main.rs".to_string()],
         }],
-        files: vec![json_file(
+        files: vec![output_json_file(
             "/tmp/archive/root/src/main.rs",
             crate::models::FileType::File,
         )],
         packages: vec![],
         dependencies: vec![],
-        license_detections: vec![crate::models::TopLevelLicenseDetection {
+        license_detections: vec![OutputTopLevelLicenseDetection {
             identifier: "mit-id".to_string(),
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             detection_count: 1,
             detection_log: vec![],
-            reference_matches: vec![crate::models::Match {
+            reference_matches: vec![OutputMatch {
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
                 from_file: Some("/tmp/archive/root/src/main.rs".to_string()),
-                start_line: LineNumber::ONE,
-                end_line: LineNumber::ONE,
+                start_line: 1,
+                end_line: 1,
                 matcher: None,
                 score: 100.0,
                 matched_length: None,
@@ -156,8 +161,8 @@ fn normalize_loaded_json_scan_trims_full_root_display_without_absolutizing() {
                 rule_identifier: None,
                 rule_url: None,
                 matched_text: None,
-                referenced_filenames: None,
                 matched_text_diagnostics: None,
+                referenced_filenames: None,
             }],
         }],
         license_references: vec![],
@@ -186,7 +191,10 @@ fn into_parts_preserves_imported_header_errors_as_extra_errors() {
         headers: vec![JsonHeaderInput {
             errors: vec!["Path: src/main.rs".to_string()],
         }],
-        files: vec![json_file("src/main.rs", crate::models::FileType::File)],
+        files: vec![output_json_file(
+            "src/main.rs",
+            crate::models::FileType::File,
+        )],
         packages: vec![],
         dependencies: vec![],
         license_detections: vec![],
@@ -196,7 +204,7 @@ fn into_parts_preserves_imported_header_errors_as_extra_errors() {
     };
 
     let (_process_result, _assembly_result, _dets, _refs, _rule_refs, extra_errors) =
-        loaded.into_parts();
+        loaded.into_parts().expect("into_parts should succeed");
 
     assert_eq!(extra_errors, vec!["Path: src/main.rs"]);
 }

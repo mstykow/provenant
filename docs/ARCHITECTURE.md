@@ -86,6 +86,7 @@ Provenant follows the same broad stage model as ScanCode, but the concrete imple
 - **Package Assembly**: Sibling and nested merge strategies for combining related manifests
 - **Text Detection**: License detection (n-gram matching), copyright detection (4-stage pipeline), email/URL extraction
 - **Post-Processing**: Summarization, tallies, classification
+- **Output Schema**: Dedicated serde-enabled types in `src/output_schema/` that define the ScanCode-compatible JSON schema, separate from internal domain types
 - **Output**: JSON, JSON Lines, YAML, HTML, SPDX (TV/RDF), CycloneDX (JSON/XML), Debian copyright, and custom templates
 - **Testing Infrastructure**: Doctests, unit tests, golden tests, parser-local scanner/assembly contract tests, and system integration tests
 - **Infrastructure**: Caching, enhanced progress tracking, static integration points
@@ -385,6 +386,7 @@ The codebase follows a modular architecture:
 
 - **`src/parsers/`** - Package manifest parsers (one per ecosystem)
 - **`src/models/`** - Core data structures (PackageData, Dependency, DatasourceId, etc.)
+- **`src/output_schema/`** - ScanCode-compatible output schema types (one file per type, with serde for JSON output)
 - **`src/assembly/`** - Package assembly system (merging related manifests)
 - **`src/scanner/`** - File system traversal and orchestration
 - **`docs/`** - Architecture decisions, improvement docs, and guides
@@ -523,6 +525,16 @@ Module location: `src/finder/`
 - Summary statistics
 
 ### Output Format Support
+
+**Internal types vs. output schema types:**
+
+Provenant separates internal domain types from the ScanCode-compatible JSON output schema:
+
+- **Internal types** (`src/models/`) carry domain invariants (e.g., `LineNumber` wraps `NonZeroUsize`, `Sha1Digest` validates hex length). They retain serde only for cache round-tripping and `--from-json` deserialization.
+- **Output schema types** (`src/output_schema/`) are dedicated serde-enabled types that define the public JSON schema: field renames, conditional omission, type widening (`LineNumber` → `u64`, digests → `Option<String>`), and the `FileInfo` info-surface gating logic.
+- **Conversion boundary** in `main.rs` converts `models::Output` → `output_schema::Output` before serialization. The `--from-json` path deserializes into output schema types and converts back via `TryFrom`.
+
+See [ADR 0008: Output Schema Type Separation](adr/0008-output-schema-separation.md) for the full decision record.
 
 **Implementation and parity tracking:**
 

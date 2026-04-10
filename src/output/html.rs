@@ -3,7 +3,8 @@ use std::io::{self, Write};
 
 use tera::{Context, Tera};
 
-use crate::models::{FileType, Output};
+use crate::models::FileType;
+use crate::output_schema::Output;
 
 use super::shared::{io_other, sorted_files};
 
@@ -32,17 +33,11 @@ pub(crate) fn write_html_report(output: &Output, writer: &mut dyn Write) -> io::
         file_row.insert("size".to_string(), file.size.to_string());
         file_row.insert(
             "sha1".to_string(),
-            file.sha1
-                .as_ref()
-                .map(|d| d.as_hex())
-                .unwrap_or("None".to_string()),
+            file.sha1.clone().unwrap_or_else(|| "None".to_string()),
         );
         file_row.insert(
             "md5".to_string(),
-            file.md5
-                .as_ref()
-                .map(|d| d.as_hex())
-                .unwrap_or("None".to_string()),
+            file.md5.clone().unwrap_or_else(|| "None".to_string()),
         );
         file_row.insert("files_count".to_string(), String::new());
         file_row.insert("mime_type".to_string(), html_opt(file.mime_type.as_deref()));
@@ -83,8 +78,8 @@ pub(crate) fn write_html_report(output: &Output, writer: &mut dyn Write) -> io::
         for c in &file.copyrights {
             let mut row = BTreeMap::new();
             row.insert("path".to_string(), file.path.clone());
-            row.insert("start".to_string(), c.start_line.get().to_string());
-            row.insert("end".to_string(), c.end_line.get().to_string());
+            row.insert("start".to_string(), c.start_line.to_string());
+            row.insert("end".to_string(), c.end_line.to_string());
             row.insert("what".to_string(), "copyright".to_string());
             row.insert("value".to_string(), c.copyright.clone());
             license_copyright_rows.push(row);
@@ -93,8 +88,8 @@ pub(crate) fn write_html_report(output: &Output, writer: &mut dyn Write) -> io::
             for m in &detection.matches {
                 let mut row = BTreeMap::new();
                 row.insert("path".to_string(), file.path.clone());
-                row.insert("start".to_string(), m.start_line.get().to_string());
-                row.insert("end".to_string(), m.end_line.get().to_string());
+                row.insert("start".to_string(), m.start_line.to_string());
+                row.insert("end".to_string(), m.end_line.to_string());
                 row.insert("what".to_string(), "license".to_string());
                 row.insert("value".to_string(), detection.license_expression.clone());
                 license_copyright_rows.push(row);
@@ -105,32 +100,32 @@ pub(crate) fn write_html_report(output: &Output, writer: &mut dyn Write) -> io::
             let mut row = BTreeMap::new();
             row.insert("path".to_string(), file.path.clone());
             row.insert("holder".to_string(), h.holder.clone());
-            row.insert("start".to_string(), h.start_line.get().to_string());
-            row.insert("end".to_string(), h.end_line.get().to_string());
+            row.insert("start".to_string(), h.start_line.to_string());
+            row.insert("end".to_string(), h.end_line.to_string());
             holder_rows.push(row);
         }
         for a in &file.authors {
             let mut row = BTreeMap::new();
             row.insert("path".to_string(), file.path.clone());
             row.insert("author".to_string(), a.author.clone());
-            row.insert("start".to_string(), a.start_line.get().to_string());
-            row.insert("end".to_string(), a.end_line.get().to_string());
+            row.insert("start".to_string(), a.start_line.to_string());
+            row.insert("end".to_string(), a.end_line.to_string());
             author_rows.push(row);
         }
         for e in &file.emails {
             let mut row = BTreeMap::new();
             row.insert("path".to_string(), file.path.clone());
             row.insert("email".to_string(), e.email.clone());
-            row.insert("start".to_string(), e.start_line.get().to_string());
-            row.insert("end".to_string(), e.end_line.get().to_string());
+            row.insert("start".to_string(), e.start_line.to_string());
+            row.insert("end".to_string(), e.end_line.to_string());
             email_rows.push(row);
         }
         for u in &file.urls {
             let mut row = BTreeMap::new();
             row.insert("path".to_string(), file.path.clone());
             row.insert("url".to_string(), u.url.clone());
-            row.insert("start".to_string(), u.start_line.get().to_string());
-            row.insert("end".to_string(), u.end_line.get().to_string());
+            row.insert("start".to_string(), u.start_line.to_string());
+            row.insert("end".to_string(), u.end_line.to_string());
             url_rows.push(row);
         }
 

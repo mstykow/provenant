@@ -62,7 +62,6 @@ static ASSEMBLER_CONFIG_LOOKUP: LazyLock<HashMap<DatasourceId, &'static Assemble
 
 /// Result of the assembly phase: top-level packages and dependencies,
 /// plus updated file-to-package associations.
-#[derive(serde::Serialize)]
 pub struct AssemblyResult {
     pub packages: Vec<Package>,
     pub dependencies: Vec<TopLevelDependency>,

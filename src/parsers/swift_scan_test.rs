@@ -180,9 +180,19 @@ mod tests {
             })
             .collect();
 
+        let output_packages: Vec<crate::output_schema::OutputPackage> = assembly_result
+            .packages
+            .iter()
+            .map(crate::output_schema::OutputPackage::from)
+            .collect();
+        let output_deps: Vec<crate::output_schema::OutputTopLevelDependency> = assembly_result
+            .dependencies
+            .iter()
+            .map(crate::output_schema::OutputTopLevelDependency::from)
+            .collect();
         json!({
-            "packages": assembly_result.packages,
-            "dependencies": assembly_result.dependencies,
+            "packages": output_packages,
+            "dependencies": output_deps,
             "files": files_json,
         })
     }

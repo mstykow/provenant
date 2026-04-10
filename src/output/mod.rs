@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
 
-use crate::models::{Output, Sha1Digest};
+use crate::output_schema::Output;
 
 mod cyclonedx;
 mod debian;
@@ -11,10 +11,6 @@ mod shared;
 mod spdx;
 mod template;
 
-pub(crate) const EMPTY_SHA1_DIGEST: Sha1Digest = Sha1Digest::from_bytes([
-    0xda, 0x39, 0xa3, 0xee, 0x5e, 0x6b, 0x4b, 0x0d, 0x32, 0x55, 0xbf, 0xef, 0x95, 0x60, 0x18, 0x90,
-    0xaf, 0xd8, 0x07, 0x09,
-]);
 pub(crate) const SPDX_DOCUMENT_NOTICE: &str = "Generated with Provenant and provided on an \"AS IS\" BASIS, WITHOUT WARRANTIES\nOR CONDITIONS OF ANY KIND, either express or implied. No content created from\nProvenant should be considered or used as legal advice. Consult an attorney\nfor legal advice.\nProvenant is a free software code scanning tool.\nVisit https://github.com/mstykow/provenant/ for support and download.\nSPDX License List: 3.27";
 const OUTPUT_BUFFER_SIZE: usize = 1024 * 1024;
 
@@ -120,12 +116,13 @@ mod tests {
     use crate::models::{
         Author, Copyright, ExtraData, FileInfo, FileType, GitSha1, Header, Holder,
         LicenseDetection, LineNumber, Match, Md5Digest, OutputEmail, OutputURL, PackageData,
-        Sha256Digest, SystemEnvironment,
+        Sha1Digest, Sha256Digest, SystemEnvironment,
     };
+    use crate::output_schema::OutputFileInfo;
 
     #[test]
     fn test_yaml_writer_outputs_yaml() {
-        let output = sample_output();
+        let output = Output::from(&sample_internal_output());
         let mut bytes = Vec::new();
         writer_for_format(OutputFormat::Yaml)
             .write(&output, &mut bytes, &OutputWriteConfig::default())
@@ -137,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_json_lines_writer_outputs_parseable_lines() {
-        let output = sample_output();
+        let output = Output::from(&sample_internal_output());
         let mut bytes = Vec::new();
         writer_for_format(OutputFormat::JsonLines)
             .write(&output, &mut bytes, &OutputWriteConfig::default())
@@ -153,12 +150,13 @@ mod tests {
 
     #[test]
     fn test_debian_writer_outputs_dep5_style_document() {
-        let mut output = sample_output();
-        output.files[0].license_expression = Some("mit".to_string());
-        output.files[0].license_detections[0].matches[0].matched_text = Some(
+        let mut internal = sample_internal_output();
+        internal.files[0].license_expression = Some("mit".to_string());
+        internal.files[0].license_detections[0].matches[0].matched_text = Some(
             "Permission is hereby granted, free of charge, to any person obtaining a copy"
                 .to_string(),
         );
+        let output = Output::from(&internal);
 
         let mut bytes = Vec::new();
         writer_for_format(OutputFormat::Debian)
@@ -178,8 +176,8 @@ mod tests {
 
     #[test]
     fn test_debian_writer_skips_directories_and_deduplicates_license_texts() {
-        let mut output = sample_output();
-        output.files.insert(
+        let mut internal = sample_internal_output();
+        internal.files.insert(
             0,
             FileInfo::new(
                 "src".to_string(),
@@ -208,10 +206,10 @@ mod tests {
                 vec![],
             ),
         );
-        output.files[1].license_expression = Some("mit".to_string());
-        output.files[1].license_detections[0].matches[0].matched_text =
+        internal.files[1].license_expression = Some("mit".to_string());
+        internal.files[1].license_detections[0].matches[0].matched_text =
             Some("Same text".to_string());
-        output.files[1].license_detections[0].matches.push(Match {
+        internal.files[1].license_detections[0].matches.push(Match {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("src/main.rs".to_string()),
@@ -228,6 +226,7 @@ mod tests {
             referenced_filenames: None,
             matched_text_diagnostics: None,
         });
+        let output = Output::from(&internal);
 
         let mut bytes = Vec::new();
         writer_for_format(OutputFormat::Debian)
@@ -268,7 +267,8 @@ mod tests {
             vec![],
         );
 
-        let value = serde_json::to_value(&file).expect("file info serializes");
+        let schema_file = OutputFileInfo::from(&file);
+        let value = serde_json::to_value(&schema_file).expect("file info serializes");
         let object = value.as_object().expect("file info object");
 
         assert!(!object.contains_key("date"));
@@ -303,7 +303,7 @@ mod tests {
             Some("text".to_string()),
             42,
             Some("2026-01-01T00:00:00Z".to_string()),
-            Some(EMPTY_SHA1_DIGEST),
+            Some(Sha1Digest::from_hex("da39a3ee5e6b4b0d3255bfef95601890afd80709").unwrap()),
             Some(Md5Digest::from_hex("d41d8cd98f00b204e9800998ecf8427e").unwrap()),
             Some(
                 Sha256Digest::from_hex(
@@ -325,7 +325,8 @@ mod tests {
             vec![],
         );
         file.license_policy = Some(vec![]);
-        file.sha1_git = Some(GitSha1::from_bytes(*EMPTY_SHA1_DIGEST.as_bytes()));
+        file.sha1_git =
+            Some(GitSha1::from_hex("da39a3ee5e6b4b0d3255bfef95601890afd80709").unwrap());
         file.is_binary = Some(false);
         file.is_text = Some(true);
         file.is_archive = Some(false);
@@ -336,7 +337,8 @@ mod tests {
         file.dirs_count = Some(0);
         file.size_count = Some(0);
 
-        let value = serde_json::to_value(&file).expect("file info serializes");
+        let schema_file = OutputFileInfo::from(&file);
+        let value = serde_json::to_value(&schema_file).expect("file info serializes");
         let object = value.as_object().expect("file info object");
 
         assert_eq!(object.get("license_policy"), Some(&serde_json::json!([])));
@@ -350,8 +352,9 @@ mod tests {
 
     #[test]
     fn test_json_lines_writer_sorts_files_by_path_for_reproducibility() {
-        let mut output = sample_output();
-        output.files.reverse();
+        let mut internal = sample_internal_output();
+        internal.files.reverse();
+        let output = Output::from(&internal);
         let mut bytes = Vec::new();
         writer_for_format(OutputFormat::JsonLines)
             .write(&output, &mut bytes, &OutputWriteConfig::default())
@@ -374,7 +377,7 @@ mod tests {
 
     #[test]
     fn test_spdx_tag_value_writer_contains_required_fields() {
-        let output = sample_output();
+        let output = Output::from(&sample_internal_output());
         let mut bytes = Vec::new();
         writer_for_format(OutputFormat::SpdxTv)
             .write(
@@ -395,7 +398,7 @@ mod tests {
 
     #[test]
     fn test_spdx_rdf_writer_outputs_xml() {
-        let output = sample_output();
+        let output = Output::from(&sample_internal_output());
         let mut bytes = Vec::new();
         writer_for_format(OutputFormat::SpdxRdf)
             .write(
@@ -416,7 +419,7 @@ mod tests {
 
     #[test]
     fn test_spdx_writers_emit_real_file_and_package_license_info() {
-        let output = sample_output();
+        let output = Output::from(&sample_internal_output());
 
         let mut tv_bytes = Vec::new();
         writer_for_format(OutputFormat::SpdxTv)
@@ -465,8 +468,8 @@ mod tests {
 
     #[test]
     fn test_spdx_writers_emit_license_ref_metadata_and_matched_text() {
-        let mut output = sample_output();
-        output.files[0].license_detections = vec![LicenseDetection {
+        let mut internal = sample_internal_output();
+        internal.files[0].license_detections = vec![LicenseDetection {
             license_expression: "unknown-license-reference".to_string(),
             license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
             matches: vec![Match {
@@ -490,7 +493,7 @@ mod tests {
             detection_log: vec![],
             identifier: Some("unknown-ref-id".to_string()),
         }];
-        output.license_references = vec![crate::models::LicenseReference {
+        internal.license_references = vec![crate::models::LicenseReference {
             key: Some("unknown-license-reference".to_string()),
             language: Some("en".to_string()),
             name: "Unknown License Reference".to_string(),
@@ -521,6 +524,7 @@ mod tests {
             spdx_url: None,
             text: "Unused fallback text".to_string(),
         }];
+        let output = Output::from(&internal);
 
         let mut tv_bytes = Vec::new();
         writer_for_format(OutputFormat::SpdxTv)
@@ -575,7 +579,7 @@ mod tests {
 
     #[test]
     fn test_cyclonedx_json_writer_outputs_bom() {
-        let output = sample_output();
+        let output = Output::from(&sample_internal_output());
         let mut bytes = Vec::new();
         writer_for_format(OutputFormat::CycloneDxJson)
             .write(&output, &mut bytes, &OutputWriteConfig::default())
@@ -589,8 +593,8 @@ mod tests {
 
     #[test]
     fn test_json_writer_includes_summary_and_key_file_flags() {
-        let mut output = sample_output();
-        output.summary = Some(crate::models::Summary {
+        let mut internal = sample_internal_output();
+        internal.summary = Some(crate::models::Summary {
             declared_license_expression: Some("apache-2.0".to_string()),
             license_clarity_score: Some(crate::models::LicenseClarityScore {
                 score: 100,
@@ -622,9 +626,10 @@ mod tests {
                 count: 2,
             }],
         });
-        output.files[0].is_legal = true;
-        output.files[0].is_top_level = true;
-        output.files[0].is_key_file = true;
+        internal.files[0].is_legal = true;
+        internal.files[0].is_top_level = true;
+        internal.files[0].is_key_file = true;
+        let output = Output::from(&internal);
 
         let mut bytes = Vec::new();
         writer_for_format(OutputFormat::Json)
@@ -653,8 +658,8 @@ mod tests {
 
     #[test]
     fn test_json_and_json_lines_writers_include_top_level_tallies() {
-        let mut output = sample_output();
-        output.tallies = Some(crate::models::Tallies {
+        let mut internal = sample_internal_output();
+        internal.tallies = Some(crate::models::Tallies {
             detected_license_expression: vec![crate::models::TallyEntry {
                 value: Some("mit".to_string()),
                 count: 2,
@@ -676,6 +681,7 @@ mod tests {
                 count: 1,
             }],
         });
+        let output = Output::from(&internal);
 
         let mut json_bytes = Vec::new();
         writer_for_format(OutputFormat::Json)
@@ -702,8 +708,8 @@ mod tests {
 
     #[test]
     fn test_json_and_json_lines_writers_include_key_file_tallies() {
-        let mut output = sample_output();
-        output.tallies_of_key_files = Some(crate::models::Tallies {
+        let mut internal = sample_internal_output();
+        internal.tallies_of_key_files = Some(crate::models::Tallies {
             detected_license_expression: vec![crate::models::TallyEntry {
                 value: Some("apache-2.0".to_string()),
                 count: 1,
@@ -716,6 +722,7 @@ mod tests {
                 count: 1,
             }],
         });
+        let output = Output::from(&internal);
 
         let mut json_bytes = Vec::new();
         writer_for_format(OutputFormat::Json)
@@ -742,8 +749,8 @@ mod tests {
 
     #[test]
     fn test_json_and_json_lines_writers_include_file_tallies() {
-        let mut output = sample_output();
-        output.files[0].tallies = Some(crate::models::Tallies {
+        let mut internal = sample_internal_output();
+        internal.files[0].tallies = Some(crate::models::Tallies {
             detected_license_expression: vec![crate::models::TallyEntry {
                 value: Some("mit".to_string()),
                 count: 1,
@@ -759,6 +766,7 @@ mod tests {
                 count: 1,
             }],
         });
+        let output = Output::from(&internal);
 
         let mut json_bytes = Vec::new();
         writer_for_format(OutputFormat::Json)
@@ -781,9 +789,9 @@ mod tests {
 
     #[test]
     fn test_json_and_json_lines_writers_include_facets_and_tallies_by_facet() {
-        let mut output = sample_output();
-        output.files[0].facets = vec!["core".to_string(), "docs".to_string()];
-        output.tallies_by_facet = Some(vec![crate::models::FacetTallies {
+        let mut internal = sample_internal_output();
+        internal.files[0].facets = vec!["core".to_string(), "docs".to_string()];
+        internal.tallies_by_facet = Some(vec![crate::models::FacetTallies {
             facet: "core".to_string(),
             tallies: crate::models::Tallies {
                 detected_license_expression: vec![crate::models::TallyEntry {
@@ -796,6 +804,7 @@ mod tests {
                 programming_language: vec![],
             },
         }]);
+        let output = Output::from(&internal);
 
         let mut json_bytes = Vec::new();
         writer_for_format(OutputFormat::Json)
@@ -820,8 +829,8 @@ mod tests {
 
     #[test]
     fn test_json_and_json_lines_writers_include_top_level_license_references() {
-        let mut output = sample_output();
-        output.license_references = vec![crate::models::LicenseReference {
+        let mut internal = sample_internal_output();
+        internal.license_references = vec![crate::models::LicenseReference {
             key: Some("mit".to_string()),
             language: Some("en".to_string()),
             name: "MIT License".to_string(),
@@ -852,7 +861,7 @@ mod tests {
             spdx_url: None,
             text: "MIT text".to_string(),
         }];
-        output.license_rule_references = vec![crate::models::LicenseRuleReference {
+        internal.license_rule_references = vec![crate::models::LicenseRuleReference {
             identifier: "license-clue_1.RULE".to_string(),
             license_expression: "unknown-license-reference".to_string(),
             is_license_text: false,
@@ -881,6 +890,7 @@ mod tests {
             ignorable_emails: vec![],
             text: None,
         }];
+        let output = Output::from(&internal);
 
         let mut json_bytes = Vec::new();
         writer_for_format(OutputFormat::Json)
@@ -942,8 +952,8 @@ mod tests {
 
     #[test]
     fn test_json_and_json_lines_writers_include_top_level_license_detections() {
-        let mut output = sample_output();
-        output.license_detections = vec![crate::models::TopLevelLicenseDetection {
+        let mut internal = sample_internal_output();
+        internal.license_detections = vec![crate::models::TopLevelLicenseDetection {
             identifier: "mit-id".to_string(),
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
@@ -967,6 +977,7 @@ mod tests {
                 matched_text_diagnostics: None,
             }],
         }];
+        let output = Output::from(&internal);
 
         let mut json_bytes = Vec::new();
         writer_for_format(OutputFormat::Json)
@@ -991,7 +1002,7 @@ mod tests {
 
     #[test]
     fn test_cyclonedx_xml_writer_outputs_xml() {
-        let output = sample_output();
+        let output = Output::from(&sample_internal_output());
         let mut bytes = Vec::new();
         writer_for_format(OutputFormat::CycloneDxXml)
             .write(&output, &mut bytes, &OutputWriteConfig::default())
@@ -1004,8 +1015,8 @@ mod tests {
 
     #[test]
     fn test_cyclonedx_json_includes_component_license_expression() {
-        let mut output = sample_output();
-        output.packages = vec![crate::models::Package {
+        let mut internal = sample_internal_output();
+        internal.packages = vec![crate::models::Package {
             package_type: Some(crate::models::PackageType::Maven),
             namespace: Some("example".to_string()),
             name: Some("gradle-project".to_string()),
@@ -1049,6 +1060,7 @@ mod tests {
             package_uid: "pkg:maven/example/gradle-project@1.0.0?uuid=test".to_string(),
             datafile_paths: vec![],
         }];
+        let output = Output::from(&internal);
 
         let mut bytes = Vec::new();
         writer_for_format(OutputFormat::CycloneDxJson)
@@ -1130,7 +1142,7 @@ mod tests {
 
     #[test]
     fn test_html_writer_outputs_html_document() {
-        let output = sample_output();
+        let output = Output::from(&sample_internal_output());
         let mut bytes = Vec::new();
         writer_for_format(OutputFormat::Html)
             .write(&output, &mut bytes, &OutputWriteConfig::default())
@@ -1142,7 +1154,7 @@ mod tests {
 
     #[test]
     fn test_custom_template_writer_renders_output_context() {
-        let output = sample_output();
+        let output = Output::from(&sample_internal_output());
         let temp_dir = tempfile::tempdir().expect("tempdir should be created");
         let template_path = temp_dir.path().join("template.tera");
         fs::write(
@@ -1169,8 +1181,8 @@ mod tests {
         assert!(rendered.contains("files=1"));
     }
 
-    fn sample_output() -> Output {
-        Output {
+    fn sample_internal_output() -> crate::models::Output {
+        crate::models::Output {
             summary: None,
             tallies: None,
             tallies_of_key_files: None,
@@ -1206,7 +1218,7 @@ mod tests {
                 None,
                 42,
                 None,
-                Some(EMPTY_SHA1_DIGEST),
+                Some(Sha1Digest::from_hex("da39a3ee5e6b4b0d3255bfef95601890afd80709").unwrap()),
                 Some(Md5Digest::from_hex("d41d8cd98f00b204e9800998ecf8427e").unwrap()),
                 Some(
                     Sha256Digest::from_hex(

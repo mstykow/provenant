@@ -261,9 +261,22 @@ fn from_json_with_no_assemble_preserves_preloaded_package_sections() {
     let parsed = load_scan_from_json(temp_path.to_str().expect("utf-8 path"))
         .expect("from-json loading should succeed");
 
+    let packages: Vec<crate::models::Package> = parsed
+        .packages
+        .iter()
+        .map(crate::models::Package::try_from)
+        .collect::<Result<Vec<_>, _>>()
+        .expect("package conversion should succeed");
+    let dependencies: Vec<crate::models::TopLevelDependency> = parsed
+        .dependencies
+        .iter()
+        .map(crate::models::TopLevelDependency::try_from)
+        .collect::<Result<Vec<_>, _>>()
+        .expect("dependency conversion should succeed");
+
     let preloaded = assembly::AssemblyResult {
-        packages: parsed.packages,
-        dependencies: parsed.dependencies,
+        packages,
+        dependencies,
     };
 
     let cli = crate::cli::Cli::try_parse_from([
@@ -318,10 +331,10 @@ fn validate_scan_option_compatibility_rejects_mark_source_without_info() {
 fn from_json_skips_final_native_projection_block() {
     let mut loaded = JsonScanInput {
         headers: vec![],
-        files: vec![json_file(
+        files: vec![crate::output_schema::OutputFileInfo::from(&json_file(
             "/tmp/archive/root/src/main.rs",
             crate::models::FileType::File,
-        )],
+        ))],
         packages: vec![],
         dependencies: vec![],
         license_detections: vec![],
@@ -343,8 +356,14 @@ fn from_json_skips_final_native_projection_block() {
     normalize_loaded_json_scan(&mut loaded, false, true);
 
     if !cli.from_json && (cli.strip_root || cli.full_root) {
+        let mut files: Vec<crate::models::FileInfo> = loaded
+            .files
+            .iter()
+            .map(crate::models::FileInfo::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .expect("file conversion should succeed");
         normalize_paths(
-            &mut loaded.files,
+            &mut files,
             cli.dir_path.first().expect("input path exists"),
             cli.strip_root,
             cli.full_root,
@@ -356,20 +375,8 @@ fn from_json_skips_final_native_projection_block() {
 
 #[test]
 fn from_json_loaded_manifest_detections_can_be_recomputed_into_top_level_uniques() {
-    let mut loaded = JsonScanInput {
-        headers: vec![],
-        files: vec![json_file(
-            "project/package.json",
-            crate::models::FileType::File,
-        )],
-        packages: vec![],
-        dependencies: vec![],
-        license_detections: vec![],
-        license_references: vec![],
-        license_rule_references: vec![],
-        excluded_count: 0,
-    };
-    loaded.files[0].package_data = vec![crate::models::PackageData {
+    let mut file0 = json_file("project/package.json", crate::models::FileType::File);
+    file0.package_data = vec![crate::models::PackageData {
         package_type: Some(crate::models::PackageType::Npm),
         license_detections: vec![crate::models::LicenseDetection {
             license_expression: "mit".to_string(),
@@ -396,12 +403,13 @@ fn from_json_loaded_manifest_detections_can_be_recomputed_into_top_level_uniques
         }],
         ..Default::default()
     }];
+    let mut files = vec![file0];
 
-    for file in &mut loaded.files {
+    for file in &mut files {
         file.backfill_license_provenance();
     }
 
-    let top_level = collect_top_level_license_detections(&loaded.files);
+    let top_level = collect_top_level_license_detections(&files);
 
     assert_eq!(top_level.len(), 1);
     assert_eq!(top_level[0].license_expression, "mit");
@@ -413,27 +421,8 @@ fn from_json_loaded_manifest_detections_can_be_recomputed_into_top_level_uniques
 
 #[test]
 fn from_json_recomputes_top_level_uniques_even_without_shaping_flags() {
-    let mut loaded = JsonScanInput {
-        headers: vec![],
-        files: vec![json_file(
-            "project/package.json",
-            crate::models::FileType::File,
-        )],
-        packages: vec![],
-        dependencies: vec![],
-        license_detections: vec![crate::models::TopLevelLicenseDetection {
-            identifier: "stale-id".to_string(),
-            license_expression: "stale-license".to_string(),
-            license_expression_spdx: "LicenseRef-scancode-stale-license".to_string(),
-            detection_count: 1,
-            detection_log: vec![],
-            reference_matches: vec![],
-        }],
-        license_references: vec![],
-        license_rule_references: vec![],
-        excluded_count: 0,
-    };
-    loaded.files[0].package_data = vec![crate::models::PackageData {
+    let mut file0 = json_file("project/package.json", crate::models::FileType::File);
+    file0.package_data = vec![crate::models::PackageData {
         package_type: Some(crate::models::PackageType::Npm),
         other_license_detections: vec![crate::models::LicenseDetection {
             license_expression: "gpl-2.0-only".to_string(),
@@ -460,12 +449,13 @@ fn from_json_recomputes_top_level_uniques_even_without_shaping_flags() {
         }],
         ..Default::default()
     }];
+    let mut files = vec![file0];
 
-    for file in &mut loaded.files {
+    for file in &mut files {
         file.backfill_license_provenance();
     }
 
-    let top_level = collect_top_level_license_detections(&loaded.files);
+    let top_level = collect_top_level_license_detections(&files);
 
     assert_eq!(top_level.len(), 1);
     assert_eq!(top_level[0].license_expression, "gpl-2.0-only");
@@ -474,21 +464,11 @@ fn from_json_recomputes_top_level_uniques_even_without_shaping_flags() {
 
 #[test]
 fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
-    let mut loaded = JsonScanInput {
-        headers: vec![],
-        files: vec![
-            json_file("project/Cargo.toml", crate::models::FileType::File),
-            json_file("project/LICENSE", crate::models::FileType::File),
-        ],
-        packages: vec![],
-        dependencies: vec![],
-        license_detections: vec![],
-        license_references: vec![],
-        license_rule_references: vec![],
-        excluded_count: 0,
-    };
+    let file0 = json_file("project/Cargo.toml", crate::models::FileType::File);
+    let file1 = json_file("project/LICENSE", crate::models::FileType::File);
+    let mut files = vec![file0, file1];
 
-    loaded.files[0].package_data = vec![crate::models::PackageData {
+    files[0].package_data = vec![crate::models::PackageData {
         package_type: Some(crate::models::PackageType::Cargo),
         datasource_id: Some(crate::models::DatasourceId::CargoToml),
         name: Some("demo".to_string()),
@@ -496,12 +476,12 @@ fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
         ..Default::default()
     }];
     let mut package = crate::models::Package::from_package_data(
-        &loaded.files[0].package_data[0],
+        &files[0].package_data[0],
         "project/Cargo.toml".to_string(),
     );
     let package_uid = package.package_uid.clone();
-    loaded.files[0].for_packages = vec![package_uid.clone()];
-    loaded.files[0].license_detections = vec![crate::models::LicenseDetection {
+    files[0].for_packages = vec![package_uid.clone()];
+    files[0].license_detections = vec![crate::models::LicenseDetection {
         license_expression: "unknown-license-reference".to_string(),
         license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
         matches: vec![crate::models::Match {
@@ -526,7 +506,7 @@ fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
         detection_log: vec![],
         identifier: None,
     }];
-    loaded.files[1].license_detections = vec![crate::models::LicenseDetection {
+    files[1].license_detections = vec![crate::models::LicenseDetection {
         license_expression: "mit".to_string(),
         license_expression_spdx: "MIT".to_string(),
         matches: vec![crate::models::Match {
@@ -550,20 +530,20 @@ fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
         identifier: Some("mit-license".to_string()),
     }];
 
-    for file in &mut loaded.files {
+    for file in &mut files {
         file.backfill_license_provenance();
     }
     package.backfill_license_provenance();
 
     let mut packages = vec![package];
-    apply_package_reference_following(&mut loaded.files, &mut packages);
+    apply_package_reference_following(&mut files, &mut packages);
 
     assert_eq!(
         packages[0].declared_license_expression.as_deref(),
         Some("mit")
     );
 
-    let top_level = collect_top_level_license_detections(&loaded.files);
+    let top_level = collect_top_level_license_detections(&files);
     assert!(
         top_level
             .iter()
@@ -572,7 +552,7 @@ fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
 
     let engine = LicenseDetectionEngine::from_embedded().expect("embedded engine should load");
     let (license_references, license_rule_references) = collect_top_level_license_references(
-        &loaded.files,
+        &files,
         &packages,
         engine.index(),
         DEFAULT_LICENSEDB_URL_TEMPLATE,
@@ -589,34 +569,24 @@ fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
 
 #[test]
 fn from_json_recomputes_top_level_outputs_after_package_inheritance_following() {
-    let mut loaded = JsonScanInput {
-        headers: vec![],
-        files: vec![
-            json_file(
-                "venv/lib/python3.11/site-packages/demo-1.0.dist-info/METADATA",
-                crate::models::FileType::File,
-            ),
-            json_file(
-                "venv/lib/python3.11/site-packages/locale/django.po",
-                crate::models::FileType::File,
-            ),
-        ],
-        packages: vec![],
-        dependencies: vec![],
-        license_detections: vec![],
-        license_references: vec![],
-        license_rule_references: vec![],
-        excluded_count: 0,
-    };
+    let file0 = json_file(
+        "venv/lib/python3.11/site-packages/demo-1.0.dist-info/METADATA",
+        crate::models::FileType::File,
+    );
+    let file1 = json_file(
+        "venv/lib/python3.11/site-packages/locale/django.po",
+        crate::models::FileType::File,
+    );
+    let mut files = vec![file0, file1];
 
-    loaded.files[0].package_data = vec![crate::models::PackageData {
+    files[0].package_data = vec![crate::models::PackageData {
         package_type: Some(crate::models::PackageType::Pypi),
         datasource_id: Some(crate::models::DatasourceId::PypiWheelMetadata),
         name: Some("demo".to_string()),
         version: Some("1.0.0".to_string()),
         ..Default::default()
     }];
-    loaded.files[0].license_detections = vec![crate::models::LicenseDetection {
+    files[0].license_detections = vec![crate::models::LicenseDetection {
         license_expression: "bsd-new".to_string(),
         license_expression_spdx: "BSD-3-Clause".to_string(),
         matches: vec![crate::models::Match {
@@ -642,13 +612,13 @@ fn from_json_recomputes_top_level_outputs_after_package_inheritance_following() 
         identifier: None,
     }];
     let mut package = crate::models::Package::from_package_data(
-        &loaded.files[0].package_data[0],
+        &files[0].package_data[0],
         "venv/lib/python3.11/site-packages/demo-1.0.dist-info/METADATA".to_string(),
     );
     let package_uid = package.package_uid.clone();
-    loaded.files[0].for_packages = vec![package_uid.clone()];
-    loaded.files[1].for_packages = vec![package_uid.clone()];
-    loaded.files[1].license_detections = vec![crate::models::LicenseDetection {
+    files[0].for_packages = vec![package_uid.clone()];
+    files[1].for_packages = vec![package_uid.clone()];
+    files[1].license_detections = vec![crate::models::LicenseDetection {
         license_expression: "free-unknown".to_string(),
         license_expression_spdx: "LicenseRef-scancode-free-unknown".to_string(),
         matches: vec![crate::models::Match {
@@ -672,24 +642,24 @@ fn from_json_recomputes_top_level_outputs_after_package_inheritance_following() 
         identifier: None,
     }];
 
-    for file in &mut loaded.files {
+    for file in &mut files {
         file.backfill_license_provenance();
     }
     package.backfill_license_provenance();
 
     let mut packages = vec![package];
-    apply_package_reference_following(&mut loaded.files, &mut packages);
+    apply_package_reference_following(&mut files, &mut packages);
 
     assert_eq!(
         packages[0].declared_license_expression.as_deref(),
         Some("bsd-new")
     );
     assert_eq!(
-        loaded.files[1].license_detections[0].detection_log,
+        files[1].license_detections[0].detection_log,
         vec!["unknown-reference-in-file-to-package"]
     );
 
-    let top_level = collect_top_level_license_detections(&loaded.files);
+    let top_level = collect_top_level_license_detections(&files);
     let bsd_new_detections = top_level
         .iter()
         .filter(|detection| detection.license_expression == "bsd-new")
@@ -713,7 +683,7 @@ fn from_json_recomputes_top_level_outputs_after_package_inheritance_following() 
 
     let engine = LicenseDetectionEngine::from_embedded().expect("embedded engine should load");
     let (license_references, license_rule_references) = collect_top_level_license_references(
-        &loaded.files,
+        &files,
         &packages,
         engine.index(),
         DEFAULT_LICENSEDB_URL_TEMPLATE,

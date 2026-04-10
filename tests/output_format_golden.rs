@@ -3,6 +3,7 @@ use provenant::models::{
     LineNumber, Md5Digest, Output, Package, PackageData, PackageType, Party, ResolvedPackage,
     Sha1Digest, SystemEnvironment, Tallies, TallyEntry, TopLevelDependency,
 };
+use provenant::output_schema::Output as OutputSchemaOutput;
 use provenant::{OutputFormat, OutputWriteConfig, OutputWriter, writer_for_format};
 use regex::Regex;
 use serde_json::Value;
@@ -15,9 +16,10 @@ const EMPTY_SHA1: &str = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
 fn test_spdx_empty_matches_local_python_golden() {
     let output = empty_output();
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::SpdxTv)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::SpdxTv,
@@ -37,9 +39,10 @@ fn test_spdx_empty_matches_local_python_golden() {
 fn test_cyclonedx_empty_matches_local_python_golden_core_fields() {
     let output = empty_output();
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::CycloneDxJson)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::CycloneDxJson,
@@ -70,9 +73,10 @@ fn test_json_lines_contract_shape_matches_python_fixture_structure() {
 
     let output = sample_output();
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::JsonLines)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::JsonLines,
@@ -137,9 +141,10 @@ fn test_debian_output_matches_local_expected_fixture() {
 
     let output = sample_output_with_sections(1, 0, vec![], vec![], vec![file]);
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::Debian)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::Debian,
@@ -228,8 +233,9 @@ fn test_json_contract_includes_detailed_tallies_for_files_and_directories() {
 
     let output = sample_output_with_sections(1, 3, vec![], vec![], vec![root, src, empty, file]);
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::Json)
-        .write(&output, &mut bytes, &OutputWriteConfig::default())
+        .write(&schema_output, &mut bytes, &OutputWriteConfig::default())
         .expect("json output should be generated");
 
     let value: Value = serde_json::from_slice(&bytes).expect("json output should parse");
@@ -319,8 +325,9 @@ fn test_json_contract_includes_facets_and_tallies_by_facet() {
     };
 
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::Json)
-        .write(&output, &mut bytes, &OutputWriteConfig::default())
+        .write(&schema_output, &mut bytes, &OutputWriteConfig::default())
         .expect("json output should be generated");
     let value: Value = serde_json::from_slice(&bytes).expect("json should parse");
 
@@ -341,9 +348,10 @@ fn test_json_lines_matches_local_fixture_file_semantics() {
 
     let output = sample_html_simple_output();
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::JsonLines)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::JsonLines,
@@ -375,9 +383,10 @@ fn test_json_lines_matches_local_fixture_file_semantics() {
 fn test_yaml_matches_local_fixture_file_semantics() {
     let output = sample_html_simple_output();
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::Yaml)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::Yaml,
@@ -414,9 +423,10 @@ fn test_yaml_matches_local_fixture_file_semantics() {
 fn test_html_report_contract_contains_python_style_sections() {
     let output = sample_output();
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::Html)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::Html,
@@ -439,9 +449,10 @@ fn test_html_report_contract_contains_python_style_sections() {
 fn test_html_report_matches_local_fixture_after_normalization() {
     let output = sample_html_simple_output();
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::Html)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::Html,
@@ -463,9 +474,10 @@ fn test_html_report_matches_local_fixture_after_normalization() {
 fn test_spdx_simple_contract_matches_local_python_fixture_after_normalization() {
     let output = sample_spdx_simple_output();
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::SpdxTv)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::SpdxTv,
@@ -486,9 +498,10 @@ fn test_spdx_simple_contract_matches_local_python_fixture_after_normalization() 
 fn test_spdx_rdf_contract_contains_python_semantic_markers() {
     let output = sample_spdx_simple_output();
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::SpdxRdf)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::SpdxRdf,
@@ -668,9 +681,10 @@ fn test_spdx_rdf_contract_contains_python_semantic_markers() {
 fn test_spdx_rdf_semantics_match_fixture_map() {
     let output = sample_spdx_simple_output();
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::SpdxRdf)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::SpdxRdf,
@@ -694,11 +708,12 @@ fn test_spdx_rdf_semantics_match_fixture_map() {
 #[test]
 fn test_cyclonedx_rich_output_contains_enriched_fields_json_and_xml() {
     let output = sample_cyclonedx_rich_output();
+    let schema_output = OutputSchemaOutput::from(&output);
 
     let mut json_bytes = Vec::new();
     writer_for_format(OutputFormat::CycloneDxJson)
         .write(
-            &output,
+            &schema_output,
             &mut json_bytes,
             &OutputWriteConfig {
                 format: OutputFormat::CycloneDxJson,
@@ -728,7 +743,7 @@ fn test_cyclonedx_rich_output_contains_enriched_fields_json_and_xml() {
     let mut xml_bytes = Vec::new();
     writer_for_format(OutputFormat::CycloneDxXml)
         .write(
-            &output,
+            &schema_output,
             &mut xml_bytes,
             &OutputWriteConfig {
                 format: OutputFormat::CycloneDxXml,
@@ -750,9 +765,10 @@ fn test_cyclonedx_rich_output_contains_enriched_fields_json_and_xml() {
 fn test_cyclonedx_json_matches_local_fixture_after_normalization() {
     let output = sample_cyclonedx_rich_output();
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::CycloneDxJson)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::CycloneDxJson,
@@ -775,9 +791,10 @@ fn test_cyclonedx_json_matches_local_fixture_after_normalization() {
 fn test_cyclonedx_json_dependency_graph_matches_local_fixture_after_normalization() {
     let output = sample_cyclonedx_dependency_output();
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::CycloneDxJson)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::CycloneDxJson,
@@ -801,9 +818,10 @@ fn test_cyclonedx_json_dependency_graph_matches_local_fixture_after_normalizatio
 fn test_cyclonedx_xml_dependency_graph_matches_local_fixture_after_normalization() {
     let output = sample_cyclonedx_dependency_output();
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::CycloneDxXml)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::CycloneDxXml,
@@ -839,9 +857,10 @@ fn test_cyclonedx_xml_matches_local_fixture_after_normalization() {
     package.vcs_url = None;
 
     let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
     writer_for_format(OutputFormat::CycloneDxXml)
         .write(
-            &output,
+            &schema_output,
             &mut bytes,
             &OutputWriteConfig {
                 format: OutputFormat::CycloneDxXml,

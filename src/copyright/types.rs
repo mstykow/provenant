@@ -6,25 +6,23 @@
 //! - Parse tree types ([`ParseNode`], [`TreeLabel`]) for grammar-based extraction
 //! - The [`Token`] struct linking text values to POS tags and source locations
 
-use serde::Serialize;
-
 use crate::models::LineNumber;
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CopyrightDetection {
     pub copyright: String,
     pub start_line: LineNumber,
     pub end_line: LineNumber,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HolderDetection {
     pub holder: String,
     pub start_line: LineNumber,
     pub end_line: LineNumber,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AuthorDetection {
     pub author: String,
     pub start_line: LineNumber,

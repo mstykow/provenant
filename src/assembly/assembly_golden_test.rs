@@ -181,9 +181,19 @@ mod tests {
             })
             .collect();
 
+        let output_packages: Vec<crate::output_schema::OutputPackage> = actual
+            .packages
+            .iter()
+            .map(crate::output_schema::OutputPackage::from)
+            .collect();
+        let output_deps: Vec<crate::output_schema::OutputTopLevelDependency> = actual
+            .dependencies
+            .iter()
+            .map(crate::output_schema::OutputTopLevelDependency::from)
+            .collect();
         let actual_json = json!({
-            "packages": actual.packages,
-            "dependencies": actual.dependencies,
+            "packages": output_packages,
+            "dependencies": output_deps,
             "files_with_packages": file_for_packages,
         });
         let actual_str = serde_json::to_string_pretty(&actual_json)
@@ -351,9 +361,19 @@ mod tests {
                 })
                 .collect();
 
+            let output_packages: Vec<crate::output_schema::OutputPackage> = result
+                .packages
+                .iter()
+                .map(crate::output_schema::OutputPackage::from)
+                .collect();
+            let output_deps: Vec<crate::output_schema::OutputTopLevelDependency> = result
+                .dependencies
+                .iter()
+                .map(crate::output_schema::OutputTopLevelDependency::from)
+                .collect();
             let output_json = json!({
-                "packages": result.packages,
-                "dependencies": result.dependencies,
+                "packages": output_packages,
+                "dependencies": output_deps,
                 "files_with_packages": file_for_packages,
             });
             let output_str = serde_json::to_string_pretty(&output_json)
