@@ -484,7 +484,7 @@ fn spdx_ids_from_expression(expression: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{LicenseDetection, LineNumber, PackageData, PackageType};
+    use crate::models::{LicenseDetection, LineNumber, MatchScore, PackageData, PackageType};
 
     #[test]
     fn spdx_file_license_info_includes_manifest_package_data_detections() {
@@ -526,7 +526,7 @@ mod tests {
                     start_line: LineNumber::ONE,
                     end_line: LineNumber::ONE,
                     matcher: Some("parser-declared-license".to_string()),
-                    score: 100.0,
+                    score: MatchScore::PERFECT,
                     matched_length: Some(1),
                     match_coverage: Some(100.0),
                     rule_relevance: Some(100),

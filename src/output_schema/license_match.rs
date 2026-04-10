@@ -1,3 +1,4 @@
+use crate::models::MatchScore;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -10,7 +11,7 @@ pub struct OutputMatch {
     pub end_line: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub matcher: Option<String>,
-    pub score: f64,
+    pub score: MatchScore,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub matched_length: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -9,6 +9,7 @@ use super::DatasourceId;
 use super::DependencyUid;
 use super::GitSha1;
 use super::LineNumber;
+use super::MatchScore;
 use super::Md5Digest;
 use super::PackageType;
 use super::PackageUid;
@@ -365,7 +366,7 @@ fn format_public_detection_content(detection: &LicenseDetection) -> String {
                     .or(detection_match.matcher.as_deref())
                     .unwrap_or("parser-declared-license")
             ),
-            detection_match.score as f32,
+            f64::from(detection_match.score) as f32,
             python_token_tuple_repr(&tokenize_without_stopwords(
                 detection_match.matched_text.as_deref().unwrap_or_default(),
             )),
@@ -532,7 +533,7 @@ pub struct Match {
     pub start_line: LineNumber,
     pub end_line: LineNumber,
     pub matcher: Option<String>,
-    pub score: f64,
+    pub score: MatchScore,
     pub matched_length: Option<usize>,
     pub match_coverage: Option<f64>,
     pub rule_relevance: Option<u8>,
@@ -1115,7 +1116,7 @@ mod tests {
                     start_line: LineNumber::ONE,
                     end_line: LineNumber::ONE,
                     matcher: Some("parser-declared-license".to_string()),
-                    score: 100.0,
+                    score: MatchScore::PERFECT,
                     matched_length: Some(1),
                     match_coverage: Some(100.0),
                     rule_relevance: Some(100),
@@ -1193,7 +1194,7 @@ mod tests {
                     start_line: LineNumber::ONE,
                     end_line: LineNumber::ONE,
                     matcher: Some("parser-declared-license".to_string()),
-                    score: 100.0,
+                    score: MatchScore::PERFECT,
                     matched_length: Some(1),
                     match_coverage: Some(100.0),
                     rule_relevance: Some(100),

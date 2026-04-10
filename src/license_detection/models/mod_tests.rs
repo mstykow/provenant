@@ -9,6 +9,7 @@ mod tests {
     use crate::license_detection::position_set::PositionSet;
     use crate::models::LineNumber;
     use crate::models::Match as OutputMatch;
+    use crate::models::MatchScore;
     use std::collections::HashMap;
 
     fn create_test_index() -> LicenseIndex {
@@ -599,7 +600,7 @@ mod tests {
             start_line: LineNumber::ONE,
             end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
-            score: 100.0,
+            score: MatchScore::PERFECT,
             matched_length: Some(3),
             match_coverage: Some(100.0),
             rule_relevance: Some(100),

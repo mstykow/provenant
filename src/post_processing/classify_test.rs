@@ -3,8 +3,8 @@ use std::fs;
 use super::test_utils::{dir, file, package, scan_and_assemble_with_keyfiles};
 use super::*;
 use crate::models::{
-    Copyright, DatasourceId, FileReference, Holder, LineNumber, Match, Package, PackageType,
-    PackageUid,
+    Copyright, DatasourceId, FileReference, Holder, LineNumber, Match, MatchScore, Package,
+    PackageType, PackageUid,
 };
 
 #[test]
@@ -54,7 +54,7 @@ fn classify_key_files_marks_nested_ruby_license_from_file_references() {
             start_line: LineNumber::ONE,
             end_line: LineNumber::new(20).unwrap(),
             matcher: None,
-            score: 100.0,
+            score: MatchScore::PERFECT,
             matched_length: Some(161),
             match_coverage: Some(100.0),
             rule_relevance: Some(100),
@@ -234,7 +234,7 @@ fn classify_key_files_marks_package_data_ancestry_like_with_package_data_fixture
     let package = Package {
         package_uid: PackageUid::from_raw(uid.to_string()),
         datafile_paths: vec![
-            "jar/META-INF/maven/org.jboss.logging/jboss-logging/pom.xml".to_string(),
+            "jar/META-INF/maven/org.jboss.logging/jboss-logging/pom.xml".to_string()
         ],
         ..package(
             uid,

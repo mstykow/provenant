@@ -1,5 +1,5 @@
 use super::*;
-use crate::models::LineNumber;
+use crate::models::{LineNumber, MatchScore};
 use clap::Parser;
 use serde_json::json;
 use std::fs;
@@ -388,7 +388,7 @@ fn from_json_loaded_manifest_detections_can_be_recomputed_into_top_level_uniques
                 start_line: LineNumber::ONE,
                 end_line: LineNumber::ONE,
                 matcher: Some("parser-declared-license".to_string()),
-                score: 100.0,
+                score: MatchScore::PERFECT,
                 matched_length: Some(1),
                 match_coverage: Some(100.0),
                 rule_relevance: Some(100),
@@ -434,7 +434,7 @@ fn from_json_recomputes_top_level_uniques_even_without_shaping_flags() {
                 start_line: LineNumber::ONE,
                 end_line: LineNumber::ONE,
                 matcher: Some("parser-declared-license".to_string()),
-                score: 100.0,
+                score: MatchScore::PERFECT,
                 matched_length: Some(1),
                 match_coverage: Some(100.0),
                 rule_relevance: Some(100),
@@ -491,7 +491,7 @@ fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
             start_line: LineNumber::ONE,
             end_line: LineNumber::ONE,
             matcher: Some("2-aho".to_string()),
-            score: 100.0,
+            score: MatchScore::PERFECT,
             matched_length: Some(2),
             match_coverage: Some(100.0),
             rule_relevance: Some(100),
@@ -516,7 +516,7 @@ fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
             start_line: LineNumber::ONE,
             end_line: LineNumber::new(10).unwrap(),
             matcher: Some("1-hash".to_string()),
-            score: 100.0,
+            score: MatchScore::PERFECT,
             matched_length: Some(50),
             match_coverage: Some(100.0),
             rule_relevance: Some(100),
@@ -598,7 +598,7 @@ fn from_json_recomputes_top_level_outputs_after_package_inheritance_following() 
             start_line: LineNumber::ONE,
             end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
-            score: 100.0,
+            score: MatchScore::PERFECT,
             matched_length: Some(1),
             match_coverage: Some(100.0),
             rule_relevance: Some(100),
@@ -628,7 +628,7 @@ fn from_json_recomputes_top_level_outputs_after_package_inheritance_following() 
             start_line: LineNumber::ONE,
             end_line: LineNumber::ONE,
             matcher: Some("2-aho".to_string()),
-            score: 100.0,
+            score: MatchScore::PERFECT,
             matched_length: Some(11),
             match_coverage: Some(100.0),
             rule_relevance: Some(100),

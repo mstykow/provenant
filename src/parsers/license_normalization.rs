@@ -7,7 +7,7 @@ use crate::license_detection::expression::{
     LicenseExpression, parse_expression, simplify_expression,
 };
 use crate::license_detection::index::LicenseIndex;
-use crate::models::{LicenseDetection, LineNumber, Match, PackageData};
+use crate::models::{LicenseDetection, LineNumber, Match, MatchScore, PackageData};
 use crate::utils::spdx::{ExpressionRelation, combine_license_expressions_with_relation};
 
 pub(crate) const PARSER_DECLARED_MATCHER: &str = "parser-declared-license";
@@ -215,7 +215,7 @@ pub(crate) fn build_declared_license_detection(
             start_line: metadata.start_line,
             end_line: metadata.end_line,
             matcher: Some(PARSER_DECLARED_MATCHER.to_string()),
-            score: 100.0,
+            score: MatchScore::PERFECT,
             matched_length: Some(metadata.matched_text.split_whitespace().count()),
             match_coverage: Some(100.0),
             rule_relevance: Some(100),
@@ -301,7 +301,7 @@ pub(crate) fn finalize_package_declared_license_references(package_data: &mut Pa
                 start_line: LineNumber::ONE,
                 end_line: LineNumber::ONE,
                 matcher: Some(PARSER_DECLARED_MATCHER.to_string()),
-                score: 100.0,
+                score: MatchScore::PERFECT,
                 matched_length: Some(statement.split_whitespace().count()),
                 match_coverage: Some(100.0),
                 rule_relevance: Some(100),
