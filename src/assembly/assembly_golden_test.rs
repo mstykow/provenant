@@ -4,9 +4,9 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use regex::Regex;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
-    use crate::assembly::{assemble, AssemblyResult};
+    use crate::assembly::{AssemblyResult, assemble};
     use crate::models::{FileInfo, FileType};
     use crate::parsers::try_parse_file;
 
@@ -482,16 +482,22 @@ mod tests {
             .expect("expected assembled conda package");
 
         assert_eq!(conda_pkg.name.as_deref(), Some("requests"));
-        assert!(conda_pkg
-            .datasource_ids
-            .contains(&crate::models::DatasourceId::CondaMetaJson));
-        assert!(conda_pkg
-            .datasource_ids
-            .contains(&crate::models::DatasourceId::CondaMetaYaml));
-        assert!(conda_pkg
-            .datafile_paths
-            .iter()
-            .any(|path| path.contains("conda-meta/requests-2.32.3-py312h06a4308_1.json")));
+        assert!(
+            conda_pkg
+                .datasource_ids
+                .contains(&crate::models::DatasourceId::CondaMetaJson)
+        );
+        assert!(
+            conda_pkg
+                .datasource_ids
+                .contains(&crate::models::DatasourceId::CondaMetaYaml)
+        );
+        assert!(
+            conda_pkg
+                .datafile_paths
+                .iter()
+                .any(|path| path.contains("conda-meta/requests-2.32.3-py312h06a4308_1.json"))
+        );
         assert!(conda_pkg.datafile_paths.iter().any(|path| {
             path.contains("pkgs/requests-2.32.3-py312h06a4308_1/info/recipe/meta.yaml")
         }));

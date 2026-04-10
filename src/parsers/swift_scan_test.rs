@@ -4,7 +4,7 @@ mod tests {
     use std::path::Path;
 
     use regex::Regex;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use tempfile::TempDir;
 
     use super::super::scan_test_utils::scan_and_assemble_with_stripped_root;
@@ -281,11 +281,15 @@ mod tests {
             .get("datafile_paths")
             .and_then(|value| value.as_array())
             .expect("datafile_paths should be present");
-        assert!(datafile_paths
-            .iter()
-            .any(|path| path.as_str() == Some("Package.swift.deplock")));
-        assert!(datafile_paths
-            .iter()
-            .any(|path| path.as_str() == Some(".package.resolved")));
+        assert!(
+            datafile_paths
+                .iter()
+                .any(|path| path.as_str() == Some("Package.swift.deplock"))
+        );
+        assert!(
+            datafile_paths
+                .iter()
+                .any(|path| path.as_str() == Some(".package.resolved"))
+        );
     }
 }
