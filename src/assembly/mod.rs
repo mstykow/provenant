@@ -274,6 +274,10 @@ fn hoist_unassembled_file_dependencies(
 }
 
 fn should_hoist_unassembled_dependencies(datasource_id: DatasourceId) -> bool {
+    if datasource_id == DatasourceId::PipRequirements {
+        return true;
+    }
+
     if !assemblers::UNASSEMBLED_DATASOURCE_IDS.contains(&datasource_id) {
         return false;
     }

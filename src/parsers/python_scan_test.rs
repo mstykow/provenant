@@ -348,7 +348,47 @@ version = "1.0.0"
                 .any(|dependency| dependency.purl.as_deref() == Some("pkg:pypi/httpx@0.27.0"))
         );
         assert!(result.packages.is_empty());
-        assert!(result.dependencies.is_empty());
+        assert_dependency_present(
+            &result.dependencies,
+            "pkg:pypi/httpx@0.27.0",
+            "requirements-txt/basic.txt",
+        );
+        assert!(result.dependencies.iter().any(|dependency| {
+            dependency
+                .datafile_path
+                .ends_with("requirements-txt/basic.txt")
+                && dependency.for_package_uid.is_none()
+        }));
+    }
+
+    #[test]
+    fn test_python_standalone_min_requirements_scan_hoists_dependencies() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        fs::write(
+            temp_dir.path().join("min_requirements.txt"),
+            "Sphinx==3.4.3\njsonschema==4.*\n",
+        )
+        .expect("write min_requirements.txt");
+
+        let (_files, result) = scan_and_assemble(temp_dir.path());
+
+        assert!(result.packages.is_empty());
+        assert_dependency_present(
+            &result.dependencies,
+            "pkg:pypi/sphinx@3.4.3",
+            "min_requirements.txt",
+        );
+        assert_dependency_present(
+            &result.dependencies,
+            "pkg:pypi/jsonschema@4.%2A",
+            "min_requirements.txt",
+        );
+        assert!(
+            result
+                .dependencies
+                .iter()
+                .all(|dependency| dependency.for_package_uid.is_none())
+        );
     }
 
     #[test]
