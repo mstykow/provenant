@@ -366,7 +366,7 @@ fn format_public_detection_content(detection: &LicenseDetection) -> String {
                     .or(detection_match.matcher.as_deref())
                     .unwrap_or("parser-declared-license")
             ),
-            f64::from(detection_match.score) as f32,
+            detection_match.score.to_f32_lossy(),
             python_token_tuple_repr(&tokenize_without_stopwords(
                 detection_match.matched_text.as_deref().unwrap_or_default(),
             )),
@@ -1116,7 +1116,7 @@ mod tests {
                     start_line: LineNumber::ONE,
                     end_line: LineNumber::ONE,
                     matcher: Some("parser-declared-license".to_string()),
-                    score: MatchScore::PERFECT,
+                    score: MatchScore::MAX,
                     matched_length: Some(1),
                     match_coverage: Some(100.0),
                     rule_relevance: Some(100),
@@ -1194,7 +1194,7 @@ mod tests {
                     start_line: LineNumber::ONE,
                     end_line: LineNumber::ONE,
                     matcher: Some("parser-declared-license".to_string()),
-                    score: MatchScore::PERFECT,
+                    score: MatchScore::MAX,
                     matched_length: Some(1),
                     match_coverage: Some(100.0),
                     rule_relevance: Some(100),

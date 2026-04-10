@@ -26,7 +26,7 @@ use crate::license_detection::models::LicenseMatch as InternalLicenseMatch;
 use crate::license_detection::query::Query;
 use crate::models::{
     Author, Copyright, DatasourceId, FileInfo, FileInfoBuilder, FileType, Holder, LicenseDetection,
-    LineNumber, Match, OutputEmail, OutputURL, Sha256Digest,
+    LineNumber, Match, MatchScore, OutputEmail, OutputURL, Sha256Digest,
 };
 use crate::parsers::utils::split_name_email;
 use crate::progress::ScanProgress;
@@ -1347,7 +1347,6 @@ fn convert_match_to_model(
     text_content: &str,
     query: Option<&Query<'_>>,
 ) -> Match {
-    let output_metric = |value: f32| ((value as f64) * 100.0).round() / 100.0;
     let rule_url = if m.rule_url.is_empty() {
         None
     } else {
@@ -1376,9 +1375,9 @@ fn convert_match_to_model(
         start_line: m.start_line,
         end_line: m.end_line,
         matcher: Some(m.matcher.to_string()),
-        score: output_metric(m.score).into(),
+        score: MatchScore::from_rounded_percentage(m.score),
         matched_length: Some(m.matched_length),
-        match_coverage: Some(output_metric(m.coverage())),
+        match_coverage: Some(((m.coverage() as f64) * 100.0).round() / 100.0),
         rule_relevance: Some(m.rule_relevance),
         rule_identifier: Some(m.rule_identifier.clone()),
         rule_url,
@@ -1560,7 +1559,7 @@ mod tests {
     use crate::license_detection::models::position_span::PositionSpan;
     use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind, RuleKind};
     use crate::license_detection::query::Query;
-    use crate::models::{FileInfoBuilder, FileType};
+    use crate::models::{FileInfoBuilder, FileType, MatchScore};
     use crate::progress::{ProgressMode, ScanProgress};
     use crate::scanner::scan_options_fingerprint;
     use crate::scanner::{LicenseScanOptions, TextDetectionOptions};
@@ -1660,7 +1659,10 @@ mod tests {
             convert_detection_to_model(&detection, LicenseScanOptions::default(), "", None);
         let converted = converted.expect("detection should convert");
 
-        assert_eq!(converted.matches[0].score, 81.82);
+        assert_eq!(
+            converted.matches[0].score,
+            MatchScore::from_rounded_percentage(81.82)
+        );
         assert_eq!(converted.matches[0].match_coverage, Some(33.33));
         assert!(clues.is_empty());
     }

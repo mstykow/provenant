@@ -126,7 +126,7 @@ fn test_debian_output_matches_local_expected_fixture() {
             start_line: LineNumber::ONE,
             end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
-            score: MatchScore::PERFECT,
+            score: MatchScore::MAX,
             matched_length: Some(1),
             match_coverage: Some(100.0),
             rule_relevance: Some(100),
