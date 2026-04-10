@@ -1,0 +1,12 @@
+:Author & Maintainer: Miguel Ojeda <ojeda@kernel.org>
+
+Authors:
+      - Christian W. Zuckschwerdt <zany@triq.net>
+      - valuable contributions by Jan M. Sendler <sendler@sendler.de>
+      - ported to 2.6 by Aurelien Jarno <aurelien@aurel32.net>
+	with the help of Jean Delvare <jdelvare@suse.de>
+
+- Written by Mydraal <vulpyne@vulpyne.net>
+- Updated by Adam Sulmicki <adam@cfar.umd.edu>
+- Updated by Jeremy M. Dolan <jmd@turbogeek.org> 2001/01/28 10:15:59
+- Added to by Crutcher Dunnavant <crutcher+kernel@datastacks.com>
