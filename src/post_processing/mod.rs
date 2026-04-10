@@ -608,7 +608,7 @@ mod tests {
     use crate::models::LineNumber;
     use crate::models::file_info::Match;
 
-    fn make_match(score: f64, coverage: Option<f64>, relevance: Option<usize>) -> Match {
+    fn make_match(score: f64, coverage: Option<f64>, relevance: Option<u8>) -> Match {
         Match {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),

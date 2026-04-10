@@ -440,7 +440,7 @@ mod tests {
             start_token,
             end_token,
             matcher: crate::license_detection::models::MatcherKind::Aho,
-            score: 1.0,
+            score: 100.0,
             matched_length,
             rule_length: matched_length,
             match_coverage: 100.0,
@@ -479,7 +479,7 @@ mod tests {
             start_token,
             end_token,
             matcher: crate::license_detection::models::MatcherKind::Aho,
-            score: 1.0,
+            score: 100.0,
             matched_length,
             rule_length: matched_length,
             match_coverage: 100.0,
@@ -528,7 +528,7 @@ mod tests {
 
     #[test]
     fn test_merge_overlapping_matches_same_rule() {
-        let mut m1 = create_test_match("#1", 1, 10, 0.9, 100.0, 100);
+        let mut m1 = create_test_match("#1", 1, 10, 90.0, 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
         m1.coordinates = MatchCoordinates::rule_aligned(
@@ -536,7 +536,7 @@ mod tests {
             PositionSpan::range(0, 10),
             PositionSpan::empty(),
         );
-        let mut m2 = create_test_match("#1", 5, 15, 0.85, 100.0, 100);
+        let mut m2 = create_test_match("#1", 5, 15, 85.0, 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 4;
         m2.coordinates = MatchCoordinates::rule_aligned(
@@ -553,12 +553,12 @@ mod tests {
         assert_eq!(merged[0].rule_identifier, "#1");
         assert_eq!(merged[0].start_line, LineNumber::ONE);
         assert_eq!(merged[0].end_line, LineNumber::new(15).unwrap());
-        assert_eq!(merged[0].score, 0.9);
+        assert_eq!(merged[0].score, 90.0);
     }
 
     #[test]
     fn test_merge_adjacent_matches_same_rule() {
-        let mut m1 = create_test_match("#1", 1, 10, 0.9, 100.0, 100);
+        let mut m1 = create_test_match("#1", 1, 10, 90.0, 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
         m1.coordinates = MatchCoordinates::rule_aligned(
@@ -566,7 +566,7 @@ mod tests {
             PositionSpan::range(0, 10),
             PositionSpan::empty(),
         );
-        let mut m2 = create_test_match("#1", 10, 20, 0.85, 100.0, 100);
+        let mut m2 = create_test_match("#1", 10, 20, 85.0, 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 9;
         m2.coordinates = MatchCoordinates::rule_aligned(
@@ -583,7 +583,7 @@ mod tests {
         assert_eq!(merged[0].rule_identifier, "#1");
         assert_eq!(merged[0].start_line, LineNumber::ONE);
         assert_eq!(merged[0].end_line, LineNumber::new(20).unwrap());
-        assert_eq!(merged[0].score, 0.9);
+        assert_eq!(merged[0].score, 90.0);
     }
 
     #[test]
@@ -621,8 +621,8 @@ mod tests {
     #[test]
     fn test_merge_no_overlap_different_rules() {
         let matches = vec![
-            create_test_match("#1", 1, 10, 0.9, 90.0, 100),
-            create_test_match("#2", 5, 15, 0.85, 85.0, 100),
+            create_test_match("#1", 1, 10, 90.0, 90.0, 100),
+            create_test_match("#2", 5, 15, 85.0, 85.0, 100),
         ];
 
         let merged = merge_overlapping_matches(&matches);
@@ -633,8 +633,8 @@ mod tests {
     #[test]
     fn test_merge_no_overlap_same_rule() {
         let matches = vec![
-            create_test_match("#1", 1, 10, 0.9, 90.0, 100),
-            create_test_match("#1", 20, 30, 0.85, 85.0, 100),
+            create_test_match("#1", 1, 10, 90.0, 90.0, 100),
+            create_test_match("#1", 20, 30, 85.0, 85.0, 100),
         ];
 
         let merged = merge_overlapping_matches(&matches);
@@ -644,7 +644,7 @@ mod tests {
 
     #[test]
     fn test_merge_multiple_matches_same_rule() {
-        let mut m1 = create_test_match("#1", 1, 5, 0.8, 100.0, 100);
+        let mut m1 = create_test_match("#1", 1, 5, 80.0, 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
         m1.coordinates = MatchCoordinates::rule_aligned(
@@ -652,7 +652,7 @@ mod tests {
             PositionSpan::range(0, 5),
             PositionSpan::empty(),
         );
-        let mut m2 = create_test_match("#1", 5, 10, 0.9, 100.0, 100);
+        let mut m2 = create_test_match("#1", 5, 10, 90.0, 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 4;
         m2.coordinates = MatchCoordinates::rule_aligned(
@@ -660,7 +660,7 @@ mod tests {
             PositionSpan::range(4, 10),
             PositionSpan::empty(),
         );
-        let mut m3 = create_test_match("#1", 10, 15, 0.85, 100.0, 100);
+        let mut m3 = create_test_match("#1", 10, 15, 85.0, 100.0, 100);
         m3.rule_length = 100;
         m3.rule_start_token = 9;
         m3.coordinates = MatchCoordinates::rule_aligned(
@@ -687,7 +687,7 @@ mod tests {
 
     #[test]
     fn test_merge_single_match() {
-        let matches = vec![create_test_match("#1", 1, 10, 0.9, 90.0, 100)];
+        let matches = vec![create_test_match("#1", 1, 10, 90.0, 90.0, 100)];
         let merged = merge_overlapping_matches(&matches);
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].start_line, LineNumber::ONE);
@@ -698,7 +698,7 @@ mod tests {
     fn test_update_match_scores_basic() {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
-        let mut matches = vec![create_test_match("#1", 1, 10, 0.5, 100.0, 100)];
+        let mut matches = vec![create_test_match("#1", 1, 10, 50.0, 100.0, 100)];
 
         update_match_scores(&mut matches, &query);
 
@@ -710,8 +710,8 @@ mod tests {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
         let mut matches = vec![
-            create_test_match("#1", 1, 10, 0.5, 100.0, 80),
-            create_test_match("#2", 15, 25, 0.5, 100.0, 100),
+            create_test_match("#1", 1, 10, 50.0, 100.0, 80),
+            create_test_match("#2", 15, 25, 50.0, 100.0, 100),
         ];
 
         update_match_scores(&mut matches, &query);
@@ -758,7 +758,7 @@ mod tests {
 
     #[test]
     fn test_merge_partially_overlapping_matches_same_rule() {
-        let mut m1 = create_test_match("#1", 1, 15, 0.9, 100.0, 100);
+        let mut m1 = create_test_match("#1", 1, 15, 90.0, 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
         m1.coordinates = MatchCoordinates::rule_aligned(
@@ -766,7 +766,7 @@ mod tests {
             PositionSpan::range(0, 15),
             PositionSpan::empty(),
         );
-        let mut m2 = create_test_match("#1", 10, 25, 0.85, 100.0, 100);
+        let mut m2 = create_test_match("#1", 10, 25, 85.0, 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 9;
         m2.coordinates = MatchCoordinates::rule_aligned(
@@ -786,14 +786,14 @@ mod tests {
 
     #[test]
     fn test_merge_matches_with_gap_larger_than_one() {
-        let mut m1 = create_test_match("#1", 1, 10, 0.9, 100.0, 100);
+        let mut m1 = create_test_match("#1", 1, 10, 90.0, 100.0, 100);
         m1.rule_length = 10;
         m1.coordinates = MatchCoordinates::rule_aligned(
             PositionSpan::range(1, 11),
             PositionSpan::range(0, 10),
             PositionSpan::empty(),
         );
-        let mut m2 = create_test_match("#1", 20, 30, 0.85, 100.0, 100);
+        let mut m2 = create_test_match("#1", 20, 30, 85.0, 100.0, 100);
         m2.rule_length = 11;
         m2.coordinates = MatchCoordinates::rule_aligned(
             PositionSpan::range(20, 31),
@@ -814,7 +814,7 @@ mod tests {
 
     #[test]
     fn test_merge_preserves_max_score() {
-        let mut m1 = create_test_match("#1", 1, 10, 0.7, 100.0, 100);
+        let mut m1 = create_test_match("#1", 1, 10, 70.0, 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
         m1.coordinates = MatchCoordinates::rule_aligned(
@@ -822,7 +822,7 @@ mod tests {
             PositionSpan::range(0, 10),
             PositionSpan::empty(),
         );
-        let mut m2 = create_test_match("#1", 5, 15, 0.95, 100.0, 100);
+        let mut m2 = create_test_match("#1", 5, 15, 95.0, 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 4;
         m2.coordinates = MatchCoordinates::rule_aligned(
@@ -830,7 +830,7 @@ mod tests {
             PositionSpan::range(4, 15),
             PositionSpan::empty(),
         );
-        let mut m3 = create_test_match("#1", 12, 20, 0.8, 100.0, 100);
+        let mut m3 = create_test_match("#1", 12, 20, 80.0, 100.0, 100);
         m3.rule_length = 100;
         m3.rule_start_token = 11;
         m3.coordinates = MatchCoordinates::rule_aligned(
@@ -844,12 +844,12 @@ mod tests {
         let merged = merge_overlapping_matches(&matches);
 
         assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].score, 0.95);
+        assert_eq!(merged[0].score, 95.0);
     }
 
     #[test]
     fn test_qspan_magnitude_contiguous() {
-        let mut m = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
+        let mut m = create_test_match("#1", 1, 10, 90.0, 90.0, 100);
         m.start_token = 5;
         m.end_token = 15;
         m.coordinates = MatchCoordinates::rule_aligned(
@@ -862,7 +862,7 @@ mod tests {
 
     #[test]
     fn test_qspan_magnitude_non_contiguous() {
-        let mut m = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
+        let mut m = create_test_match("#1", 1, 10, 90.0, 90.0, 100);
         m.coordinates = MatchCoordinates::rule_aligned(
             PositionSpan::from_positions(vec![4, 8]),
             PositionSpan::empty(),

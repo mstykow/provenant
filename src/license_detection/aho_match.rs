@@ -146,9 +146,9 @@ pub fn aho_match_with_extra_matchables(
             };
 
             let score = if rule_length > 0 {
-                matched_length as f32 / rule_length as f32
+                (matched_length as f32 / rule_length as f32) * 100.0
             } else {
-                1.0
+                100.0
             };
 
             let qspan = PositionSpan::range(qstart, qend);
@@ -336,7 +336,7 @@ mod tests {
 
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].matcher, MATCH_AHO);
-        assert_eq!(matches[0].score, 1.0);
+        assert_eq!(matches[0].score, 100.0);
         assert_eq!(matches[0].match_coverage, 100.0);
     }
 
@@ -819,8 +819,8 @@ mod tests {
 
         assert_eq!(matches.len(), 1);
         assert!(
-            (matches[0].score - 1.0).abs() < 0.001,
-            "Full match should have score 1.0"
+            (matches[0].score - 100.0).abs() < 0.001,
+            "Full match should have score 100.0"
         );
         assert_eq!(matches[0].matched_length, 5);
         assert_eq!(matches[0].match_coverage, 100.0);

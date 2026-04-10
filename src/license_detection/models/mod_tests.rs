@@ -101,7 +101,7 @@ mod tests {
             start_token: 0,
             end_token: 100,
             matcher: crate::license_detection::models::MatcherKind::Hash,
-            score: 0.95,
+            score: 95.0,
             matched_length: 100,
             rule_length: 100,
             match_coverage: 95.0,
@@ -505,7 +505,7 @@ mod tests {
         assert_eq!(match_result.start_line, LineNumber::ONE);
         assert_eq!(match_result.end_line, LineNumber::new(5).unwrap());
         assert_eq!(match_result.matcher, MatcherKind::Hash);
-        assert!((match_result.score - 0.95).abs() < 0.001);
+        assert!((match_result.score - 95.0).abs() < 0.001);
     }
 
     #[test]
@@ -550,11 +550,11 @@ mod tests {
         match_result.score = 0.0;
         assert_eq!(match_result.score, 0.0);
 
-        match_result.score = 1.0;
-        assert_eq!(match_result.score, 1.0);
+        match_result.score = 100.0;
+        assert_eq!(match_result.score, 100.0);
 
-        match_result.score = 0.5;
-        assert!((match_result.score - 0.5).abs() < 0.001);
+        match_result.score = 50.0;
+        assert!((match_result.score - 50.0).abs() < 0.001);
     }
 
     #[test]
@@ -628,7 +628,7 @@ mod tests {
             start_token: 0,
             end_token: 100,
             matcher: crate::license_detection::models::MatcherKind::Hash,
-            score: 0.95,
+            score: 95.0,
             matched_length: 100,
             rule_length: 100,
             match_coverage: 95.0,
