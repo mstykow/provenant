@@ -1,10 +1,9 @@
 what:
-  - copyrights
-  - holders
-  - authors
+- copyrights
+- holders
+- authors
 copyrights:
-  - Copyright (c) 1998-2000 University College London
+- Copyright (c) 1998-2000 University College London
 holders:
-  - University College London
-authors:
-  - the Computer Science Department at University College London
+- University College London
+authors: []

@@ -1,10 +1,9 @@
 what:
-  - copyrights
-  - holders
-  - authors
+- copyrights
+- holders
+- authors
 copyrights:
-  - Copyright (c) 2015 Broadcom
+- Copyright (c) 2015 Broadcom
 holders:
-  - Broadcom
-authors:
-  - the RCL. Other
+- Broadcom
+authors: []

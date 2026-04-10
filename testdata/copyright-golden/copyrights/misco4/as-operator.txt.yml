@@ -1,8 +1,7 @@
 what:
-  - copyrights
-  - holders
-  - authors
-authors:
-  - the University of Chicago, as Operator of Argonne National Laboratory
+- copyrights
+- holders
+- authors
+authors: []
 copyrights: []
 holders: []

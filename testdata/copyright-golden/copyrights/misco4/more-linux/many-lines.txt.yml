@@ -1,10 +1,12 @@
 what:
-  - copyrights
-  - holders
-  - authors
+- copyrights
+- holders
+- authors
 copyrights:
-  - (c) 1999 Terrehon Bowden <terrehon@pacbell.net> Bodo Bauer <bb@ricochet.net>
+- (c) 1999 Terrehon Bowden <terrehon@pacbell.net> Bodo Bauer <bb@ricochet.net>
 holders:
-  - Terrehon Bowden
-  - Bodo Bauer
-authors: []
+- Bodo Bauer
+- Terrehon Bowden
+authors:
+- (c) 1999 Terrehon Bowden <terrehon@pacbell.net>
+- Bodo Bauer <bb@ricochet.net>

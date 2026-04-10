@@ -1,12 +1,10 @@
 what:
-  - copyrights
-  - holders
-  - authors
+- copyrights
+- holders
+- authors
 copyrights:
-  - Copyright (c) 2004 IBM Corporation
+- Copyright (c) 2004 IBM Corporation
 holders:
-  - IBM Corporation
+- IBM Corporation
 authors:
-  - March, 02
-  - Ryan S. Arnold <rsa@us.ibm.com>
-  - firmware. An example vty-server sysfs entry looks like the following
+- Ryan S. Arnold <rsa@us.ibm.com>

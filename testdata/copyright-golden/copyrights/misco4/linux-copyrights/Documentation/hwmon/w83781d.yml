@@ -1,8 +1,9 @@
 what:
-  - copyrights
-  - holders
-  - authors
+- copyrights
+- holders
+- authors
 authors:
-  - the sensors group
+- Frodo Looijaard <frodol@dds.nl>, Philip Edelbrock <phil@netroedge.com>, Mark Studebaker <mdsxyz123@yahoo.com>
+- the sensors group
 copyrights: []
 holders: []
