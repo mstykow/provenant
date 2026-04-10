@@ -88,6 +88,14 @@ pub struct ScancodeManifest {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct ProvenantManifest {
+    pub version: String,
+    pub runtime_revision: Option<String>,
+    pub runtime_dirty: bool,
+    pub runtime_diff_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct CompareRunManifest {
     pub run_id: String,
     pub target: TargetManifest,
@@ -96,6 +104,7 @@ pub struct CompareRunManifest {
     pub scan_args: Vec<String>,
     pub artifacts: CompareArtifactsManifest,
     pub commands: CommandsManifest,
+    pub provenant: ProvenantManifest,
     pub scancode: ScancodeManifest,
 }
 
@@ -105,4 +114,5 @@ pub struct BenchmarkRunManifest {
     pub repo: RepoManifest,
     pub scan_profile: Option<String>,
     pub scan_args: Vec<String>,
+    pub provenant: ProvenantManifest,
 }

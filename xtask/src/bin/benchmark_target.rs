@@ -7,10 +7,12 @@ use anyhow::{Context, Result, bail};
 use clap::Parser;
 use provenant_xtask::common::{
     ScanProfile, TargetSource, append_tsv_row, derive_repo_name_from_url, ensure_release_binary,
-    project_root, realpath, render_tsv_table, resolve_scan_args, run_and_capture,
-    write_pretty_json, write_tsv,
+    project_root, read_binary_version, realpath, render_tsv_table, resolve_git_worktree_identity,
+    resolve_scan_args, run_and_capture, write_pretty_json, write_tsv,
 };
-use provenant_xtask::manifests::{BenchmarkRunManifest, RepoManifest, TargetManifest};
+use provenant_xtask::manifests::{
+    BenchmarkRunManifest, ProvenantManifest, RepoManifest, TargetManifest,
+};
 use provenant_xtask::repo_cache::{
     cleanup_repo_worktree, current_git_log_line, current_git_revision, ensure_repo_mirror,
     prepare_repo_worktree, repo_cache_path, resolve_repo_ref_to_sha,
@@ -47,6 +49,10 @@ struct BenchContext {
     time_program: String,
     time_args: Vec<String>,
     provenant_bin: PathBuf,
+    provenant_version: String,
+    provenant_runtime_revision: Option<String>,
+    provenant_runtime_dirty: bool,
+    provenant_runtime_diff_hash: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -86,7 +92,6 @@ fn main() -> Result<()> {
 
     let checkout = prepare_target_checkout(&context, &args)?;
     context.target_revision = current_target_revision(&context);
-    write_manifest(&context)?;
 
     println!("\nConfiguration:");
     println!(
@@ -117,6 +122,16 @@ fn main() -> Result<()> {
     ensure_release_binary(&context.project_root, &context.provenant_bin, "provenant")?;
     println!();
     println!("[4/4] Running benchmark matrix...\n");
+    resolve_provenant_runtime_identity(&mut context)?;
+    println!("  Provenant version: {}", context.provenant_version);
+    if let Some(revision) = &context.provenant_runtime_revision {
+        println!("  Provenant rev:     {revision}");
+    }
+    if context.provenant_runtime_dirty {
+        println!("  Provenant tree:    dirty");
+    }
+    write_manifest(&context)?;
+    println!();
 
     run_case(&context, "uncached-cold", None, false, &[])?;
     run_case(&context, "uncached-repeat", None, false, &[])?;
@@ -222,6 +237,10 @@ fn prepare_context(
         time_program,
         time_args,
         provenant_bin: project_root.join("target/release/provenant"),
+        provenant_version: String::new(),
+        provenant_runtime_revision: None,
+        provenant_runtime_dirty: false,
+        provenant_runtime_diff_hash: None,
     })
 }
 
@@ -312,8 +331,23 @@ fn write_manifest(context: &BenchContext) -> Result<()> {
         ),
         scan_profile: context.profile_name.clone(),
         scan_args: context.scan_args.clone(),
+        provenant: ProvenantManifest {
+            version: context.provenant_version.clone(),
+            runtime_revision: context.provenant_runtime_revision.clone(),
+            runtime_dirty: context.provenant_runtime_dirty,
+            runtime_diff_hash: context.provenant_runtime_diff_hash.clone(),
+        },
     };
     write_pretty_json(&context.manifest_path, &manifest)?;
+    Ok(())
+}
+
+fn resolve_provenant_runtime_identity(context: &mut BenchContext) -> Result<()> {
+    context.provenant_version = read_binary_version(&context.provenant_bin)?;
+    let identity = resolve_git_worktree_identity(&context.project_root)?;
+    context.provenant_runtime_revision = identity.revision;
+    context.provenant_runtime_dirty = identity.dirty;
+    context.provenant_runtime_diff_hash = identity.diff_hash;
     Ok(())
 }
 
