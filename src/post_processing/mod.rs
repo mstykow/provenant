@@ -617,7 +617,7 @@ mod tests {
             start_line: LineNumber::ONE,
             end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
-            score: MatchScore::from(score),
+            score: MatchScore::from_rounded_percentage(score as f32),
             matched_length: Some(3),
             match_coverage: coverage,
             rule_relevance: relevance,
