@@ -223,6 +223,39 @@ copied from [title]. Copyright ©\n\
 }
 
 #[test]
+fn test_boost_html_holder_drops_symbol_table_run_junk() {
+    let input = concat!(
+        "<p>Copyright &copy; John Maddock, Joel de Guzman, Eric Niebler and Matias Capeletto</p>\n",
+        "<p>(r), & 175, & 176, & 177, & 178, & 179, & 180, & 181, & 182, & 183</p>",
+    );
+
+    let (_copyrights, holders, _authors) = detect_copyrights_from_text(input);
+    let values: Vec<&str> = holders.iter().map(|h| h.holder.as_str()).collect();
+
+    assert_eq!(
+        values,
+        vec!["John Maddock, Joel de Guzman, Eric Niebler and Matias Capeletto"],
+        "holders: {values:?}"
+    );
+    assert!(
+        !values.iter().any(|holder| holder.starts_with("(r), & 175")),
+        "holders: {values:?}"
+    );
+}
+
+#[test]
+fn test_prose_snippet_does_not_report_laboriously_took_the_trouble_as_author() {
+    let input = concat!(
+        "<para>the authors laboriously took the trouble of searching for workarounds ",
+        "to make these compilers happy</para>",
+    );
+
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {:?}", authors);
+}
+
+#[test]
 fn test_developed_by_sentence_author_is_extracted() {
     let input = "developed by the U.S. Government. BAE Systems is enhancing and supporting the SMP";
 
