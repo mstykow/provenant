@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use clap::ValueEnum;
 use regex::Regex;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum ScanProfile {
@@ -193,6 +194,86 @@ pub fn derive_repo_name_from_url(repo_url: &str, fallback: &str) -> String {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GitWorktreeIdentity {
+    pub revision: Option<String>,
+    pub dirty: bool,
+    pub diff_hash: Option<String>,
+}
+
+pub fn resolve_git_worktree_identity(worktree_root: &Path) -> Result<GitWorktreeIdentity> {
+    let revision = crate::repo_cache::current_git_revision(worktree_root);
+    let status = Command::new("git")
+        .current_dir(worktree_root)
+        .args(["status", "--short", "--untracked-files=no"])
+        .output()
+        .with_context(|| format!("failed to inspect git worktree {}", worktree_root.display()))?;
+    if !status.status.success() {
+        anyhow::bail!(
+            "git status failed for {}: {}",
+            worktree_root.display(),
+            String::from_utf8_lossy(&status.stderr).trim()
+        );
+    }
+
+    let dirty = !String::from_utf8_lossy(&status.stdout).trim().is_empty();
+    let diff_hash = if dirty {
+        let diff = Command::new("git")
+            .current_dir(worktree_root)
+            .args(["diff", "--no-ext-diff", "--binary", "HEAD"])
+            .output()
+            .with_context(|| format!("failed to diff git worktree {}", worktree_root.display()))?;
+        if !diff.status.success() {
+            anyhow::bail!(
+                "git diff failed for {}: {}",
+                worktree_root.display(),
+                String::from_utf8_lossy(&diff.stderr).trim()
+            );
+        }
+        let mut hasher = Sha256::new();
+        hasher.update(&diff.stdout);
+        Some(
+            hasher
+                .finalize()
+                .iter()
+                .map(|byte| format!("{:02x}", byte))
+                .collect(),
+        )
+    } else {
+        None
+    };
+
+    Ok(GitWorktreeIdentity {
+        revision,
+        dirty,
+        diff_hash,
+    })
+}
+
+pub fn read_binary_version(binary: &Path) -> Result<String> {
+    let output = Command::new(binary)
+        .arg("-V")
+        .output()
+        .with_context(|| format!("failed to read binary version from {}", binary.display()))?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "{} -V failed: {}",
+            binary.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let version = stdout
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .split_whitespace()
+        .last()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("unable to parse version from {} -V", binary.display()))?;
+    Ok(version.to_string())
+}
+
 pub fn ensure_release_binary(project_root: &Path, binary: &Path, label: &str) -> Result<()> {
     let output = Command::new("cargo")
         .current_dir(project_root)
@@ -343,7 +424,40 @@ pub fn render_tsv_table(path: &Path, display_headers: &[&str]) -> Result<Vec<Vec
 
 #[cfg(test)]
 mod tests {
-    use super::{ScanProfile, resolve_scan_args};
+    use std::fs;
+    use std::path::Path;
+    use std::process::Command;
+
+    use tempfile::TempDir;
+
+    use super::{
+        ScanProfile, read_binary_version, resolve_git_worktree_identity, resolve_scan_args,
+    };
+
+    fn git(dir: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn init_git_repo() -> TempDir {
+        let temp = TempDir::new().unwrap();
+        git(temp.path(), &["init"]);
+        git(temp.path(), &["config", "user.name", "Test User"]);
+        git(temp.path(), &["config", "user.email", "test@example.com"]);
+        fs::write(temp.path().join("tracked.txt"), "hello\n").unwrap();
+        git(temp.path(), &["add", "tracked.txt"]);
+        git(temp.path(), &["commit", "-m", "init"]);
+        temp
+    }
 
     #[test]
     fn common_with_compiled_profile_expands_to_expected_args() {
@@ -377,5 +491,68 @@ mod tests {
                 "--strip-root".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn resolve_git_worktree_identity_reports_clean_repo() {
+        let temp = init_git_repo();
+
+        let identity = resolve_git_worktree_identity(temp.path()).unwrap();
+
+        assert!(identity.revision.is_some());
+        assert!(!identity.dirty);
+        assert_eq!(identity.diff_hash, None);
+    }
+
+    #[test]
+    fn resolve_git_worktree_identity_reports_dirty_repo() {
+        let temp = init_git_repo();
+        fs::write(temp.path().join("tracked.txt"), "changed\n").unwrap();
+
+        let identity = resolve_git_worktree_identity(temp.path()).unwrap();
+
+        assert!(identity.revision.is_some());
+        assert!(identity.dirty);
+        assert!(identity.diff_hash.is_some());
+    }
+
+    #[test]
+    fn read_binary_version_parses_last_token() {
+        let temp = TempDir::new().unwrap();
+        let script = temp.path().join("fake-provenant");
+        fs::write(
+            &script,
+            "#!/bin/sh\nif [ \"$1\" = \"-V\" ]; then\n  printf 'provenant 1.2.3\\n'\nelse\n  printf 'provenant 1.2.3\\nLicense detection uses data from ScanCode Toolkit.\\n'\nfi",
+        )
+        .unwrap();
+        let mut perms = fs::metadata(&script).unwrap().permissions();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            perms.set_mode(0o755);
+            fs::set_permissions(&script, perms).unwrap();
+        }
+
+        assert_eq!(read_binary_version(&script).unwrap(), "1.2.3");
+    }
+
+    #[test]
+    fn read_binary_version_uses_short_version_line() {
+        let temp = TempDir::new().unwrap();
+        let script = temp.path().join("fake-provenant");
+        fs::write(
+            &script,
+            "#!/bin/sh\nif [ \"$1\" = \"-V\" ]; then\n  printf 'provenant-cli 0.0.13\\n'\nelse\n  printf 'provenant-cli 0.0.13\\nLicense detection uses data from ScanCode Toolkit (CC-BY-4.0). See NOTICE or --show_attribution.\\n'\nfi",
+        )
+        .unwrap();
+        let mut perms = fs::metadata(&script).unwrap().permissions();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            perms.set_mode(0o755);
+            fs::set_permissions(&script, perms).unwrap();
+        }
+
+        assert_eq!(read_binary_version(&script).unwrap(), "0.0.13");
     }
 }
