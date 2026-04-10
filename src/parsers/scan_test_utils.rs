@@ -107,7 +107,11 @@ pub(crate) fn assert_file_links_to_package(
         .find(|file| file.path.ends_with(suffix))
         .unwrap_or_else(|| panic!("{suffix} should be scanned"));
 
-    assert!(file.for_packages.iter().any(|uid| uid == package_uid));
+    assert!(
+        file.for_packages
+            .iter()
+            .any(|uid| uid.as_str() == package_uid)
+    );
     assert!(
         file.package_data
             .iter()

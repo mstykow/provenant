@@ -1,5 +1,7 @@
 use super::*;
-use crate::models::{FileReference, FileType, Md5Digest, PackageData, PackageType};
+use crate::models::{
+    DependencyUid, FileReference, FileType, Md5Digest, PackageData, PackageType, PackageUid,
+};
 use strum::IntoEnumIterator;
 
 #[test]
@@ -253,7 +255,9 @@ fn test_resolve_rpm_sqlite_file_references_from_legacy_var_lib_path() {
         repository_download_url: None,
         api_data_url: None,
         purl: Some("pkg:rpm/fedora/libgcc@13.1.1-2.fc38?arch=x86_64".to_string()),
-        package_uid: "pkg:rpm/fedora/libgcc@13.1.1-2.fc38?uuid=test-uuid".to_string(),
+        package_uid: PackageUid::from_raw(
+            "pkg:rpm/fedora/libgcc@13.1.1-2.fc38?uuid=test-uuid".to_string(),
+        ),
         datafile_paths: vec!["rootfs/var/lib/rpm/rpmdb.sqlite".to_string()],
         datasource_ids: vec![DatasourceId::RpmInstalledDatabaseSqlite],
     }];
@@ -263,7 +267,9 @@ fn test_resolve_rpm_sqlite_file_references_from_legacy_var_lib_path() {
 
     assert_eq!(
         files[1].for_packages,
-        vec!["pkg:rpm/fedora/libgcc@13.1.1-2.fc38?uuid=test-uuid".to_string()]
+        vec![PackageUid::from_raw(
+            "pkg:rpm/fedora/libgcc@13.1.1-2.fc38?uuid=test-uuid".to_string()
+        )]
     );
 }
 
@@ -481,7 +487,7 @@ fn test_resolve_basic_alpine() {
         repository_download_url: None,
         api_data_url: None,
         purl: Some("pkg:alpine/musl@1.2.3".to_string()),
-        package_uid: "pkg:alpine/musl@1.2.3?uuid=test-uuid".to_string(),
+        package_uid: PackageUid::from_raw("pkg:alpine/musl@1.2.3?uuid=test-uuid".to_string()),
         datafile_paths: vec!["lib/apk/db/installed".to_string()],
         datasource_ids: vec![DatasourceId::AlpineInstalledDb],
     }];
@@ -493,12 +499,12 @@ fn test_resolve_basic_alpine() {
     assert_eq!(files[1].for_packages.len(), 1);
     assert_eq!(
         files[1].for_packages[0],
-        "pkg:alpine/musl@1.2.3?uuid=test-uuid"
+        PackageUid::from_raw("pkg:alpine/musl@1.2.3?uuid=test-uuid".to_string())
     );
     assert_eq!(files[2].for_packages.len(), 1);
     assert_eq!(
         files[2].for_packages[0],
-        "pkg:alpine/musl@1.2.3?uuid=test-uuid"
+        PackageUid::from_raw("pkg:alpine/musl@1.2.3?uuid=test-uuid".to_string())
     );
 }
 
@@ -618,7 +624,7 @@ fn test_resolve_missing_refs() {
         repository_download_url: None,
         api_data_url: None,
         purl: Some("pkg:alpine/test@1.0".to_string()),
-        package_uid: "pkg:alpine/test@1.0?uuid=test-uuid".to_string(),
+        package_uid: PackageUid::from_raw("pkg:alpine/test@1.0?uuid=test-uuid".to_string()),
         datafile_paths: vec!["lib/apk/db/installed".to_string()],
         datasource_ids: vec![DatasourceId::AlpineInstalledDb],
     }];
@@ -791,7 +797,7 @@ fn test_resolve_rpm_namespace() {
         repository_download_url: None,
         api_data_url: None,
         purl: Some("pkg:rpm/bash@5.0".to_string()),
-        package_uid: "pkg:rpm/bash@5.0?uuid=test-uuid".to_string(),
+        package_uid: PackageUid::from_raw("pkg:rpm/bash@5.0?uuid=test-uuid".to_string()),
         datafile_paths: vec!["rootfs/var/lib/rpm/Packages".to_string()],
         datasource_ids: vec![DatasourceId::RpmInstalledDatabaseBdb],
     }];
@@ -806,8 +812,10 @@ fn test_resolve_rpm_namespace() {
         is_direct: None,
         resolved_package: None,
         extra_data: None,
-        dependency_uid: "pkg:rpm/readline@8.0?uuid=dep-uuid".to_string(),
-        for_package_uid: Some("pkg:rpm/bash@5.0?uuid=test-uuid".to_string()),
+        dependency_uid: DependencyUid::from_raw("pkg:rpm/readline@8.0?uuid=dep-uuid".to_string()),
+        for_package_uid: Some(PackageUid::from_raw(
+            "pkg:rpm/bash@5.0?uuid=test-uuid".to_string(),
+        )),
         datafile_path: "rootfs/var/lib/rpm/Packages".to_string(),
         datasource_id: DatasourceId::RpmInstalledDatabaseBdb,
         namespace: None,
@@ -860,7 +868,9 @@ fn test_merge_rpm_yumdb_metadata() {
             authors: vec![],
             emails: vec![],
             urls: vec![],
-            for_packages: vec!["pkg:rpm/bash@5.0-1.el8?uuid=rpm-uuid".to_string()],
+            for_packages: vec![PackageUid::from_raw(
+                "pkg:rpm/bash@5.0-1.el8?uuid=rpm-uuid".to_string(),
+            )],
             scan_errors: vec![],
             license_policy: None,
             is_source: None,
@@ -908,7 +918,9 @@ fn test_merge_rpm_yumdb_metadata() {
             authors: vec![],
             emails: vec![],
             urls: vec![],
-            for_packages: vec!["pkg:rpm/bash@5.0-1.el8?uuid=yumdb-uuid".to_string()],
+            for_packages: vec![PackageUid::from_raw(
+                "pkg:rpm/bash@5.0-1.el8?uuid=yumdb-uuid".to_string(),
+            )],
             scan_errors: vec![],
             license_policy: None,
             is_source: None,
@@ -975,7 +987,7 @@ fn test_merge_rpm_yumdb_metadata() {
             repository_download_url: None,
             api_data_url: None,
             purl: Some("pkg:rpm/bash@5.0-1.el8?arch=x86_64".to_string()),
-            package_uid: "pkg:rpm/bash@5.0-1.el8?uuid=rpm-uuid".to_string(),
+            package_uid: PackageUid::from_raw("pkg:rpm/bash@5.0-1.el8?uuid=rpm-uuid".to_string()),
             datafile_paths: vec!["rootfs/var/lib/rpm/Packages".to_string()],
             datasource_ids: vec![DatasourceId::RpmInstalledDatabaseBdb],
         },
@@ -1032,7 +1044,7 @@ fn test_merge_rpm_yumdb_metadata() {
             repository_download_url: None,
             api_data_url: None,
             purl: Some("pkg:rpm/bash@5.0-1.el8?arch=x86_64".to_string()),
-            package_uid: "pkg:rpm/bash@5.0-1.el8?uuid=yumdb-uuid".to_string(),
+            package_uid: PackageUid::from_raw("pkg:rpm/bash@5.0-1.el8?uuid=yumdb-uuid".to_string()),
             datafile_paths: vec![
                 "rootfs/var/lib/yum/yumdb/p/abc123-bash-5.0-1.el8.x86_64/from_repo".to_string(),
             ],
@@ -1060,7 +1072,9 @@ fn test_merge_rpm_yumdb_metadata() {
     assert_eq!(yumdb["releasever"], "8");
     assert_eq!(
         files[1].for_packages,
-        vec!["pkg:rpm/bash@5.0-1.el8?uuid=rpm-uuid".to_string()]
+        vec![PackageUid::from_raw(
+            "pkg:rpm/bash@5.0-1.el8?uuid=rpm-uuid".to_string()
+        )]
     );
 }
 
@@ -1219,7 +1233,7 @@ fn test_strip_leading_slash() {
         repository_download_url: None,
         api_data_url: None,
         purl: Some("pkg:alpine/test@1.0".to_string()),
-        package_uid: "pkg:alpine/test@1.0?uuid=test-uuid".to_string(),
+        package_uid: PackageUid::from_raw("pkg:alpine/test@1.0?uuid=test-uuid".to_string()),
         datafile_paths: vec!["lib/apk/db/installed".to_string()],
         datasource_ids: vec![DatasourceId::AlpineInstalledDb],
     }];
@@ -1231,7 +1245,7 @@ fn test_strip_leading_slash() {
     assert_eq!(files[1].for_packages.len(), 1);
     assert_eq!(
         files[1].for_packages[0],
-        "pkg:alpine/test@1.0?uuid=test-uuid"
+        PackageUid::from_raw("pkg:alpine/test@1.0?uuid=test-uuid".to_string())
     );
 }
 
@@ -1507,7 +1521,7 @@ fn test_resolve_python_metadata_file_references() {
         repository_download_url: None,
         api_data_url: None,
         purl: Some("pkg:pypi/click@8.0.4".to_string()),
-        package_uid: "pkg:pypi/click@8.0.4?uuid=test-uuid".to_string(),
+        package_uid: PackageUid::from_raw("pkg:pypi/click@8.0.4?uuid=test-uuid".to_string()),
         datafile_paths: vec![
             "venv/lib/python3.11/site-packages/click-8.0.4.dist-info/METADATA".to_string(),
         ],
@@ -1523,7 +1537,7 @@ fn test_resolve_python_metadata_file_references() {
     assert_eq!(files[3].for_packages.len(), 1);
     assert_eq!(
         files[2].for_packages[0],
-        "pkg:pypi/click@8.0.4?uuid=test-uuid"
+        PackageUid::from_raw("pkg:pypi/click@8.0.4?uuid=test-uuid".to_string())
     );
 }
 
@@ -1683,7 +1697,7 @@ fn test_resolve_python_pkg_info_installed_files_references() {
         repository_download_url: None,
         api_data_url: None,
         purl: Some("pkg:pypi/examplepkg@1.0.0".to_string()),
-        package_uid: "pkg:pypi/examplepkg@1.0.0?uuid=test-uuid".to_string(),
+        package_uid: PackageUid::from_raw("pkg:pypi/examplepkg@1.0.0?uuid=test-uuid".to_string()),
         datafile_paths: vec![
             "venv/lib/python3.11/site-packages/examplepkg.egg-info/PKG-INFO".to_string(),
         ],
@@ -1696,7 +1710,9 @@ fn test_resolve_python_pkg_info_installed_files_references() {
 
     assert_eq!(
         files[1].for_packages,
-        vec!["pkg:pypi/examplepkg@1.0.0?uuid=test-uuid".to_string()]
+        vec![PackageUid::from_raw(
+            "pkg:pypi/examplepkg@1.0.0?uuid=test-uuid".to_string()
+        )]
     );
 }
 
@@ -1856,7 +1872,7 @@ fn test_resolve_python_metadata_file_references_in_dist_packages() {
         repository_download_url: None,
         api_data_url: None,
         purl: Some("pkg:pypi/click@8.0.4".to_string()),
-        package_uid: "pkg:pypi/click@8.0.4?uuid=test-uuid".to_string(),
+        package_uid: PackageUid::from_raw("pkg:pypi/click@8.0.4?uuid=test-uuid".to_string()),
         datafile_paths: vec![
             "usr/lib/python3/dist-packages/click-8.0.4.dist-info/METADATA".to_string(),
         ],
@@ -1869,7 +1885,9 @@ fn test_resolve_python_metadata_file_references_in_dist_packages() {
 
     assert_eq!(
         files[1].for_packages,
-        vec!["pkg:pypi/click@8.0.4?uuid=test-uuid".to_string()]
+        vec![PackageUid::from_raw(
+            "pkg:pypi/click@8.0.4?uuid=test-uuid".to_string()
+        )]
     );
 }
 
@@ -2029,7 +2047,7 @@ fn test_python_metadata_file_references_do_not_assign_outside_packages_dirs() {
         repository_download_url: None,
         api_data_url: None,
         purl: Some("pkg:pypi/examplepkg@1.0.0".to_string()),
-        package_uid: "pkg:pypi/examplepkg@1.0.0?uuid=test-uuid".to_string(),
+        package_uid: PackageUid::from_raw("pkg:pypi/examplepkg@1.0.0?uuid=test-uuid".to_string()),
         datafile_paths: vec!["project/metadata/METADATA".to_string()],
         datasource_ids: vec![DatasourceId::PypiWheelMetadata],
     }];
@@ -2197,7 +2215,7 @@ fn test_python_sources_file_references_do_not_escape_project_root() {
         repository_download_url: None,
         api_data_url: None,
         purl: Some("pkg:pypi/PyJPString@0.0.3".to_string()),
-        package_uid: "pkg:pypi/PyJPString@0.0.3?uuid=test-uuid".to_string(),
+        package_uid: PackageUid::from_raw("pkg:pypi/PyJPString@0.0.3?uuid=test-uuid".to_string()),
         datafile_paths: vec!["project/PyJPString.egg-info/PKG-INFO".to_string()],
         datasource_ids: vec![DatasourceId::PypiEditableEggPkginfo],
     }];
@@ -2552,7 +2570,9 @@ fn test_resolve_debian_installed_file_references_from_status_db() {
         repository_download_url: None,
         api_data_url: None,
         purl: Some("pkg:deb/debian/bash@5.2-1?arch=amd64".to_string()),
-        package_uid: "pkg:deb/debian/bash@5.2-1?arch=amd64&uuid=test-uuid".to_string(),
+        package_uid: PackageUid::from_raw(
+            "pkg:deb/debian/bash@5.2-1?arch=amd64&uuid=test-uuid".to_string(),
+        ),
         datafile_paths: vec!["rootfs/var/lib/dpkg/status".to_string()],
         datasource_ids: vec![DatasourceId::DebianInstalledStatusDb],
     }];
@@ -2562,11 +2582,15 @@ fn test_resolve_debian_installed_file_references_from_status_db() {
 
     assert_eq!(
         files[3].for_packages,
-        vec!["pkg:deb/debian/bash@5.2-1?arch=amd64&uuid=test-uuid".to_string()]
+        vec![PackageUid::from_raw(
+            "pkg:deb/debian/bash@5.2-1?arch=amd64&uuid=test-uuid".to_string()
+        )]
     );
     assert_eq!(
         files[4].for_packages,
-        vec!["pkg:deb/debian/bash@5.2-1?arch=amd64&uuid=test-uuid".to_string()]
+        vec![PackageUid::from_raw(
+            "pkg:deb/debian/bash@5.2-1?arch=amd64&uuid=test-uuid".to_string()
+        )]
     );
 }
 
@@ -2783,7 +2807,9 @@ fn test_resolve_debian_installed_file_references_matches_ubuntu_package_namespac
         repository_download_url: None,
         api_data_url: None,
         purl: Some("pkg:deb/ubuntu/bash@5.2-1ubuntu1?arch=amd64".to_string()),
-        package_uid: "pkg:deb/ubuntu/bash@5.2-1ubuntu1?arch=amd64&uuid=test-uuid".to_string(),
+        package_uid: PackageUid::from_raw(
+            "pkg:deb/ubuntu/bash@5.2-1ubuntu1?arch=amd64&uuid=test-uuid".to_string(),
+        ),
         datafile_paths: vec!["rootfs/var/lib/dpkg/status".to_string()],
         datasource_ids: vec![DatasourceId::DebianInstalledStatusDb],
     }];
@@ -2793,7 +2819,9 @@ fn test_resolve_debian_installed_file_references_matches_ubuntu_package_namespac
 
     assert_eq!(
         files[2].for_packages,
-        vec!["pkg:deb/ubuntu/bash@5.2-1ubuntu1?arch=amd64&uuid=test-uuid".to_string()]
+        vec![PackageUid::from_raw(
+            "pkg:deb/ubuntu/bash@5.2-1ubuntu1?arch=amd64&uuid=test-uuid".to_string()
+        )]
     );
 }
 
@@ -3125,7 +3153,9 @@ fn test_resolve_debian_installed_file_references_respects_arch_qualifier() {
         repository_download_url: None,
         api_data_url: None,
         purl: Some("pkg:deb/debian/libc6@2.36-1?arch=amd64".to_string()),
-        package_uid: "pkg:deb/debian/libc6@2.36-1?arch=amd64&uuid=test-uuid".to_string(),
+        package_uid: PackageUid::from_raw(
+            "pkg:deb/debian/libc6@2.36-1?arch=amd64&uuid=test-uuid".to_string(),
+        ),
         datafile_paths: vec!["rootfs/var/lib/dpkg/status".to_string()],
         datasource_ids: vec![DatasourceId::DebianInstalledStatusDb],
     }];
@@ -3135,7 +3165,9 @@ fn test_resolve_debian_installed_file_references_respects_arch_qualifier() {
 
     assert_eq!(
         files[3].for_packages,
-        vec!["pkg:deb/debian/libc6@2.36-1?arch=amd64&uuid=test-uuid".to_string()]
+        vec![PackageUid::from_raw(
+            "pkg:deb/debian/libc6@2.36-1?arch=amd64&uuid=test-uuid".to_string()
+        )]
     );
     assert!(files[4].for_packages.is_empty());
 }

@@ -1,4 +1,4 @@
-use crate::models::{DatasourceId, FileInfo, Package, PackageData, TopLevelDependency};
+use crate::models::{DatasourceId, FileInfo, Package, PackageData, PackageUid, TopLevelDependency};
 
 struct HackageSource<'a> {
     file_index: usize,
@@ -95,7 +95,7 @@ pub fn assemble_hackage_packages(
 
 fn hoist_sources_with_package<'a>(
     sources: impl Iterator<Item = &'a HackageSource<'a>>,
-    for_package_uid: Option<String>,
+    for_package_uid: Option<PackageUid>,
 ) -> Vec<TopLevelDependency> {
     sources
         .flat_map(|source| {
@@ -122,7 +122,7 @@ fn hoist_sources_with_package<'a>(
 
 fn hoist_sources_without_package<'a>(
     sources: &'a [HackageSource<'a>],
-    for_package_uid: Option<String>,
+    for_package_uid: Option<PackageUid>,
 ) -> Vec<TopLevelDependency> {
     hoist_sources_with_package(sources.iter(), for_package_uid)
 }

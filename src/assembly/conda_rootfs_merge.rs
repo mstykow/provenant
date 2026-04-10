@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::models::{DatasourceId, FileInfo, Package, PackageData, TopLevelDependency};
+use crate::models::{DatasourceId, FileInfo, Package, PackageData, PackageUid, TopLevelDependency};
 
 pub fn merge_conda_rootfs_metadata(
     files: &mut [FileInfo],
@@ -32,7 +32,7 @@ pub fn merge_conda_rootfs_metadata(
         })
         .collect();
 
-    let json_package_uids: HashMap<Option<String>, String> = packages
+    let json_package_uids: HashMap<Option<String>, PackageUid> = packages
         .iter()
         .filter(|package| {
             package
@@ -83,7 +83,7 @@ pub fn merge_conda_rootfs_metadata(
             }
 
             for dep in dependencies.iter_mut() {
-                if dep.for_package_uid.as_deref() == Some(old_uid.as_str()) {
+                if dep.for_package_uid.as_ref() == Some(&old_uid) {
                     dep.for_package_uid = Some(new_uid.clone());
                 }
             }

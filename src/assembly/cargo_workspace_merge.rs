@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use log::debug;
 
-use crate::models::{DatasourceId, FileInfo, Package, PackageData, TopLevelDependency};
+use crate::models::{DatasourceId, FileInfo, Package, PackageData, PackageUid, TopLevelDependency};
 
 pub(super) struct CargoWorkspaceRootHint {
     pub(super) root_dir: PathBuf,
@@ -192,7 +192,7 @@ pub(super) fn apply_cargo_workspace_domain(
         &workspace_root.workspace_data,
     );
 
-    let member_uids: Vec<String> = member_packages
+    let member_uids: Vec<PackageUid> = member_packages
         .iter()
         .map(|(pkg, _deps)| pkg.package_uid.clone())
         .collect();
@@ -318,7 +318,7 @@ fn remove_member_packages(
         .map(|&idx| files[idx].path.as_str())
         .collect();
 
-    let removed_uids: Vec<String> = packages
+    let removed_uids: Vec<PackageUid> = packages
         .iter()
         .filter(|pkg| {
             pkg.datafile_paths
@@ -538,7 +538,7 @@ fn extract_cargo_dep_name(purl: &str) -> Option<String> {
 fn assign_for_packages(
     files: &mut [FileInfo],
     workspace_root: &CargoWorkspaceDomain,
-    member_uids: &[String],
+    member_uids: &[PackageUid],
 ) {
     let mut member_dirs: Vec<PathBuf> = Vec::new();
     member_dirs.extend(

@@ -236,7 +236,11 @@ impl From<&crate::models::FileInfo> for OutputFileInfo {
             authors: value.authors.iter().map(OutputAuthor::from).collect(),
             emails: value.emails.iter().map(OutputEmail::from).collect(),
             urls: value.urls.iter().map(OutputURL::from).collect(),
-            for_packages: value.for_packages.clone(),
+            for_packages: value
+                .for_packages
+                .iter()
+                .map(|uid| uid.to_string())
+                .collect(),
             scan_errors: value.scan_errors.clone(),
             license_policy: value
                 .license_policy
@@ -354,7 +358,11 @@ impl TryFrom<&OutputFileInfo> for crate::models::FileInfo {
             authors,
             emails,
             urls,
-            for_packages: value.for_packages.clone(),
+            for_packages: value
+                .for_packages
+                .iter()
+                .map(|s| crate::models::PackageUid::from_raw(s.clone()))
+                .collect(),
             scan_errors: value.scan_errors.clone(),
             license_policy,
             is_generated: value.is_generated,

@@ -1,17 +1,17 @@
 use derive_builder::Builder;
 use packageurl::PackageUrl;
 use serde::{Deserialize, Serialize};
+use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 use std::str::FromStr;
-use uuid::Uuid;
-
-use sha1::{Digest, Sha1};
 
 use super::DatasourceId;
+use super::DependencyUid;
 use super::GitSha1;
 use super::LineNumber;
 use super::Md5Digest;
 use super::PackageType;
+use super::PackageUid;
 use super::Sha1Digest;
 use super::Sha256Digest;
 use super::Sha512Digest;
@@ -86,7 +86,7 @@ pub struct FileInfo {
     pub urls: Vec<OutputURL>,
     #[builder(default)]
     #[serde(default)]
-    pub for_packages: Vec<String>,
+    pub for_packages: Vec<PackageUid>,
     #[builder(default)]
     #[serde(default)]
     pub scan_errors: Vec<String>,
@@ -221,7 +221,7 @@ impl FileInfo {
         authors: Vec<Author>,
         emails: Vec<OutputEmail>,
         urls: Vec<OutputURL>,
-        for_packages: Vec<String>,
+        for_packages: Vec<PackageUid>,
         scan_errors: Vec<String>,
     ) -> Self {
         let mut package_data = package_data;
@@ -832,7 +832,7 @@ pub struct Package {
     pub api_data_url: Option<String>,
     pub purl: Option<String>,
     /// Unique identifier for this package instance (PURL with UUID qualifier).
-    pub package_uid: String,
+    pub package_uid: PackageUid,
     /// Paths to all datafiles that contributed to this package.
     pub datafile_paths: Vec<String>,
     /// Datasource identifiers for all parsers that contributed to this package.
@@ -851,8 +851,8 @@ impl Package {
         let package_uid = package_data
             .purl
             .as_ref()
-            .map(|p| build_package_uid(p))
-            .unwrap_or_default();
+            .map(|p| PackageUid::new(p))
+            .unwrap_or_else(PackageUid::empty);
 
         Package {
             package_type: package_data.package_type,
@@ -1027,7 +1027,7 @@ impl Package {
         };
 
         if self.purl.as_deref() != Some(next_purl.as_str()) || self.package_uid.is_empty() {
-            self.package_uid = build_package_uid(&next_purl);
+            self.package_uid = PackageUid::new(&next_purl);
         }
 
         self.purl = Some(next_purl);
@@ -1238,9 +1238,9 @@ pub struct TopLevelDependency {
     #[serde(default)]
     pub extra_data: Option<HashMap<String, serde_json::Value>>,
     /// Unique identifier for this dependency instance (PURL with UUID qualifier).
-    pub dependency_uid: String,
+    pub dependency_uid: DependencyUid,
     /// The `package_uid` of the package this dependency belongs to.
-    pub for_package_uid: Option<String>,
+    pub for_package_uid: Option<PackageUid>,
     /// Path to the datafile where this dependency was declared.
     pub datafile_path: String,
     /// Datasource identifier for the parser that extracted this dependency.
@@ -1255,13 +1255,13 @@ impl TopLevelDependency {
         dep: &Dependency,
         datafile_path: String,
         datasource_id: DatasourceId,
-        for_package_uid: Option<String>,
+        for_package_uid: Option<PackageUid>,
     ) -> Self {
         let dependency_uid = dep
             .purl
             .as_ref()
-            .map(|p| build_package_uid(p))
-            .unwrap_or_default();
+            .map(|p| DependencyUid::new(p))
+            .unwrap_or_else(DependencyUid::empty);
 
         TopLevelDependency {
             purl: dep.purl.clone(),
@@ -1279,18 +1279,6 @@ impl TopLevelDependency {
             datasource_id,
             namespace: None,
         }
-    }
-}
-
-/// Generate a unique package identifier by appending a UUID v4 qualifier to a PURL.
-///
-/// The format matches Python ScanCode: `pkg:type/name@version?uuid=<uuid-v4>`
-pub fn build_package_uid(purl: &str) -> String {
-    let uuid = Uuid::new_v4();
-    if purl.contains('?') {
-        format!("{}&uuid={}", purl, uuid)
-    } else {
-        format!("{}?uuid={}", purl, uuid)
     }
 }
 

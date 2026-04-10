@@ -38,8 +38,8 @@ impl From<&crate::models::TopLevelDependency> for OutputTopLevelDependency {
                 .as_ref()
                 .map(|rp| Box::new(OutputResolvedPackage::from(rp.as_ref()))),
             extra_data: value.extra_data.clone(),
-            dependency_uid: value.dependency_uid.clone(),
-            for_package_uid: value.for_package_uid.clone(),
+            dependency_uid: value.dependency_uid.to_string(),
+            for_package_uid: value.for_package_uid.as_ref().map(|uid| uid.to_string()),
             datafile_path: value.datafile_path.clone(),
             datasource_id: value.datasource_id,
             namespace: value.namespace.clone(),
@@ -65,8 +65,11 @@ impl TryFrom<&OutputTopLevelDependency> for crate::models::TopLevelDependency {
             is_direct: value.is_direct,
             resolved_package,
             extra_data: value.extra_data.clone(),
-            dependency_uid: value.dependency_uid.clone(),
-            for_package_uid: value.for_package_uid.clone(),
+            dependency_uid: crate::models::DependencyUid::from_raw(value.dependency_uid.clone()),
+            for_package_uid: value
+                .for_package_uid
+                .as_ref()
+                .map(|s| crate::models::PackageUid::from_raw(s.clone())),
             datafile_path: value.datafile_path.clone(),
             datasource_id: value.datasource_id,
             namespace: value.namespace.clone(),

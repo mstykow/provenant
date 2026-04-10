@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use crate::models::{FileInfo, Package, PackageType};
+use crate::models::{FileInfo, Package, PackageType, PackageUid};
 
 pub fn assign_cargo_package_resources(files: &mut [FileInfo], packages: &[Package]) {
-    let cargo_roots: Vec<(PathBuf, String)> = packages
+    let cargo_roots: Vec<(PathBuf, PackageUid)> = packages
         .iter()
         .filter(|package| package.package_type == Some(PackageType::Cargo))
         .filter_map(|package| {

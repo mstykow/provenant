@@ -6,14 +6,16 @@ use super::super::test_utils::{dir, file, package};
 use super::*;
 use crate::models::{
     Copyright, DatasourceId, FileReference, Holder, LineNumber, Match, Package, PackageType,
-    TallyEntry,
+    PackageUid, TallyEntry,
 };
 
 #[test]
 fn key_file_license_clues_feed_summary_without_mutating_package_license_provenance() {
     let uid = "pkg:gem/inspec-bin@6.8.2?uuid=test";
     let mut metadata_file = file("inspec-6.8.2/metadata.gz-extract");
-    metadata_file.for_packages.push(uid.to_string());
+    metadata_file
+        .for_packages
+        .push(PackageUid::from_raw(uid.to_string()));
     metadata_file.package_data = vec![crate::models::PackageData {
         package_type: Some(PackageType::Gem),
         datasource_id: Some(DatasourceId::GemArchiveExtracted),
@@ -30,7 +32,9 @@ fn key_file_license_clues_feed_summary_without_mutating_package_license_provenan
     }];
 
     let mut license_file = file("inspec-6.8.2/inspec-bin/LICENSE");
-    license_file.for_packages.push(uid.to_string());
+    license_file
+        .for_packages
+        .push(PackageUid::from_raw(uid.to_string()));
     license_file.license_expression = Some("Apache-2.0".to_string());
     license_file.license_detections = vec![crate::models::LicenseDetection {
         license_expression: "apache-2.0".to_string(),

@@ -1,7 +1,7 @@
 use provenant::models::{
-    Copyright, DatasourceId, ExtraData, FacetTallies, FileInfo, FileType, Header, Holder,
-    LineNumber, Md5Digest, Output, Package, PackageData, PackageType, Party, ResolvedPackage,
-    Sha1Digest, SystemEnvironment, Tallies, TallyEntry, TopLevelDependency,
+    Copyright, DatasourceId, DependencyUid, ExtraData, FacetTallies, FileInfo, FileType, Header,
+    Holder, LineNumber, Md5Digest, Output, Package, PackageData, PackageType, PackageUid, Party,
+    ResolvedPackage, Sha1Digest, SystemEnvironment, Tallies, TallyEntry, TopLevelDependency,
 };
 use provenant::output_schema::Output as OutputSchemaOutput;
 use provenant::{OutputFormat, OutputWriteConfig, OutputWriter, writer_for_format};
@@ -1738,10 +1738,12 @@ fn sample_cyclonedx_dependency_output() -> Output {
             )
         })),
         extra_data: None,
-        dependency_uid: "pkg:npm/root@1.0.0?uuid=00000000-0000-0000-0000-000000000001".to_string(),
-        for_package_uid: Some(
-            "pkg:npm/root-package@1.0.0?uuid=00000000-0000-0000-0000-000000000000".to_string(),
+        dependency_uid: DependencyUid::from_raw(
+            "pkg:npm/root@1.0.0?uuid=00000000-0000-0000-0000-000000000001".to_string(),
         ),
+        for_package_uid: Some(PackageUid::from_raw(
+            "pkg:npm/root-package@1.0.0?uuid=00000000-0000-0000-0000-000000000000".to_string(),
+        )),
         datafile_path: "scan/package-lock.json".to_string(),
         datasource_id: DatasourceId::NpmPackageLockJson,
         namespace: None,
@@ -1757,10 +1759,10 @@ fn sample_cyclonedx_dependency_output() -> Output {
         is_direct: Some(true),
         resolved_package: None,
         extra_data: None,
-        dependency_uid: String::new(),
-        for_package_uid: Some(
+        dependency_uid: DependencyUid::empty(),
+        for_package_uid: Some(PackageUid::from_raw(
             "pkg:npm/root-package@1.0.0?uuid=00000000-0000-0000-0000-000000000000".to_string(),
-        ),
+        )),
         datafile_path: "scan/package-lock.json".to_string(),
         datasource_id: DatasourceId::NpmPackageLockJson,
         namespace: None,

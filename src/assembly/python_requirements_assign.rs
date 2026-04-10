@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::models::{DatasourceId, FileInfo, Package, PackageType, TopLevelDependency};
+use crate::models::{DatasourceId, FileInfo, Package, PackageType, PackageUid, TopLevelDependency};
 
 const PYTHON_PROJECT_ROOT_FILENAMES: &[&str] = &[
     "pyproject.toml",
@@ -16,7 +16,7 @@ const PYTHON_PROJECT_ROOT_FILENAMES: &[&str] = &[
 struct PythonProjectRoot {
     root: PathBuf,
     package_index: usize,
-    package_uid: String,
+    package_uid: PackageUid,
 }
 
 pub fn assign_python_requirements_to_projects(

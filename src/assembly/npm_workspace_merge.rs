@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use log::debug;
 
 use super::{ASSEMBLERS, AssemblerConfig, sibling_merge};
-use crate::models::{DatasourceId, FileInfo, Package, PackageData, TopLevelDependency};
+use crate::models::{DatasourceId, FileInfo, Package, PackageData, PackageUid, TopLevelDependency};
 use crate::utils::path::{parent_dir, parent_dir_for_lookup};
 
 /// File-local topology hint emitted by npm-family workspace root files.
@@ -298,7 +298,7 @@ pub(super) fn apply_npm_workspace_domain(
     }
 
     // Collect member UIDs for for_packages assignment
-    let member_uids: Vec<String> = member_packages
+    let member_uids: Vec<PackageUid> = member_packages
         .iter()
         .map(|(pkg, _deps)| pkg.package_uid.clone())
         .collect();
@@ -329,7 +329,7 @@ pub(super) fn apply_npm_workspace_domain(
         files,
         workspace_domain,
         &member_uids,
-        root_package_uid.as_deref(),
+        root_package_uid.as_ref(),
     );
 
     // Step 7: Resolve workspace: versions in all dependencies
@@ -457,7 +457,7 @@ fn remove_member_packages(
         .map(|&idx| files[idx].path.as_str())
         .collect();
 
-    let removed_uids: Vec<String> = packages
+    let removed_uids: Vec<PackageUid> = packages
         .iter()
         .filter(|pkg| {
             pkg.datafile_paths
@@ -591,7 +591,7 @@ fn hoist_root_dependencies(
     root_dir: &Path,
     dependencies: &mut Vec<TopLevelDependency>,
     member_versions: &HashMap<String, String>,
-    for_package_uid: Option<&str>,
+    for_package_uid: Option<PackageUid>,
 ) {
     let root_file = &files[root_idx];
 
@@ -612,7 +612,7 @@ fn hoist_root_dependencies(
                 dep,
                 root_file.path.clone(),
                 DatasourceId::NpmPackageJson,
-                for_package_uid.map(|s| s.to_string()),
+                for_package_uid.clone(),
             );
 
             // Resolve workspace: version immediately
@@ -672,7 +672,7 @@ fn hoist_root_dependencies(
                         dep,
                         file.path.clone(),
                         dsid,
-                        for_package_uid.map(|s| s.to_string()),
+                        for_package_uid.clone(),
                     );
 
                     // Resolve workspace: version
@@ -699,11 +699,11 @@ fn hoist_root_dependencies(
 fn assign_for_packages(
     files: &mut [FileInfo],
     workspace_root: &NpmWorkspaceDomain,
-    member_uids: &[String],
-    root_package_uid: Option<&str>,
+    member_uids: &[PackageUid],
+    root_package_uid: Option<&PackageUid>,
 ) {
     let workspace_root_str = workspace_root.root_dir.to_string_lossy().into_owned();
-    let mut member_dirs: HashMap<String, String> = HashMap::new();
+    let mut member_dirs: HashMap<String, PackageUid> = HashMap::new();
     for (member, uid) in workspace_root.members.iter().zip(member_uids.iter()) {
         if let Some(relative_path) =
             strip_root_prefix(&files[member.manifest_idx].path, &workspace_root_str)
@@ -737,7 +737,7 @@ fn assign_for_packages(
 
         // Shared file: assign to root package (pnpm) or all members (npm/yarn)
         if let Some(root_uid) = root_package_uid {
-            file.for_packages.push(root_uid.to_string());
+            file.for_packages.push(root_uid.clone());
         } else {
             for uid in member_uids {
                 file.for_packages.push(uid.clone());
@@ -746,7 +746,10 @@ fn assign_for_packages(
     }
 }
 
-fn find_nearest_member_dir(path: &str, member_dirs: &HashMap<String, String>) -> Option<String> {
+fn find_nearest_member_dir(
+    path: &str,
+    member_dirs: &HashMap<String, PackageUid>,
+) -> Option<PackageUid> {
     let mut current = Some(path);
 
     while let Some(candidate) = current {
