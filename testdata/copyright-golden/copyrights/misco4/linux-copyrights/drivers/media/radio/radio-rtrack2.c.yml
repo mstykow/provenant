@@ -1,20 +1,20 @@
 what:
-- copyrights
-- holders
-- authors
+  - copyrights
+  - holders
+  - authors
 copyrights:
-- (c) 1997 M. Kirkwood Converted to
-- Copyright 1998 Ben Pfaff
+  - (c) 1997 M. Kirkwood Converted to
+  - Copyright 1998 Ben Pfaff
 holders:
-- Ben Pfaff
-- M. Kirkwood Converted
+  - Ben Pfaff
+  - M. Kirkwood Converted
 authors:
-- Alan Cox <alan@lxorguk.ukuu.org.uk>
-- Converted to V4L2 API by Mauro Carvalho Chehab <mchehab@kernel.org>
-- Converted to new API by Alan Cox <alan@lxorguk.ukuu.org.uk>
-- Converted to the radio-isa framework by Hans Verkuil <hans.verkuil@cisco.com>
-- Hans Verkuil <hans.verkuil@cisco.com>
-- Hans Verkuil <hans.verkuil@cisco.com> Converted
-- Mauro Carvalho Chehab <mchehab@kernel.org>
-- Russell Kroll <rkroll@exploits.org>
-- Various bugfixes and enhancements by Russell Kroll <rkroll@exploits.org>
+  - Alan Cox <alan@lxorguk.ukuu.org.uk>
+  - Converted to V4L2 API by Mauro Carvalho Chehab <mchehab@kernel.org>
+  - Converted to new API by Alan Cox <alan@lxorguk.ukuu.org.uk>
+  - Converted to the radio-isa framework by Hans Verkuil <hans.verkuil@cisco.com>
+  - Hans Verkuil <hans.verkuil@cisco.com>
+  - Hans Verkuil <hans.verkuil@cisco.com> Converted
+  - Mauro Carvalho Chehab <mchehab@kernel.org>
+  - Russell Kroll <rkroll@exploits.org>
+  - Various bugfixes and enhancements by Russell Kroll <rkroll@exploits.org>

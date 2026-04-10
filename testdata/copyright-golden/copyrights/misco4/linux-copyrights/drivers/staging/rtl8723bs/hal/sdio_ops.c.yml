@@ -1,9 +1,9 @@
 what:
-- copyrights
-- holders
-- authors
+  - copyrights
+  - holders
+  - authors
 copyrights:
-- Copyright (c) 2007 - 2012 Realtek Corporation
+  - Copyright (c) 2007 - 2012 Realtek Corporation
 holders:
-- Realtek Corporation
+  - Realtek Corporation
 authors: []

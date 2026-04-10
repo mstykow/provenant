@@ -1,20 +1,20 @@
 what:
-- copyrights
-- holders
-- authors
+  - copyrights
+  - holders
+  - authors
 copyrights:
-- Copyright (c) 2016 Realtek Corporation
+  - Copyright (c) 2016 Realtek Corporation
 holders:
-- Realtek Corporation
+  - Realtek Corporation
 authors:
-- Ivan Lin
-- Ivan Lin Return
-- Ivan Lin/KaiYuan Chang
-- KaiYuan Chang
-- KaiYuan Chang Return
-- KaiYuan Chang/Ivan Lin
-- KaiYuan Chang/Ivan Lin Return
-- Soar Return
-- Soar/Ivan Lin
-- chunchu
-- chunchu Return
+  - Ivan Lin
+  - Ivan Lin Return
+  - Ivan Lin/KaiYuan Chang
+  - KaiYuan Chang
+  - KaiYuan Chang Return
+  - KaiYuan Chang/Ivan Lin
+  - KaiYuan Chang/Ivan Lin Return
+  - Soar Return
+  - Soar/Ivan Lin
+  - chunchu
+  - chunchu Return

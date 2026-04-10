@@ -1,13 +1,13 @@
 what:
-- copyrights
-- holders
-- authors
+  - copyrights
+  - holders
+  - authors
 copyrights:
-- (c) Daniel Phillips, 2001 Hash Tree Directory
-- Copyright (c) 1991, 1992 Linus Torvalds
-- Copyright (c) 1992, 1993, 1994, 1995 Remy Card (card@masi.ibp.fr) Laboratoire MASI - Institut Blaise Pascal Universite Pierre et Marie Curie Paris
+  - (c) Daniel Phillips, 2001 Hash Tree Directory
+  - Copyright (c) 1991, 1992 Linus Torvalds
+  - Copyright (c) 1992, 1993, 1994, 1995 Remy Card (card@masi.ibp.fr) Laboratoire MASI - Institut Blaise Pascal Universite Pierre et Marie Curie Paris
 holders:
-- Daniel Phillips, Hash Tree Directory
-- Linus Torvalds
-- Remy Card Laboratoire MASI - Institut Blaise Pascal Universite Pierre et Marie Curie Paris
+  - Daniel Phillips, Hash Tree Directory
+  - Linus Torvalds
+  - Remy Card Laboratoire MASI - Institut Blaise Pascal Universite Pierre et Marie Curie Paris
 authors: []

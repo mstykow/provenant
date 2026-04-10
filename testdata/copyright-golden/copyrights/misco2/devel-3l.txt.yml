@@ -1,8 +1,8 @@
 what:
-- copyrights
-- holders
-- holders_summary
-- authors
+  - copyrights
+  - holders
+  - holders_summary
+  - authors
 authors: []
 copyrights: []
 holders: []

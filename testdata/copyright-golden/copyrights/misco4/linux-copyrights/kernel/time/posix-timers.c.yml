@@ -1,13 +1,13 @@
 what:
-- copyrights
-- holders
-- authors
+  - copyrights
+  - holders
+  - authors
 copyrights:
-- Copyright (c) 2002 2003 by MontaVista Software
-- Copyright (c) 2004 Boris
-- Copyright (c) 2004 Boris Hu
+  - Copyright (c) 2002 2003 by MontaVista Software
+  - Copyright (c) 2004 Boris
+  - Copyright (c) 2004 Boris Hu
 holders:
-- Boris
-- Boris Hu
-- MontaVista Software
+  - Boris
+  - Boris Hu
+  - MontaVista Software
 authors: []
