@@ -33,6 +33,7 @@ Each ADR follows a consistent structure:
 | [0005](0005-auto-generated-docs.md)                      | Auto-Generated Documentation                    | Accepted | 2026-02-08 |
 | [0006](0006-datasourceid-driven-package-assembly.md)     | DatasourceId-Driven Multi-Pass Package Assembly | Accepted | 2026-03-14 |
 | [0007](0007-embedded-license-index-artifact-strategy.md) | Embedded License Index Artifact Strategy        | Accepted | 2026-03-29 |
+| [0008](0008-output-schema-separation.md)                 | Output Schema Type Separation                   | Accepted | 2026-04-10 |
 
 ## When to Create a New ADR
 
