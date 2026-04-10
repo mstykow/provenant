@@ -1,9 +1,9 @@
 what:
-- copyrights
-- holders
-- authors
+  - copyrights
+  - holders
+  - authors
 copyrights:
-- Copyright (c) 2013 Intel Corporation
+  - Copyright (c) 2013 Intel Corporation
 holders:
-- Intel Corporation
+  - Intel Corporation
 authors: []

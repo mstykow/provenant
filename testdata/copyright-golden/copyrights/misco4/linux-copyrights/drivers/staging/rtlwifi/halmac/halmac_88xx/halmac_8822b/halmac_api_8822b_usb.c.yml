@@ -1,12 +1,12 @@
 what:
-- copyrights
-- holders
-- authors
+  - copyrights
+  - holders
+  - authors
 copyrights:
-- Copyright (c) 2016 Realtek Corporation
+  - Copyright (c) 2016 Realtek Corporation
 holders:
-- Realtek Corporation
+  - Realtek Corporation
 authors:
-- Ivan Return
-- KaiYuan Chang
-- KaiYuan Chang Return
+  - Ivan Return
+  - KaiYuan Chang
+  - KaiYuan Chang Return

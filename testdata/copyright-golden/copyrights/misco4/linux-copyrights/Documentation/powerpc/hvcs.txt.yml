@@ -1,10 +1,10 @@
 what:
-- copyrights
-- holders
-- authors
+  - copyrights
+  - holders
+  - authors
 copyrights:
-- Copyright (c) 2004 IBM Corporation
+  - Copyright (c) 2004 IBM Corporation
 holders:
-- IBM Corporation
+  - IBM Corporation
 authors:
-- Ryan S. Arnold <rsa@us.ibm.com>
+  - Ryan S. Arnold <rsa@us.ibm.com>

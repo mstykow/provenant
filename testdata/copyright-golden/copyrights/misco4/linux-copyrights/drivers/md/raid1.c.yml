@@ -1,14 +1,14 @@
 what:
-- copyrights
-- holders
-- authors
+  - copyrights
+  - holders
+  - authors
 copyrights:
-- Copyright (c) 1996, 1997, 1998 Ingo Molnar, Miguel de Icaza, Gadi Oxman
-- Copyright (c) 1999, 2000, 2001 Ingo Molnar, Red Hat
+  - Copyright (c) 1996, 1997, 1998 Ingo Molnar, Miguel de Icaza, Gadi Oxman
+  - Copyright (c) 1999, 2000, 2001 Ingo Molnar, Red Hat
 holders:
-- Ingo Molnar, Miguel de Icaza, Gadi Oxman
-- Ingo Molnar, Red Hat
-- Paul Clements, SteelEye Technology
+  - Ingo Molnar, Miguel de Icaza, Gadi Oxman
+  - Ingo Molnar, Red Hat
+  - Paul Clements, SteelEye Technology
 authors:
-- Mika Kuoppala <miku@iki.fi>
-- Peter T. Breuer <ptb@it.uc3m.es>
+  - Mika Kuoppala <miku@iki.fi>
+  - Peter T. Breuer <ptb@it.uc3m.es>
