@@ -237,6 +237,7 @@ static AUTHORS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^did not confirm that$",
         r"(?i)^could not find a direct reference to$",
         r"(?i)^developers aware of the problem and plan to fix it$",
+        r"(?i)^with the help of\s+.+$",
         r"(?i)^with the mode of \d{3,4}$",
         r"(?i)^kernel afs\.\s+skip afs metadata and acls$",
         r"(?i)^with a (?:fsf|dco)$",
@@ -252,6 +253,8 @@ static AUTHORS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^at sunpro, a sun microsystems, inc\. business$",
         r"(?i)^debian by .+\bupstream-contact\b.*$",
         r"(?i)^was originally written by .+\bit is now maintained by\b.*$",
+        r"(?i)^writing to the appropriate\b.*$",
+        r"(?i)^the task'?s numa mempolicy\b.*$",
     ];
     patterns.iter().filter_map(|p| Regex::new(p).ok()).collect()
 });

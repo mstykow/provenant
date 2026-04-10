@@ -12488,6 +12488,7 @@ fn merge_year_only_copyright_clause_with_preceding_copyrighted_by(
 
 const AUTHOR_BY_KEYWORDS: &[&str] = &[
     "originally",
+    "modified",
     "contributed",
     "adapted",
     "hacking",
@@ -13296,10 +13297,8 @@ fn extract_from_spans(
         } else if matches!(
             token.tag,
             PosTag::Auth
-                | PosTag::Auth2
                 | PosTag::Auths
                 | PosTag::AuthDot
-                | PosTag::Maint
                 | PosTag::Contributors
                 | PosTag::Commit
                 | PosTag::SpdxContrib
@@ -13320,10 +13319,8 @@ fn extract_from_spans(
                     if matches!(
                         t.tag,
                         PosTag::Auth
-                            | PosTag::Auth2
                             | PosTag::Auths
                             | PosTag::AuthDot
-                            | PosTag::Maint
                             | PosTag::Contributors
                             | PosTag::Commit
                             | PosTag::SpdxContrib

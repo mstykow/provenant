@@ -34,6 +34,7 @@ pub(super) fn run_phase_postprocess(
     super::recover_template_literal_year_range_copyrights(content, copyrights, holders);
 
     super::author_heuristics::extract_markup_authors(content, authors);
+    super::author_heuristics::extract_rst_field_authors(prepared_cache, authors);
     super::author_heuristics::merge_metadata_author_and_email_lines(prepared_cache, authors);
     super::author_heuristics::extract_debian_maintainer_authors(prepared_cache, authors);
     super::author_heuristics::extract_maintained_by_authors(prepared_cache, authors);
@@ -45,6 +46,7 @@ pub(super) fn run_phase_postprocess(
         authors,
     );
     super::author_heuristics::extract_multiline_written_by_author_blocks(prepared_cache, authors);
+    super::author_heuristics::extract_dash_bullet_attribution_authors(prepared_cache, authors);
     super::author_heuristics::extract_json_excerpt_developed_by_authors(content, authors);
     super::author_heuristics::extract_modified_portion_developed_by_authors(content, authors);
     super::author_heuristics::extract_was_developed_by_author_blocks(prepared_cache, authors);
@@ -62,6 +64,7 @@ pub(super) fn run_phase_postprocess(
     );
     super::author_heuristics::extract_dense_name_email_author_lists(prepared_cache, authors);
     super::author_heuristics::drop_authors_embedded_in_copyrights(copyrights, authors);
+    super::author_heuristics::drop_merged_dash_bullet_attribution_authors(authors);
     super::drop_created_by_camelcase_identifier_authors(prepared_cache, authors);
     super::author_heuristics::drop_shadowed_prefix_authors(authors);
     super::author_heuristics::drop_comedi_ds_status_devices_authors(content, copyrights, authors);
