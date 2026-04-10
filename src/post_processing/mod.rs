@@ -596,9 +596,9 @@ fn resolve_generated_scan_path(path: &str, scanned_root: Option<&Path>) -> Resul
 fn is_good_match(license_match: &Match) -> bool {
     match (license_match.match_coverage, license_match.rule_relevance) {
         (Some(coverage), Some(relevance)) => {
-            license_match.score >= 80.0 && coverage >= 80.0 && relevance >= 80
+            license_match.score.is_good() && coverage >= 80.0 && relevance >= 80
         }
-        _ => license_match.score >= 80.0,
+        _ => license_match.score.is_good(),
     }
 }
 
@@ -606,6 +606,7 @@ fn is_good_match(license_match: &Match) -> bool {
 mod tests {
     use super::is_good_match;
     use crate::models::LineNumber;
+    use crate::models::MatchScore;
     use crate::models::file_info::Match;
 
     fn make_match(score: f64, coverage: Option<f64>, relevance: Option<u8>) -> Match {
@@ -616,7 +617,7 @@ mod tests {
             start_line: LineNumber::ONE,
             end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
-            score,
+            score: MatchScore::from(score),
             matched_length: Some(3),
             match_coverage: coverage,
             rule_relevance: relevance,

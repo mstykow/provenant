@@ -1376,7 +1376,7 @@ fn convert_match_to_model(
         start_line: m.start_line,
         end_line: m.end_line,
         matcher: Some(m.matcher.to_string()),
-        score: output_metric(m.score),
+        score: output_metric(m.score).into(),
         matched_length: Some(m.matched_length),
         match_coverage: Some(output_metric(m.coverage())),
         rule_relevance: Some(m.rule_relevance),

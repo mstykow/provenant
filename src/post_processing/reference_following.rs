@@ -8,7 +8,8 @@ use crate::license_detection::detection::{
 };
 use crate::license_detection::expression::parse_expression;
 use crate::models::{
-    FileInfo, FileType, LicenseDetection, Match, Package, PackageUid, TopLevelLicenseDetection,
+    FileInfo, FileType, LicenseDetection, Match, MatchScore, Package, PackageUid,
+    TopLevelLicenseDetection,
 };
 use crate::utils::spdx::combine_license_expressions;
 
@@ -1168,7 +1169,7 @@ fn public_match_to_internal(
             .as_deref()
             .and_then(|matcher| matcher.parse().ok())
             .unwrap_or(crate::license_detection::models::MatcherKind::Hash),
-        score: detection_match.score as f32,
+        score: f64::from(detection_match.score) as f32,
         matched_length: detection_match.matched_length.unwrap_or_default(),
         rule_length: detection_match.matched_length.unwrap_or_default(),
         match_coverage: detection_match.match_coverage.unwrap_or_default() as f32,
@@ -1192,7 +1193,7 @@ fn internal_match_to_public(
     detection_match: crate::license_detection::models::LicenseMatch,
 ) -> Match {
     let output_metric = |value: f32| ((value as f64) * 100.0).round() / 100.0;
-    let score = output_metric(detection_match.score);
+    let score: MatchScore = output_metric(detection_match.score).into();
     let match_coverage = output_metric(detection_match.coverage());
 
     Match {
@@ -1217,7 +1218,7 @@ fn internal_match_to_public(
 #[cfg(test)]
 mod tests {
     use super::{apply_package_reference_following, collect_top_level_license_detections};
-    use crate::models::{LineNumber, Match};
+    use crate::models::{LineNumber, Match, MatchScore};
     use crate::post_processing::test_utils::file;
 
     #[test]
@@ -1233,7 +1234,7 @@ mod tests {
                 start_line: LineNumber::ONE,
                 end_line: LineNumber::new(3).unwrap(),
                 matcher: Some("1-hash".to_string()),
-                score: 100.0,
+                score: MatchScore::PERFECT,
                 matched_length: Some(10),
                 match_coverage: Some(100.0),
                 rule_relevance: Some(100),
@@ -1258,7 +1259,7 @@ mod tests {
                 start_line: LineNumber::new(4).unwrap(),
                 end_line: LineNumber::new(6).unwrap(),
                 matcher: Some("1-hash".to_string()),
-                score: 100.0,
+                score: MatchScore::PERFECT,
                 matched_length: Some(10),
                 match_coverage: Some(100.0),
                 rule_relevance: Some(100),
@@ -1319,7 +1320,7 @@ mod tests {
                 start_line: LineNumber::ONE,
                 end_line: LineNumber::new(3).unwrap(),
                 matcher: Some("2-aho".to_string()),
-                score: 100.0,
+                score: MatchScore::PERFECT,
                 matched_length: Some(10),
                 match_coverage: Some(100.0),
                 rule_relevance: Some(100),

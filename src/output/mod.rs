@@ -115,8 +115,8 @@ mod tests {
 
     use crate::models::{
         Author, Copyright, ExtraData, FileInfo, FileType, GitSha1, Header, Holder,
-        LicenseDetection, LineNumber, Match, Md5Digest, OutputEmail, OutputURL, PackageData,
-        PackageUid, Sha1Digest, Sha256Digest, SystemEnvironment,
+        LicenseDetection, LineNumber, Match, MatchScore, Md5Digest, OutputEmail, OutputURL,
+        PackageData, PackageUid, Sha1Digest, Sha256Digest, SystemEnvironment,
     };
     use crate::output_schema::OutputFileInfo;
 
@@ -216,7 +216,7 @@ mod tests {
             start_line: LineNumber::ONE,
             end_line: LineNumber::ONE,
             matcher: Some("2-aho".to_string()),
-            score: 100.0,
+            score: MatchScore::PERFECT,
             matched_length: Some(1),
             match_coverage: Some(100.0),
             rule_relevance: Some(100),
@@ -480,7 +480,7 @@ mod tests {
                 start_line: LineNumber::ONE,
                 end_line: LineNumber::new(2).unwrap(),
                 matcher: Some("2-aho".to_string()),
-                score: 100.0,
+                score: MatchScore::PERFECT,
                 matched_length: Some(4),
                 match_coverage: Some(100.0),
                 rule_relevance: Some(100),
@@ -966,7 +966,7 @@ mod tests {
                 start_line: LineNumber::ONE,
                 end_line: LineNumber::new(3).unwrap(),
                 matcher: Some("1-hash".to_string()),
-                score: 100.0,
+                score: MatchScore::PERFECT,
                 matched_length: Some(10),
                 match_coverage: Some(100.0),
                 rule_relevance: Some(100),
@@ -1248,7 +1248,7 @@ mod tests {
                         start_line: LineNumber::ONE,
                         end_line: LineNumber::ONE,
                         matcher: None,
-                        score: 100.0,
+                        score: MatchScore::PERFECT,
                         matched_length: None,
                         match_coverage: None,
                         rule_relevance: None,

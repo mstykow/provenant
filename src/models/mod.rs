@@ -3,6 +3,7 @@ mod dependency_uid;
 mod digest;
 pub(crate) mod file_info;
 mod line_number;
+mod match_score;
 mod output;
 mod package_type;
 mod package_uid;
@@ -16,6 +17,7 @@ pub use file_info::{
     Party, ResolvedPackage, TopLevelDependency,
 };
 pub use line_number::LineNumber;
+pub use match_score::MatchScore;
 pub use package_type::PackageType;
 pub use package_uid::PackageUid;
 

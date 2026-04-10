@@ -303,9 +303,9 @@ fn compute_license_score(
 fn is_good_match(license_match: &crate::models::Match) -> bool {
     match (license_match.match_coverage, license_match.rule_relevance) {
         (Some(coverage), Some(relevance)) => {
-            license_match.score >= 80.0 && coverage >= 80.0 && relevance >= 80
+            license_match.score.is_good() && coverage >= 80.0 && relevance >= 80
         }
-        _ => license_match.score >= 80.0,
+        _ => license_match.score.is_good(),
     }
 }
 

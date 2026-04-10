@@ -1,10 +1,11 @@
 use provenant::models::{
     Copyright, DatasourceId, DependencyUid, ExtraData, FacetTallies, FileInfo, FileType, Header,
-    Holder, LineNumber, Md5Digest, Output, Package, PackageData, PackageType, PackageUid, Party,
-    ResolvedPackage, Sha1Digest, SystemEnvironment, Tallies, TallyEntry, TopLevelDependency,
+    Holder, LineNumber, MatchScore, Md5Digest, Output, Package, PackageData, PackageType,
+    PackageUid, Party, ResolvedPackage, Sha1Digest, SystemEnvironment, Tallies, TallyEntry,
+    TopLevelDependency,
 };
 use provenant::output_schema::Output as OutputSchemaOutput;
-use provenant::{OutputFormat, OutputWriteConfig, OutputWriter, writer_for_format};
+use provenant::{writer_for_format, OutputFormat, OutputWriteConfig, OutputWriter};
 use regex::Regex;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -125,7 +126,7 @@ fn test_debian_output_matches_local_expected_fixture() {
             start_line: LineNumber::ONE,
             end_line: LineNumber::ONE,
             matcher: Some("1-hash".to_string()),
-            score: 100.0,
+            score: MatchScore::PERFECT,
             matched_length: Some(1),
             match_coverage: Some(100.0),
             rule_relevance: Some(100),
@@ -543,10 +544,10 @@ fn test_spdx_rdf_contract_contains_python_semantic_markers() {
     let expected_package_license_declared = package["spdx:licenseDeclared"]["@rdf:resource"]
         .as_str()
         .expect("fixture must contain package license declared");
-    let expected_package_license_info_from_files =
-        package["spdx:licenseInfoFromFiles"]["@rdf:resource"]
-            .as_str()
-            .expect("fixture must contain package license info from files");
+    let expected_package_license_info_from_files = package["spdx:licenseInfoFromFiles"]
+        ["@rdf:resource"]
+        .as_str()
+        .expect("fixture must contain package license info from files");
     let expected_relationship_type = relationship["spdx:relationshipType"]["@rdf:resource"]
         .as_str()
         .expect("fixture must contain relationship type");
@@ -559,10 +560,10 @@ fn test_spdx_rdf_contract_contains_python_semantic_markers() {
     let expected_file_license_info_in_file = file["spdx:licenseInfoInFile"]["@rdf:resource"]
         .as_str()
         .expect("fixture must contain file license info in file");
-    let expected_checksum_algorithm =
-        file["spdx:checksum"]["spdx:Checksum"]["spdx:algorithm"]["@rdf:resource"]
-            .as_str()
-            .expect("fixture must contain checksum algorithm");
+    let expected_checksum_algorithm = file["spdx:checksum"]["spdx:Checksum"]["spdx:algorithm"]
+        ["@rdf:resource"]
+        .as_str()
+        .expect("fixture must contain checksum algorithm");
     let expected_file_sha1 = file["spdx:checksum"]["spdx:Checksum"]["spdx:checksumValue"]
         .as_str()
         .expect("fixture must contain file sha1");
@@ -726,11 +727,9 @@ fn test_cyclonedx_rich_output_contains_enriched_fields_json_and_xml() {
     assert_eq!(json_value["bomFormat"], "CycloneDX");
     assert_eq!(json_value["specVersion"], "1.3");
     assert_eq!(json_value["version"], 1);
-    assert!(
-        json_value["serialNumber"]
-            .as_str()
-            .is_some_and(|s| s.starts_with("urn:uuid:"))
-    );
+    assert!(json_value["serialNumber"]
+        .as_str()
+        .is_some_and(|s| s.starts_with("urn:uuid:")));
     assert_eq!(json_value["metadata"]["tools"][0]["name"], "Provenant");
     let component = &json_value["components"][0];
     assert_eq!(component["name"], "npm");

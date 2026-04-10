@@ -119,7 +119,7 @@ fn unique_license_texts(detections: &[crate::output_schema::OutputLicenseDetecti
 #[cfg(test)]
 mod tests {
     use super::{detected_license_expression, unique_license_texts};
-    use crate::models::FileType;
+    use crate::models::{FileType, MatchScore};
     use crate::output_schema::{OutputFileInfo, OutputLicenseDetection, OutputMatch};
 
     #[test]
@@ -135,7 +135,7 @@ mod tests {
                     start_line: 1,
                     end_line: 3,
                     matcher: Some("1-hash".to_string()),
-                    score: 100.0,
+                    score: MatchScore::PERFECT,
                     matched_length: Some(3),
                     match_coverage: Some(100.0),
                     rule_relevance: Some(100),
@@ -152,7 +152,7 @@ mod tests {
                     start_line: 1,
                     end_line: 3,
                     matcher: Some("2-aho".to_string()),
-                    score: 100.0,
+                    score: MatchScore::PERFECT,
                     matched_length: Some(3),
                     match_coverage: Some(100.0),
                     rule_relevance: Some(100),
