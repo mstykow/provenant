@@ -1,6 +1,6 @@
 # Serde Separation Plan: Internal Types vs. Output Schema Types
 
-## Status: Planning
+## Status: Implemented (Phases 0–6 complete)
 
 ## Problem Statement
 
@@ -11,7 +11,7 @@ Provenant's internal domain types carry `serde` attributes and derive macros tha
 3. **`serde` is viral** — any type that contains a `Serialize`/`Deserialize` field must itself derive or implement serde, spreading serialization concerns deep into the crate.
 4. **Internal types can't evolve freely** — adding, renaming, or restructuring internal fields is constrained by backward compatibility with the JSON output format.
 
-The goal: **no internal type should use serde**. Output types should live in a dedicated module with conversion functions bridging internal → output (and output → internal for `--from-json`).
+The goal: **no internal type should use serde for JSON output**. Output types should live in a dedicated module with conversion functions bridging internal → output (and output → internal for `--from-json`). Internal types retain `Serialize`/`Deserialize` for non-JSON persistence (MessagePack cache, spill-to-disk) but no longer carry JSON-specific serde attributes for the output path.
 
 ## Scope
 
@@ -548,6 +548,73 @@ The reverse conversion (`OutputType` → `InternalType`) is fallible, which mean
 
 None — all questions resolved. The plan is ready for implementation.
 
+## Implementation Status
+
+### Completed Phases (0–6)
+
+All phases have been implemented on the `serde-separation` branch:
+
+**Phase 0**: Removed unused `Serialize` from `AssemblyResult`, `CopyrightDetection`, `HolderDetection`, `AuthorDetection`. Created `src/output_schema/mod.rs`.
+
+**Phase 1**: Created output schema types for leaf types: `OutputCopyright`, `OutputHolder`, `OutputAuthor`, `OutputEmail`, `OutputURL`, `OutputLicensePolicyEntry`, `OutputLicenseClarityScore`, `OutputTallyEntry`, `OutputTallies`, `OutputFacetTallies`, `OutputExtraData`, `OutputSystemEnvironment`. All have `From<&InternalType>` conversions; Group A types (used in --from-json) also have `TryFrom<&OutputType>`.
+
+**Phase 2–3**: Created structured types: `OutputParty`, `OutputFileReference`, `OutputMatch`, `OutputLicenseDetection`, `OutputDependency`, `OutputResolvedPackage`.
+
+**Phase 4**: Created core types: `OutputPackageData`, `OutputPackage`, `OutputFileInfo` (with custom `Serialize` impl replicating the info-surface gating logic). Shared utilities in `serde_helpers.rs`.
+
+**Phase 5**: Created output containers: `OutputTopLevelDependency`, `OutputTopLevelLicenseDetection`, `OutputSummary`, `OutputHeader`, `OutputLicenseReference`, `OutputLicenseRuleReference`, `Output` (top-level). `OUTPUT_FORMAT_VERSION` moved to `output_schema`.
+
+**Phase 6**: Refactored `--from-json` path. `JsonScanInput` now deserializes into output_schema types (`Vec<OutputFileInfo>`, `Vec<OutputPackage>`, etc.). `into_parts()` returns `Result` with `TryFrom` conversions. Output_schema-specific normalization functions (`normalize_output_paths`, `normalize_output_match_paths`, `normalize_output_top_level_paths`) handle path normalization on output types before conversion.
+
+**Cutover wiring**: Updated all format writers (`output/mod.rs`, `jsonl.rs`, `template.rs`, `debian.rs`, `cyclonedx.rs`, `html.rs`, `spdx.rs`, `shared.rs`) to use `output_schema::Output` and output types. `main.rs` converts `models::Output` → `output_schema::Output` at the serialization boundary. `create_output()` still returns `models::Output` with internal types.
+
+### Key Constraint: Cache and Scanner Require Serde on Internal Types
+
+During Phase 6 implementation, removing `Serialize` from internal types broke the cache (`src/cache/incremental.rs`) and scanner spill-to-disk (`src/scanner/process.rs`) subsystems. Both use `rmp_serde` (MessagePack) to persist `FileInfo` and its field types. This means:
+
+- **Internal types in `models/file_info.rs` retain `Serialize` and `Deserialize`** for non-JSON persistence (MessagePack cache, spill-to-disk)
+- **JSON output path is fully separated** — all JSON serialization goes through `output_schema` types exclusively
+- **`--from-json` path is fully separated** — deserialization goes through `output_schema` types, then `TryFrom` converts to internal types
+- **The custom `Serialize` impl on internal `FileInfo` was removed** — it only served JSON output, which is now handled by `OutputFileInfo`
+- **`serialize_optional_map_as_object` was removed from `file_info.rs`** — moved to `output_schema/serde_helpers.rs`
+- **`should_serialize_info_surface()` was removed from internal `FileInfo`** — now lives on `OutputFileInfo`
+- **Serde attributes like `skip_serializing_if` and `rename` remain on internal types** — they're needed for MessagePack serialization and deserialization in the --from-json path (though --from-json now uses output_schema types, the `Deserialize` is still present on internal types for MessagePack)
+
+### Remaining Serde on Internal Types
+
+Internal types that still carry serde derives:
+
+| Type                            | `Serialize` | `Deserialize` | Reason                                    |
+| ------------------------------- | :---------: | :-----------: | ----------------------------------------- |
+| `FileInfo`                      |      ✓      |       ✓       | MessagePack cache, spill-to-disk          |
+| `PackageData`                   |      ✓      |       ✓       | Nested in `FileInfo`                      |
+| `Package`                       |      ✓      |       ✓       | Nested in `FileInfo` (via `PackageData`)  |
+| `ResolvedPackage`               |      ✓      |       ✓       | Nested in `FileInfo` (via `PackageData`)  |
+| `Dependency`                    |      ✓      |       ✓       | Nested in `FileInfo` (via `PackageData`)  |
+| `TopLevelDependency`            |      ✓      |       ✓       | Nested in `Output`                        |
+| `LicenseDetection`              |      ✓      |       ✓       | Nested in `FileInfo`                      |
+| `Match`                         |      ✓      |       ✓       | Nested in `FileInfo`                      |
+| `Copyright`, `Holder`, `Author` |      ✓      |       ✓       | Nested in `FileInfo`                      |
+| `Party`, `FileReference`        |      ✓      |       ✓       | Nested in `FileInfo` (via `PackageData`)  |
+| `OutputEmail`, `OutputURL`      |      ✓      |       ✓       | Nested in `FileInfo`                      |
+| `LicensePolicyEntry`            |      ✓      |       ✓       | Nested in `FileInfo`                      |
+| `FileType`                      | ✓ (custom)  |  ✓ (custom)   | Shared enum, used in MessagePack          |
+| `DatasourceId`                  |      ✓      |       ✓       | Shared enum                               |
+| `PackageType`                   |      ✓      |       ✓       | Shared enum                               |
+| Digest types                    | ✓ (custom)  |  ✓ (custom)   | Nested in `FileInfo`, used in MessagePack |
+| `LineNumber`                    |      ✓      |       ✓       | Nested in `FileInfo`, used in MessagePack |
+| `Tallies`, `TallyEntry`         |      ✓      |       ✓       | Nested in `FileInfo`                      |
+| `TopLevelLicenseDetection`      |      —      |       ✓       | --from-json path (now uses output_schema) |
+| `LicenseReference`              |      —      |       ✓       | --from-json path (now uses output_schema) |
+| `LicenseRuleReference`          |      —      |       ✓       | --from-json path (now uses output_schema) |
+
+### Verified
+
+- `cargo check` — passes
+- `cargo clippy` — passes
+- `cargo test --lib` — 442 tests pass
+- `--from-json` round-trip — verified identical JSON output (excluding timestamps) for both simple and complex scans
+
 ## Appendix A: Cache Types
 
 `src/cache/incremental.rs` has three types with `Serialize`/`Deserialize`:
@@ -556,15 +623,20 @@ None — all questions resolved. The plan is ready for implementation.
 - `IncrementalManifestEntry` (contains `FileInfo` — creates a dependency on `FileInfo`'s serde)
 - `IncrementalManifest`
 
-These use serde for MessagePack persistence (`rmp_serde`), not JSON output. After the main separation:
+These use serde for MessagePack persistence (`rmp_serde`), not JSON output. Additionally, `src/scanner/process.rs` uses `serde_json::to_vec` for spill-to-disk serialization of `FileInfo` batches.
 
-- `FileStateFingerprint` is a simple struct — can remove serde and add MessagePack-specific serialization separately
-- `IncrementalManifestEntry` contains `FileInfo` — after `FileInfo` loses serde, this will need to either:
-  - Define its own MessagePack serialization for `FileInfo`, or
-  - Store `FileInfo` as raw bytes (serialized separately), or
-  - Keep a parallel cache-schema type
+**Implementation finding**: Removing `Serialize` from internal types broke both the cache and scanner subsystems. Since MessagePack is a serde format, `FileInfo` and all its nested types must retain `Serialize`/`Deserialize` as long as the cache uses MessagePack.
 
-This is a separate concern and should be its own PR after the main separation is complete.
+**Current state**: Internal types retain serde for MessagePack. The JSON output path is fully separated through `output_schema` types. The serde on internal types is now solely for non-JSON persistence.
+
+**Future options** for fully removing serde from internal types:
+
+1. **Replace MessagePack with a custom binary format** — e.g., `bincode` without serde derive, or a hand-written binary serializer. This is the cleanest but most work.
+2. **Use `serde::Serialize`/`Deserialize` impls without derive** — write custom MessagePack-specific impls for internal types that don't require derive macros on the types themselves. This keeps the serde trait implementations but removes the attribute coupling.
+3. **Introduce cache-specific schema types** — define separate types for cache serialization, similar to how `output_schema` handles JSON. This duplicates types but cleanly separates concerns.
+4. **Accept the current state** — internal types keep serde derives, but JSON-specific attributes (`skip_serializing_if`, `rename` for JSON compat, `serialize_with`) are progressively removed since they're no longer needed for JSON output.
+
+Option 4 is the pragmatic near-term choice. Options 1–3 are available for a future PR if full serde removal becomes a priority.
 
 ## Appendix B: License Detection Internal Types
 

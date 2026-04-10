@@ -3,57 +3,45 @@ use serde::{Deserialize, Serialize};
 
 pub const OUTPUT_FORMAT_VERSION: &str = "4.0.0";
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug)]
 /// Top-level ScanCode-compatible JSON payload.
 pub struct Output {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<Summary>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tallies: Option<Tallies>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tallies_of_key_files: Option<Tallies>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tallies_by_facet: Option<Vec<FacetTallies>>,
     pub headers: Vec<Header>,
     pub packages: Vec<Package>,
     pub dependencies: Vec<TopLevelDependency>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub license_detections: Vec<TopLevelLicenseDetection>,
     pub files: Vec<FileInfo>,
     pub license_references: Vec<LicenseReference>,
     pub license_rule_references: Vec<LicenseRuleReference>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct TopLevelLicenseDetection {
     pub identifier: String,
     pub license_expression: String,
     pub license_expression_spdx: String,
     pub detection_count: usize,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(default)]
     pub detection_log: Vec<String>,
     pub reference_matches: Vec<Match>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Summary {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub declared_license_expression: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub license_clarity_score: Option<LicenseClarityScore>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub declared_holder: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub primary_language: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub other_license_expressions: Vec<TallyEntry>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub other_holders: Vec<TallyEntry>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub other_languages: Vec<TallyEntry>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LicenseClarityScore {
     pub score: usize,
     pub declared_license: bool,
@@ -94,13 +82,13 @@ impl Tallies {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FacetTallies {
     pub facet: String,
     pub tallies: Tallies,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug)]
 /// Scan execution metadata stored in `output.headers`.
 pub struct Header {
     pub start_timestamp: String,
@@ -111,7 +99,7 @@ pub struct Header {
     pub output_format_version: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug)]
 /// Additional counters and environment details for a scan run.
 pub struct ExtraData {
     pub files_count: usize,
@@ -120,7 +108,7 @@ pub struct ExtraData {
     pub system_environment: SystemEnvironment,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug)]
 /// Host environment information captured during scan execution.
 pub struct SystemEnvironment {
     pub operating_system: Option<String>,
@@ -129,33 +117,33 @@ pub struct SystemEnvironment {
     pub rust_version: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 /// Reference entry for a detected license.
 pub struct LicenseReference {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub key: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub language: Option<String>,
     pub name: String,
     pub short_name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub owner: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub homepage_url: Option<String>,
     pub spdx_license_key: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub other_spdx_license_keys: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub osi_license_key: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub text_urls: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub osi_url: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub faq_url: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub other_urls: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub category: Option<String>,
     #[serde(default)]
     pub is_exception: bool,
@@ -163,32 +151,32 @@ pub struct LicenseReference {
     pub is_unknown: bool,
     #[serde(default)]
     pub is_generic: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub notes: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub minimum_coverage: Option<u8>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub standard_notice: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub ignorable_copyrights: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub ignorable_holders: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub ignorable_authors: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub ignorable_urls: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub ignorable_emails: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub scancode_url: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub licensedb_url: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub spdx_url: Option<String>,
     pub text: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 /// Reference metadata for a license detection rule.
 pub struct LicenseRuleReference {
     pub identifier: String,
@@ -199,15 +187,15 @@ pub struct LicenseRuleReference {
     pub is_license_tag: bool,
     pub is_license_clue: bool,
     pub is_license_intro: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub language: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub rule_url: Option<String>,
     #[serde(default)]
     pub is_required_phrase: bool,
     #[serde(default)]
     pub skip_for_required_phrase_generation: bool,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub replaced_by: Vec<String>,
     #[serde(default)]
     pub is_continuous: bool,
@@ -217,24 +205,24 @@ pub struct LicenseRuleReference {
     pub is_from_license: bool,
     #[serde(default)]
     pub length: usize,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub relevance: Option<u8>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub minimum_coverage: Option<u8>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub referenced_filenames: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub notes: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub ignorable_copyrights: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub ignorable_holders: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub ignorable_authors: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub ignorable_urls: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub ignorable_emails: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub text: Option<String>,
 }

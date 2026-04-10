@@ -45,6 +45,7 @@ mod finder;
 mod license_detection;
 mod models;
 mod output;
+mod output_schema;
 mod parsers;
 mod post_processing;
 mod progress;
@@ -115,7 +116,7 @@ fn run() -> Result<()> {
             license_references,
             license_rule_references,
             extra_errors,
-        ) = loaded.into_parts();
+        ) = loaded.into_parts()?;
         (
             process_result,
             directories_count,
@@ -526,6 +527,7 @@ fn run() -> Result<()> {
     });
     progress.finish_finalize();
 
+    let output_schema_output = crate::output_schema::Output::from(&output);
     progress.start_output();
     for target in cli.output_targets() {
         let output_config = OutputWriteConfig {
@@ -540,7 +542,7 @@ fn run() -> Result<()> {
 
         let timing_name = format!("output:{:?}", target.format).to_lowercase();
         record_detail_timing(&progress, timing_name, || {
-            write_output_file(&target.file, &output, &output_config)
+            write_output_file(&target.file, &output_schema_output, &output_config)
         })?;
         progress.output_written(&format!(
             "{:?} output written to {}",

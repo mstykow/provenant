@@ -2196,7 +2196,8 @@ fn create_output_projects_file_scan_errors_into_headers_and_serialized_files() {
         vec!["Failed to read or parse package.json: project/package.json".to_string()]
     );
 
-    let serialized = serde_json::to_value(&output).expect("serialize output with scan errors");
+    let serialized = serde_json::to_value(crate::output_schema::Output::from(&output))
+        .expect("serialize output with scan errors");
     let serialized_manifest = serialized["files"]
         .as_array()
         .expect("files should serialize as an array")
@@ -2715,7 +2716,8 @@ fn create_output_preserves_file_level_license_clues_in_json_shape() {
         },
     );
 
-    let value = serde_json::to_value(&output).expect("output should serialize");
+    let value = serde_json::to_value(crate::output_schema::Output::from(&output))
+        .expect("output should serialize");
     let notice = value["files"]
         .as_array()
         .expect("files array")
@@ -2778,7 +2780,8 @@ fn create_output_preserves_empty_package_data_license_and_dependency_arrays() {
         },
     );
 
-    let value = serde_json::to_value(&output).expect("output should serialize");
+    let value = serde_json::to_value(crate::output_schema::Output::from(&output))
+        .expect("output should serialize");
     let package_data = value["files"]
         .as_array()
         .expect("files array")

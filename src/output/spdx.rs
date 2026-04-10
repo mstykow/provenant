@@ -4,10 +4,13 @@ use std::path::PathBuf;
 
 use sha1::{Digest, Sha1};
 
-use crate::models::{FileInfo, FileType, Match, Output};
+use crate::models::FileType;
+use crate::output_schema::{Output, OutputFileInfo as FileInfo, OutputMatch as Match};
 
 use super::shared::{sorted_files, xml_escape};
-use super::{EMPTY_SHA1_DIGEST, OutputWriteConfig, SPDX_DOCUMENT_NOTICE};
+use super::{OutputWriteConfig, SPDX_DOCUMENT_NOTICE};
+
+const EMPTY_SHA1_HEX: &str = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
 
 struct ExtractedLicenseInfo {
     license_id: String,
@@ -71,7 +74,7 @@ pub(crate) fn write_spdx_tag_value(
 
     let mut file_index = 1usize;
     for file in files {
-        let sha1 = file.sha1.as_ref().unwrap_or(&EMPTY_SHA1_DIGEST);
+        let sha1 = file.sha1.as_deref().unwrap_or(EMPTY_SHA1_HEX);
         let file_license_info = spdx_file_license_info(file);
         writeln!(writer, "FileName: ./{}", file.path)?;
         writeln!(writer, "SPDXID: SPDXRef-{}", file_index)?;
@@ -199,9 +202,7 @@ pub(crate) fn write_spdx_rdf_xml(
         }
         xml.push_str("<spdx:checksum><spdx:Checksum><spdx:algorithm rdf:resource=\"http://spdx.org/rdf/terms#checksumAlgorithm_sha1\"/>");
         xml.push_str("<spdx:checksumValue>");
-        xml.push_str(&xml_escape(
-            &file.sha1.as_ref().unwrap_or(&EMPTY_SHA1_DIGEST).as_hex(),
-        ));
+        xml.push_str(&xml_escape(file.sha1.as_deref().unwrap_or(EMPTY_SHA1_HEX)));
         xml.push_str("</spdx:checksumValue></spdx:Checksum></spdx:checksum>");
         xml.push_str("<spdx:fileName>");
         xml.push_str(&xml_escape(&format!("./{}", file.path)));
@@ -313,13 +314,13 @@ fn spdx_files(output: &Output) -> Vec<&FileInfo> {
 fn spdx_package_verification_code(files: &[&FileInfo]) -> String {
     let mut file_sha1s = files
         .iter()
-        .map(|f| f.sha1.unwrap_or(EMPTY_SHA1_DIGEST))
+        .map(|f| f.sha1.as_deref().unwrap_or(EMPTY_SHA1_HEX).to_string())
         .collect::<Vec<_>>();
     file_sha1s.sort_unstable();
 
     let mut hasher = Sha1::new();
-    for sha1 in file_sha1s {
-        hasher.update(sha1.as_hex().as_bytes());
+    for sha1_hex in file_sha1s {
+        hasher.update(sha1_hex.as_bytes());
     }
     hex::encode(hasher.finalize())
 }
@@ -487,7 +488,7 @@ mod tests {
 
     #[test]
     fn spdx_file_license_info_includes_manifest_package_data_detections() {
-        let mut file = FileInfo::new(
+        let mut file = crate::models::FileInfo::new(
             "Cargo.toml".to_string(),
             "Cargo".to_string(),
             ".toml".to_string(),
@@ -518,7 +519,7 @@ mod tests {
             license_detections: vec![LicenseDetection {
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
-                matches: vec![Match {
+                matches: vec![crate::models::Match {
                     license_expression: "mit".to_string(),
                     license_expression_spdx: "MIT".to_string(),
                     from_file: Some("project/Cargo.toml".to_string()),
@@ -541,6 +542,10 @@ mod tests {
             ..Default::default()
         }];
 
-        assert_eq!(spdx_file_license_info(&file), vec!["MIT".to_string()]);
+        let schema_file = crate::output_schema::OutputFileInfo::from(&file);
+        assert_eq!(
+            spdx_file_license_info(&schema_file),
+            vec!["MIT".to_string()]
+        );
     }
 }

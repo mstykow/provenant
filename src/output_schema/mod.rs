@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 pub mod author;
 pub mod copyright;
 pub mod dependency;

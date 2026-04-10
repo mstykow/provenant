@@ -2,7 +2,7 @@ use std::io::{self, Write};
 
 use serde_json::{Value, json};
 
-use crate::models::Output;
+use crate::output_schema::Output;
 
 use super::shared::{io_other, sorted_files};
 

@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 use std::io::{self, Write};
 
-use crate::models::{FileInfo, Output};
+use crate::models::FileType;
+use crate::output_schema::{Output, OutputFileInfo as FileInfo};
 
 const COPYRIGHT_FORMAT_URL: &str =
     "https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/";
@@ -22,7 +23,7 @@ pub(crate) fn write_debian_copyright(output: &Output, writer: &mut dyn Write) ->
     let mut files: Vec<_> = output
         .files
         .iter()
-        .filter(|file| !matches!(file.file_type, crate::models::FileType::Directory))
+        .filter(|file| !matches!(file.file_type, FileType::Directory))
         .collect();
     files.sort_by(|left, right| left.path.cmp(&right.path));
 
@@ -90,7 +91,7 @@ fn write_multiline_field(writer: &mut dyn Write, key: &str, lines: &[&str]) -> i
     Ok(())
 }
 
-fn unique_license_texts(detections: &[crate::models::LicenseDetection]) -> Vec<&str> {
+fn unique_license_texts(detections: &[crate::output_schema::OutputLicenseDetection]) -> Vec<&str> {
     let mut seen = HashSet::new();
     let mut texts = Vec::new();
 
@@ -118,20 +119,21 @@ fn unique_license_texts(detections: &[crate::models::LicenseDetection]) -> Vec<&
 #[cfg(test)]
 mod tests {
     use super::{detected_license_expression, unique_license_texts};
-    use crate::models::{FileInfo, FileType, LicenseDetection, LineNumber, Match};
+    use crate::models::FileType;
+    use crate::output_schema::{OutputFileInfo, OutputLicenseDetection, OutputMatch};
 
     #[test]
     fn unique_license_texts_deduplicates_by_region_and_rule() {
-        let detections = vec![LicenseDetection {
+        let detections = vec![OutputLicenseDetection {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             matches: vec![
-                Match {
+                OutputMatch {
                     license_expression: "mit".to_string(),
                     license_expression_spdx: "MIT".to_string(),
                     from_file: Some("src/lib.rs".to_string()),
-                    start_line: LineNumber::ONE,
-                    end_line: LineNumber::new(3).unwrap(),
+                    start_line: 1,
+                    end_line: 3,
                     matcher: Some("1-hash".to_string()),
                     score: 100.0,
                     matched_length: Some(3),
@@ -143,12 +145,12 @@ mod tests {
                     referenced_filenames: None,
                     matched_text_diagnostics: None,
                 },
-                Match {
+                OutputMatch {
                     license_expression: "mit".to_string(),
                     license_expression_spdx: "MIT".to_string(),
                     from_file: Some("src/lib.rs".to_string()),
-                    start_line: LineNumber::ONE,
-                    end_line: LineNumber::new(3).unwrap(),
+                    start_line: 1,
+                    end_line: 3,
                     matcher: Some("2-aho".to_string()),
                     score: 100.0,
                     matched_length: Some(3),
@@ -170,7 +172,7 @@ mod tests {
 
     #[test]
     fn detected_license_expression_prefers_non_spdx_detection_expression() {
-        let mut file = FileInfo::new(
+        let internal = crate::models::FileInfo::new(
             "LICENSE".to_string(),
             "LICENSE".to_string(),
             String::new(),
@@ -196,7 +198,8 @@ mod tests {
             vec![],
             vec![],
         );
-        file.license_detections = vec![LicenseDetection {
+        let mut file = OutputFileInfo::from(&internal);
+        file.license_detections = vec![OutputLicenseDetection {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             matches: vec![],

@@ -17,6 +17,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 pub fn is_false(value: &bool) -> bool {
     !value
 }

@@ -19,6 +19,7 @@ pub struct OutputFileInfo {
     pub base_name: String,
     pub extension: String,
     pub path: String,
+    #[serde(rename = "type")]
     pub file_type: crate::models::FileType,
     pub mime_type: Option<String>,
     pub file_type_label: Option<String>,

@@ -3,7 +3,7 @@ use std::io::{self, Write};
 
 use tera::{Context, Tera};
 
-use crate::models::Output;
+use crate::output_schema::Output;
 
 use super::OutputWriteConfig;
 use super::shared::io_other;

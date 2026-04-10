@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
-use crate::models::{Output, Package};
+use crate::output_schema::{Output, OutputPackage as Package};
 
 use super::shared::{io_other, xml_escape};
 
@@ -271,16 +271,16 @@ fn package_author(pkg: &Package) -> Option<String> {
 fn component_hashes(pkg: &Package) -> Vec<(&'static str, String)> {
     let mut hashes = Vec::new();
     if let Some(sha1) = &pkg.sha1 {
-        hashes.push(("SHA-1", sha1.as_hex()));
+        hashes.push(("SHA-1", sha1.clone()));
     }
     if let Some(sha256) = &pkg.sha256 {
-        hashes.push(("SHA-256", sha256.as_hex()));
+        hashes.push(("SHA-256", sha256.clone()));
     }
     if let Some(sha512) = &pkg.sha512 {
-        hashes.push(("SHA-512", sha512.as_hex()));
+        hashes.push(("SHA-512", sha512.clone()));
     }
     if let Some(md5) = &pkg.md5 {
-        hashes.push(("MD5", md5.as_hex()));
+        hashes.push(("MD5", md5.clone()));
     }
     hashes
 }

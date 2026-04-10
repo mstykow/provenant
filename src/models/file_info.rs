@@ -1,8 +1,6 @@
 use derive_builder::Builder;
 use packageurl::PackageUrl;
-use serde::ser::Error as SerError;
-use serde::{Deserialize, Serialize, Serializer};
-use serde_json::{Map, Value};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -21,7 +19,7 @@ use crate::license_detection::tokenize::tokenize_without_stopwords;
 use crate::models::output::Tallies;
 use crate::utils::spdx::combine_license_expressions;
 
-#[derive(Debug, Builder, Deserialize, Clone)]
+#[derive(Debug, Builder, Serialize, Deserialize, Clone)]
 #[builder(build_fn(skip))]
 /// File-level scan result containing metadata and detected findings.
 pub struct FileInfo {
@@ -32,29 +30,29 @@ pub struct FileInfo {
     #[serde(rename = "type")] // name used by ScanCode
     pub file_type: FileType,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub mime_type: Option<String>,
     #[builder(default)]
-    #[serde(rename = "file_type", skip_serializing_if = "Option::is_none", default)]
+    #[serde(rename = "file_type", default)]
     pub file_type_label: Option<String>,
     pub size: u64,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub date: Option<String>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub sha1: Option<Sha1Digest>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub md5: Option<Md5Digest>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub sha256: Option<Sha256Digest>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub sha1_git: Option<GitSha1>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub programming_language: Option<String>,
     #[builder(default)]
     #[serde(default)]
@@ -66,10 +64,10 @@ pub struct FileInfo {
     #[serde(default)]
     pub license_detections: Vec<LicenseDetection>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(default)]
     pub license_clues: Vec<Match>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub percentage_of_license_text: Option<f64>,
     #[builder(default)]
     #[serde(default)]
@@ -81,7 +79,7 @@ pub struct FileInfo {
     #[serde(default)]
     pub authors: Vec<Author>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(default)]
     pub emails: Vec<OutputEmail>,
     #[builder(default)]
     #[serde(default)]
@@ -93,64 +91,64 @@ pub struct FileInfo {
     #[serde(default)]
     pub scan_errors: Vec<String>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub license_policy: Option<Vec<LicensePolicyEntry>>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub is_generated: Option<bool>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub is_binary: Option<bool>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub is_text: Option<bool>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub is_archive: Option<bool>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub is_media: Option<bool>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub is_source: Option<bool>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub is_script: Option<bool>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub files_count: Option<usize>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub dirs_count: Option<usize>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub size_count: Option<u64>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub source_count: Option<usize>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "is_false", default)]
+    #[serde(default)]
     pub is_legal: bool,
     #[builder(default)]
-    #[serde(skip_serializing_if = "is_false", default)]
+    #[serde(default)]
     pub is_manifest: bool,
     #[builder(default)]
-    #[serde(skip_serializing_if = "is_false", default)]
+    #[serde(default)]
     pub is_readme: bool,
     #[builder(default)]
-    #[serde(skip_serializing_if = "is_false", default)]
+    #[serde(default)]
     pub is_top_level: bool,
     #[builder(default)]
-    #[serde(skip_serializing_if = "is_false", default)]
+    #[serde(default)]
     pub is_key_file: bool,
     #[builder(default)]
-    #[serde(skip_serializing_if = "is_false", default)]
+    #[serde(default)]
     pub is_community: bool,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(default)]
     pub facets: Vec<String>,
     #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub tallies: Option<Tallies>,
 }
 
@@ -195,137 +193,6 @@ impl FileInfoBuilder {
         file_info.size_count = self.size_count.flatten();
         Ok(file_info)
     }
-}
-
-impl Serialize for FileInfo {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut map = Map::new();
-        insert_json(&mut map, "path", &self.path)?;
-        insert_json(&mut map, "type", &self.file_type)?;
-        insert_json(&mut map, "name", &self.name)?;
-        insert_json(&mut map, "base_name", &self.base_name)?;
-        insert_json(&mut map, "extension", &self.extension)?;
-        insert_json(&mut map, "size", self.size)?;
-
-        if self.should_serialize_info_surface() {
-            insert_json(&mut map, "date", &self.date)?;
-            insert_json(&mut map, "sha1", self.sha1)?;
-            insert_json(&mut map, "md5", self.md5)?;
-            insert_json(&mut map, "sha256", self.sha256)?;
-            insert_json(&mut map, "sha1_git", self.sha1_git)?;
-            insert_json(&mut map, "mime_type", &self.mime_type)?;
-            insert_json(&mut map, "file_type", &self.file_type_label)?;
-            insert_json(&mut map, "programming_language", &self.programming_language)?;
-            insert_json(&mut map, "is_binary", self.is_binary)?;
-            insert_json(&mut map, "is_text", self.is_text)?;
-            insert_json(&mut map, "is_archive", self.is_archive)?;
-            insert_json(&mut map, "is_media", self.is_media)?;
-            insert_json(&mut map, "is_source", self.is_source)?;
-            insert_json(&mut map, "is_script", self.is_script)?;
-            insert_json(&mut map, "files_count", self.files_count)?;
-            insert_json(&mut map, "dirs_count", self.dirs_count)?;
-            insert_json(&mut map, "size_count", self.size_count)?;
-        }
-
-        insert_json(&mut map, "package_data", &self.package_data)?;
-        insert_json(
-            &mut map,
-            "detected_license_expression_spdx",
-            &self.license_expression,
-        )?;
-        insert_json(&mut map, "license_detections", &self.license_detections)?;
-        if !self.license_clues.is_empty() {
-            insert_json(&mut map, "license_clues", &self.license_clues)?;
-        }
-        if self.percentage_of_license_text.is_some() {
-            insert_json(
-                &mut map,
-                "percentage_of_license_text",
-                self.percentage_of_license_text,
-            )?;
-        }
-        insert_json(&mut map, "copyrights", &self.copyrights)?;
-        insert_json(&mut map, "holders", &self.holders)?;
-        insert_json(&mut map, "authors", &self.authors)?;
-        if !self.emails.is_empty() {
-            insert_json(&mut map, "emails", &self.emails)?;
-        }
-        insert_json(&mut map, "urls", &self.urls)?;
-        insert_json(&mut map, "for_packages", &self.for_packages)?;
-        insert_json(&mut map, "scan_errors", &self.scan_errors)?;
-        if self.license_policy.is_some() {
-            insert_json(&mut map, "license_policy", &self.license_policy)?;
-        }
-        if self.is_generated.is_some() {
-            insert_json(&mut map, "is_generated", self.is_generated)?;
-        }
-        if self.source_count.is_some() {
-            insert_json(&mut map, "source_count", self.source_count)?;
-        }
-        if self.is_legal {
-            insert_json(&mut map, "is_legal", self.is_legal)?;
-        }
-        if self.is_manifest {
-            insert_json(&mut map, "is_manifest", self.is_manifest)?;
-        }
-        if self.is_readme {
-            insert_json(&mut map, "is_readme", self.is_readme)?;
-        }
-        if self.is_top_level {
-            insert_json(&mut map, "is_top_level", self.is_top_level)?;
-        }
-        if self.is_key_file {
-            insert_json(&mut map, "is_key_file", self.is_key_file)?;
-        }
-        if self.is_community {
-            insert_json(&mut map, "is_community", self.is_community)?;
-        }
-        if !self.facets.is_empty() {
-            insert_json(&mut map, "facets", &self.facets)?;
-        }
-        if self.tallies.is_some() {
-            insert_json(&mut map, "tallies", &self.tallies)?;
-        }
-
-        map.serialize(serializer)
-    }
-}
-
-impl FileInfo {
-    fn should_serialize_info_surface(&self) -> bool {
-        self.date.is_some()
-            || self.sha1.is_some()
-            || self.md5.is_some()
-            || self.sha256.is_some()
-            || self.sha1_git.is_some()
-            || self.mime_type.is_some()
-            || self.file_type_label.is_some()
-            || self.programming_language.is_some()
-            || self.is_binary.is_some()
-            || self.is_text.is_some()
-            || self.is_archive.is_some()
-            || self.is_media.is_some()
-            || self.is_source.is_some()
-            || self.is_script.is_some()
-            || self.files_count.is_some()
-            || self.dirs_count.is_some()
-            || self.size_count.is_some()
-    }
-}
-
-fn insert_json<S: Serialize, E: SerError>(
-    map: &mut Map<String, Value>,
-    key: &str,
-    value: S,
-) -> Result<(), E> {
-    map.insert(
-        key.to_string(),
-        serde_json::to_value(value).map_err(E::custom)?,
-    );
-    Ok(())
 }
 
 impl FileInfo {
@@ -574,7 +441,7 @@ pub struct PackageData {
     pub namespace: Option<String>,
     pub name: Option<String>,
     pub version: Option<String>,
-    #[serde(default, serialize_with = "serialize_optional_map_as_object")]
+    #[serde(default)]
     pub qualifiers: Option<HashMap<String, String>>,
     pub subpath: Option<String>,
     pub primary_language: Option<String>,
@@ -614,7 +481,7 @@ pub struct PackageData {
     pub is_private: bool,
     #[serde(default)]
     pub is_virtual: bool,
-    #[serde(default, serialize_with = "serialize_optional_map_as_object")]
+    #[serde(default)]
     pub extra_data: Option<HashMap<String, serde_json::Value>>,
     #[serde(default)]
     pub dependencies: Vec<Dependency>,
@@ -623,20 +490,6 @@ pub struct PackageData {
     pub api_data_url: Option<String>,
     pub datasource_id: Option<DatasourceId>,
     pub purl: Option<String>,
-}
-
-fn serialize_optional_map_as_object<S, T>(
-    value: &Option<HashMap<String, T>>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-    T: Serialize,
-{
-    match value {
-        Some(map) => map.serialize(serializer),
-        None => HashMap::<String, T>::new().serialize(serializer),
-    }
 }
 
 impl PackageData {
@@ -663,9 +516,8 @@ pub struct LicenseDetection {
     pub license_expression: String,
     pub license_expression_spdx: String,
     pub matches: Vec<Match>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(default)]
     pub detection_log: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub identifier: Option<String>,
 }
 
@@ -676,27 +528,19 @@ pub struct LicenseDetection {
 pub struct Match {
     pub license_expression: String,
     pub license_expression_spdx: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub from_file: Option<String>,
     pub start_line: LineNumber,
     pub end_line: LineNumber,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub matcher: Option<String>,
     pub score: f64,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub matched_length: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub match_coverage: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub rule_relevance: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub rule_identifier: Option<String>,
     pub rule_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub matched_text: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub matched_text_diagnostics: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(default)]
     pub referenced_filenames: Option<Vec<String>>,
 }
 
@@ -735,7 +579,7 @@ pub struct Dependency {
     pub is_pinned: Option<bool>,
     pub is_direct: Option<bool>,
     pub resolved_package: Option<Box<ResolvedPackage>>,
-    #[serde(default, serialize_with = "serialize_optional_map_as_object")]
+    #[serde(default)]
     pub extra_data: Option<HashMap<String, serde_json::Value>>,
 }
 
@@ -746,7 +590,7 @@ pub struct ResolvedPackage {
     pub namespace: String,
     pub name: String,
     pub version: String,
-    #[serde(default, serialize_with = "serialize_optional_map_as_object")]
+    #[serde(default)]
     pub qualifiers: Option<HashMap<String, String>>,
     pub subpath: Option<String>,
     pub primary_language: Option<String>,
@@ -786,7 +630,7 @@ pub struct ResolvedPackage {
     pub is_private: bool,
     #[serde(default)]
     pub is_virtual: bool,
-    #[serde(default, serialize_with = "serialize_optional_map_as_object")]
+    #[serde(default)]
     pub extra_data: Option<HashMap<String, serde_json::Value>>,
     #[serde(default)]
     pub dependencies: Vec<Dependency>,
@@ -903,21 +747,13 @@ impl ResolvedPackage {
 /// Represents a person or organization associated with a package.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Party {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub r#type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub organization: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub organization_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub timezone: Option<String>,
 }
 
@@ -927,17 +763,11 @@ pub struct Party {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileReference {
     pub path: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub sha1: Option<Sha1Digest>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub md5: Option<Md5Digest>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub sha256: Option<Sha256Digest>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub sha512: Option<Sha512Digest>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_data: Option<std::collections::HashMap<String, serde_json::Value>>,
 }
 
@@ -957,7 +787,7 @@ pub struct Package {
     pub namespace: Option<String>,
     pub name: Option<String>,
     pub version: Option<String>,
-    #[serde(default, serialize_with = "serialize_optional_map_as_object")]
+    #[serde(default)]
     pub qualifiers: Option<HashMap<String, String>>,
     pub subpath: Option<String>,
     pub primary_language: Option<String>,
@@ -995,7 +825,7 @@ pub struct Package {
     pub is_private: bool,
     #[serde(default)]
     pub is_virtual: bool,
-    #[serde(default, serialize_with = "serialize_optional_map_as_object")]
+    #[serde(default)]
     pub extra_data: Option<HashMap<String, serde_json::Value>>,
     pub repository_homepage_url: Option<String>,
     pub repository_download_url: Option<String>,
@@ -1270,16 +1100,6 @@ impl Package {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-
-    fn assert_has_key(value: &Value, key: &str) {
-        assert!(
-            value
-                .as_object()
-                .is_some_and(|object| object.contains_key(key)),
-            "missing key {key} in {value:#?}"
-        );
-    }
 
     #[test]
     fn file_info_new_backfills_package_detection_provenance() {
@@ -1399,150 +1219,6 @@ mod tests {
         );
         assert!(package.license_detections[0].identifier.is_some());
     }
-
-    #[test]
-    fn package_data_serialization_includes_scancode_style_defaults() {
-        let package_data = PackageData {
-            package_type: Some(PackageType::Npm),
-            name: Some("left-pad".to_string()),
-            datasource_id: Some(DatasourceId::NpmPackageJson),
-            ..PackageData::default()
-        };
-
-        let value = serde_json::to_value(&package_data).expect("package data should serialize");
-
-        assert_has_key(&value, "namespace");
-        assert_eq!(value["namespace"], Value::Null);
-        assert_eq!(value["qualifiers"], json!({}));
-        assert_eq!(value["subpath"], Value::Null);
-        assert_eq!(value["description"], Value::Null);
-        assert_eq!(value["license_detections"], json!([]));
-        assert_eq!(value["other_license_detections"], json!([]));
-        assert_eq!(value["source_packages"], json!([]));
-        assert_eq!(value["file_references"], json!([]));
-        assert_eq!(value["is_private"], json!(false));
-        assert_eq!(value["is_virtual"], json!(false));
-        assert_eq!(value["extra_data"], json!({}));
-        assert_eq!(value["repository_homepage_url"], Value::Null);
-        assert_eq!(value["repository_download_url"], Value::Null);
-        assert_eq!(value["api_data_url"], Value::Null);
-        assert_has_key(&value, "datasource_id");
-        assert_eq!(value["purl"], Value::Null);
-    }
-
-    #[test]
-    fn package_serialization_includes_scancode_style_defaults() {
-        let package = Package::from_package_data(
-            &PackageData {
-                package_type: Some(PackageType::Npm),
-                name: Some("left-pad".to_string()),
-                datasource_id: Some(DatasourceId::NpmPackageJson),
-                ..PackageData::default()
-            },
-            "project/package.json".to_string(),
-        );
-
-        let value = serde_json::to_value(&package).expect("package should serialize");
-
-        assert_eq!(value["namespace"], Value::Null);
-        assert_eq!(value["qualifiers"], json!({}));
-        assert_eq!(value["subpath"], Value::Null);
-        assert_eq!(value["keywords"], json!([]));
-        assert_eq!(value["license_detections"], json!([]));
-        assert_eq!(value["other_license_detections"], json!([]));
-        assert_eq!(value["source_packages"], json!([]));
-        assert_eq!(value["is_private"], json!(false));
-        assert_eq!(value["is_virtual"], json!(false));
-        assert_eq!(value["extra_data"], json!({}));
-        assert_eq!(value["repository_homepage_url"], Value::Null);
-        assert_eq!(value["repository_download_url"], Value::Null);
-        assert_eq!(value["api_data_url"], Value::Null);
-        assert_eq!(value["purl"], Value::Null);
-    }
-
-    #[test]
-    fn dependency_shapes_serialize_with_explicit_nulls_and_empty_objects() {
-        let dependency = Dependency {
-            purl: None,
-            extracted_requirement: None,
-            scope: None,
-            is_runtime: None,
-            is_optional: None,
-            is_pinned: None,
-            is_direct: None,
-            resolved_package: None,
-            extra_data: None,
-        };
-
-        let dependency_value =
-            serde_json::to_value(&dependency).expect("dependency should serialize");
-        assert_eq!(dependency_value["extracted_requirement"], Value::Null);
-        assert_eq!(dependency_value["is_runtime"], Value::Null);
-        assert_eq!(dependency_value["is_optional"], Value::Null);
-        assert_eq!(dependency_value["is_pinned"], Value::Null);
-        assert_eq!(dependency_value["is_direct"], Value::Null);
-        assert_eq!(dependency_value["resolved_package"], Value::Null);
-        assert_eq!(dependency_value["extra_data"], json!({}));
-
-        let top_level = TopLevelDependency::from_dependency(
-            &dependency,
-            "project/package-lock.json".to_string(),
-            DatasourceId::NpmPackageLockJson,
-            None,
-        );
-        let top_level_value =
-            serde_json::to_value(&top_level).expect("top-level dependency should serialize");
-
-        assert_eq!(top_level_value["resolved_package"], Value::Null);
-        assert_eq!(top_level_value["extra_data"], json!({}));
-        assert_eq!(top_level_value["for_package_uid"], Value::Null);
-        assert_eq!(top_level_value["namespace"], Value::Null);
-    }
-
-    #[test]
-    fn nested_resolved_package_serialization_uses_full_package_shape() {
-        let dependency = Dependency {
-            purl: Some("pkg:npm/left-pad@1.3.0".to_string()),
-            extracted_requirement: Some("1.3.0".to_string()),
-            scope: Some("dependencies".to_string()),
-            is_runtime: Some(true),
-            is_optional: Some(false),
-            is_pinned: Some(true),
-            is_direct: Some(true),
-            resolved_package: Some(Box::new(ResolvedPackage {
-                primary_language: Some("JavaScript".to_string()),
-                datasource_id: Some(DatasourceId::NpmPackageLockJson),
-                purl: Some("pkg:npm/left-pad@1.3.0".to_string()),
-                ..ResolvedPackage::new(
-                    PackageType::Npm,
-                    String::new(),
-                    "left-pad".to_string(),
-                    "1.3.0".to_string(),
-                )
-            })),
-            extra_data: None,
-        };
-
-        let value = serde_json::to_value(&dependency).expect("dependency should serialize");
-        let resolved_package = &value["resolved_package"];
-
-        assert_eq!(resolved_package["namespace"], json!(""));
-        assert_eq!(resolved_package["qualifiers"], json!({}));
-        assert_eq!(resolved_package["subpath"], Value::Null);
-        assert_eq!(resolved_package["description"], Value::Null);
-        assert_eq!(resolved_package["license_detections"], json!([]));
-        assert_eq!(resolved_package["other_license_detections"], json!([]));
-        assert_eq!(resolved_package["source_packages"], json!([]));
-        assert_eq!(resolved_package["file_references"], json!([]));
-        assert_eq!(resolved_package["is_private"], json!(false));
-        assert_eq!(resolved_package["is_virtual"], json!(false));
-        assert_eq!(resolved_package["extra_data"], json!({}));
-        assert_eq!(resolved_package["repository_homepage_url"], Value::Null);
-        assert_eq!(resolved_package["repository_download_url"], Value::Null);
-        assert_eq!(resolved_package["api_data_url"], Value::Null);
-        assert_has_key(resolved_package, "datasource_id");
-        assert_has_key(resolved_package, "purl");
-    }
 }
 
 /// Top-level dependency instance, created during package assembly.
@@ -1559,7 +1235,7 @@ pub struct TopLevelDependency {
     pub is_pinned: Option<bool>,
     pub is_direct: Option<bool>,
     pub resolved_package: Option<Box<ResolvedPackage>>,
-    #[serde(default, serialize_with = "serialize_optional_map_as_object")]
+    #[serde(default)]
     pub extra_data: Option<HashMap<String, serde_json::Value>>,
     /// Unique identifier for this dependency instance (PURL with UUID qualifier).
     pub dependency_uid: String,
@@ -1646,16 +1322,15 @@ pub enum FileType {
     Directory,
 }
 
-impl Serialize for FileType {
+impl serde::Serialize for FileType {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        let value = match self {
-            FileType::File => "file",
-            FileType::Directory => "directory",
-        };
-        serializer.serialize_str(value)
+        match self {
+            FileType::File => serializer.serialize_str("file"),
+            FileType::Directory => serializer.serialize_str("directory"),
+        }
     }
 }
 

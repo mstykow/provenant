@@ -520,7 +520,7 @@ pub(crate) fn compute_fixture_output(
         (Vec::new(), Vec::new(), Vec::new())
     };
 
-    serde_json::to_value(create_output(
+    let models_output = create_output(
         Utc::now(),
         Utc::now(),
         crate::scanner::ProcessResult {
@@ -546,8 +546,9 @@ pub(crate) fn compute_fixture_output(
                 include_generated: options.include_generated,
             },
         },
-    ))
-    .expect("fixture output should serialize")
+    );
+    serde_json::to_value(crate::output_schema::Output::from(&models_output))
+        .expect("fixture output should serialize")
 }
 
 #[cfg(feature = "golden-tests")]
@@ -602,11 +603,11 @@ pub(crate) fn compute_fixture_summary(
     );
     promote_package_metadata_from_key_files(&files, &mut packages, &indexes);
 
-    serde_json::to_value(
+    let models_summary =
         compute_summary_with_options(&files, &packages, &indexes, include_summary, include_score)
-            .expect("fixture summary should exist"),
-    )
-    .expect("fixture summary should serialize")
+            .expect("fixture summary should exist");
+    serde_json::to_value(crate::output_schema::OutputSummary::from(&models_summary))
+        .expect("fixture summary should serialize")
 }
 
 #[cfg(feature = "golden-tests")]
