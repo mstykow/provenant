@@ -1,8 +1,7 @@
 what:
-  - copyrights
-  - holders
-  - authors
-authors:
-  - an SR-IOV device. Walk up to the first bridge device found or derive the domain from the host bridge
+- copyrights
+- holders
+- authors
+authors: []
 copyrights: []
 holders: []

@@ -1,13 +1,12 @@
 what:
-  - copyrights
-  - holders
-  - authors
+- copyrights
+- holders
+- authors
 copyrights:
-  - Copyright (c) 1992 Rick Sladkey
-  - Copyright (c) 1994 by Florian La Roche
+- Copyright (c) 1992 Rick Sladkey
+- Copyright (c) 1994 by Florian La Roche
 holders:
-  - Florian La Roche
-  - Rick Sladkey
+- Florian La Roche
+- Rick Sladkey
 authors:
-  - Wai S Kok elekokws@ee.nus.sg
-  - stable storage
+- Wai S Kok elekokws@ee.nus.sg

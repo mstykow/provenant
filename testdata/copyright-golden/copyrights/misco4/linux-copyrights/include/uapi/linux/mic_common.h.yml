@@ -1,10 +1,9 @@
 what:
-  - copyrights
-  - holders
-  - authors
+- copyrights
+- holders
+- authors
 copyrights:
-  - Copyright (c) 2013 Intel Corporation
+- Copyright (c) 2013 Intel Corporation
 holders:
-  - Intel Corporation
-authors:
-  - the Guest. @config Start of the following variable length config
+- Intel Corporation
+authors: []

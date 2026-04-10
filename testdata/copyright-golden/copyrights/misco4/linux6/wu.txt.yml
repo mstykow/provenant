@@ -1,11 +1,14 @@
 what:
-  - copyrights
-  - holders
-  - authors
+- copyrights
+- holders
+- authors
 copyrights:
-  - Copyright (c) 2006 Yuan
-  - Copyright (c) 2006 Yuan Mu (Winbond)
+- Copyright (c) 2006 Yuan
+- Copyright (c) 2006 Yuan Mu (Winbond)
 holders:
-  - Yuan
-  - Yuan Mu (Winbond)
-authors: []
+- Yuan
+- Yuan Mu (Winbond)
+authors:
+- Daniel J Blueman <daniel.blueman@gmail.com>
+- David Hubbard <david.c.hubbard@gmail.com>
+- Rudolf Marek <r.marek@assembler.cz>
