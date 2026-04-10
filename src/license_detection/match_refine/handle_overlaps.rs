@@ -5,7 +5,7 @@
 
 use crate::license_detection::expression::licensing_contains;
 use crate::license_detection::index::LicenseIndex;
-use crate::license_detection::models::LicenseMatch;
+use crate::license_detection::models::{LicenseMatch, MatcherKind};
 use crate::license_detection::position_set::PositionSet;
 
 use super::merge::merge_overlapping_matches;
@@ -115,6 +115,14 @@ fn is_false_positive(m: &LicenseMatch, index: &LicenseIndex) -> bool {
     index.false_positive_rids.contains(&m.rid)
 }
 
+fn is_strong_exact_match(match_item: &LicenseMatch) -> bool {
+    match_item.matcher == MatcherKind::Aho && match_item.coverage() == 100.0
+}
+
+fn is_low_confidence_seq_match(match_item: &LicenseMatch) -> bool {
+    match_item.matcher == MatcherKind::Seq && match_item.coverage() < 10.0
+}
+
 fn licensing_contains_match(current: &LicenseMatch, other: &LicenseMatch) -> bool {
     if current.license_expression.is_empty() || other.license_expression.is_empty() {
         return false;
@@ -216,6 +224,23 @@ pub fn filter_overlapping_matches(
             let current_is_generic_license_notice =
                 is_generic_license_reference_notice(&matches[i]);
             let next_is_generic_license_notice = is_generic_license_reference_notice(&matches[j]);
+
+            if medium_next
+                && is_strong_exact_match(&matches[i])
+                && is_low_confidence_seq_match(&matches[j])
+            {
+                discarded.push(matches.remove(j));
+                continue;
+            }
+
+            if medium_current
+                && is_low_confidence_seq_match(&matches[i])
+                && is_strong_exact_match(&matches[j])
+            {
+                discarded.push(matches.remove(i));
+                i = i.saturating_sub(1);
+                break;
+            }
 
             // Note: We do NOT use candidate_resemblance for tie-breaking here.
             // candidate_resemblance is a GLOBAL measure based on multiset intersection
@@ -1259,5 +1284,60 @@ mod tests {
 
         assert_eq!(kept, vec![referenced]);
         assert_eq!(discarded, vec![plain]);
+    }
+
+    #[test]
+    fn test_filter_overlapping_matches_keeps_exact_match_between_weak_seq_wrappers() {
+        let index = LicenseIndex::with_legalese_count(10);
+
+        let mut left =
+            create_test_match("bsd-new_and_lgpl-2.0_1.RULE", 9227, 9227, 4.82, 4.82, 100);
+        left.matcher = crate::license_detection::models::MatcherKind::Seq;
+        left.license_expression = "bsd-new AND lgpl-2.0".to_string();
+        left.license_expression_spdx = Some("BSD-3-Clause AND LGPL-2.0-only".to_string());
+        left.start_token = 100;
+        left.end_token = 108;
+        left.matched_length = 8;
+        left.coordinates = MatchCoordinates::query_region(PositionSpan::range(100, 108));
+
+        let mut exact = create_test_match("lgpl-2.1-plus_161.RULE", 9227, 9227, 100.0, 100.0, 100);
+        exact.matcher = crate::license_detection::models::MatcherKind::Aho;
+        exact.license_expression = "lgpl-2.1-plus".to_string();
+        exact.license_expression_spdx = Some("LGPL-2.1-or-later".to_string());
+        exact.start_token = 102;
+        exact.end_token = 110;
+        exact.matched_length = 8;
+        exact.coordinates = MatchCoordinates::query_region(PositionSpan::range(102, 110));
+
+        let mut right = create_test_match(
+            "mpl-1.1_or_lgpl-2.1-plus_or_apache-2.0_5.RULE",
+            9227,
+            9227,
+            4.76,
+            4.76,
+            100,
+        );
+        right.matcher = crate::license_detection::models::MatcherKind::Seq;
+        right.license_expression = "mpl-1.1 OR lgpl-2.1-plus OR apache-2.0".to_string();
+        right.license_expression_spdx =
+            Some("MPL-1.1 OR LGPL-2.1-or-later OR Apache-2.0".to_string());
+        right.start_token = 101;
+        right.end_token = 109;
+        right.matched_length = 8;
+        right.coordinates = MatchCoordinates::query_region(PositionSpan::range(101, 109));
+
+        let (kept, discarded) =
+            filter_overlapping_matches(vec![left.clone(), exact.clone(), right.clone()], &index);
+
+        assert!(
+            kept.iter()
+                .any(|m| m.rule_identifier == exact.rule_identifier),
+            "kept: {:?}, discarded: {:?}",
+            kept.iter().map(|m| &m.rule_identifier).collect::<Vec<_>>(),
+            discarded
+                .iter()
+                .map(|m| &m.rule_identifier)
+                .collect::<Vec<_>>()
+        );
     }
 }
