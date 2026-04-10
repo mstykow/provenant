@@ -1470,21 +1470,27 @@ fn xml_unescape_for_assert(value: &str) -> String {
 
 fn sample_header(files_count: usize, directories_count: usize) -> Header {
     Header {
+        tool_name: "provenant".to_string(),
+        tool_version: env!("CARGO_PKG_VERSION").to_string(),
+        options: serde_json::Map::new(),
         start_timestamp: "2026-01-01T00:00:00Z".to_string(),
         end_timestamp: "2026-01-01T00:00:01Z".to_string(),
+        output_format_version: "4.1.0".to_string(),
         duration: 1.0,
         errors: vec![],
-        output_format_version: "4.0.0".to_string(),
+        warnings: vec![],
         extra_data: ExtraData {
+            system_environment: SystemEnvironment {
+                operating_system: "linux".to_string(),
+                cpu_architecture: "64".to_string(),
+                platform: "linux".to_string(),
+                platform_version: "unknown".to_string(),
+                rust_version: "1.93.0".to_string(),
+            },
+            spdx_license_list_version: "3.27".to_string(),
             files_count,
             directories_count,
             excluded_count: 0,
-            system_environment: SystemEnvironment {
-                operating_system: Some("linux".to_string()),
-                cpu_architecture: "64".to_string(),
-                platform: "linux".to_string(),
-                rust_version: "1.93.0".to_string(),
-            },
         },
     }
 }

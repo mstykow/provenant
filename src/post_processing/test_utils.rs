@@ -534,6 +534,8 @@ pub(crate) fn compute_fixture_output(
             license_references,
             license_rule_references,
             extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
             options: CreateOutputOptions {
                 facet_rules: &facet_rules,
                 include_classify: options.include_classify,
@@ -544,6 +546,7 @@ pub(crate) fn compute_fixture_output(
                 include_tallies_with_details: options.include_tallies_with_details,
                 include_tallies_by_facet: options.include_tallies_by_facet,
                 include_generated: options.include_generated,
+                verbose: false,
             },
         },
     );

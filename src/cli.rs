@@ -1,7 +1,8 @@
 use clap::{ArgGroup, Parser};
+use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 use std::fs;
 use std::path::Path;
-use yaml_serde::Value;
+use yaml_serde::Value as YamlValue;
 
 use crate::license_detection::DEFAULT_LICENSEDB_URL_TEMPLATE;
 use crate::output::OutputFormat;
@@ -33,7 +34,7 @@ fn parse_license_policy_arg(value: &str) -> Result<String, String> {
         return Err(format!("License policy file {:?} is empty", policy_path));
     }
 
-    let policy_value: Value = yaml_serde::from_str(&policy_text).map_err(|err| {
+    let policy_value: YamlValue = yaml_serde::from_str(&policy_text).map_err(|err| {
         format!(
             "Failed to parse license policy file {:?}: {err}",
             policy_path
@@ -41,7 +42,7 @@ fn parse_license_policy_arg(value: &str) -> Result<String, String> {
     })?;
     let has_license_policies = policy_value
         .as_mapping()
-        .and_then(|mapping| mapping.get(Value::String("license_policies".to_string())))
+        .and_then(|mapping| mapping.get(YamlValue::String("license_policies".to_string())))
         .is_some();
     if !has_license_policies {
         return Err(format!(
@@ -473,6 +474,227 @@ impl Cli {
 
         targets
     }
+
+    pub fn output_header_options(&self) -> JsonMap<String, JsonValue> {
+        let mut options = JsonMap::new();
+        if !self.dir_path.is_empty() {
+            options.insert(
+                "input".to_string(),
+                JsonValue::Array(
+                    self.dir_path
+                        .iter()
+                        .cloned()
+                        .map(JsonValue::String)
+                        .collect(),
+                ),
+            );
+        }
+
+        let mut flags = Vec::new();
+
+        push_string_option(&mut flags, "--cache-dir", self.cache_dir.as_ref());
+        push_bool_option(&mut flags, "--cache-clear", self.cache_clear);
+        push_bool_option(&mut flags, "--classify", self.classify);
+        push_string_option(&mut flags, "--custom-output", self.custom_output.as_ref());
+        push_string_option(
+            &mut flags,
+            "--custom-template",
+            self.custom_template.as_ref(),
+        );
+        push_bool_option(&mut flags, "--copyright", self.copyright);
+        push_string_option(&mut flags, "--cyclonedx", self.output_cyclonedx.as_ref());
+        push_string_option(
+            &mut flags,
+            "--cyclonedx-xml",
+            self.output_cyclonedx_xml.as_ref(),
+        );
+        push_string_option(&mut flags, "--debian", self.output_debian.as_ref());
+        push_bool_option(&mut flags, "--email", self.email);
+        push_array_option(&mut flags, "--facet", &self.facet);
+        push_bool_option(&mut flags, "--filter-clues", self.filter_clues);
+        push_bool_option(&mut flags, "--from-json", self.from_json);
+        push_bool_option(&mut flags, "--full-root", self.full_root);
+        push_bool_option(&mut flags, "--generated", self.generated);
+        push_string_option(&mut flags, "--html", self.output_html.as_ref());
+        push_array_option(&mut flags, "--ignore", &self.exclude);
+        push_array_option(&mut flags, "--ignore-author", &self.ignore_author);
+        push_array_option(
+            &mut flags,
+            "--ignore-copyright-holder",
+            &self.ignore_copyright_holder,
+        );
+        push_bool_option(&mut flags, "--incremental", self.incremental);
+        push_array_option(&mut flags, "--include", &self.include);
+        push_bool_option(&mut flags, "--info", self.info);
+        push_string_option(&mut flags, "--json", self.output_json.as_ref());
+        push_string_option(&mut flags, "--json-lines", self.output_json_lines.as_ref());
+        push_string_option(&mut flags, "--json-pp", self.output_json_pp.as_ref());
+        push_bool_option(&mut flags, "--license", self.license);
+        push_bool_option(
+            &mut flags,
+            "--license-clarity-score",
+            self.license_clarity_score,
+        );
+        push_bool_option(
+            &mut flags,
+            "--license-diagnostics",
+            self.license_diagnostics,
+        );
+        push_string_option(&mut flags, "--license-policy", self.license_policy.as_ref());
+        push_bool_option(&mut flags, "--license-references", self.license_references);
+        push_non_default_u8_option(&mut flags, "--license-score", self.license_score, 0);
+        push_bool_option(&mut flags, "--license-text", self.license_text);
+        push_bool_option(
+            &mut flags,
+            "--license-text-diagnostics",
+            self.license_text_diagnostics,
+        );
+        push_non_default_string_option(
+            &mut flags,
+            "--license-url-template",
+            &self.license_url_template,
+            DEFAULT_LICENSEDB_URL_TEMPLATE,
+        );
+        push_non_default_usize_option(&mut flags, "--max-depth", self.max_depth, 0);
+        push_non_default_i64_option(&mut flags, "--max-in-memory", self.max_in_memory, 10000);
+        if self.email {
+            push_non_default_usize_option(&mut flags, "--max-email", self.max_email, 50);
+        }
+        if self.url {
+            push_non_default_usize_option(&mut flags, "--max-url", self.max_url, 50);
+        }
+        push_bool_option(&mut flags, "--mark-source", self.mark_source);
+        push_bool_option(&mut flags, "--no-assemble", self.no_assemble);
+        push_bool_option(&mut flags, "--only-findings", self.only_findings);
+        push_bool_option(&mut flags, "--package", self.package);
+        push_bool_option(
+            &mut flags,
+            "--package-in-compiled",
+            self.package_in_compiled,
+        );
+        push_bool_option(&mut flags, "--package-only", self.package_only);
+        push_non_default_i32_option(
+            &mut flags,
+            "--processes",
+            self.processes,
+            default_processes(),
+        );
+        push_bool_option(&mut flags, "--quiet", self.quiet);
+        push_string_option(&mut flags, "--spdx-rdf", self.output_spdx_rdf.as_ref());
+        push_string_option(&mut flags, "--spdx-tv", self.output_spdx_tv.as_ref());
+        push_bool_option(&mut flags, "--strip-root", self.strip_root);
+        push_bool_option(&mut flags, "--summary", self.summary);
+        push_bool_option(&mut flags, "--system-package", self.system_package);
+        push_bool_option(&mut flags, "--tallies", self.tallies);
+        push_bool_option(&mut flags, "--tallies-by-facet", self.tallies_by_facet);
+        push_bool_option(&mut flags, "--tallies-key-files", self.tallies_key_files);
+        push_bool_option(
+            &mut flags,
+            "--tallies-with-details",
+            self.tallies_with_details,
+        );
+        push_non_default_f64_option(&mut flags, "--timeout", self.timeout, 120.0);
+        push_bool_option(&mut flags, "--unknown-licenses", self.unknown_licenses);
+        push_bool_option(&mut flags, "--url", self.url);
+        push_bool_option(&mut flags, "--verbose", self.verbose);
+        push_string_option(&mut flags, "--yaml", self.output_yaml.as_ref());
+
+        flags.sort_by(|left, right| left.0.cmp(&right.0));
+        for (key, value) in flags {
+            options.insert(key, value);
+        }
+
+        options
+    }
+}
+
+fn push_bool_option(options: &mut Vec<(String, JsonValue)>, key: &str, enabled: bool) {
+    if enabled {
+        options.push((key.to_string(), JsonValue::Bool(true)));
+    }
+}
+
+fn push_string_option(options: &mut Vec<(String, JsonValue)>, key: &str, value: Option<&String>) {
+    if let Some(value) = value {
+        options.push((key.to_string(), JsonValue::String(value.clone())));
+    }
+}
+
+fn push_non_default_string_option(
+    options: &mut Vec<(String, JsonValue)>,
+    key: &str,
+    value: &str,
+    default: &str,
+) {
+    if value != default {
+        options.push((key.to_string(), JsonValue::String(value.to_string())));
+    }
+}
+
+fn push_array_option(options: &mut Vec<(String, JsonValue)>, key: &str, values: &[String]) {
+    if !values.is_empty() {
+        options.push((
+            key.to_string(),
+            JsonValue::Array(values.iter().cloned().map(JsonValue::String).collect()),
+        ));
+    }
+}
+
+fn push_non_default_usize_option(
+    options: &mut Vec<(String, JsonValue)>,
+    key: &str,
+    value: usize,
+    default: usize,
+) {
+    if value != default {
+        options.push((key.to_string(), JsonValue::Number(value.into())));
+    }
+}
+
+fn push_non_default_u8_option(
+    options: &mut Vec<(String, JsonValue)>,
+    key: &str,
+    value: u8,
+    default: u8,
+) {
+    if value != default {
+        options.push((key.to_string(), JsonValue::Number(value.into())));
+    }
+}
+
+fn push_non_default_i32_option(
+    options: &mut Vec<(String, JsonValue)>,
+    key: &str,
+    value: i32,
+    default: i32,
+) {
+    if value != default {
+        options.push((key.to_string(), JsonValue::Number(value.into())));
+    }
+}
+
+fn push_non_default_i64_option(
+    options: &mut Vec<(String, JsonValue)>,
+    key: &str,
+    value: i64,
+    default: i64,
+) {
+    if value != default {
+        options.push((key.to_string(), JsonValue::Number(value.into())));
+    }
+}
+
+fn push_non_default_f64_option(
+    options: &mut Vec<(String, JsonValue)>,
+    key: &str,
+    value: f64,
+    default: f64,
+) {
+    if (value - default).abs() > f64::EPSILON
+        && let Some(number) = JsonNumber::from_f64(value)
+    {
+        options.push((key.to_string(), JsonValue::Number(number)));
+    }
 }
 
 #[cfg(test)]
@@ -494,6 +716,81 @@ mod tests {
         assert_eq!(parsed.output_json_pp.as_deref(), Some("scan.json"));
         assert_eq!(parsed.output_targets().len(), 1);
         assert_eq!(parsed.output_targets()[0].format, OutputFormat::JsonPretty);
+    }
+
+    #[test]
+    fn test_output_header_options_use_scancode_style_keys() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--license",
+            "--package",
+            "--strip-root",
+            "--ignore",
+            "*.git*",
+            "--ignore",
+            "target/*",
+            "samples",
+        ])
+        .expect("cli parse should succeed");
+
+        let options = parsed.output_header_options();
+
+        assert_eq!(
+            options.get("input"),
+            Some(&JsonValue::Array(vec![JsonValue::String(
+                "samples".to_string()
+            )]))
+        );
+        assert_eq!(
+            options.get("--json-pp"),
+            Some(&JsonValue::String("scan.json".to_string()))
+        );
+        assert_eq!(options.get("--license"), Some(&JsonValue::Bool(true)));
+        assert_eq!(options.get("--package"), Some(&JsonValue::Bool(true)));
+        assert_eq!(options.get("--strip-root"), Some(&JsonValue::Bool(true)));
+        assert_eq!(
+            options.get("--ignore"),
+            Some(&JsonValue::Array(vec![
+                JsonValue::String("*.git*".to_string()),
+                JsonValue::String("target/*".to_string()),
+            ]))
+        );
+    }
+
+    #[test]
+    fn test_output_header_options_skip_defaults_and_include_non_defaults() {
+        let default_options =
+            Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "samples"])
+                .expect("default cli parse should succeed")
+                .output_header_options();
+        assert!(!default_options.contains_key("--timeout"));
+        assert!(!default_options.contains_key("--processes"));
+
+        let custom_options = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--timeout",
+            "30",
+            "--processes",
+            "4",
+            "samples",
+        ])
+        .expect("custom cli parse should succeed")
+        .output_header_options();
+
+        assert_eq!(
+            custom_options.get("--timeout"),
+            Some(&JsonValue::Number(
+                JsonNumber::from_f64(30.0).expect("valid number")
+            ))
+        );
+        assert_eq!(
+            custom_options.get("--processes"),
+            Some(&JsonValue::Number(4.into()))
+        );
     }
 
     #[test]

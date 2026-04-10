@@ -1,7 +1,10 @@
 use super::{FileInfo, Match, Package, TopLevelDependency};
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
-pub const OUTPUT_FORMAT_VERSION: &str = "4.0.0";
+pub const OUTPUT_FORMAT_VERSION: &str = "4.1.0";
+pub const TOOL_NAME: &str = "provenant";
+pub const SPDX_LICENSE_LIST_VERSION: &str = "3.27";
 
 #[derive(Debug)]
 /// Top-level ScanCode-compatible JSON payload.
@@ -91,29 +94,35 @@ pub struct FacetTallies {
 #[derive(Debug)]
 /// Scan execution metadata stored in `output.headers`.
 pub struct Header {
+    pub tool_name: String,
+    pub tool_version: String,
+    pub options: Map<String, Value>,
     pub start_timestamp: String,
     pub end_timestamp: String,
-    pub duration: f64,
-    pub extra_data: ExtraData,
-    pub errors: Vec<String>,
     pub output_format_version: String,
+    pub duration: f64,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+    pub extra_data: ExtraData,
 }
 
 #[derive(Debug)]
 /// Additional counters and environment details for a scan run.
 pub struct ExtraData {
+    pub system_environment: SystemEnvironment,
+    pub spdx_license_list_version: String,
     pub files_count: usize,
     pub directories_count: usize,
     pub excluded_count: usize,
-    pub system_environment: SystemEnvironment,
 }
 
 #[derive(Debug)]
 /// Host environment information captured during scan execution.
 pub struct SystemEnvironment {
-    pub operating_system: Option<String>,
+    pub operating_system: String,
     pub cpu_architecture: String,
     pub platform: String,
+    pub platform_version: String,
     pub rust_version: String,
 }
 

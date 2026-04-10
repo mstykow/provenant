@@ -9,7 +9,7 @@
           "--json-lines": "<file>"
         },
         "notice": "Generated with Provenant and provided on an \"AS IS\" BASIS, WITHOUT WARRANTIES\nOR CONDITIONS OF ANY KIND, either express or implied. No content created from\nProvenant should be considered or used as legal advice. Consult an attorney\nfor legal advice.\nProvenant is a free software code scanning tool.\nVisit https://github.com/mstykow/provenant/ for support and download.",
-        "output_format_version": "4.0.0",
+        "output_format_version": "4.1.0",
         "message": null,
         "errors": [],
         "warnings": [],

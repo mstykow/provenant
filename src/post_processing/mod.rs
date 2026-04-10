@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, anyhow};
 use chrono::Utc;
 use glob::Pattern;
+use serde_json::{Map, Value};
 
 use self::classification::apply_file_classification;
 pub(crate) use self::license_policy::apply_license_policy_from_file;
@@ -31,7 +32,7 @@ use crate::models::DatasourceId;
 use crate::models::Match;
 use crate::models::{
     ExtraData, FileInfo, FileType, Header, OUTPUT_FORMAT_VERSION, Output, Package,
-    SystemEnvironment, TopLevelLicenseDetection,
+    SPDX_LICENSE_LIST_VERSION, SystemEnvironment, TOOL_NAME, TopLevelLicenseDetection,
 };
 use crate::progress::format_default_scan_error_from_list;
 use crate::scanner;
@@ -80,6 +81,7 @@ pub(crate) struct CreateOutputOptions<'a> {
     pub(crate) include_tallies_with_details: bool,
     pub(crate) include_tallies_by_facet: bool,
     pub(crate) include_generated: bool,
+    pub(crate) verbose: bool,
 }
 
 pub(crate) struct CreateOutputContext<'a> {
@@ -89,6 +91,8 @@ pub(crate) struct CreateOutputContext<'a> {
     pub(crate) license_references: Vec<crate::models::LicenseReference>,
     pub(crate) license_rule_references: Vec<crate::models::LicenseRuleReference>,
     pub(crate) extra_errors: Vec<String>,
+    pub(crate) extra_warnings: Vec<String>,
+    pub(crate) header_options: Map<String, Value>,
     pub(crate) options: CreateOutputOptions<'a>,
 }
 
@@ -101,6 +105,8 @@ pub(crate) fn create_output(
     let duration = (end_time - start_time).num_nanoseconds().unwrap_or(0) as f64 / 1_000_000_000.0;
 
     let extra_data = ExtraData {
+        system_environment: current_system_environment(),
+        spdx_license_list_version: SPDX_LICENSE_LIST_VERSION.to_string(),
         files_count: scan_result
             .files
             .iter()
@@ -108,19 +114,18 @@ pub(crate) fn create_output(
             .count(),
         directories_count: context.total_dirs,
         excluded_count: scan_result.excluded_count,
-        system_environment: current_system_environment(),
     };
 
-    let mut errors: Vec<String> = scan_result
-        .files
-        .iter()
-        .filter_map(|file| {
-            format_default_scan_error_from_list(Path::new(&file.path), &file.scan_errors)
-        })
-        .collect();
-    errors.extend(context.extra_errors);
+    let mut errors = summarize_header_errors(
+        &scan_result.files,
+        context.extra_errors,
+        context.options.verbose,
+    );
     let mut seen_errors = HashSet::new();
     errors.retain(|error| seen_errors.insert(error.clone()));
+    let mut warnings = context.extra_warnings;
+    let mut seen_warnings = HashSet::new();
+    warnings.retain(|warning| seen_warnings.insert(warning.clone()));
 
     let mut files = scan_result.files;
     let assembly::AssemblyResult {
@@ -202,12 +207,16 @@ pub(crate) fn create_output(
         tallies_of_key_files,
         tallies_by_facet,
         headers: vec![Header {
+            tool_name: TOOL_NAME.to_string(),
+            tool_version: env!("CARGO_PKG_VERSION").to_string(),
+            options: context.header_options,
             start_timestamp: start_time.to_rfc3339(),
             end_timestamp: end_time.to_rfc3339(),
-            duration,
-            extra_data,
-            errors,
             output_format_version: OUTPUT_FORMAT_VERSION.to_string(),
+            duration,
+            errors,
+            warnings,
+            extra_data,
         }],
         packages,
         dependencies,
@@ -218,19 +227,63 @@ pub(crate) fn create_output(
     }
 }
 
+fn summarize_header_errors(
+    files: &[FileInfo],
+    extra_errors: Vec<String>,
+    verbose: bool,
+) -> Vec<String> {
+    let mut errors = extra_errors;
+
+    errors.extend(
+        files
+            .iter()
+            .filter_map(|file| summarize_file_header_error(file, verbose)),
+    );
+
+    errors
+}
+
+fn summarize_file_header_error(file: &FileInfo, verbose: bool) -> Option<String> {
+    let summary = format_default_scan_error_from_list(Path::new(&file.path), &file.scan_errors)?;
+
+    if !verbose {
+        return Some(summary);
+    }
+
+    let details = file
+        .scan_errors
+        .iter()
+        .flat_map(|error| error.lines().map(|line| format!("  {line}")))
+        .collect::<Vec<_>>();
+
+    if details.is_empty() {
+        Some(summary)
+    } else {
+        Some(
+            std::iter::once(summary)
+                .chain(details)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+    }
+}
+
 fn current_system_environment() -> SystemEnvironment {
     let info = os_info::get();
     let operating_system = operating_system_name(&info);
-    let os_version = operating_system_version(&info);
+    let platform_version = operating_system_version(&info);
 
     SystemEnvironment {
-        operating_system: operating_system.clone(),
+        operating_system: operating_system
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string()),
         cpu_architecture: env::consts::ARCH.to_string(),
         platform: build_platform_label(
             operating_system.as_deref(),
-            os_version.as_deref(),
+            platform_version.as_deref(),
             env::consts::ARCH,
         ),
+        platform_version: platform_version.unwrap_or_else(|| "unknown".to_string()),
         rust_version: rustc_version_runtime::version().to_string(),
     }
 }
