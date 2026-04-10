@@ -1941,6 +1941,51 @@ pub(super) fn drop_authors_embedded_in_copyrights(
     });
 }
 
+pub(super) fn drop_author_colon_lines_absorbed_into_year_only_copyrights(
+    prepared_cache: &PreparedLineCache<'_>,
+    copyrights: &[CopyrightDetection],
+    authors: &mut Vec<AuthorDetection>,
+) {
+    if copyrights.is_empty() || authors.is_empty() || prepared_cache.raw_line_count() < 2 {
+        return;
+    }
+
+    static YEAR_ONLY_COPY_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?ix)^copyright\s*\(c\)\s*(?P<years>[0-9\s,\-–/]+)\s+.+$").unwrap()
+    });
+    static AUTHOR_LINE_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?ix)^author\s*:\s*(?P<name>[^<]+?)\s*(?:<\s*(?P<email>[^>\s]+@[^>\s]+)\s*>)?\s*$",
+        )
+        .unwrap()
+    });
+
+    authors.retain(|author| {
+        let start_line = author.start_line.get();
+        let end_line = author.end_line.get();
+        if start_line != end_line || start_line <= 1 {
+            return true;
+        }
+
+        let Some(raw_line) = prepared_cache.raw_by_index(start_line - 1) else {
+            return true;
+        };
+        let normalized_line = raw_line.trim().trim_start_matches('*').trim_start();
+        if !AUTHOR_LINE_RE.is_match(normalized_line) {
+            return true;
+        }
+
+        copyrights.iter().all(|copyright| {
+            if copyright.start_line.get() != start_line - 1
+                || copyright.end_line.get() != start_line
+            {
+                return true;
+            }
+            !YEAR_ONLY_COPY_RE.is_match(copyright.copyright.as_str())
+        })
+    });
+}
+
 pub(super) fn drop_shadowed_prefix_authors(authors: &mut Vec<AuthorDetection>) {
     if authors.len() < 2 {
         return;

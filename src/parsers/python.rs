@@ -3673,17 +3673,23 @@ fn encode_python_dependency_purl_version(version: &str) -> String {
 }
 
 fn build_python_dependency_purl(name: &str, version: Option<&str>) -> Option<String> {
-    PackageUrl::new(PythonParser::PACKAGE_TYPE.as_str(), name)
+    let normalized_name = normalize_python_dependency_name(name);
+
+    PackageUrl::new(PythonParser::PACKAGE_TYPE.as_str(), &normalized_name)
         .ok()
         .map(|_| match version {
             Some(version) => {
                 format!(
-                    "pkg:pypi/{name}@{}",
+                    "pkg:pypi/{normalized_name}@{}",
                     encode_python_dependency_purl_version(version)
                 )
             }
-            None => format!("pkg:pypi/{name}"),
+            None => format!("pkg:pypi/{normalized_name}"),
         })
+}
+
+fn normalize_python_dependency_name(name: &str) -> String {
+    name.trim().to_ascii_lowercase().replace('_', "-")
 }
 
 fn parse_rfc822_marker(

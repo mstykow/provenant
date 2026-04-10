@@ -63,6 +63,11 @@ pub(super) fn run_phase_postprocess(
         authors,
     );
     super::author_heuristics::extract_dense_name_email_author_lists(prepared_cache, authors);
+    super::author_heuristics::drop_author_colon_lines_absorbed_into_year_only_copyrights(
+        prepared_cache,
+        copyrights,
+        authors,
+    );
     super::author_heuristics::drop_authors_embedded_in_copyrights(copyrights, authors);
     super::author_heuristics::drop_merged_dash_bullet_attribution_authors(authors);
     super::drop_created_by_camelcase_identifier_authors(prepared_cache, authors);
