@@ -73,6 +73,24 @@ fn test_refine_copyright_strips_obfuscated_email_after_dash() {
     );
 }
 
+#[test]
+fn test_refine_author_discards_laboriously_took_the_trouble_junk() {
+    assert_eq!(
+        refine_author(
+            "the authors laboriously took the trouble of searching for workarounds to make these compilers happy"
+        ),
+        None
+    );
+}
+
+#[test]
+fn test_refine_holder_discards_symbol_table_run_junk() {
+    assert_eq!(
+        refine_holder("(r), & 175, & 176, & 177, & 178, & 179, & 180, & 181, & 182, & 183"),
+        None
+    );
+}
+
 // ── strip_some_punct ─────────────────────────────────────────────
 
 #[test]
