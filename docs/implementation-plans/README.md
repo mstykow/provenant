@@ -87,9 +87,6 @@ These documents are retained as explicit product-scope decisions. They describe 
 
 ### Infrastructure (`infrastructure/`)
 
-- **[SERDE_SEPARATION_PLAN.md](infrastructure/SERDE_SEPARATION_PLAN.md)** - Separate internal types from output schema types
-  - Status: 🟡 Planning — detailed analysis and phased implementation plan for removing serde from internal domain types and establishing a dedicated `output_schema` module
-
 - **[PLUGIN_SYSTEM_PLAN.md](infrastructure/PLUGIN_SYSTEM_PLAN.md)** - Runtime/extensible plugin architecture
   - Status: ⚪ Deferred — intentionally not planned because Provenant is favoring compile-time integration over runtime plugin loading
 

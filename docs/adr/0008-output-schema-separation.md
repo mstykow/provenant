@@ -21,25 +21,24 @@ Mixing these concerns in one type meant:
 
 ## Decision
 
-Separate internal types from output schema types:
+Separate the ScanCode-compatible output schema from internal types:
 
-1. **Internal types** (`src/models/`) retain serde only where needed for cache round-tripping and `--from-json` deserialization. Output-specific attributes (`skip_serializing_if`, `serialize_with`, custom `Serialize` impls) are removed from internal types.
-
-2. **Output schema types** (`src/output_schema/`) are dedicated serde-enabled types, one file per type, that define the ScanCode-compatible JSON schema explicitly. They own all output-formatting logic:
+1. **Output schema types** (`src/output_schema/`) are dedicated serde-enabled types, one file per type, that define the ScanCode-compatible JSON schema explicitly. They own all output-formatting logic:
    - Field renames (`package_type` → `"type"`, `license_expression` → `"detected_license_expression_spdx"`)
    - Conditional field omission (`skip_serializing_if`)
    - `None` → `{}` serialization for optional maps
    - The `FileInfo` info-surface gating logic
    - Type widening: `LineNumber` → `u64`, `Sha1Digest` → `Option<String>` (hex)
 
+2. **Internal types** (`src/models/`) retain serde for cache round-tripping and `--from-json` deserialization. Output-specific attributes (`skip_serializing_if`, `serialize_with`, custom `Serialize` impls) are removed from internal types.
+
 3. **Conversion boundary** — `From<&InternalType>` converts internal → output at the serialization boundary in `main.rs`. `TryFrom<&OutputType>` converts output → internal for the `--from-json` path, with validation at the conversion boundary.
 
 4. **Shared enums** (`FileType`, `DatasourceId`, `PackageType`) are reused directly in output types — not widened to `String`. These enums have their own serde impls that are shared between internal and output contexts.
 
-5. **Internal types retain `Serialize`/`Deserialize`** for two non-JSON-output purposes:
+5. **Internal types retain `Serialize`/`Deserialize`** for non-JSON-output purposes:
    - Incremental cache stores `FileInfo` as JSON in the manifest (`src/cache/incremental.rs`)
    - Scanner spill-to-disk serializes `FileInfo` during large scans
-     Removing serde from internal types entirely would require migrating the cache format first.
 
 ### Invariants contributors must follow
 
@@ -61,14 +60,12 @@ Separate internal types from output schema types:
 - **Internal types are simpler.** No `skip_serializing_if`, `serialize_with`, or custom `Serialize` on domain types. Serde attrs on internal types are limited to `rename`, `default`, `alias`, and `transparent` — all serving deserialization or cache round-tripping.
 - **Output formatting is testable in isolation.** The `OutputFileInfo` custom `Serialize` can be tested without running a full scan.
 - **`--from-json` gets explicit validation.** `TryFrom` conversions reject invalid data at the boundary instead of silently deserializing into potentially invalid internal state.
-- **Future option: fully remove serde from internal types** once the cache format is migrated away from JSON-serialized `FileInfo`.
 
 ### Trade-offs
 
 - **Two parallel type hierarchies.** Every internal type now has a corresponding output schema type. This is ~30 new types and ~2,500 lines of conversion code.
 - **Conversion overhead at the boundary.** Every scan pays the cost of converting `models::Output` → `output_schema::Output`. In practice this is a shallow field-by-field clone with no serialization/deserialization overhead.
 - **Drift risk.** Adding a field to an internal type without updating the output schema type will silently drop it from output. Mitigated by the one-file-per-type structure making it easy to compare.
-- **Internal types still have serde.** The cache and scanner need `Serialize`/`Deserialize` on `FileInfo` and its field types. Fully removing serde from internal types requires a cache format migration first.
 
 ## Alternatives Considered
 
@@ -80,18 +77,7 @@ Would simplify the `FileInfo` serializer but leave output formatting scattered a
 
 Still mixes output concerns into internal types. The `with` module pattern is better suited for field-level customization than type-level separation.
 
-### 3. Remove serde entirely from internal types, migrate cache to a non-serde format
-
-Would achieve the cleanest separation but requires:
-
-- Designing a new cache serialization format (e.g., bincode, postcard)
-- Migrating the incremental manifest
-- Migrating the scanner spill format
-- Handling backward compatibility with existing cache files
-
-Deferred as a future option (documented in the implementation plan).
-
-### 4. Generate output schema types from a schema definition (e.g., JSON Schema)
+### 3. Generate output schema types from a schema definition (e.g., JSON Schema)
 
 Would ensure schema consistency but adds a build-time code generation step and makes it harder to maintain custom serialization logic like the `FileInfo` info-surface gating.
 
@@ -102,7 +88,6 @@ Would ensure schema consistency but adds a build-time code generation step and m
 
 ## References
 
-- Implementation plan: [`docs/implementation-plans/infrastructure/SERDE_SEPARATION_PLAN.md`](../implementation-plans/infrastructure/SERDE_SEPARATION_PLAN.md)
 - Output schema module: `src/output_schema/`
 - Conversion boundary: `src/main.rs` (where `models::Output` → `output_schema::Output`)
 - `--from-json` deserialization: `src/scan_result_shaping/json_input.rs`
