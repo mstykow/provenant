@@ -84,6 +84,28 @@ fn normalize_markup_author_value(value: &str) -> String {
     normalize_whitespace(&prepared)
 }
 
+fn split_markup_author_candidates(value: &str) -> Vec<String> {
+    let normalized = normalize_markup_author_value(value);
+    let parts: Vec<String> = normalized
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(ToOwned::to_owned)
+        .collect();
+
+    if parts.len() >= 2
+        && parts.iter().all(|part| {
+            part.contains(' ')
+                || part.split_whitespace().count() >= 2
+                || part.chars().filter(|ch| *ch == '.').count() >= 1
+        })
+    {
+        parts
+    } else {
+        vec![normalized]
+    }
+}
+
 pub(super) fn extract_markup_authors(content: &str, authors: &mut Vec<AuthorDetection>) {
     if content.is_empty() {
         return;
@@ -100,7 +122,10 @@ pub(super) fn extract_markup_authors(content: &str, authors: &mut Vec<AuthorDete
         .unwrap()
     });
 
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+    let mut seen: HashSet<(String, LineNumber)> = authors
+        .iter()
+        .map(|a| (a.author.clone(), a.start_line))
+        .collect();
 
     for captures in [
         AUTHOR_ATTR_DQ_RE.captures_iter(content).collect::<Vec<_>>(),
@@ -111,17 +136,18 @@ pub(super) fn extract_markup_authors(content: &str, authors: &mut Vec<AuthorDete
                 continue;
             };
             let value = cap.get(1).map(|m| m.as_str()).unwrap_or("").trim();
-            let normalized = normalize_markup_author_value(value);
-            let Some(author) = refine_author(&normalized) else {
-                continue;
-            };
-            if seen.insert(author.clone()) {
-                let line = line_number_for_offset(content, full.start());
-                authors.push(AuthorDetection {
-                    author,
-                    start_line: line,
-                    end_line: line,
-                });
+            let line = line_number_for_offset(content, full.start());
+            for candidate in split_markup_author_candidates(value) {
+                let Some(author) = refine_author(&candidate) else {
+                    continue;
+                };
+                if seen.insert((author.clone(), line)) {
+                    authors.push(AuthorDetection {
+                        author,
+                        start_line: line,
+                        end_line: line,
+                    });
+                }
             }
         }
     }
@@ -138,8 +164,8 @@ pub(super) fn extract_markup_authors(content: &str, authors: &mut Vec<AuthorDete
         let Some(author) = refine_author(&format!("{first} {last}")) else {
             continue;
         };
-        if seen.insert(author.clone()) {
-            let line = line_number_for_offset(content, full.start());
+        let line = line_number_for_offset(content, full.start());
+        if seen.insert((author.clone(), line)) {
             authors.push(AuthorDetection {
                 author,
                 start_line: line,
