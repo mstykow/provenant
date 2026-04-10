@@ -2485,6 +2485,34 @@ fn test_detect_author_from_xml_author_attribute_decodes_entities() {
 }
 
 #[test]
+fn test_detect_author_from_repeated_xml_author_attributes_keeps_multiple_occurrences() {
+    let text = r#"<mark-expected-failures>
+<note author="Aleksey Gurtovoy" refid="4"/>
+<note author="Aleksey Gurtovoy" refid="19"/>
+</mark-expected-failures>"#;
+    let (_c, _h, a) = detect_copyrights_from_text(text);
+
+    let matching: Vec<_> = a
+        .iter()
+        .filter(|ad| ad.author == "Aleksey Gurtovoy")
+        .collect();
+    assert_eq!(matching.len(), 2, "authors: {a:#?}");
+    assert_eq!(matching[0].start_line, LineNumber::new(2).expect("valid"));
+    assert_eq!(matching[1].start_line, LineNumber::new(3).expect("valid"));
+}
+
+#[test]
+fn test_detect_author_from_xml_author_attribute_splits_obvious_multi_name_lists() {
+    let text = r#"<note author="Robert Ramey,Roland Schwarz" date="16 Feb 07" refid="19"/>"#;
+    let (_c, _h, a) = detect_copyrights_from_text(text);
+
+    let names: Vec<&str> = a.iter().map(|ad| ad.author.as_str()).collect();
+    assert!(names.contains(&"Robert Ramey"), "authors: {names:?}");
+    assert!(names.contains(&"Roland Schwarz"), "authors: {names:?}");
+    assert_eq!(names.len(), 2, "authors: {names:?}");
+}
+
+#[test]
 fn test_detect_docbook_html_authorgroup_authors() {
     let text = r#"<div class="authorgroup">
 <div class="author"><h3 class="author"><span class="firstname">John</span> <span class="surname">Maddock</span></h3></div>
