@@ -42,6 +42,29 @@ fn create_ignore_fixture() -> (TempDir, String) {
     (temp, scan_dir.to_string_lossy().to_string())
 }
 
+fn normalize_multi_parser_header(output: &mut Value) {
+    let header = output["headers"]
+        .as_array_mut()
+        .and_then(|headers| headers.first_mut())
+        .expect("headers[0] should exist");
+
+    header["tool_version"] = Value::String("<tool_version>".to_string());
+    header["start_timestamp"] = Value::String("<start_timestamp>".to_string());
+    header["end_timestamp"] = Value::String("<end_timestamp>".to_string());
+    header["duration"] = Value::String("<duration>".to_string());
+    header["options"]["--json-pp"] = Value::String("<output_file>".to_string());
+    header["extra_data"]["system_environment"]["operating_system"] =
+        Value::String("<operating_system>".to_string());
+    header["extra_data"]["system_environment"]["cpu_architecture"] =
+        Value::String("<cpu_architecture>".to_string());
+    header["extra_data"]["system_environment"]["platform"] =
+        Value::String("<platform>".to_string());
+    header["extra_data"]["system_environment"]["platform_version"] =
+        Value::String("<platform_version>".to_string());
+    header["extra_data"]["system_environment"]["rust_version"] =
+        Value::String("<rust_version>".to_string());
+}
+
 #[test]
 fn quiet_mode_suppresses_stderr_output() {
     let (temp, scan_dir) = create_scan_fixture();
@@ -338,4 +361,37 @@ fn ignore_root_csv_glob_excludes_root_csv_from_cli_output() {
             .any(|path| path.ends_with("/report.csv") || *path == "report.csv"),
         "root csv should be excluded: {paths:#?}"
     );
+}
+
+#[test]
+fn multi_parser_expected_header_fixture_matches_cli_output() {
+    let temp = TempDir::new().expect("failed to create temp dir");
+    let output_file = temp.path().join("multi-parser.json");
+
+    let output = provenant_command()
+        .args([
+            "--json-pp",
+            output_file.to_str().expect("utf8 output path"),
+            "--package",
+            "--info",
+            "testdata/integration/multi-parser",
+        ])
+        .output()
+        .expect("failed to run provenant");
+
+    assert!(output.status.success());
+
+    let mut actual: Value =
+        serde_json::from_slice(&fs::read(&output_file).expect("failed to read output json"))
+            .expect("output json should parse");
+    let mut expected: Value = serde_json::from_str(
+        &fs::read_to_string("testdata/integration/multi-parser.expected.json")
+            .expect("failed to read expected fixture"),
+    )
+    .expect("expected fixture should parse");
+
+    normalize_multi_parser_header(&mut actual);
+    normalize_multi_parser_header(&mut expected);
+
+    assert_eq!(actual["headers"], expected["headers"]);
 }

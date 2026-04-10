@@ -1,19 +1,34 @@
 {
   "headers": [
     {
+      "tool_name": "provenant",
+      "tool_version": "<tool_version>",
+      "options": {
+        "input": ["testdata/integration/multi-parser"],
+        "--info": true,
+        "--json-pp": "<output_file>",
+        "--package": true
+      },
+      "notice": "Generated with Provenant and provided on an \"AS IS\" basis, without warranties or conditions of any kind, either express or implied. Provenant and its authors/providers do not provide legal advice, and are not responsible for how this output is used. Consult qualified legal counsel for legal advice.",
+      "start_timestamp": "<start_timestamp>",
+      "end_timestamp": "<end_timestamp>",
+      "output_format_version": "4.1.0",
+      "duration": "<duration>",
       "extra_data": {
         "files_count": 3,
         "directories_count": 1,
         "excluded_count": 0,
+        "spdx_license_list_version": "3.27",
         "system_environment": {
-          "operating_system": "Darwin",
-          "cpu_architecture": "aarch64",
-          "platform": "Darwin-25.2.0-aarch64",
-          "rust_version": "1.93.0"
+          "operating_system": "<operating_system>",
+          "cpu_architecture": "<cpu_architecture>",
+          "platform": "<platform>",
+          "platform_version": "<platform_version>",
+          "rust_version": "<rust_version>"
         }
       },
       "errors": [],
-      "output_format_version": "4.0.0"
+      "warnings": []
     }
   ],
   "files": [
