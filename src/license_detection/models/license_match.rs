@@ -175,7 +175,7 @@ pub struct LicenseMatch {
     /// Matching strategy used to create this match.
     pub matcher: MatcherKind,
 
-    /// Match score 0.0-1.0
+    /// Match score 0.0-100.0
     pub score: f32,
 
     /// Length of matched text in characters

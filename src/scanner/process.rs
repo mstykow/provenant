@@ -1379,7 +1379,7 @@ fn convert_match_to_model(
         score: output_metric(m.score),
         matched_length: Some(m.matched_length),
         match_coverage: Some(output_metric(m.coverage())),
-        rule_relevance: Some(m.rule_relevance as usize),
+        rule_relevance: Some(m.rule_relevance),
         rule_identifier: Some(m.rule_identifier.clone()),
         rule_url,
         matched_text,

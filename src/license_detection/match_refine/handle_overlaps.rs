@@ -529,7 +529,7 @@ mod tests {
             start_token,
             end_token,
             matcher: crate::license_detection::models::MatcherKind::Aho,
-            score: 1.0,
+            score: 100.0,
             matched_length,
             rule_length: matched_length,
             match_coverage: 100.0,

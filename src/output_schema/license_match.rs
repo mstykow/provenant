@@ -16,7 +16,7 @@ pub struct OutputMatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub match_coverage: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rule_relevance: Option<usize>,
+    pub rule_relevance: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rule_identifier: Option<String>,
     pub rule_url: Option<String>,

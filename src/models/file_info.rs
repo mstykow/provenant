@@ -535,7 +535,7 @@ pub struct Match {
     pub score: f64,
     pub matched_length: Option<usize>,
     pub match_coverage: Option<f64>,
-    pub rule_relevance: Option<usize>,
+    pub rule_relevance: Option<u8>,
     pub rule_identifier: Option<String>,
     pub rule_url: Option<String>,
     pub matched_text: Option<String>,

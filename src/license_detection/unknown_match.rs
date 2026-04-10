@@ -558,7 +558,7 @@ fn calculate_score(ngram_count: usize, match_len: usize) -> f32 {
 
     let density = ngram_count as f32 / match_len as f32;
 
-    density.min(1.0)
+    (density.min(1.0)) * 100.0
 }
 
 #[cfg(test)]
@@ -772,7 +772,7 @@ mod tests {
         let score3 = calculate_score(0, 10);
 
         assert!(score2 > score1);
-        assert!(score2 <= 1.0);
+        assert!(score2 <= 100.0);
         assert_eq!(score3, 0.0);
     }
 
@@ -821,7 +821,7 @@ mod tests {
             start_token: 0,
             end_token: 10,
             matcher: MatcherKind::Aho,
-            score: 1.0,
+            score: 100.0,
             matched_length: 6,
             rule_length: 6,
             match_coverage: 100.0,
@@ -870,7 +870,7 @@ mod tests {
             start_token: 5,
             end_token: 10,
             matcher: MatcherKind::Aho,
-            score: 1.0,
+            score: 100.0,
             matched_length: 5,
             rule_length: 5,
             match_coverage: 100.0,
@@ -918,7 +918,7 @@ mod tests {
             start_token: 0,
             end_token: 15,
             matcher: MatcherKind::Aho,
-            score: 1.0,
+            score: 100.0,
             matched_length: 8,
             rule_length: 8,
             match_coverage: 100.0,
@@ -1001,7 +1001,7 @@ mod tests {
             start_token: 0,
             end_token: 5,
             matcher: MatcherKind::Aho,
-            score: 1.0,
+            score: 100.0,
             matched_length: 5,
             rule_length: 5,
             match_coverage: 100.0,
@@ -1036,8 +1036,8 @@ mod tests {
 
         let score_high_density = calculate_score(100, 50);
         assert_eq!(
-            score_high_density, 1.0,
-            "High density should be capped at 1.0"
+            score_high_density, 100.0,
+            "High density should be capped at 100.0"
         );
     }
 
