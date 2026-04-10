@@ -7,13 +7,7 @@ headers:
       --license: yes
       --package: yes
       --yaml: <file>
-    notice: |
-      Generated with Provenant and provided on an "AS IS" BASIS, WITHOUT WARRANTIES
-      OR CONDITIONS OF ANY KIND, either express or implied. No content created from
-      Provenant should be considered or used as legal advice. Consult an attorney
-      for legal advice.
-      Provenant is a free software code scanning tool.
-      Visit https://github.com/mstykow/provenant/ for support and download.
+    notice: Generated with Provenant and provided on an "AS IS" basis, without warranties or conditions of any kind, either express or implied. Provenant and its authors/providers do not provide legal advice, and are not responsible for how this output is used. Consult qualified legal counsel for legal advice.
     output_format_version: 4.1.0
     message:
     errors: []

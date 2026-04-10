@@ -5,6 +5,7 @@ use serde_json::{Map, Value};
 pub const OUTPUT_FORMAT_VERSION: &str = "4.1.0";
 pub const TOOL_NAME: &str = "provenant";
 pub const SPDX_LICENSE_LIST_VERSION: &str = "3.27";
+pub const HEADER_NOTICE: &str = "Generated with Provenant and provided on an \"AS IS\" basis, without warranties or conditions of any kind, either express or implied. Provenant and its authors/providers do not provide legal advice, and are not responsible for how this output is used. Consult qualified legal counsel for legal advice.";
 
 #[derive(Debug)]
 /// Top-level ScanCode-compatible JSON payload.
@@ -97,6 +98,7 @@ pub struct Header {
     pub tool_name: String,
     pub tool_version: String,
     pub options: Map<String, Value>,
+    pub notice: String,
     pub start_timestamp: String,
     pub end_timestamp: String,
     pub output_format_version: String,
