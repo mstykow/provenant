@@ -1,0 +1,11 @@
+what:
+  - authors
+authors:
+  - Miguel Ojeda <ojeda@kernel.org>
+  - Christian W. Zuckschwerdt <zany@triq.net>
+  - Jan M. Sendler <sendler@sendler.de>
+  - Aurelien Jarno <aurelien@aurel32.net>
+  - Mydraal <vulpyne@vulpyne.net>
+  - Adam Sulmicki <adam@cfar.umd.edu>
+  - Jeremy M. Dolan <jmd@turbogeek.org>
+  - Crutcher Dunnavant <crutcher+kernel@datastacks.com>

@@ -4,4 +4,8 @@ what:
   - copyrights
 copyrights:
   - Copyright (c) 2010 GSyC/LibreSoft, Universidad Rey Juan Carlos. Authors Santiago Carot Nemesio
-authors: []
+authors:
+  - Santiago Carot Nemesio sancane at gmail.com
+authors_summary:
+  - value: Santiago Carot Nemesio sancane at gmail.com
+    count: 1
