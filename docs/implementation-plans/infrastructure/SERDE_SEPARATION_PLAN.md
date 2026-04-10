@@ -131,7 +131,7 @@ These types have `Serialize` but are **not serialized directly in the output** �
 
 The `--from-json` CLI flag deserializes a previous JSON scan output back into internal types:
 
-```
+```text
 JsonScanInput (Deserialize-only struct)
   ├── files: Vec<FileInfo>
   ├── packages: Vec<Package>
@@ -162,7 +162,7 @@ These will be replaced by the new conversion functions.
 
 All output-facing types will live in `src/output_schema/`, one file per type, with conversion functions.
 
-```
+```text
 src/output_schema/
 ├── mod.rs                     # Module re-exports
 ├── output.rs                  # Output (top-level payload)

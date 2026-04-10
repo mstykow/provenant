@@ -4,7 +4,7 @@ mod tests {
     use std::path::Path;
 
     use regex::Regex;
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
     use tempfile::TempDir;
 
     use super::super::scan_test_utils::scan_and_assemble_with_stripped_root;
@@ -180,9 +180,19 @@ mod tests {
             })
             .collect();
 
+        let output_packages: Vec<crate::output_schema::OutputPackage> = assembly_result
+            .packages
+            .iter()
+            .map(crate::output_schema::OutputPackage::from)
+            .collect();
+        let output_deps: Vec<crate::output_schema::OutputTopLevelDependency> = assembly_result
+            .dependencies
+            .iter()
+            .map(crate::output_schema::OutputTopLevelDependency::from)
+            .collect();
         json!({
-            "packages": assembly_result.packages,
-            "dependencies": assembly_result.dependencies,
+            "packages": output_packages,
+            "dependencies": output_deps,
             "files": files_json,
         })
     }
@@ -271,15 +281,11 @@ mod tests {
             .get("datafile_paths")
             .and_then(|value| value.as_array())
             .expect("datafile_paths should be present");
-        assert!(
-            datafile_paths
-                .iter()
-                .any(|path| path.as_str() == Some("Package.swift.deplock"))
-        );
-        assert!(
-            datafile_paths
-                .iter()
-                .any(|path| path.as_str() == Some(".package.resolved"))
-        );
+        assert!(datafile_paths
+            .iter()
+            .any(|path| path.as_str() == Some("Package.swift.deplock")));
+        assert!(datafile_paths
+            .iter()
+            .any(|path| path.as_str() == Some(".package.resolved")));
     }
 }

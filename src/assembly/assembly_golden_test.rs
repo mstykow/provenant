@@ -4,9 +4,9 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use regex::Regex;
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
-    use crate::assembly::{AssemblyResult, assemble};
+    use crate::assembly::{assemble, AssemblyResult};
     use crate::models::{FileInfo, FileType};
     use crate::parsers::try_parse_file;
 
@@ -181,9 +181,19 @@ mod tests {
             })
             .collect();
 
+        let output_packages: Vec<crate::output_schema::OutputPackage> = actual
+            .packages
+            .iter()
+            .map(crate::output_schema::OutputPackage::from)
+            .collect();
+        let output_deps: Vec<crate::output_schema::OutputTopLevelDependency> = actual
+            .dependencies
+            .iter()
+            .map(crate::output_schema::OutputTopLevelDependency::from)
+            .collect();
         let actual_json = json!({
-            "packages": actual.packages,
-            "dependencies": actual.dependencies,
+            "packages": output_packages,
+            "dependencies": output_deps,
             "files_with_packages": file_for_packages,
         });
         let actual_str = serde_json::to_string_pretty(&actual_json)
@@ -351,9 +361,19 @@ mod tests {
                 })
                 .collect();
 
+            let output_packages: Vec<crate::output_schema::OutputPackage> = result
+                .packages
+                .iter()
+                .map(crate::output_schema::OutputPackage::from)
+                .collect();
+            let output_deps: Vec<crate::output_schema::OutputTopLevelDependency> = result
+                .dependencies
+                .iter()
+                .map(crate::output_schema::OutputTopLevelDependency::from)
+                .collect();
             let output_json = json!({
-                "packages": result.packages,
-                "dependencies": result.dependencies,
+                "packages": output_packages,
+                "dependencies": output_deps,
                 "files_with_packages": file_for_packages,
             });
             let output_str = serde_json::to_string_pretty(&output_json)
@@ -462,22 +482,16 @@ mod tests {
             .expect("expected assembled conda package");
 
         assert_eq!(conda_pkg.name.as_deref(), Some("requests"));
-        assert!(
-            conda_pkg
-                .datasource_ids
-                .contains(&crate::models::DatasourceId::CondaMetaJson)
-        );
-        assert!(
-            conda_pkg
-                .datasource_ids
-                .contains(&crate::models::DatasourceId::CondaMetaYaml)
-        );
-        assert!(
-            conda_pkg
-                .datafile_paths
-                .iter()
-                .any(|path| path.contains("conda-meta/requests-2.32.3-py312h06a4308_1.json"))
-        );
+        assert!(conda_pkg
+            .datasource_ids
+            .contains(&crate::models::DatasourceId::CondaMetaJson));
+        assert!(conda_pkg
+            .datasource_ids
+            .contains(&crate::models::DatasourceId::CondaMetaYaml));
+        assert!(conda_pkg
+            .datafile_paths
+            .iter()
+            .any(|path| path.contains("conda-meta/requests-2.32.3-py312h06a4308_1.json")));
         assert!(conda_pkg.datafile_paths.iter().any(|path| {
             path.contains("pkgs/requests-2.32.3-py312h06a4308_1/info/recipe/meta.yaml")
         }));

@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::serde_helpers::serialize_optional_map_as_object;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OutputFileReference {
     pub path: String,
@@ -14,7 +16,7 @@ pub struct OutputFileReference {
     pub sha256: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sha512: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, serialize_with = "serialize_optional_map_as_object")]
     pub extra_data: Option<HashMap<String, serde_json::Value>>,
 }
 
