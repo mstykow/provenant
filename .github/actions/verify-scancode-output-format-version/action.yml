@@ -1,0 +1,8 @@
+name: Verify ScanCode output format version sync
+description: Verify that Provenant's output format version matches the pinned ScanCode submodule
+runs:
+  using: composite
+  steps:
+    - name: Verify ScanCode output format version sync
+      shell: bash
+      run: ./scripts/check_scancode_output_format_sync.sh

@@ -37,6 +37,9 @@ jobs:
       - name: Verify embedded license index
         uses: ./.github/actions/verify-embedded-license-index
 
+      - name: Verify ScanCode output format version sync
+        uses: ./.github/actions/verify-scancode-output-format-version
+
   rust-quality:
     name: Code Quality
     runs-on: ubuntu-latest

@@ -4,7 +4,7 @@ This guide documents the maintainer release flow for `provenant`.
 
 ## Overview
 
-Releases are driven locally with `release.sh`, which wraps `cargo release` and ensures the embedded license data is refreshed before publishing.
+Releases are driven locally with `release.sh`, which wraps `cargo release`, refreshes the embedded license data, and checks for ScanCode output-format drift before publishing.
 
 The published crate name is `provenant-cli`, while the installed binary and product name remain `provenant` / Provenant.
 
@@ -50,9 +50,10 @@ cargo test --test scanner_integration --release --verbose
 cargo test --test output_format_golden --release --verbose
 cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin generate-supported-formats -- --check
 ./scripts/check_release_version_sync.sh
+./scripts/check_scancode_output_format_sync.sh
 ```
 
-The GitHub `Quality Checks` workflow is the primary pre-release quality gate. It verifies the embedded license index, dependency policy via `cargo-deny`, crate size, manifest sorting, unused dependencies, golden-test shards, Windows and Intel macOS build smoke, and the split integration-test matrix defined in `.github/workflows/check.yml`. It is best to start from a branch and commit state where that workflow is already green. The tag-triggered release workflow adds one final embedded-license-index verification before it builds and publishes release artifacts.
+The GitHub `Quality Checks` workflow is the primary pre-release quality gate. It verifies the embedded license index, ScanCode output-format version sync, dependency policy via `cargo-deny`, crate size, manifest sorting, unused dependencies, golden-test shards, Windows and Intel macOS build smoke, and the split integration-test matrix defined in `.github/workflows/check.yml`. It is best to start from a branch and commit state where that workflow is already green. The tag-triggered release workflow adds final embedded-license-index and output-format-sync verification before it builds and publishes release artifacts.
 
 ## Release Commands
 
@@ -81,9 +82,10 @@ On every release attempt, the script:
 1. Checks that the ScanCode reference submodule is present.
 2. Fetches the latest `origin/develop` for `reference/scancode-toolkit`.
 3. Updates the submodule checkout if the upstream commit changed.
-4. Regenerates `resources/license_detection/license_index.zst`.
-5. In `--execute` mode, commits that license-data refresh as `chore: update license rules/licenses to latest` when needed.
-6. Runs `cargo release <patch|minor|major>` in dry-run or execute mode.
+4. Verifies that Provenant's output-format version is still aligned with the pinned ScanCode submodule and stops early if contract updates are required.
+5. Regenerates `resources/license_detection/license_index.zst`.
+6. In `--execute` mode, commits that license-data refresh as `chore: update license rules/licenses to latest` when needed.
+7. Runs `cargo release <patch|minor|major>` in dry-run or execute mode.
 
 The repository is configured so `cargo release`:
 
