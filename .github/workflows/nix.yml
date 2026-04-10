@@ -1,0 +1,41 @@
+name: Nix Flake
+
+on:
+  push:
+    branches:
+      - main
+      - "renovate/*"
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  nix-build-smoke:
+    name: Nix Build Smoke Test
+    runs-on: ubuntu-latest
+    if: |
+      !(github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/'))
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        with:
+          submodules: false
+          lfs: false
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@e50d5f73bf55f3548d8a3436842c3fd85d02a670 # v16
+
+      - name: Set up Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@21c6a9e2e8ea727c467decabb9c1aab5fd0e4e78 # v9
+
+      - name: Check flake evaluation
+        run: nix flake check --no-build
+
+      - name: Build provenant
+        run: nix build '.#'
+
+      - name: Smoke test CLI
+        run: |
+          ./result/bin/provenant --version
+          ./result/bin/provenant --show-attribution > /dev/null
+
+      - name: Smoke test dev shell
+        run: nix develop --command cargo --version
