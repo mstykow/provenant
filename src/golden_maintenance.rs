@@ -37,10 +37,24 @@ pub fn run_prettier(paths: &[PathBuf]) -> Result<()> {
         return Ok(());
     }
 
+    let ignore_path = std::env::temp_dir().join("provenant-empty-prettierignore");
+    if !ignore_path.exists() {
+        fs::write(&ignore_path, "").context("failed to create empty prettier ignore file")?;
+    }
+
     const CHUNK_SIZE: usize = 100;
     for chunk in paths.chunks(CHUNK_SIZE) {
         let mut cmd = Command::new("npm");
-        cmd.args(["exec", "--", "prettier", "--write"]);
+        cmd.args([
+            "exec",
+            "--",
+            "prettier",
+            "--write",
+            "--ignore-path",
+            ignore_path
+                .to_str()
+                .context("temporary prettier ignore path is not valid UTF-8")?,
+        ]);
         for path in chunk {
             cmd.arg(path);
         }
