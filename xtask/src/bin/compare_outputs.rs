@@ -12,12 +12,12 @@ use sha2::Digest;
 
 use provenant_xtask::common::{
     ScanProfile, derive_repo_name_from_url, ensure_release_binary, now_run_id, project_root,
-    realpath, render_tsv_table, resolve_scan_args, sanitize_label, shell_join, write_pretty_json,
-    write_tsv,
+    read_binary_version, realpath, render_tsv_table, resolve_git_worktree_identity,
+    resolve_scan_args, sanitize_label, shell_join, write_pretty_json, write_tsv,
 };
 use provenant_xtask::manifests::{
     CommandInvocation, CommandsManifest, CompareArtifactsManifest, CompareRunManifest,
-    RepoManifest, ScancodeManifest, TargetManifest,
+    ProvenantManifest, RepoManifest, ScancodeManifest, TargetManifest,
 };
 use provenant_xtask::repo_cache::{
     cleanup_repo_worktree, current_git_log_line, current_git_revision, ensure_repo_mirror,
@@ -65,6 +65,10 @@ struct ContextState {
     provenant_stdout: PathBuf,
     scancode_json: PathBuf,
     scancode_stdout: PathBuf,
+    provenant_version: String,
+    provenant_runtime_revision: Option<String>,
+    provenant_runtime_dirty: bool,
+    provenant_runtime_diff_hash: Option<String>,
     scancode_image: String,
     scancode_runtime_revision: String,
     scancode_runtime_dirty: bool,
@@ -164,6 +168,7 @@ fn main() -> Result<()> {
     ensure_release_binary(&context.project_root, &context.provenant_bin, "provenant")?;
     println!();
 
+    resolve_provenant_runtime_identity(&mut context)?;
     println!("[4/6] Preparing ScanCode runtime/cache...");
     resolve_scancode_runtime_identity(&mut context)?;
     prepare_scancode_cache(&mut context)?;
@@ -193,6 +198,10 @@ fn main() -> Result<()> {
     }
     if let Some(profile_name) = &context.profile_name {
         println!("  Profile:       {profile_name}");
+    }
+    println!("  Provenant:     {}", context.provenant_version);
+    if let Some(revision) = &context.provenant_runtime_revision {
+        println!("  Provenant rev: {revision}");
     }
     println!("  Scan args:     {}\n", context.scan_args.join(" "));
     if let Some(cache_dir) = &context.scancode_cache_dir {
@@ -355,6 +364,10 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
         provenant_bin: project_root.join("target/release/provenant"),
         provenant_json: raw_dir.join("provenant.json"),
         provenant_stdout: raw_dir.join("provenant-stdout.txt"),
+        provenant_version: String::new(),
+        provenant_runtime_revision: None,
+        provenant_runtime_dirty: false,
+        provenant_runtime_diff_hash: None,
         scancode_json: raw_dir.join("scancode.json"),
         scancode_stdout: raw_dir.join("scancode-stdout.txt"),
         scancode_image: String::new(),
@@ -410,30 +423,16 @@ fn prepare_target(context: &mut ContextState, args: &Args) -> Result<CheckoutGua
 }
 
 fn resolve_scancode_runtime_identity(context: &mut ContextState) -> Result<()> {
-    let commit = current_git_revision(&context.scancode_submodule_dir)
+    let identity = resolve_git_worktree_identity(&context.scancode_submodule_dir)?;
+    let commit = identity
+        .revision
         .context("failed to resolve ScanCode submodule revision")?;
     let short_commit: String = commit.chars().take(10).collect();
-    let status = Command::new("git")
-        .current_dir(&context.scancode_submodule_dir)
-        .args(["status", "--short", "--untracked-files=no"])
-        .output()
-        .context("failed to inspect ScanCode worktree")?;
-    let dirty = !String::from_utf8_lossy(&status.stdout).trim().is_empty();
+    let dirty = identity.dirty;
     let mut image = format!("provenant-scancode-local:{short_commit}");
-    let mut diff_hash = None;
+    let diff_hash = identity.diff_hash;
     if dirty {
-        let diff = Command::new("git")
-            .current_dir(&context.scancode_submodule_dir)
-            .args(["diff", "--no-ext-diff", "--binary", "HEAD"])
-            .output()?;
-        let mut hasher = sha2::Sha256::default();
-        hasher.update(&diff.stdout);
-        let digest: String = hasher
-            .finalize()
-            .iter()
-            .map(|byte| format!("{:02x}", byte))
-            .collect();
-        diff_hash = Some(digest.clone());
+        let digest = diff_hash.clone().unwrap_or_default();
         image = format!("provenant-scancode-local:{short_commit}-dirty-{digest}");
         image.truncate(128);
     }
@@ -441,6 +440,15 @@ fn resolve_scancode_runtime_identity(context: &mut ContextState) -> Result<()> {
     context.scancode_runtime_dirty = dirty;
     context.scancode_runtime_diff_hash = diff_hash;
     context.scancode_image = image;
+    Ok(())
+}
+
+fn resolve_provenant_runtime_identity(context: &mut ContextState) -> Result<()> {
+    context.provenant_version = read_binary_version(&context.provenant_bin)?;
+    let identity = resolve_git_worktree_identity(&context.project_root)?;
+    context.provenant_runtime_revision = identity.revision;
+    context.provenant_runtime_dirty = identity.dirty;
+    context.provenant_runtime_diff_hash = identity.diff_hash;
     Ok(())
 }
 
@@ -1517,6 +1525,12 @@ fn write_manifest(context: &ContextState) -> Result<()> {
                 working_directory: Some(context.target_dir.clone()),
             },
         },
+        provenant: ProvenantManifest {
+            version: context.provenant_version.clone(),
+            runtime_revision: context.provenant_runtime_revision.clone(),
+            runtime_dirty: context.provenant_runtime_dirty,
+            runtime_diff_hash: context.provenant_runtime_diff_hash.clone(),
+        },
         scancode: ScancodeManifest {
             image: context.scancode_image.clone(),
             submodule_path: context.scancode_submodule_dir.clone(),
@@ -1875,6 +1889,10 @@ mod tests {
             provenant_stdout: PathBuf::from(
                 "/tmp/project/.provenant/compare-runs/run-id/raw/provenant-stdout.txt",
             ),
+            provenant_version: "0.0.13".to_string(),
+            provenant_runtime_revision: Some("prov-rev".to_string()),
+            provenant_runtime_dirty: false,
+            provenant_runtime_diff_hash: None,
             scancode_json: PathBuf::from(
                 "/tmp/project/.provenant/compare-runs/run-id/raw/scancode.json",
             ),

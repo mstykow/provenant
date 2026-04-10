@@ -89,6 +89,7 @@ It also writes a tab-separated summary file at:
 - Warm-run comparisons are meaningful only within one invocation because the command recreates `.provenant/benchmarks` on every run.
 - Benchmark artifacts are kept in the repo-local `.provenant/` developer artifact directory rather than `/tmp`, so they stay near future comparison runs and are easier to inspect before cleanup.
 - Repo URL runs reuse cached git objects from `.provenant/repo-cache/` instead of recloning the upstream repository on every invocation.
+- `run-manifest.json` records the Provenant binary version plus the current Provenant repository revision, dirty state, and diff hash for the run, so benchmark snapshots stay attributable as the scanner evolves.
 - On macOS, the command falls back to `/usr/bin/time -l`; on systems with GNU `time`, it uses verbose memory reporting automatically.
 
 ## `compare-outputs`
@@ -170,6 +171,7 @@ Optional diagnostic logs when available:
 - ScanCode currently runs via Docker on all platforms for this workflow because that is the reproducible runtime path verified in this repository.
 - `compare-outputs` passes the same shared scan args to both scanners. The `common` profile includes installed package database coverage, which is usually a no-op on ordinary source repositories but matters for extracted rootfs/container trees and other artifact targets. Use `common-with-compiled` when you also want Go/Rust compiled-binary package extraction in the shared scan profile.
 - `--repo-url` mode requires `--repo-ref`; the command records both the requested ref and the resolved full commit SHA in `run-manifest.json`.
+- `run-manifest.json` also records the Provenant binary version plus the current Provenant repository revision, dirty state, and diff hash, alongside the ScanCode runtime identity.
 - Repo URL runs reuse cached git objects from `.provenant/repo-cache/`, and the temporary detached checkout is removed after the run so compare artifacts do not retain duplicate full repository trees.
 - Repo URL runs also reuse cached raw ScanCode artifacts from `.provenant/scancode-cache/` when the resolved target commit, ScanCode runtime identity, and effective ScanCode scan args are unchanged.
 - Local `--target-path` runs rerun ScanCode by default. Pass `--scancode-cache-identity <id>` to opt into shared ScanCode cache reuse for a local snapshot you have identified explicitly.
