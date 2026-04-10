@@ -2394,6 +2394,38 @@ dev = ["typing_extensions", "helper[cli]==1.2.3"]
     }
 
     #[test]
+    fn test_pyproject_wildcard_exact_dependencies_preserve_purl_versions() {
+        let content = r#"
+[project]
+name = "wildcard-demo"
+version = "1.0.0"
+dependencies = [
+    "jsonschema==4.*",
+    "PyYAML==6.*",
+]
+"#;
+
+        let (_temp_dir, file_path) = create_temp_file(content, "pyproject.toml");
+        let package_data = PythonParser::extract_first_package(&file_path);
+
+        let jsonschema = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:pypi/jsonschema@4.%2A"))
+            .expect("jsonschema dependency");
+        assert_eq!(jsonschema.extracted_requirement.as_deref(), Some("==4.*"));
+        assert_eq!(jsonschema.is_pinned, Some(true));
+
+        let pyyaml = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:pypi/pyyaml@6.%2A"))
+            .expect("pyyaml dependency");
+        assert_eq!(pyyaml.extracted_requirement.as_deref(), Some("==6.*"));
+        assert_eq!(pyyaml.is_pinned, Some(true));
+    }
+
+    #[test]
     fn test_pyproject_extracts_uv_dependency_groups_and_tool_config() {
         let content = r#"
 [project]

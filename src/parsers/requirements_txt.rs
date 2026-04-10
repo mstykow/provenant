@@ -655,7 +655,7 @@ fn extract_pinned_version(specifiers: &str) -> Option<String> {
     };
 
     let version = stripped.trim();
-    if version.is_empty() || version.contains('*') {
+    if version.is_empty() {
         None
     } else {
         Some(version.to_string())
@@ -663,11 +663,16 @@ fn extract_pinned_version(specifiers: &str) -> Option<String> {
 }
 
 fn create_pypi_purl(name: &str, version: Option<&str>) -> Option<String> {
-    let mut purl = PackageUrl::new(RequirementsTxtParser::PACKAGE_TYPE.as_str(), name).ok()?;
-    if let Some(version) = version {
-        purl.with_version(version).ok()?;
-    }
-    Some(purl.to_string())
+    PackageUrl::new(RequirementsTxtParser::PACKAGE_TYPE.as_str(), name)
+        .ok()
+        .map(|_| match version {
+            Some(version) => format!("pkg:pypi/{name}@{}", encode_pypi_purl_version(version)),
+            None => format!("pkg:pypi/{name}"),
+        })
+}
+
+fn encode_pypi_purl_version(version: &str) -> String {
+    version.replace('*', "%2A")
 }
 
 fn normalize_pypi_name(name: &str) -> String {

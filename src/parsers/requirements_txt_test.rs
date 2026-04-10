@@ -152,6 +152,42 @@ mod tests {
     }
 
     #[test]
+    fn test_requirements_wildcard_exact_versions_are_pinned_in_purl() {
+        let requirements_path = unique_temp_path("requirements.txt");
+        fs::write(&requirements_path, "jsonschema==4.*\nPyYAML==6.*\n")
+            .expect("Failed to write requirements file");
+
+        let package_data = RequirementsTxtParser::extract_first_package(&requirements_path);
+
+        let jsonschema = package_data
+            .dependencies
+            .iter()
+            .find(|dependency| dependency.purl.as_deref() == Some("pkg:pypi/jsonschema@4.%2A"))
+            .expect("jsonschema dependency should preserve wildcard pin in purl");
+        assert_eq!(
+            jsonschema.extracted_requirement.as_deref(),
+            Some("jsonschema==4.*")
+        );
+        assert_eq!(jsonschema.is_pinned, Some(true));
+
+        let pyyaml = package_data
+            .dependencies
+            .iter()
+            .find(|dependency| dependency.purl.as_deref() == Some("pkg:pypi/pyyaml@6.%2A"))
+            .expect("pyyaml dependency should preserve wildcard pin in purl");
+        assert_eq!(pyyaml.extracted_requirement.as_deref(), Some("PyYAML==6.*"));
+        assert_eq!(pyyaml.is_pinned, Some(true));
+
+        fs::remove_file(&requirements_path).expect("Failed to remove requirements file");
+        fs::remove_dir_all(
+            requirements_path
+                .parent()
+                .expect("requirements file should have a parent"),
+        )
+        .expect("Failed to remove requirements temp dir");
+    }
+
+    #[test]
     fn test_is_match_supports_underscore_lockfile_and_nested_directory_names() {
         assert!(RequirementsTxtParser::is_match(&PathBuf::from(
             "/tmp/requirements_lock_3_11.txt"

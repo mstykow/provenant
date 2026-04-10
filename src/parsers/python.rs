@@ -2604,10 +2604,7 @@ fn build_pyproject_array_dependency(
         .as_deref()
         .and_then(extract_exact_pinned_version);
 
-    let mut package_url = PackageUrl::new(PythonParser::PACKAGE_TYPE.as_str(), &name).ok()?;
-    if let Some(version) = pinned_version.as_deref() {
-        package_url.with_version(version).ok()?;
-    }
+    let purl = build_python_dependency_purl(&name, pinned_version.as_deref())?;
 
     let mut extra_data = HashMap::new();
     if let Some(marker) = parsed.marker {
@@ -2623,7 +2620,7 @@ fn build_pyproject_array_dependency(
     let extracted_requirement = parsed.specifiers.or(parsed.url);
 
     Some(Dependency {
-        purl: Some(package_url.to_string()),
+        purl: Some(purl),
         extracted_requirement: extracted_requirement.clone(),
         scope: scope.map(|s| s.to_string()),
         is_runtime: Some(!is_optional),
@@ -2654,7 +2651,7 @@ fn extract_exact_pinned_version(specifiers: &str) -> Option<String> {
     };
 
     let version = stripped.trim();
-    if version.is_empty() || version.contains('*') {
+    if version.is_empty() {
         None
     } else {
         Some(version.to_string())
@@ -3603,18 +3600,20 @@ fn build_python_dependency(
         default_scope,
         default_optional,
     );
-    let mut purl = PackageUrl::new(PythonParser::PACKAGE_TYPE.as_str(), &name).ok()?;
+    let purl = build_python_dependency_purl(&name, None)?;
 
     let is_pinned = requirement
         .as_deref()
         .is_some_and(|req| req.starts_with("==") || req.starts_with("==="));
-    if is_pinned
-        && let Some(version) = requirement
+    let purl = if is_pinned {
+        requirement
             .as_deref()
             .map(|req| req.trim_start_matches('='))
-    {
-        purl.with_version(version).ok()?;
-    }
+            .and_then(|version| build_python_dependency_purl(&name, Some(version)))
+            .unwrap_or(purl)
+    } else {
+        purl
+    };
 
     let mut extra_data = HashMap::new();
     extra_data.extend(marker_data);
@@ -3623,7 +3622,7 @@ fn build_python_dependency(
     }
 
     Some(Dependency {
-        purl: Some(purl.to_string()),
+        purl: Some(purl),
         extracted_requirement: requirement,
         scope: Some(scope),
         is_runtime: Some(true),
@@ -3667,6 +3666,24 @@ fn normalize_rfc822_requirement(requirement_part: &str) -> Option<String> {
         .collect();
     specifiers.sort();
     Some(specifiers.join(","))
+}
+
+fn encode_python_dependency_purl_version(version: &str) -> String {
+    version.replace('*', "%2A")
+}
+
+fn build_python_dependency_purl(name: &str, version: Option<&str>) -> Option<String> {
+    PackageUrl::new(PythonParser::PACKAGE_TYPE.as_str(), name)
+        .ok()
+        .map(|_| match version {
+            Some(version) => {
+                format!(
+                    "pkg:pypi/{name}@{}",
+                    encode_python_dependency_purl_version(version)
+                )
+            }
+            None => format!("pkg:pypi/{name}"),
+        })
 }
 
 fn parse_rfc822_marker(
