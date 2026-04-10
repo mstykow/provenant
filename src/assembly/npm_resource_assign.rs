@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::models::{FileInfo, Package, PackageType};
+use crate::models::{FileInfo, Package, PackageType, PackageUid};
 use crate::utils::path::parent_dir_for_lookup;
 
 pub fn assign_npm_package_resources(files: &mut [FileInfo], packages: &[Package]) {
-    let package_roots: HashMap<String, String> = packages
+    let package_roots: HashMap<String, PackageUid> = packages
         .iter()
         .filter(|package| package.package_type == Some(PackageType::Npm))
         .filter_map(|package| {
@@ -32,8 +32,8 @@ pub fn assign_npm_package_resources(files: &mut [FileInfo], packages: &[Package]
 
 fn find_nearest_package_owner(
     path: &str,
-    package_roots: &HashMap<String, String>,
-) -> Option<String> {
+    package_roots: &HashMap<String, PackageUid>,
+) -> Option<PackageUid> {
     let mut current = Some(path);
 
     while let Some(candidate) = current {

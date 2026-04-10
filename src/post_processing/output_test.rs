@@ -7,7 +7,7 @@ use crate::assembly;
 use crate::license_detection::index::{IndexedRuleMetadata, LicenseIndex};
 use crate::license_detection::models::{License as RuntimeLicense, Rule, RuleKind};
 use crate::models::{
-    Copyright, Holder, LineNumber, Match, Package, PackageData, PackageType, Tallies,
+    Copyright, Holder, LineNumber, Match, Package, PackageData, PackageType, PackageUid, Tallies,
 };
 use crate::scan_result_shaping::normalize_paths;
 use serde_json::json;
@@ -1029,7 +1029,7 @@ fn apply_local_file_reference_following_resolves_files_beside_manifest() {
     }];
 
     let mut source = file("project/demo/__init__.py");
-    source.for_packages = vec![package_uid.clone()];
+    source.for_packages = vec![PackageUid::from_raw(package_uid.clone())];
     source.license_expression = Some("unknown-license-reference".to_string());
     source.license_detections = vec![crate::models::LicenseDetection {
         license_expression: "unknown-license-reference".to_string(),
@@ -1100,7 +1100,7 @@ fn apply_package_reference_following_resolves_manifest_origin_local_file() {
     }];
 
     let mut manifest = file("project/Cargo.toml");
-    manifest.for_packages = vec![package_uid.clone()];
+    manifest.for_packages = vec![PackageUid::from_raw(package_uid.clone())];
     manifest.package_data = vec![PackageData {
         package_type: Some(PackageType::Cargo),
         license_detections: package.license_detections.clone(),
@@ -1434,7 +1434,7 @@ fn apply_package_reference_following_inherits_license_from_package_context() {
     }];
 
     let mut source = file("project/locale/django.po");
-    source.for_packages = vec![package_uid.clone()];
+    source.for_packages = vec![PackageUid::from_raw(package_uid.clone())];
     source.license_expression = Some("free-unknown".to_string());
     source.license_detections = vec![crate::models::LicenseDetection {
         license_expression: "free-unknown".to_string(),
@@ -1611,7 +1611,10 @@ fn apply_package_reference_following_leaves_ambiguous_multi_package_file_unresol
     }];
 
     let mut shared_file = file("project/shared/locale.po");
-    shared_file.for_packages = vec![first_uid, second_uid];
+    shared_file.for_packages = vec![
+        PackageUid::from_raw(first_uid),
+        PackageUid::from_raw(second_uid),
+    ];
     shared_file.license_expression = Some("free-unknown".to_string());
     shared_file.license_detections = vec![crate::models::LicenseDetection {
         license_expression: "free-unknown".to_string(),
@@ -2846,7 +2849,7 @@ fn create_output_promotes_package_metadata_without_summary_flags() {
     let end = start;
     let package_uid = "pkg:npm/demo?uuid=test".to_string();
     let mut license = file("project/LICENSE");
-    license.for_packages = vec![package_uid.clone()];
+    license.for_packages = vec![PackageUid::from_raw(package_uid.clone())];
     license.copyrights = vec![Copyright {
         copyright: "Copyright Example Corp.".to_string(),
         start_line: LineNumber::ONE,
@@ -2858,7 +2861,7 @@ fn create_output_promotes_package_metadata_without_summary_flags() {
         end_line: LineNumber::ONE,
     }];
     let package = Package {
-        package_uid,
+        package_uid: PackageUid::from_raw(package_uid),
         datafile_paths: vec!["project/package.json".to_string()],
         ..super::test_utils::package("pkg:npm/demo?uuid=test", "project/package.json")
     };

@@ -25,7 +25,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use crate::models::{DatasourceId, FileInfo, Package, TopLevelDependency};
+use crate::models::{DatasourceId, FileInfo, Package, PackageUid, TopLevelDependency};
 
 pub use assemblers::ASSEMBLERS;
 
@@ -155,7 +155,7 @@ pub fn assemble(files: &mut [FileInfo]) -> AssemblyResult {
         {
             let package_uid = pkg.package_uid.clone();
             let purl = pkg.purl.clone();
-            let removed_package_uids: Vec<String> = packages
+            let removed_package_uids: Vec<PackageUid> = packages
                 .iter()
                 .filter(|p| p.purl == purl)
                 .map(|p| p.package_uid.clone())
@@ -191,7 +191,7 @@ pub fn assemble(files: &mut [FileInfo]) -> AssemblyResult {
 
     for file in files.iter_mut() {
         file.for_packages
-            .sort_by(|left, right| stable_uid_key(left).cmp(stable_uid_key(right)));
+            .sort_by(|left, right| left.stable_key().cmp(right.stable_key()));
         file.for_packages.dedup();
     }
 
@@ -215,9 +215,9 @@ pub fn assemble(files: &mut [FileInfo]) -> AssemblyResult {
             })
             .then_with(|| {
                 left.for_package_uid
-                    .as_deref()
-                    .map(stable_uid_key)
-                    .cmp(&right.for_package_uid.as_deref().map(stable_uid_key))
+                    .as_ref()
+                    .map(|uid| uid.stable_key())
+                    .cmp(&right.for_package_uid.as_ref().map(|uid| uid.stable_key()))
             })
     });
 
@@ -298,13 +298,6 @@ fn stable_package_sort_key(package: &Package) -> (Option<&str>, Option<&str>, Op
             .map(String::as_str)
             .unwrap_or(""),
     )
-}
-
-fn stable_uid_key(uid: &str) -> &str {
-    uid.split_once("?uuid=")
-        .map(|(prefix, _)| prefix)
-        .or_else(|| uid.split_once("&uuid=").map(|(prefix, _)| prefix))
-        .unwrap_or(uid)
 }
 
 fn assemble_one_per_package_data(

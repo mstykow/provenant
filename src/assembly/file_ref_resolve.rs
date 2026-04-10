@@ -950,19 +950,6 @@ fn resolve_rpm_namespace(
     None
 }
 
-fn replace_uid_base(old_uid: &str, new_purl: &str) -> String {
-    if let Some((_, suffix)) = old_uid.split_once("?uuid=") {
-        return format!("{}?uuid={}", new_purl, suffix);
-    }
-
-    if let Some((_, suffix)) = old_uid.split_once("&uuid=") {
-        let separator = if new_purl.contains('?') { '&' } else { '?' };
-        return format!("{}{separator}uuid={suffix}", new_purl);
-    }
-
-    old_uid.to_string()
-}
-
 fn rewrite_purl_namespace(existing_purl: &str, namespace: &str) -> Option<String> {
     let parsed = PackageUrl::from_str(existing_purl).ok()?;
     let mut updated = PackageUrl::new(parsed.ty(), parsed.name()).ok()?;
@@ -1000,7 +987,7 @@ fn apply_rpm_namespace(
         && let Some(updated_purl) = rewrite_purl_namespace(current_purl, namespace)
     {
         package.purl = Some(updated_purl.clone());
-        package.package_uid = replace_uid_base(&old_package_uid, &updated_purl);
+        package.package_uid = old_package_uid.replace_base(&updated_purl);
     }
 
     for file in files.iter_mut() {
@@ -1012,18 +999,18 @@ fn apply_rpm_namespace(
     }
 
     for dep in dependencies.iter_mut() {
-        if dep.for_package_uid.as_deref() == Some(old_package_uid.as_str()) {
+        if dep.for_package_uid.as_ref() == Some(&old_package_uid) {
             dep.for_package_uid = Some(package.package_uid.clone());
         }
 
-        if dep.for_package_uid.as_deref() == Some(package.package_uid.as_str()) {
+        if dep.for_package_uid.as_ref() == Some(&package.package_uid) {
             dep.namespace = Some(namespace.to_string());
 
             if let Some(current_purl) = dep.purl.as_deref()
                 && let Some(updated_purl) = rewrite_purl_namespace(current_purl, namespace)
             {
                 dep.purl = Some(updated_purl.clone());
-                dep.dependency_uid = replace_uid_base(&dep.dependency_uid, &updated_purl);
+                dep.dependency_uid = dep.dependency_uid.replace_base(&updated_purl);
             }
         }
     }

@@ -2748,25 +2748,28 @@ mod tests {
 
     #[test]
     fn test_build_package_uid_format() {
-        use crate::models::build_package_uid;
+        use crate::models::PackageUid;
 
         let purl = "pkg:npm/test@1.0.0";
-        let uid = build_package_uid(purl);
+        let uid = PackageUid::new(purl);
 
         assert!(
-            uid.starts_with("pkg:npm/test@1.0.0?uuid="),
+            uid.as_str().starts_with("pkg:npm/test@1.0.0?uuid="),
             "Expected UUID to be added as qualifier"
         );
-        assert!(uid.contains("uuid="), "Expected uuid qualifier");
+        assert!(uid.as_str().contains("uuid="), "Expected uuid qualifier");
 
         let purl_with_qualifier = "pkg:npm/test@1.0.0?arch=x64";
-        let uid2 = build_package_uid(purl_with_qualifier);
+        let uid2 = PackageUid::new(purl_with_qualifier);
 
         assert!(
-            uid2.contains("&uuid="),
+            uid2.as_str().contains("&uuid="),
             "Expected UUID to be appended with & when qualifiers exist"
         );
-        assert!(uid2.starts_with("pkg:npm/test@1.0.0?arch=x64&uuid="));
+        assert!(
+            uid2.as_str()
+                .starts_with("pkg:npm/test@1.0.0?arch=x64&uuid=")
+        );
     }
 
     #[test]

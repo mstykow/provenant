@@ -1,7 +1,7 @@
 use super::*;
 use crate::models::{
     Author, Copyright, DatasourceId, Dependency, FileReference, LineNumber, OutputEmail, OutputURL,
-    Package, PackageData, TopLevelDependency,
+    Package, PackageData, PackageUid, TopLevelDependency,
 };
 use crate::scan_result_shaping::test_fixtures::{dir, file};
 use regex::Regex;
@@ -809,8 +809,8 @@ fn trim_preloaded_assembly_to_files_drops_unreferenced_packages_and_dependencies
             "project/drop-package.json".to_string(),
         ),
     ];
-    packages[0].package_uid = "pkg:npm/keep@1.0.0?uuid=keep".to_string();
-    packages[1].package_uid = "pkg:npm/drop@1.0.0?uuid=drop".to_string();
+    packages[0].package_uid = PackageUid::from_raw("pkg:npm/keep@1.0.0?uuid=keep".to_string());
+    packages[1].package_uid = PackageUid::from_raw("pkg:npm/drop@1.0.0?uuid=drop".to_string());
 
     let mut dependencies = vec![
         TopLevelDependency::from_dependency(
@@ -827,7 +827,9 @@ fn trim_preloaded_assembly_to_files_drops_unreferenced_packages_and_dependencies
             },
             "project/keep-package.json".to_string(),
             DatasourceId::NpmPackageJson,
-            Some("pkg:npm/keep@1.0.0?uuid=keep".to_string()),
+            Some(PackageUid::from_raw(
+                "pkg:npm/keep@1.0.0?uuid=keep".to_string(),
+            )),
         ),
         TopLevelDependency::from_dependency(
             &Dependency {
@@ -843,7 +845,9 @@ fn trim_preloaded_assembly_to_files_drops_unreferenced_packages_and_dependencies
             },
             "project/drop-package.json".to_string(),
             DatasourceId::NpmPackageJson,
-            Some("pkg:npm/drop@1.0.0?uuid=drop".to_string()),
+            Some(PackageUid::from_raw(
+                "pkg:npm/drop@1.0.0?uuid=drop".to_string(),
+            )),
         ),
     ];
 
@@ -881,7 +885,9 @@ fn normalize_top_level_output_paths_only_applies_strip_root() {
         },
         "/tmp/project/package.json".to_string(),
         DatasourceId::NpmPackageJson,
-        Some("pkg:npm/demo@1.0.0?uuid=demo".to_string()),
+        Some(PackageUid::from_raw(
+            "pkg:npm/demo@1.0.0?uuid=demo".to_string(),
+        )),
     )];
 
     normalize_top_level_output_paths(&mut packages, &mut dependencies, "/tmp/project", true);

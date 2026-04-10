@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use packageurl::PackageUrl;
-use uuid::Uuid;
 
 use crate::cache::DEFAULT_CACHE_DIR_NAME;
 use crate::models::{
-    DatasourceId, Dependency, FileInfo, Package, PackageData, PackageType, TopLevelDependency,
+    DatasourceId, Dependency, FileInfo, Package, PackageData, PackageType, PackageUid,
+    TopLevelDependency,
 };
 
 pub fn assemble_swift_packages(
@@ -66,7 +66,7 @@ pub fn assemble_swift_packages(
             continue;
         };
 
-        let package_uids: Vec<String> = created_packages
+        let package_uids: Vec<PackageUid> = created_packages
             .iter()
             .map(|package| package.package_uid.clone())
             .collect();
@@ -188,7 +188,7 @@ fn hoist_dependencies(
     dependencies: &[Dependency],
     datafile_path: &str,
     datasource_id: DatasourceId,
-    package_uid: Option<String>,
+    package_uid: Option<PackageUid>,
 ) -> Vec<TopLevelDependency> {
     dependencies
         .iter()
@@ -293,7 +293,7 @@ fn build_package_from_resolved_dependency(
         repository_download_url: None,
         api_data_url: None,
         purl: Some(purl.to_string()),
-        package_uid: build_package_uid(purl),
+        package_uid: PackageUid::new(purl),
         datafile_paths: vec![datafile_path.to_string()],
         datasource_ids: vec![DatasourceId::SwiftPackageResolved],
     })
@@ -309,7 +309,7 @@ fn dependency_name(dependency: &Dependency) -> Option<String> {
 fn assign_swift_resources(
     files: &mut [FileInfo],
     root: &Path,
-    package_uids: &[String],
+    package_uids: &[PackageUid],
     inputs: &SwiftDirectoryInputs,
     swift_roots: &[PathBuf],
 ) {
@@ -361,15 +361,6 @@ fn is_internal_cache_path(path: &Path, root: &Path) -> bool {
         .ok()
         .and_then(|relative| relative.components().next())
         .is_some_and(|component| component.as_os_str() == DEFAULT_CACHE_DIR_NAME)
-}
-
-fn build_package_uid(purl: &str) -> String {
-    let uuid = Uuid::new_v4();
-    if purl.contains('?') {
-        format!("{}&uuid={}", purl, uuid)
-    } else {
-        format!("{}?uuid={}", purl, uuid)
-    }
 }
 
 #[cfg(test)]
@@ -554,7 +545,9 @@ mod tests {
         assign_swift_resources(
             &mut files,
             Path::new(""),
-            &["pkg:swift/RootPkg?uuid=root".to_string()],
+            &[PackageUid::from_raw(
+                "pkg:swift/RootPkg?uuid=root".to_string(),
+            )],
             &SwiftDirectoryInputs {
                 manifest: Some(SwiftSource {
                     file_index: 0,
@@ -570,8 +563,18 @@ mod tests {
             &[PathBuf::new(), PathBuf::from("examples/demo")],
         );
 
-        assert_eq!(files[0].for_packages, vec!["pkg:swift/RootPkg?uuid=root"]);
-        assert_eq!(files[1].for_packages, vec!["pkg:swift/RootPkg?uuid=root"]);
+        assert_eq!(
+            files[0].for_packages,
+            vec![PackageUid::from_raw(
+                "pkg:swift/RootPkg?uuid=root".to_string()
+            )]
+        );
+        assert_eq!(
+            files[1].for_packages,
+            vec![PackageUid::from_raw(
+                "pkg:swift/RootPkg?uuid=root".to_string()
+            )]
+        );
         assert!(files[2].for_packages.is_empty());
         assert!(files[3].for_packages.is_empty());
     }

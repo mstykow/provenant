@@ -8,7 +8,7 @@ use crate::license_detection::detection::{
 };
 use crate::license_detection::expression::parse_expression;
 use crate::models::{
-    FileInfo, FileType, LicenseDetection, Match, Package, TopLevelLicenseDetection,
+    FileInfo, FileType, LicenseDetection, Match, Package, PackageUid, TopLevelLicenseDetection,
 };
 use crate::utils::spdx::combine_license_expressions;
 
@@ -33,8 +33,8 @@ pub(super) struct ResolvedReferenceTarget {
 pub(super) struct ReferenceFollowSnapshot {
     all_file_paths: HashSet<String>,
     files_by_path: HashMap<String, ResolvedReferenceTarget>,
-    package_targets_by_uid: HashMap<String, ResolvedReferenceTarget>,
-    package_manifest_dirs_by_uid: HashMap<String, Vec<String>>,
+    package_targets_by_uid: HashMap<PackageUid, ResolvedReferenceTarget>,
+    package_manifest_dirs_by_uid: HashMap<PackageUid, Vec<String>>,
     same_directory_legal_targets_by_dir: HashMap<String, Vec<ResolvedReferenceTarget>>,
     root_license_targets_by_root: HashMap<String, Vec<ResolvedReferenceTarget>>,
     root_paths: Vec<String>,
@@ -224,7 +224,7 @@ pub(super) fn build_reference_follow_snapshot(
                 .datafile_paths
                 .first()
                 .cloned()
-                .unwrap_or_else(|| package.package_uid.clone());
+                .unwrap_or_else(|| package.package_uid.to_string());
 
             Some((
                 package.package_uid.clone(),
@@ -696,7 +696,7 @@ fn sync_packages_from_followed_package_data(
 fn apply_reference_following_to_detection(
     detection: &mut LicenseDetection,
     current_path: &str,
-    package_uids: &[String],
+    package_uids: &[PackageUid],
     snapshot: &ReferenceFollowSnapshot,
 ) -> bool {
     if has_resolved_referenced_file(detection, current_path) {
@@ -919,7 +919,7 @@ fn sanitize_referenced_filename(name: &str) -> String {
 pub(super) fn resolve_referenced_resource(
     referenced_filename: &str,
     current_path: &str,
-    package_uids: &[String],
+    package_uids: &[PackageUid],
     snapshot: &ReferenceFollowSnapshot,
 ) -> Option<ResolvedReferenceTarget> {
     let is_absolute = referenced_filename.trim_start().starts_with('/');
@@ -975,7 +975,7 @@ fn explicit_reference_root(snapshot: &ReferenceFollowSnapshot) -> Option<&str> {
 
 fn resolve_package_reference_targets(
     current_path: &str,
-    package_uids: &[String],
+    package_uids: &[PackageUid],
     snapshot: &ReferenceFollowSnapshot,
 ) -> Option<(Vec<ResolvedReferenceTarget>, &'static str)> {
     if let Some(targets) = resolve_package_context_target(package_uids, snapshot) {
@@ -991,7 +991,7 @@ fn resolve_package_reference_targets(
 }
 
 fn resolve_package_context_target(
-    package_uids: &[String],
+    package_uids: &[PackageUid],
     snapshot: &ReferenceFollowSnapshot,
 ) -> Option<Vec<ResolvedReferenceTarget>> {
     let mut targets = Vec::new();

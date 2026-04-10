@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::models::{FileInfo, Package, PackageType, TopLevelDependency};
+use crate::models::{FileInfo, Package, PackageType, PackageUid, TopLevelDependency};
 
 pub(super) fn prune_unused_bazel_packages(
     files: &[FileInfo],
@@ -9,10 +9,10 @@ pub(super) fn prune_unused_bazel_packages(
 ) {
     let used_package_uids: HashSet<&str> = files
         .iter()
-        .flat_map(|file| file.for_packages.iter().map(String::as_str))
+        .flat_map(|file| file.for_packages.iter().map(|uid| uid.as_str()))
         .collect();
 
-    let removed_package_uids: HashSet<String> = packages
+    let removed_package_uids: HashSet<PackageUid> = packages
         .iter()
         .filter(|package| package.package_type == Some(PackageType::Bazel))
         .filter(|package| !used_package_uids.contains(package.package_uid.as_str()))

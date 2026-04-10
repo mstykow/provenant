@@ -4,13 +4,16 @@ use super::test_utils::{dir, file, package, scan_and_assemble_with_keyfiles};
 use super::*;
 use crate::models::{
     Copyright, DatasourceId, FileReference, Holder, LineNumber, Match, Package, PackageType,
+    PackageUid,
 };
 
 #[test]
 fn classify_key_files_marks_nested_ruby_license_from_file_references() {
     let uid = "pkg:gem/inspec-bin@6.8.2?uuid=test";
     let mut metadata_file = file("inspec-6.8.2/metadata.gz-extract");
-    metadata_file.for_packages.push(uid.to_string());
+    metadata_file
+        .for_packages
+        .push(PackageUid::from_raw(uid.to_string()));
     metadata_file.package_data = vec![crate::models::PackageData {
         package_type: Some(PackageType::Gem),
         datasource_id: Some(DatasourceId::GemArchiveExtracted),
@@ -27,7 +30,9 @@ fn classify_key_files_marks_nested_ruby_license_from_file_references() {
     }];
 
     let mut license_file = file("inspec-6.8.2/inspec-bin/LICENSE");
-    license_file.for_packages.push(uid.to_string());
+    license_file
+        .for_packages
+        .push(PackageUid::from_raw(uid.to_string()));
     license_file.license_expression = Some("Apache-2.0".to_string());
     license_file.copyrights = vec![Copyright {
         copyright: "Copyright (c) 2019 Chef Software Inc.".to_string(),
@@ -81,7 +86,9 @@ fn classify_key_files_marks_nested_ruby_license_from_file_references() {
 fn classify_key_files_does_not_tag_unreferenced_nested_legal_file() {
     let uid = "pkg:gem/demo@1.0.0?uuid=test";
     let mut gemspec = file("demo/demo.gemspec");
-    gemspec.for_packages.push(uid.to_string());
+    gemspec
+        .for_packages
+        .push(PackageUid::from_raw(uid.to_string()));
     gemspec.package_data = vec![crate::models::PackageData {
         package_type: Some(PackageType::Gem),
         datasource_id: Some(DatasourceId::Gemspec),
@@ -89,7 +96,9 @@ fn classify_key_files_does_not_tag_unreferenced_nested_legal_file() {
     }];
 
     let mut nested_license = file("demo/subdir/LICENSE");
-    nested_license.for_packages.push(uid.to_string());
+    nested_license
+        .for_packages
+        .push(PackageUid::from_raw(uid.to_string()));
 
     let mut files = vec![gemspec, nested_license];
     let packages = vec![package(uid, "demo/demo.gemspec")];
@@ -178,23 +187,33 @@ fn classify_key_files_marks_package_data_ancestry_like_with_package_data_fixture
     let uid = "pkg:maven/org.jboss.logging/jboss-logging@3.4.2.Final?uuid=test";
 
     let mut manifest_mf = file("jar/META-INF/MANIFEST.MF");
-    manifest_mf.for_packages.push(uid.to_string());
+    manifest_mf
+        .for_packages
+        .push(PackageUid::from_raw(uid.to_string()));
     manifest_mf.package_data = vec![crate::models::PackageData::default()];
 
     let mut license = file("jar/META-INF/LICENSE.txt");
-    license.for_packages.push(uid.to_string());
+    license
+        .for_packages
+        .push(PackageUid::from_raw(uid.to_string()));
 
     let mut pom_properties =
         file("jar/META-INF/maven/org.jboss.logging/jboss-logging/pom.properties");
-    pom_properties.for_packages.push(uid.to_string());
+    pom_properties
+        .for_packages
+        .push(PackageUid::from_raw(uid.to_string()));
     pom_properties.package_data = vec![crate::models::PackageData::default()];
 
     let mut pom_xml = file("jar/META-INF/maven/org.jboss.logging/jboss-logging/pom.xml");
-    pom_xml.for_packages.push(uid.to_string());
+    pom_xml
+        .for_packages
+        .push(PackageUid::from_raw(uid.to_string()));
     pom_xml.package_data = vec![crate::models::PackageData::default()];
 
     let mut source = file("jar/org/jboss/logging/AbstractLoggerProvider.java");
-    source.for_packages.push(uid.to_string());
+    source
+        .for_packages
+        .push(PackageUid::from_raw(uid.to_string()));
 
     let mut files = vec![
         dir("jar"),
@@ -213,7 +232,7 @@ fn classify_key_files_marks_package_data_ancestry_like_with_package_data_fixture
     ];
 
     let package = Package {
-        package_uid: uid.to_string(),
+        package_uid: PackageUid::from_raw(uid.to_string()),
         datafile_paths: vec![
             "jar/META-INF/maven/org.jboss.logging/jboss-logging/pom.xml".to_string(),
         ],

@@ -115,7 +115,7 @@ impl From<&crate::models::Package> for OutputPackage {
             repository_download_url: value.repository_download_url.clone(),
             api_data_url: value.api_data_url.clone(),
             purl: value.purl.clone(),
-            package_uid: value.package_uid.clone(),
+            package_uid: value.package_uid.to_string(),
             datafile_paths: value.datafile_paths.clone(),
             datasource_ids: value.datasource_ids.clone(),
         }
@@ -197,7 +197,7 @@ impl TryFrom<&OutputPackage> for crate::models::Package {
             repository_download_url: value.repository_download_url.clone(),
             api_data_url: value.api_data_url.clone(),
             purl: value.purl.clone(),
-            package_uid: value.package_uid.clone(),
+            package_uid: crate::models::PackageUid::from_raw(value.package_uid.clone()),
             datafile_paths: value.datafile_paths.clone(),
             datasource_ids: value.datasource_ids.clone(),
         })

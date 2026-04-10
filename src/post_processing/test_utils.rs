@@ -24,7 +24,7 @@ use crate::assembly;
 use crate::cache::{DEFAULT_CACHE_DIR_NAME, build_collection_exclude_patterns};
 #[cfg(feature = "golden-tests")]
 use crate::license_detection::LicenseDetectionEngine;
-use crate::models::{FileInfo, FileType, Package, PackageType};
+use crate::models::{FileInfo, FileType, Package, PackageType, PackageUid};
 use crate::progress::{ProgressMode, ScanProgress};
 #[cfg(feature = "golden-tests")]
 use crate::scan_result_shaping::normalize_paths;
@@ -150,7 +150,7 @@ pub(crate) fn package(uid: &str, path: &str) -> Package {
         api_data_url: None,
         datasource_ids: vec![DatasourceId::GemArchiveExtracted],
         purl: Some("pkg:gem/inspec-bin@6.8.2".to_string()),
-        package_uid: uid.to_string(),
+        package_uid: PackageUid::from_raw(uid.to_string()),
         datafile_paths: vec![path.to_string()],
     }
 }

@@ -116,7 +116,7 @@ mod tests {
     use crate::models::{
         Author, Copyright, ExtraData, FileInfo, FileType, GitSha1, Header, Holder,
         LicenseDetection, LineNumber, Match, Md5Digest, OutputEmail, OutputURL, PackageData,
-        Sha1Digest, Sha256Digest, SystemEnvironment,
+        PackageUid, Sha1Digest, Sha256Digest, SystemEnvironment,
     };
     use crate::output_schema::OutputFileInfo;
 
@@ -1057,7 +1057,9 @@ mod tests {
             api_data_url: None,
             datasource_ids: vec![],
             purl: Some("pkg:maven/example/gradle-project@1.0.0".to_string()),
-            package_uid: "pkg:maven/example/gradle-project@1.0.0?uuid=test".to_string(),
+            package_uid: PackageUid::from_raw(
+                "pkg:maven/example/gradle-project@1.0.0?uuid=test".to_string(),
+            ),
             datafile_paths: vec![],
         }];
         let output = Output::from(&internal);

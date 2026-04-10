@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use crate::cache::DEFAULT_CACHE_DIR_NAME;
-use crate::models::{FileInfo, Package, PackageType};
+use crate::models::{FileInfo, Package, PackageType, PackageUid};
 
 pub fn assign_composer_package_resources(files: &mut [FileInfo], packages: &[Package]) {
-    let composer_roots: Vec<(PathBuf, String)> = packages
+    let composer_roots: Vec<(PathBuf, PackageUid)> = packages
         .iter()
         .filter(|package| package.package_type == Some(PackageType::Composer))
         .filter_map(|package| {
