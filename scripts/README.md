@@ -61,3 +61,14 @@ Example:
 ```bash
 ./scripts/check_release_version_sync.sh
 ```
+
+## `check_scancode_output_format_sync.sh`
+
+Verify that Provenant's `OUTPUT_FORMAT_VERSION` stays aligned with the pinned
+`reference/scancode-toolkit/` submodule.
+
+Example:
+
+```bash
+./scripts/check_scancode_output_format_sync.sh
+```

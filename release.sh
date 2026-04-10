@@ -39,6 +39,8 @@ cd ../..
 
 if [ "$CURRENT_COMMIT" != "$NEW_COMMIT" ]; then
     echo "✅ License data updated: $CURRENT_COMMIT → $NEW_COMMIT"
+    echo "🔎 Verifying ScanCode output format version sync..."
+    ./scripts/check_scancode_output_format_sync.sh
     echo "🔧 Regenerating embedded license index artifact..."
     cargo run --manifest-path xtask/Cargo.toml --bin generate-index-artifact
     
@@ -52,6 +54,8 @@ if [ "$CURRENT_COMMIT" != "$NEW_COMMIT" ]; then
     fi
 else
     echo "✅ License data already up to date"
+    echo "🔎 Verifying ScanCode output format version sync..."
+    ./scripts/check_scancode_output_format_sync.sh
 fi
 
 # Run cargo-release
