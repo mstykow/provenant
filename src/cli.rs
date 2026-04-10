@@ -60,7 +60,7 @@ fn parse_license_policy_arg(value: &str) -> Result<String, String> {
     long_version = concat!(
         env!("CARGO_PKG_VERSION"),
         "\n",
-        "License detection uses data from ScanCode Toolkit (CC-BY-4.0). See NOTICE or --show_attribution."
+        "License detection uses data from ScanCode Toolkit (CC-BY-4.0). See NOTICE file or --show-attribution option."
     ),
     after_help = PDF_OXIDE_LOG_HELP,
     about,
