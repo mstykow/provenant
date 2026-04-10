@@ -255,6 +255,8 @@ static AUTHORS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^was originally written by .+\bit is now maintained by\b.*$",
         r"(?i)^writing to the appropriate\b.*$",
         r"(?i)^the task'?s numa mempolicy\b.*$",
+        r"(?i)^the authors laboriously took the trouble\b.*$",
+        r"(?i)^laboriously took the trouble\b.*$",
     ];
     patterns.iter().filter_map(|p| Regex::new(p).ok()).collect()
 });
@@ -1407,6 +1409,7 @@ static HOLDERS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^the resulting\b",
         r"(?i)^whoever named in\b",
         r"(?i)^as specified below\b",
+        r"(?i)^\((?:r|c|tm)\)\s*,\s*(?:&\s*\d{2,4}\s*,\s*){5,}.*$",
         r"(?i)^not used to limit\b",
         r"(?i)^the coordinator$",
         r"(?i)^provided\b",
