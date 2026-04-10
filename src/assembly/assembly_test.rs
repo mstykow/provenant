@@ -868,6 +868,59 @@ mod tests {
     }
 
     #[test]
+    fn test_assemble_hoists_unowned_standalone_pip_requirements_dependencies() {
+        let mut files = vec![create_test_file_info(
+            "docs/min_requirements.txt",
+            DatasourceId::PipRequirements,
+            None,
+            None,
+            None,
+            vec![create_test_dependency(
+                "pkg:pypi/sphinx@3.4.3",
+                Some("==3.4.3"),
+                None,
+            )],
+        )];
+
+        let result = assemble(&mut files);
+
+        assert!(result.packages.is_empty());
+        assert_eq!(result.dependencies.len(), 1);
+        assert_eq!(
+            result.dependencies[0].purl.as_deref(),
+            Some("pkg:pypi/sphinx@3.4.3")
+        );
+        assert_eq!(result.dependencies[0].for_package_uid, None);
+        assert_eq!(
+            result.dependencies[0].datafile_path,
+            "docs/min_requirements.txt"
+        );
+        assert!(files[0].for_packages.is_empty());
+    }
+
+    #[test]
+    fn test_assemble_does_not_hoist_unowned_nuget_cpm_metadata_dependencies() {
+        let mut files = vec![create_test_file_info(
+            "repo/Directory.Packages.props",
+            DatasourceId::NugetDirectoryPackagesProps,
+            None,
+            None,
+            None,
+            vec![create_test_central_dependency(
+                "pkg:nuget/Newtonsoft.Json",
+                Some("13.0.3"),
+                None,
+            )],
+        )];
+
+        let result = assemble(&mut files);
+
+        assert!(result.packages.is_empty());
+        assert!(result.dependencies.is_empty());
+        assert!(files[0].for_packages.is_empty());
+    }
+
+    #[test]
     fn test_assemble_nuget_cpm_prefers_version_override_when_enabled() {
         let mut props_file = create_test_file_info(
             "repo/Directory.Packages.props",
