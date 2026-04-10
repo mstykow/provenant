@@ -21,6 +21,6 @@ pub use package_uid::PackageUid;
 
 pub use output::{
     ExtraData, FacetTallies, HEADER_NOTICE, Header, LicenseClarityScore, LicenseReference,
-    LicenseRuleReference, OUTPUT_FORMAT_VERSION, Output, SPDX_LICENSE_LIST_VERSION, Summary,
-    SystemEnvironment, TOOL_NAME, Tallies, TallyEntry, TopLevelLicenseDetection,
+    LicenseRuleReference, OUTPUT_FORMAT_VERSION, Output, Summary, SystemEnvironment, TOOL_NAME,
+    Tallies, TallyEntry, TopLevelLicenseDetection,
 };

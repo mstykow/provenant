@@ -533,6 +533,7 @@ pub(crate) fn compute_fixture_output(
             license_detections,
             license_references,
             license_rule_references,
+            spdx_license_list_version: "3.27".to_string(),
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),

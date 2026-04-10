@@ -31,12 +31,15 @@ pub mod unknown_match;
 
 use bit_set::BitSet;
 use std::collections::HashSet;
+use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
 
-use crate::license_detection::embedded::index::load_license_index_from_bytes;
+use crate::license_detection::embedded::index::{
+    load_embedded_artifact_metadata_from_bytes, load_embedded_license_index_from_bytes,
+};
 use crate::license_detection::index::build_index_from_loaded;
 use crate::license_detection::query::Query;
 use crate::license_detection::rules::{
@@ -97,6 +100,7 @@ use self::seq_match::{MAX_NEAR_DUPE_CANDIDATES, select_seq_candidates, seq_match
 pub struct LicenseDetectionEngine {
     index: Arc<index::LicenseIndex>,
     spdx_mapping: SpdxMapping,
+    spdx_license_list_version: Option<String>,
 }
 
 const MAX_DETECTION_SIZE: usize = 10 * 1024 * 1024; // 10MB
@@ -435,7 +439,10 @@ impl LicenseDetectionEngine {
     ///
     /// This is an internal constructor used by `from_directory()` and `from_embedded()`.
     /// It builds the SPDX mapping from the licenses in the index.
-    fn from_index(index: index::LicenseIndex) -> Result<Self> {
+    fn from_index(
+        index: index::LicenseIndex,
+        spdx_license_list_version: Option<String>,
+    ) -> Result<Self> {
         let mut license_vec: Vec<_> = index.licenses_by_key.values().cloned().collect();
         license_vec.sort_by(|a, b| a.key.cmp(&b.key));
         let spdx_mapping = build_spdx_mapping(&license_vec);
@@ -443,6 +450,7 @@ impl LicenseDetectionEngine {
         Ok(Self {
             index: Arc::new(index),
             spdx_mapping,
+            spdx_license_list_version,
         })
     }
 
@@ -456,9 +464,12 @@ impl LicenseDetectionEngine {
     /// A Result containing the engine or an error
     pub fn from_embedded() -> Result<Self> {
         let artifact_bytes = include_bytes!("../../resources/license_detection/license_index.zst");
-        let index = load_license_index_from_bytes(artifact_bytes)
+        let loaded = load_embedded_license_index_from_bytes(artifact_bytes)
             .map_err(|e| anyhow::anyhow!("Failed to load embedded license index: {}", e))?;
-        Self::from_index(index)
+        Self::from_index(
+            loaded.index,
+            Some(loaded.metadata.spdx_license_list_version),
+        )
     }
 
     /// Create a new license detection engine from a directory of license rules.
@@ -483,8 +494,18 @@ impl LicenseDetectionEngine {
         let loaded_rules = load_loaded_rules_from_directory(&rules_dir)?;
         let loaded_licenses = load_loaded_licenses_from_directory(&licenses_dir)?;
         let index = build_index_from_loaded(loaded_rules, loaded_licenses, false);
+        let spdx_license_list_version = detect_scancode_spdx_license_list_version(&rules_dir)?;
 
-        Self::from_index(index)
+        Self::from_index(index, spdx_license_list_version)
+    }
+
+    pub fn embedded_spdx_license_list_version() -> Result<String> {
+        let artifact_bytes = include_bytes!("../../resources/license_detection/license_index.zst");
+        Ok(load_embedded_artifact_metadata_from_bytes(artifact_bytes)
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to load embedded license artifact metadata: {}", e)
+            })?
+            .spdx_license_list_version)
     }
 
     pub fn detect_with_kind(
@@ -793,11 +814,41 @@ impl LicenseDetectionEngine {
         &self.index
     }
 
+    pub fn spdx_license_list_version(&self) -> Option<&str> {
+        self.spdx_license_list_version.as_deref()
+    }
+
     /// Get a reference to the SPDX mapping.
     #[cfg(test)]
     pub fn spdx_mapping(&self) -> &SpdxMapping {
         &self.spdx_mapping
     }
+}
+
+pub fn detect_scancode_spdx_license_list_version(search_path: &Path) -> Result<Option<String>> {
+    for ancestor in search_path.ancestors() {
+        let candidate = ancestor.join("scancode_config.py");
+        if candidate.is_file() {
+            let config = fs::read_to_string(&candidate)?;
+            return Ok(parse_scancode_spdx_license_list_version(&config));
+        }
+    }
+
+    Ok(None)
+}
+
+fn parse_scancode_spdx_license_list_version(config: &str) -> Option<String> {
+    config.lines().find_map(|line| {
+        let trimmed = line.trim();
+        let (_, value) = trimmed.split_once('=')?;
+        (trimmed.starts_with("spdx_license_list_version")).then(|| {
+            value
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .to_string()
+        })
+    })
 }
 
 #[cfg(test)]

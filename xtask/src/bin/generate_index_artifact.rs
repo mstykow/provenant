@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::Parser;
 
+use provenant::license_detection::detect_scancode_spdx_license_list_version;
 use provenant::license_detection::embedded::schema::{EmbeddedLoaderSnapshot, SCHEMA_VERSION};
 use provenant::license_detection::rules::{
     load_loaded_licenses_from_directory, load_loaded_rules_from_directory,
@@ -55,8 +56,14 @@ fn main() -> Result<()> {
     loaded_rules.sort_by(|a, b| a.identifier.cmp(&b.identifier));
     loaded_licenses.sort_by(|a, b| a.key.cmp(&b.key));
 
+    let spdx_license_list_version = detect_scancode_spdx_license_list_version(&rules_dir)?
+        .context("Failed to detect SPDX license list version from ScanCode source metadata")?;
+
     let snapshot = EmbeddedLoaderSnapshot {
         schema_version: SCHEMA_VERSION,
+        metadata: provenant::license_detection::embedded::schema::EmbeddedArtifactMetadata {
+            spdx_license_list_version,
+        },
         rules: loaded_rules,
         licenses: loaded_licenses,
     };

@@ -498,6 +498,10 @@ fn run() -> Result<()> {
         });
 
     let end_time = Utc::now();
+    let spdx_license_list_version = active_license_engine
+        .as_ref()
+        .and_then(|engine| engine.spdx_license_list_version().map(ToOwned::to_owned))
+        .unwrap_or(LicenseDetectionEngine::embedded_spdx_license_list_version()?);
 
     let output = record_detail_timing(&progress, "finalize:output-prepare", || {
         create_output(
@@ -510,6 +514,7 @@ fn run() -> Result<()> {
                 license_detections,
                 license_references,
                 license_rule_references,
+                spdx_license_list_version,
                 extra_errors,
                 extra_warnings: Vec::new(),
                 header_options: cli.output_header_options(),
