@@ -1472,7 +1472,7 @@ fn xml_unescape_for_assert(value: &str) -> String {
 fn sample_header(files_count: usize, directories_count: usize) -> Header {
     Header {
         tool_name: "provenant".to_string(),
-        tool_version: env!("CARGO_PKG_VERSION").to_string(),
+        tool_version: provenant::version::BUILD_VERSION.to_string(),
         options: serde_json::Map::new(),
         notice: provenant::models::HEADER_NOTICE.to_string(),
         start_timestamp: "2026-01-01T000000.000000".to_string(),
