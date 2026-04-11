@@ -1194,11 +1194,7 @@ p:so:libtest.so.1
 
     #[test]
     fn test_alpine_apk_parser_is_match() {
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let apk_path = temp_dir.path().join("app-1.0.apk");
-        let mut file = std::fs::File::create(&apk_path).expect("Failed to create apk fixture");
-        file.write_all(&[0x1F, 0x8B, 0x08, 0x00])
-            .expect("Failed to write gzip signature");
+        let apk_path = PathBuf::from("testdata/alpine/apk/basic/test-package-1.0-r0.apk");
 
         assert!(AlpineApkParser::is_match(&apk_path));
         assert!(!AlpineApkParser::is_match(&PathBuf::from("package.tar.gz")));
@@ -1206,12 +1202,14 @@ p:so:libtest.so.1
     }
 
     #[test]
-    fn test_alpine_apk_parser_rejects_android_apk_fixture() {
+    fn test_alpine_apk_parser_rejects_android_and_placeholder_apk_fixtures() {
         let android_apk = PathBuf::from("testdata/misc/test_android.apk");
-        let alpine_apk = PathBuf::from("testdata/misc/test_alpine.apk");
+        let placeholder_alpine_apk = PathBuf::from("testdata/misc/test_alpine.apk");
+        let valid_alpine_apk = PathBuf::from("testdata/alpine/apk/basic/test-package-1.0-r0.apk");
 
         assert!(!AlpineApkParser::is_match(&android_apk));
-        assert!(AlpineApkParser::is_match(&alpine_apk));
+        assert!(!AlpineApkParser::is_match(&placeholder_alpine_apk));
+        assert!(AlpineApkParser::is_match(&valid_alpine_apk));
     }
 
     #[test]
