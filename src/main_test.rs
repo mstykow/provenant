@@ -910,3 +910,26 @@ fn build_collection_exclude_patterns_does_not_exclude_scan_root_when_cache_root_
     assert_eq!(collected.file_count(), 1);
     assert_eq!(collected.excluded_count, 0);
 }
+
+#[test]
+fn build_collection_exclude_patterns_skips_vcs_metadata_directories() {
+    let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+    let scan_root = temp_dir.path().join("scan");
+    fs::create_dir_all(scan_root.join("src")).unwrap();
+    fs::create_dir_all(scan_root.join(".git")).unwrap();
+    fs::write(scan_root.join("src").join("main.rs"), "fn main() {}\n").unwrap();
+    fs::write(scan_root.join(".git").join("index"), b"git index contents").unwrap();
+
+    let config = CacheConfig::from_scan_root(&scan_root);
+    let exclude_patterns = build_collection_exclude_patterns(&scan_root, config.root_dir());
+    let collected = collect_paths(&scan_root, 0, &exclude_patterns);
+
+    assert!(
+        collected
+            .files
+            .iter()
+            .all(|(path, _)| !path.starts_with(scan_root.join(".git")))
+    );
+    assert_eq!(collected.file_count(), 1);
+    assert!(collected.excluded_count >= 1);
+}

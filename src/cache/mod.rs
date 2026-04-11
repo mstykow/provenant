@@ -17,6 +17,14 @@ pub use incremental::{
 pub fn build_collection_exclude_patterns(scan_root: &Path, cache_root: &Path) -> Vec<Pattern> {
     let mut patterns = Vec::new();
 
+    for vcs_dir in [".git", ".hg", ".svn"] {
+        for pattern in [vcs_dir.to_string(), format!("{vcs_dir}/**")] {
+            if let Ok(pattern) = Pattern::new(&pattern) {
+                patterns.push(pattern);
+            }
+        }
+    }
+
     if let Ok(relative_cache_root) = cache_root.strip_prefix(scan_root)
         && !relative_cache_root.as_os_str().is_empty()
     {
