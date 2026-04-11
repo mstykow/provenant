@@ -124,7 +124,7 @@ fn contains_dollar_prefixed_code_token(s: &str) -> bool {
     })
 }
 
-fn looks_like_name_with_parenthesized_url(s: &str) -> bool {
+pub(crate) fn looks_like_name_with_parenthesized_url(s: &str) -> bool {
     static NAME_WITH_URL_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"^[A-Z][\p{L}'\-.]+(?:\s+(?:[a-z]{1,3}|[A-Z][\p{L}'\-.]+)){0,5}\s*\(\s*https?://[^)\s]+\s*\)$",
