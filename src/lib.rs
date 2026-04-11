@@ -39,6 +39,7 @@ pub mod parsers;
 pub mod progress;
 pub mod scanner;
 pub mod utils;
+pub mod version;
 
 pub use models::{ExtraData, FileInfo, FileType, Header, Output, SystemEnvironment};
 pub use output::{

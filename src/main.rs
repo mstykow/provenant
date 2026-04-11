@@ -54,6 +54,7 @@ mod scan_result_shaping;
 mod scanner;
 mod time;
 mod utils;
+mod version;
 
 fn main() -> std::io::Result<()> {
     if let Err(err) = run() {
