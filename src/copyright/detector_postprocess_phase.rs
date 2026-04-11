@@ -20,6 +20,7 @@ pub(super) fn run_phase_postprocess(
     super::drop_batman_adv_contributors_copyright(content, copyrights, holders);
 
     super::split_embedded_copyright_detections(copyrights, holders);
+    super::add_missing_holders_from_email_bearing_copyrights(copyrights, holders);
     super::extend_bare_c_year_detections_to_line_end_for_multi_c_lines(
         prepared_cache,
         copyrights,
@@ -52,6 +53,7 @@ pub(super) fn run_phase_postprocess(
     super::author_heuristics::extract_was_developed_by_author_blocks(prepared_cache, authors);
     super::author_heuristics::extract_developed_by_sentence_authors(prepared_cache, authors);
     super::author_heuristics::extract_developed_by_phrase_authors(prepared_cache, authors);
+    super::author_heuristics::extract_developed_by_contributors_authors(prepared_cache, authors);
     super::author_heuristics::extract_with_additional_hacking_by_authors(prepared_cache, authors);
     super::author_heuristics::extract_developed_and_created_by_authors(prepared_cache, authors);
     super::author_heuristics::extract_author_colon_blocks(prepared_cache, authors);
@@ -69,10 +71,10 @@ pub(super) fn run_phase_postprocess(
         authors,
     );
     super::author_heuristics::drop_authors_embedded_in_copyrights(copyrights, authors);
+    super::author_heuristics::drop_authors_from_copyright_by_lines(prepared_cache, authors);
     super::author_heuristics::drop_merged_dash_bullet_attribution_authors(authors);
     super::drop_created_by_camelcase_identifier_authors(prepared_cache, authors);
     super::author_heuristics::drop_shadowed_prefix_authors(authors);
-    super::author_heuristics::drop_comedi_ds_status_devices_authors(content, copyrights, authors);
 
     super::merge_implemented_by_lines(prepared_cache, copyrights, holders, authors);
     super::split_written_by_copyrights_into_holder_prefixed_clauses(
@@ -86,9 +88,10 @@ pub(super) fn run_phase_postprocess(
         authors,
     );
     super::author_heuristics::drop_ref_markup_authors(authors);
+    super::author_heuristics::extract_json_author_object_authors(raw_lines, authors);
     super::author_heuristics::normalize_json_blob_authors(raw_lines, authors);
 
-    super::extract_following_authors_holders(raw_lines, prepared_cache, holders);
+    super::extract_following_authors_holders(raw_lines, prepared_cache, authors);
 
     super::merge_multiline_copyrighted_by_with_trailing_copyright_clause(
         did_expand_href,
