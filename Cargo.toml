@@ -1,6 +1,6 @@
 [package]
 name = "provenant-cli"
-version = "0.0.13"
+version = "0.0.14"
 edition = "2024"
 repository = "https://github.com/mstykow/provenant"
 homepage = "https://github.com/mstykow/provenant"
