@@ -16,6 +16,7 @@
     ],
     "keywords": ["nginx", "reverse-proxy"],
     "homepage_url": "https://example.com/nginx",
+    "code_view_url": "https://github.com/example/nginx-chart",
     "extra_data": {
       "api_version": "v2",
       "icon": "https://example.com/icon.png",
