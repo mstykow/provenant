@@ -4258,6 +4258,86 @@ fn test_multiline_json_author_object_name_detected() {
 }
 
 #[test]
+fn test_metadata_json_author_fallback_keeps_collective_and_single_word_names() {
+    let input = r#"{
+  "components": [
+    {
+      "supplier": { "name": "Google LLC" },
+      "author": "gRPC authors",
+      "name": "gRPC (C++)"
+    },
+    {
+      "supplier": { "name": "Meta Open Source" },
+      "author": "Meta",
+      "name": "folly"
+    },
+    {
+      "supplier": { "name": "The libunwind project" },
+      "author": "The libunwind project",
+      "name": "libunwind"
+    },
+    {
+      "supplier": { "name": "Google LLC" },
+      "author": "S2Geometry",
+      "name": "S2 Geometry Library"
+    }
+  ]
+}"#;
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    let values: Vec<&str> = authors.iter().map(|a| a.author.as_str()).collect();
+    assert!(values.contains(&"gRPC authors"), "authors: {authors:?}");
+    assert!(values.contains(&"Meta"), "authors: {authors:?}");
+    assert!(
+        values.contains(&"The libunwind project"),
+        "authors: {authors:?}"
+    );
+    assert!(values.contains(&"S2Geometry"), "authors: {authors:?}");
+}
+
+#[test]
+fn test_json_code_example_author_fields_do_not_create_authors() {
+    let input = r#"{
+  "expectedStages": [
+    {
+      "$match": {
+        "author": "Agatha Christie"
+      }
+    },
+    {
+      "$setMetadata": {
+        "score": {
+          "$divide": [1, 2]
+        }
+      }
+    }
+  ]
+}"#;
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_code_pipeline_author_match_not_detected_as_author() {
+    let input = r#"{
+  $scoreFusion: {
+    input: {
+      pipelines: {
+        pipeOne: [
+          { $match : { author : "Agatha Christie" } },
+          { $sort: {author: 1} }
+        ]
+      }
+    }
+  }
+}"#;
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
 fn test_json_sponsor_description_does_not_create_authors() {
     let input = r#"{
   "description": "A useful plugin",

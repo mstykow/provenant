@@ -93,6 +93,7 @@ pub(super) fn run_phase_postprocess(
     super::author_heuristics::normalize_json_blob_authors(raw_lines, authors);
 
     super::extract_following_authors_holders(raw_lines, prepared_cache, authors);
+    super::author_heuristics::drop_json_code_example_authors(raw_lines, authors);
 
     super::merge_multiline_copyrighted_by_with_trailing_copyright_clause(
         did_expand_href,
