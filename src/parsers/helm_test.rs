@@ -94,6 +94,10 @@ dependencies:
             package_data.homepage_url.as_deref(),
             Some("https://example.com/nginx")
         );
+        assert_eq!(
+            package_data.code_view_url.as_deref(),
+            Some("https://github.com/example/nginx-chart")
+        );
         assert_eq!(package_data.keywords, vec!["nginx", "reverse-proxy"]);
         assert_eq!(package_data.parties.len(), 1);
         assert_eq!(package_data.parties[0].role.as_deref(), Some("maintainer"));
