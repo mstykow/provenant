@@ -11,20 +11,18 @@ pub fn refine_author(s: &str) -> Option<String> {
     a = strip_trailing_bare_c_copyright_clause(&a);
     a = truncate_trailing_boilerplate(&a);
     a = truncate_status_clause(&a);
-    a = strip_devices_clause_for_ds_status_unless_complete(&a);
     a = truncate_devices_clause(&a);
-    a = strip_devices_clause_for_ds_status_unless_complete(&a);
     a = truncate_return_clause(&a);
     a = truncate_branched_from_clause(&a);
     a = truncate_common_clock_framework_clause(&a);
     a = truncate_omap_dual_mode_clause(&a);
-    a = truncate_caller_specificaly_clause(&a);
     a = strip_initials_before_angle_email(&a);
     a = strip_trailing_comma_year_after_angle_email(&a);
     a = strip_trailing_comma_month_year(&a);
     a = strip_trailing_comma_email_matching_name(&a);
     a = strip_trailing_comma_and(&a);
     a = truncate_bug_reports_clause(&a);
+    a = truncate_caller_specificaly_clause(&a);
     a = truncate_json_metadata_tail(&a);
     a = normalize_slash_spacing(&a);
     a = normalize_slash_author_pairs(&a);
@@ -44,8 +42,14 @@ pub fn refine_author(s: &str) -> Option<String> {
     a = refine_names(&a, &AUTHORS_PREFIXES);
     a = a.trim().to_string();
     a = a.trim_matches(&['+', '-'][..]).to_string();
+    a = restore_leading_the_for_institution_and_contributors(s, &a);
+    a = restore_leading_the_for_collective_author(s, &a);
 
     if is_path_like_code_fragment(&a) {
+        return None;
+    }
+
+    if looks_like_prose_fragment_author(&a) {
         return None;
     }
 
@@ -58,6 +62,148 @@ pub fn refine_author(s: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+fn looks_like_prose_fragment_author(s: &str) -> bool {
+    let trimmed = s.trim();
+    if trimmed.is_empty() || trimmed.contains('@') {
+        return false;
+    }
+
+    if (trimmed.contains("http://") || trimmed.contains("https://"))
+        && !looks_like_name_with_parenthesized_url(trimmed)
+    {
+        return true;
+    }
+
+    if looks_like_institution_and_contributors_author(trimmed) {
+        return false;
+    }
+    if looks_like_collective_author_with_leading_the(trimmed) {
+        return false;
+    }
+    if trimmed.eq_ignore_ascii_case("not attributable") {
+        return false;
+    }
+
+    let words: Vec<&str> = trimmed.split_whitespace().collect();
+    if words.len() == 1 {
+        let word = words[0];
+        let all_lower = word
+            .chars()
+            .all(|ch| !ch.is_alphabetic() || ch.is_lowercase());
+        return !all_lower || word.len() < 6;
+    }
+    if words.len() == 2 && words.iter().all(|word| starts_with_lowercase_alpha(word)) {
+        return true;
+    }
+    if words.len() < 3 {
+        return false;
+    }
+
+    let starts_lowercase = words
+        .first()
+        .is_some_and(|word| starts_with_lowercase_alpha(word));
+    let capitalized_word_count = words
+        .iter()
+        .filter_map(|word| word.chars().find(|ch| ch.is_alphabetic()))
+        .filter(|ch| ch.is_uppercase())
+        .count();
+
+    starts_lowercase || capitalized_word_count < 2
+}
+
+fn looks_like_name_with_parenthesized_url(s: &str) -> bool {
+    static NAME_WITH_URL_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"^[A-Z][\p{L}'\-.]+(?:\s+(?:[a-z]{1,3}|[A-Z][\p{L}'\-.]+)){0,5}\s*\(\s*https?://[^)\s]+\s*\)$",
+        )
+        .unwrap()
+    });
+    NAME_WITH_URL_RE.is_match(s.trim())
+}
+
+fn looks_like_institution_and_contributors_author(s: &str) -> bool {
+    let trimmed = s.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if !lower.ends_with(" and its contributors") {
+        return false;
+    }
+
+    let prefix = trimmed[..trimmed.len() - " and its contributors".len()].trim();
+    let prefix = prefix.strip_prefix("the ").unwrap_or(prefix).trim();
+    let words: Vec<&str> = prefix.split_whitespace().collect();
+    if words.len() < 2 {
+        return false;
+    }
+
+    words.iter().any(|word| {
+        word.chars()
+            .find(|ch| ch.is_alphabetic())
+            .is_some_and(|ch| ch.is_uppercase())
+    })
+}
+
+fn looks_like_collective_author_with_leading_the(s: &str) -> bool {
+    let trimmed = s.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if !lower.starts_with("the ") {
+        return false;
+    }
+
+    [
+        " team",
+        " group",
+        " foundation",
+        " foundation, inc.",
+        " committee",
+    ]
+    .iter()
+    .any(|suffix| lower.ends_with(suffix))
+}
+
+fn starts_with_lowercase_alpha(word: &str) -> bool {
+    word.chars()
+        .find(|ch| ch.is_alphabetic())
+        .is_some_and(|ch| ch.is_lowercase())
+}
+
+fn restore_leading_the_for_institution_and_contributors(original: &str, refined: &str) -> String {
+    let original_trimmed = original.trim();
+    let refined_trimmed = refined.trim();
+    if original_trimmed.to_ascii_lowercase().starts_with("the ")
+        && looks_like_institution_and_contributors_author(original_trimmed)
+        && looks_like_institution_and_contributors_author(&format!("the {refined_trimmed}"))
+        && !refined_trimmed.to_ascii_lowercase().starts_with("the ")
+    {
+        return format!("the {refined_trimmed}");
+    }
+    refined.to_string()
+}
+
+fn restore_leading_the_for_collective_author(original: &str, refined: &str) -> String {
+    let original_trimmed = original.trim();
+    let refined_trimmed = refined.trim();
+    let original_lower = original_trimmed.to_ascii_lowercase();
+    let refined_lower = refined_trimmed.to_ascii_lowercase();
+
+    if !original_lower.starts_with("the ") || refined_lower.starts_with("the ") {
+        return refined.to_string();
+    }
+
+    for suffix in [
+        " team",
+        " group",
+        " foundation",
+        " foundation, inc.",
+        " committee",
+    ] {
+        if original_lower.ends_with(suffix) && refined_lower.ends_with(suffix.trim_start()) {
+            return format!("the {refined_trimmed}");
+        }
+    }
+
+    refined.to_string()
 }
 
 fn normalize_slash_spacing(s: &str) -> String {
@@ -140,20 +286,6 @@ fn strip_trailing_comma_month_year(s: &str) -> String {
     s.to_string()
 }
 
-fn truncate_caller_specificaly_clause(s: &str) -> String {
-    static CALLER_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?i)^(?P<prefix>caller\.\s+Specificaly\s+si.*?dev,\s+si)\b.*$").unwrap()
-    });
-    let trimmed = s.trim();
-    if let Some(cap) = CALLER_RE.captures(trimmed) {
-        let prefix = cap.name("prefix").map(|m| m.as_str()).unwrap_or("").trim();
-        if !prefix.is_empty() {
-            return prefix.to_string();
-        }
-    }
-    s.to_string()
-}
-
 fn strip_initials_before_angle_email(s: &str) -> String {
     static INITIALS_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"^(?P<first>[A-Z][A-Za-z]+)\s+(?P<second>[A-Z])\s+(?P<third>[A-Z])\s+<[^>\s]*@[^>\s]*>\s*$").unwrap()
@@ -201,6 +333,20 @@ fn normalize_slash_author_pairs(s: &str) -> String {
     s.to_string()
 }
 
+fn truncate_caller_specificaly_clause(s: &str) -> String {
+    static CALLER_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)^(?P<prefix>caller\.\s+Specificaly\s+si.*?dev,\s+si)\b.*$").unwrap()
+    });
+    let trimmed = s.trim();
+    if let Some(cap) = CALLER_RE.captures(trimmed) {
+        let prefix = cap.name("prefix").map(|m| m.as_str()).unwrap_or("").trim();
+        if !prefix.is_empty() {
+            return prefix.to_string();
+        }
+    }
+    s.to_string()
+}
+
 fn truncate_branched_from_clause(s: &str) -> String {
     static BRANCHED_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)^(?P<prefix>.+?)\s+Branched\s+from\b.*$").unwrap());
@@ -211,26 +357,6 @@ fn truncate_branched_from_clause(s: &str) -> String {
             return prefix.to_string();
         }
     }
-    s.to_string()
-}
-
-fn strip_devices_clause_for_ds_status_unless_complete(s: &str) -> String {
-    let trimmed = s.trim();
-    let lower = trimmed.to_ascii_lowercase();
-
-    if lower.starts_with("ds status")
-        && !lower.contains("status complete")
-        && let Some(idx) = lower.find(" devices")
-    {
-        return trimmed[..idx].trim_end().to_string();
-    }
-
-    if lower.starts_with("ds,")
-        && let Some(idx) = lower.find(" devices")
-    {
-        return trimmed[..idx].trim_end().to_string();
-    }
-
     s.to_string()
 }
 
