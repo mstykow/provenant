@@ -126,6 +126,7 @@ fn parse_pubspec_yaml(yaml_content: &Value) -> PackageData {
     let homepage_url = extract_string_field(yaml_content, FIELD_HOMEPAGE);
     let raw_license = extract_string_field(yaml_content, FIELD_LICENSE);
     let vcs_url = extract_string_field(yaml_content, FIELD_REPOSITORY);
+    let bug_tracking_url = extract_string_field(yaml_content, FIELD_ISSUE_TRACKER);
     let archive_url = extract_string_field(yaml_content, FIELD_ARCHIVE_URL);
 
     let parties = extract_authors(yaml_content);
@@ -215,7 +216,7 @@ fn parse_pubspec_yaml(yaml_content: &Value) -> PackageData {
         md5: None,
         sha256: None,
         sha512: None,
-        bug_tracking_url: None,
+        bug_tracking_url,
         code_view_url: None,
         vcs_url,
         copyright: None,
