@@ -1876,10 +1876,13 @@ pub(super) fn extract_json_author_object_authors(
         let start = idx.saturating_sub(1);
         let end = (idx + 4).min(raw_lines.len());
         let window = raw_lines[start..end].join(" ");
+        if json_window_contains_code_like_author_usage(&window) {
+            continue;
+        }
         let Some(name) = extract_author_name_from_json_window(&window) else {
             continue;
         };
-        let Some(author) = refine_author(&name) else {
+        let Some(author) = refine_json_author_candidate(&name, &window) else {
             continue;
         };
 
@@ -2279,8 +2282,12 @@ pub(super) fn normalize_json_blob_authors(raw_lines: &[&str], authors: &mut Vec<
             continue;
         };
 
+        if json_window_contains_code_like_author_usage(&window) {
+            continue;
+        }
+
         let replacement = if let Some(name) = extract_author_name_from_json_window(&window) {
-            refine_author(&name)
+            refine_json_author_candidate(&name, &window)
         } else if json_window_contains_developed_by(&window, &author.author) {
             refine_author(&author.author)
         } else {
@@ -2302,6 +2309,74 @@ pub(super) fn normalize_json_blob_authors(raw_lines: &[&str], authors: &mut Vec<
     }
 
     *authors = normalized;
+}
+
+pub(super) fn drop_json_code_example_authors(
+    raw_lines: &[&str],
+    authors: &mut Vec<AuthorDetection>,
+) {
+    if raw_lines.is_empty() || authors.is_empty() {
+        return;
+    }
+
+    authors.retain(|author| {
+        if let Some(window) =
+            surrounding_author_window(raw_lines, author.start_line.get(), author.end_line.get())
+            && window_contains_code_style_author_usage(&window)
+        {
+            return false;
+        }
+
+        let Some(window) =
+            json_author_window(raw_lines, author.start_line.get(), author.end_line.get())
+        else {
+            return true;
+        };
+
+        if json_window_contains_code_like_author_usage(&window) {
+            return false;
+        }
+
+        if json_window_has_metadata_context(&window)
+            || json_window_is_simple_author_only_fragment(&window)
+        {
+            return true;
+        }
+
+        extract_author_name_from_json_window(&window).is_none()
+    });
+}
+
+fn surrounding_author_window(
+    raw_lines: &[&str],
+    start_line: usize,
+    end_line: usize,
+) -> Option<String> {
+    if start_line == 0
+        || end_line == 0
+        || start_line > raw_lines.len()
+        || end_line > raw_lines.len()
+    {
+        return None;
+    }
+    let start = start_line.saturating_sub(2).max(1);
+    let end = (end_line + 2).min(raw_lines.len());
+    Some(raw_lines[start - 1..end].join(" "))
+}
+
+fn window_contains_code_style_author_usage(window: &str) -> bool {
+    static CODE_OPERATOR_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"\$[A-Za-z_][A-Za-z0-9_]*"#).unwrap());
+    static QUOTED_AUTHOR_ASSIGNMENT_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"\"author\"\s*:"#).unwrap());
+    static BARE_OBJECT_AUTHOR_ASSIGNMENT_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"\{[^\r\n]*\bauthor\s*:\s*\"[^\"]+\""#).unwrap());
+
+    CODE_OPERATOR_RE.is_match(window)
+        && (QUOTED_AUTHOR_ASSIGNMENT_RE.is_match(window)
+            || (window.contains('{')
+                && window.contains('}')
+                && BARE_OBJECT_AUTHOR_ASSIGNMENT_RE.is_match(window)))
 }
 
 fn is_json_like_line(line: &str) -> bool {
@@ -2327,6 +2402,124 @@ fn json_author_window(raw_lines: &[&str], start_line: usize, end_line: usize) ->
         return None;
     }
     Some(lines.join(" "))
+}
+
+fn json_window_contains_code_like_author_usage(window: &str) -> bool {
+    static JSON_CODE_OPERATOR_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"\$[A-Za-z_][A-Za-z0-9_]*"#).unwrap());
+    static JSON_AUTHOR_NUMERIC_VALUE_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"(?i)(?:\"author\"|\bauthor)\s*:\s*(?:-?\d+|true|false|null)"#).unwrap()
+    });
+
+    JSON_CODE_OPERATOR_RE.is_match(window) || JSON_AUTHOR_NUMERIC_VALUE_RE.is_match(window)
+}
+
+fn json_window_has_metadata_context(window: &str) -> bool {
+    static JSON_METADATA_KEY_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r#"(?i)\"(?:name|supplier|publisher|version|license|licenses|bomFormat|components|purl|homepage|description|package|url)\"\s*:"#,
+        )
+        .unwrap()
+    });
+
+    JSON_METADATA_KEY_RE.is_match(window)
+}
+
+fn json_window_is_simple_author_only_fragment(window: &str) -> bool {
+    static JSON_AUTHOR_ONLY_STRING_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"(?is)^\s*\{?\s*\"author\"\s*:\s*\"[^\"]+\"\s*,?\s*\}?\s*$"#).unwrap()
+    });
+    static JSON_AUTHOR_ONLY_OBJECT_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r#"(?is)^\s*\{?\s*\"author\"\s*:\s*\{\s*\"name\"\s*:\s*\"[^\"]+\"(?:\s*,\s*\"(?:url|email)\"\s*:\s*\"[^\"]+\")*\s*\}\s*,?\s*\}?\s*$"#,
+        )
+        .unwrap()
+    });
+
+    JSON_AUTHOR_ONLY_STRING_RE.is_match(window) || JSON_AUTHOR_ONLY_OBJECT_RE.is_match(window)
+}
+
+fn looks_like_structured_json_author_fallback(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty()
+        || trimmed.contains('@')
+        || trimmed.contains("http://")
+        || trimmed.contains("https://")
+        || json_window_contains_code_like_author_usage(trimmed)
+    {
+        return false;
+    }
+
+    let words: Vec<&str> = trimmed.split_whitespace().collect();
+    if words.is_empty() {
+        return false;
+    }
+
+    if words.len() == 1 {
+        let token =
+            words[0].trim_matches(|ch: char| !ch.is_alphanumeric() && ch != '-' && ch != '\'');
+        if token.len() < 4 {
+            return false;
+        }
+        let lower = token.to_ascii_lowercase();
+        if matches!(
+            lower.as_str(),
+            "author" | "authors" | "guide" | "description" | "project"
+        ) {
+            return false;
+        }
+        return token
+            .chars()
+            .any(|ch| ch.is_uppercase() || ch.is_ascii_digit());
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    [
+        " authors",
+        " project",
+        " team",
+        " group",
+        " foundation",
+        " committee",
+        " communities",
+        " consortium",
+        " developers",
+    ]
+    .iter()
+    .any(|suffix| lower.ends_with(suffix))
+}
+
+fn refine_json_author_candidate(name: &str, window: &str) -> Option<String> {
+    if json_window_contains_code_like_author_usage(window) {
+        return None;
+    }
+
+    if !json_window_has_metadata_context(window)
+        && !json_window_is_simple_author_only_fragment(window)
+    {
+        return None;
+    }
+
+    if let Some(author) = refine_author(name) {
+        return Some(author);
+    }
+
+    if !json_window_has_metadata_context(window) {
+        return None;
+    }
+
+    let prepared = prepare_text_line(name);
+    let normalized = normalize_whitespace(&prepared);
+    let trimmed = normalized
+        .trim()
+        .trim_end_matches(&[',', ';', '.'][..])
+        .trim();
+
+    if looks_like_structured_json_author_fallback(trimmed) {
+        Some(trimmed.to_string())
+    } else {
+        None
+    }
 }
 
 fn extract_author_name_from_json_window(window: &str) -> Option<String> {
