@@ -3547,6 +3547,7 @@ mod author;
 #[path = "refiner_utils.rs"]
 mod utils;
 
+pub(crate) use author::looks_like_name_with_parenthesized_url;
 pub use author::refine_author;
 pub use utils::{
     remove_dupe_copyright_words, remove_some_extra_words_and_punct, strip_all_unbalanced_parens,

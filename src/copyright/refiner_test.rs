@@ -1423,6 +1423,14 @@ fn test_refine_author_drops_dollar_prefixed_code_tokens() {
 }
 
 #[test]
+fn test_refine_author_keeps_name_with_parenthesized_url() {
+    assert_eq!(
+        refine_author("Qix (http://github.com/qix-)"),
+        Some("Qix (http://github.com/qix-)".to_string())
+    );
+}
+
+#[test]
 fn test_refine_author_drops_the_current_user_phrase() {
     assert_eq!(refine_author("the current user"), None);
 }
