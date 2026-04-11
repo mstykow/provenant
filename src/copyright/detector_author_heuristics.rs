@@ -6,7 +6,7 @@ use regex::Regex;
 use super::normalize_whitespace;
 use crate::copyright::line_tracking::PreparedLineCache;
 use crate::copyright::prepare::prepare_text_line;
-use crate::copyright::refiner::refine_author;
+use crate::copyright::refiner::{looks_like_name_with_parenthesized_url, refine_author};
 use crate::copyright::types::{AuthorDetection, CopyrightDetection, HolderDetection};
 use crate::models::LineNumber;
 
@@ -2343,7 +2343,10 @@ pub(super) fn drop_json_code_example_authors(
             return true;
         }
 
-        extract_author_name_from_json_window(&window).is_none()
+        let Some(name) = extract_author_name_from_json_window(&window) else {
+            return true;
+        };
+        looks_like_name_with_parenthesized_url(name.trim())
     });
 }
 
@@ -2441,6 +2444,10 @@ fn json_window_is_simple_author_only_fragment(window: &str) -> bool {
 
 fn looks_like_structured_json_author_fallback(value: &str) -> bool {
     let trimmed = value.trim();
+    if looks_like_name_with_parenthesized_url(trimmed) {
+        return true;
+    }
+
     if trimmed.is_empty()
         || trimmed.contains('@')
         || trimmed.contains("http://")
@@ -2494,8 +2501,16 @@ fn refine_json_author_candidate(name: &str, window: &str) -> Option<String> {
         return None;
     }
 
+    let prepared = prepare_text_line(name);
+    let normalized = normalize_whitespace(&prepared);
+    let trimmed = normalized
+        .trim()
+        .trim_end_matches(&[',', ';', '.'][..])
+        .trim();
+
     if !json_window_has_metadata_context(window)
         && !json_window_is_simple_author_only_fragment(window)
+        && !looks_like_name_with_parenthesized_url(trimmed)
     {
         return None;
     }
@@ -2504,16 +2519,12 @@ fn refine_json_author_candidate(name: &str, window: &str) -> Option<String> {
         return Some(author);
     }
 
-    if !json_window_has_metadata_context(window) {
+    if !json_window_has_metadata_context(window)
+        && !json_window_is_simple_author_only_fragment(window)
+        && !looks_like_name_with_parenthesized_url(trimmed)
+    {
         return None;
     }
-
-    let prepared = prepare_text_line(name);
-    let normalized = normalize_whitespace(&prepared);
-    let trimmed = normalized
-        .trim()
-        .trim_end_matches(&[',', ';', '.'][..])
-        .trim();
 
     if looks_like_structured_json_author_fallback(trimmed) {
         Some(trimmed.to_string())

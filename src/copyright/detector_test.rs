@@ -4226,6 +4226,39 @@ fn test_plain_json_author_string_preserved() {
 }
 
 #[test]
+fn test_plain_json_author_string_with_parenthesized_url_preserved() {
+    let input = r#""author": "Qix (http://github.com/qix-)","#;
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert_eq!(
+        authors
+            .iter()
+            .map(|a| a.author.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Qix (http://github.com/qix-)"],
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_plain_json_author_string_with_parenthesized_url_and_following_key_preserved() {
+    let input = concat!(
+        "   \"author\": \"Qix (http://github.com/qix-)\",\n",
+        "   \"keywords\": [\n",
+    );
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert_eq!(
+        authors
+            .iter()
+            .map(|a| a.author.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Qix (http://github.com/qix-)"],
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
 fn test_json_author_object_name_preferred_over_url_tail() {
     let input =
         "\"author\": { \"name\": \"Chen Fengyuan\", \"url\": \"https://chenfengyuan.com/\" }";
