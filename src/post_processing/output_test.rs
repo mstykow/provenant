@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{TimeZone, Timelike, Utc};
 use std::collections::HashMap;
 
 use super::test_utils::{dir, file};
@@ -3249,4 +3249,59 @@ fn create_output_classify_only_sets_key_file_flags() {
     assert!(readme.is_readme);
     assert!(readme.is_top_level);
     assert!(readme.is_key_file);
+}
+
+#[test]
+fn create_output_uses_scancode_header_timestamp_format() {
+    let start = Utc
+        .with_ymd_and_hms(2026, 4, 11, 9, 18, 28)
+        .single()
+        .expect("timestamp should be valid")
+        .with_nanosecond(24_390_124)
+        .expect("nanoseconds should be valid");
+    let end = Utc
+        .with_ymd_and_hms(2026, 4, 11, 9, 18, 29)
+        .single()
+        .expect("timestamp should be valid")
+        .with_nanosecond(987_654_321)
+        .expect("nanoseconds should be valid");
+
+    let output = create_output(
+        start,
+        end,
+        crate::scanner::ProcessResult {
+            files: vec![dir("project")],
+            excluded_count: 0,
+        },
+        CreateOutputContext {
+            total_dirs: 1,
+            assembly_result: assembly::AssemblyResult {
+                packages: vec![],
+                dependencies: vec![],
+            },
+            license_detections: vec![],
+            license_references: vec![],
+            license_rule_references: vec![],
+            spdx_license_list_version: "3.27".to_string(),
+            extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
+            options: CreateOutputOptions {
+                facet_rules: &[],
+                include_classify: false,
+                include_tallies_by_facet: false,
+                include_summary: false,
+                include_license_clarity_score: false,
+                include_tallies: false,
+                include_tallies_with_details: false,
+                include_tallies_of_key_files: false,
+                include_generated: false,
+                verbose: false,
+            },
+        },
+    );
+
+    let header = output.headers.first().expect("header should exist");
+    assert_eq!(header.start_timestamp, "2026-04-11T091828.024390");
+    assert_eq!(header.end_timestamp, "2026-04-11T091829.987654");
 }
