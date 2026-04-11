@@ -183,6 +183,8 @@ numpy = ">=1.20.0"
             package_data.homepage_url,
             Some("https://example.com".to_string())
         );
+        assert_eq!(package_data.description, None);
+        assert!(package_data.keywords.is_empty());
 
         assert_eq!(
             package_data.declared_license_expression.as_deref(),
@@ -199,6 +201,98 @@ numpy = ">=1.20.0"
         assert_eq!(
             package_data.purl,
             Some("pkg:pypi/test-package@0.1.0".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_from_pyproject_toml_with_pep621_tables_and_labeled_urls() {
+        let content = r#"
+[project]
+name = "apache-airflow"
+description = "Programmatically author, schedule and monitor data pipelines"
+keywords = ["airflow", "workflow", "dag"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "License :: OSI Approved :: Apache Software License",
+]
+authors = [
+    { name = "Apache Software Foundation", email = "dev@airflow.apache.org" },
+]
+maintainers = [
+    { name = "Apache Software Foundation", email = "dev@airflow.apache.org" },
+]
+
+[project.urls]
+"Bug Tracker" = "https://github.com/apache/airflow/issues"
+Downloads = "https://archive.apache.org/dist/airflow/"
+Homepage = "https://airflow.apache.org/"
+"Source Code" = "https://github.com/apache/airflow"
+Documentation = "https://airflow.apache.org/docs/"
+"#;
+
+        let (_temp_file, file_path) = create_temp_file(content, "pyproject.toml");
+        let package_data = PythonParser::extract_first_package(&file_path);
+
+        assert_eq!(
+            package_data.description.as_deref(),
+            Some("Programmatically author, schedule and monitor data pipelines")
+        );
+        assert_eq!(
+            package_data.keywords,
+            vec![
+                "airflow".to_string(),
+                "workflow".to_string(),
+                "dag".to_string(),
+                "Development Status :: 5 - Production/Stable".to_string(),
+                "Environment :: Console".to_string()
+            ]
+        );
+        assert_eq!(
+            package_data.extracted_license_statement.as_deref(),
+            Some("classifiers:\n  - 'License :: OSI Approved :: Apache Software License'\n")
+        );
+        assert_eq!(package_data.parties.len(), 2);
+        assert!(package_data.parties.iter().any(|party| {
+            party.role.as_deref() == Some("author")
+                && party.name.as_deref() == Some("Apache Software Foundation")
+                && party.email.as_deref() == Some("dev@airflow.apache.org")
+        }));
+        assert!(package_data.parties.iter().any(|party| {
+            party.role.as_deref() == Some("maintainer")
+                && party.name.as_deref() == Some("Apache Software Foundation")
+                && party.email.as_deref() == Some("dev@airflow.apache.org")
+        }));
+        assert_eq!(
+            package_data.homepage_url.as_deref(),
+            Some("https://airflow.apache.org/")
+        );
+        assert_eq!(
+            package_data.download_url.as_deref(),
+            Some("https://archive.apache.org/dist/airflow/")
+        );
+        assert_eq!(
+            package_data.bug_tracking_url.as_deref(),
+            Some("https://github.com/apache/airflow/issues")
+        );
+        assert_eq!(
+            package_data.code_view_url.as_deref(),
+            Some("https://github.com/apache/airflow")
+        );
+        assert_eq!(package_data.vcs_url, None);
+
+        let extra_data = package_data
+            .extra_data
+            .expect("extra_data should be present");
+        let project_urls = extra_data
+            .get("project_urls")
+            .and_then(|value| value.as_object())
+            .expect("project_urls should be preserved");
+        assert_eq!(
+            project_urls
+                .get("Documentation")
+                .and_then(|value| value.as_str()),
+            Some("https://airflow.apache.org/docs/")
         );
     }
 
