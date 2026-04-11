@@ -1427,8 +1427,14 @@ mod tests {
     fn test_filter_overlapping_matches_keeps_exact_match_between_weak_seq_wrappers() {
         let index = LicenseIndex::with_legalese_count(10);
 
-        let mut left =
-            create_test_match("bsd-new_and_lgpl-2.0_1.RULE", 9227, 9227, 4.82, 4.82, 100);
+        let mut left = create_test_match(
+            "bsd-new_and_lgpl-2.0_1.RULE",
+            9227,
+            9227,
+            MatchScore::from_percentage(4.82),
+            4.82,
+            100,
+        );
         left.matcher = crate::license_detection::models::MatcherKind::Seq;
         left.license_expression = "bsd-new AND lgpl-2.0".to_string();
         left.license_expression_spdx = Some("BSD-3-Clause AND LGPL-2.0-only".to_string());
@@ -1437,7 +1443,14 @@ mod tests {
         left.matched_length = 8;
         left.coordinates = MatchCoordinates::query_region(PositionSpan::range(100, 108));
 
-        let mut exact = create_test_match("lgpl-2.1-plus_161.RULE", 9227, 9227, 100.0, 100.0, 100);
+        let mut exact = create_test_match(
+            "lgpl-2.1-plus_161.RULE",
+            9227,
+            9227,
+            MatchScore::MAX,
+            100.0,
+            100,
+        );
         exact.matcher = crate::license_detection::models::MatcherKind::Aho;
         exact.license_expression = "lgpl-2.1-plus".to_string();
         exact.license_expression_spdx = Some("LGPL-2.1-or-later".to_string());
@@ -1450,7 +1463,7 @@ mod tests {
             "mpl-1.1_or_lgpl-2.1-plus_or_apache-2.0_5.RULE",
             9227,
             9227,
-            4.76,
+            MatchScore::from_percentage(4.76),
             4.76,
             100,
         );

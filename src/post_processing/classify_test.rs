@@ -234,7 +234,7 @@ fn classify_key_files_marks_package_data_ancestry_like_with_package_data_fixture
     let package = Package {
         package_uid: PackageUid::from_raw(uid.to_string()),
         datafile_paths: vec![
-            "jar/META-INF/maven/org.jboss.logging/jboss-logging/pom.xml".to_string()
+            "jar/META-INF/maven/org.jboss.logging/jboss-logging/pom.xml".to_string(),
         ],
         ..package(
             uid,

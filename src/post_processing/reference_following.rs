@@ -8,8 +8,7 @@ use crate::license_detection::detection::{
 };
 use crate::license_detection::expression::parse_expression;
 use crate::models::{
-    FileInfo, FileType, LicenseDetection, Match, Package, PackageUid,
-    TopLevelLicenseDetection,
+    FileInfo, FileType, LicenseDetection, Match, Package, PackageUid, TopLevelLicenseDetection,
 };
 use crate::utils::spdx::combine_license_expressions;
 
