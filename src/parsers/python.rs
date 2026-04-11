@@ -166,7 +166,10 @@ impl PackageParser for PythonParser {
 
         if let Some(extension) = path.extension() {
             let ext = extension.to_string_lossy().to_lowercase();
-            if ext == "whl" || ext == "egg" || is_python_sdist_archive_path(path) {
+            if (ext == "whl" && is_valid_wheel_archive_path(path))
+                || ext == "egg"
+                || is_python_sdist_archive_path(path)
+            {
                 return true;
             }
         }
@@ -653,6 +656,28 @@ fn is_python_sdist_archive_path(path: &Path) -> bool {
     detect_python_sdist_archive_format(path).is_some()
 }
 
+fn is_valid_wheel_archive_path(path: &Path) -> bool {
+    if !path.is_file() {
+        return true;
+    }
+
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(_) => return false,
+    };
+    let mut archive = match ZipArchive::new(file) {
+        Ok(archive) => archive,
+        Err(_) => return false,
+    };
+
+    let validated_entries = match collect_validated_zip_entries(&mut archive, path, "wheel") {
+        Ok(entries) => entries,
+        Err(_) => return false,
+    };
+
+    find_validated_zip_entry_by_suffix(&validated_entries, ".dist-info/METADATA").is_some()
+}
+
 fn detect_python_sdist_archive_format(path: &Path) -> Option<PythonSdistArchiveFormat> {
     let file_name = path.file_name()?.to_str()?.to_ascii_lowercase();
 
@@ -661,13 +686,13 @@ fn detect_python_sdist_archive_format(path: &Path) -> Option<PythonSdistArchiveF
     }
 
     if file_name.ends_with(".tar.gz") {
-        Some(PythonSdistArchiveFormat::TarGz)
+        tar_gz_sdist_contains_pkg_info(path).then_some(PythonSdistArchiveFormat::TarGz)
     } else if file_name.ends_with(".tgz") {
         tgz_sdist_contains_pkg_info(path).then_some(PythonSdistArchiveFormat::Tgz)
     } else if file_name.ends_with(".tar.bz2") {
-        Some(PythonSdistArchiveFormat::TarBz2)
+        tar_bz2_sdist_contains_pkg_info(path).then_some(PythonSdistArchiveFormat::TarBz2)
     } else if file_name.ends_with(".tar.xz") {
-        Some(PythonSdistArchiveFormat::TarXz)
+        tar_xz_sdist_contains_pkg_info(path).then_some(PythonSdistArchiveFormat::TarXz)
     } else if file_name.ends_with(".zip") {
         zip_sdist_contains_pkg_info(path).then_some(PythonSdistArchiveFormat::Zip)
     } else {
@@ -675,25 +700,74 @@ fn detect_python_sdist_archive_format(path: &Path) -> Option<PythonSdistArchiveF
     }
 }
 
-fn tgz_sdist_contains_pkg_info(path: &Path) -> bool {
-    if !path.is_file() {
-        return true;
-    }
-
-    let compressed_size = match std::fs::metadata(path) {
-        Ok(metadata) => metadata.len(),
-        Err(_) => return false,
+fn tar_gz_sdist_contains_pkg_info(path: &Path) -> bool {
+    let Some(compressed_size) = compressed_archive_size(path) else {
+        return false;
     };
     let file = match File::open(path) {
         Ok(file) => file,
         Err(_) => return false,
     };
     let decoder = GzDecoder::new(file);
-    let Some(entries) = collect_tar_sdist_entries(path, decoder, "tgz", compressed_size) else {
+    tar_sdist_contains_pkg_info(path, decoder, "tar.gz", compressed_size)
+}
+
+fn tar_bz2_sdist_contains_pkg_info(path: &Path) -> bool {
+    let Some(compressed_size) = compressed_archive_size(path) else {
+        return false;
+    };
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(_) => return false,
+    };
+    let decoder = BzDecoder::new(file);
+    tar_sdist_contains_pkg_info(path, decoder, "tar.bz2", compressed_size)
+}
+
+fn tar_xz_sdist_contains_pkg_info(path: &Path) -> bool {
+    let Some(compressed_size) = compressed_archive_size(path) else {
+        return false;
+    };
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(_) => return false,
+    };
+    let decoder = XzDecoder::new(file);
+    tar_sdist_contains_pkg_info(path, decoder, "tar.xz", compressed_size)
+}
+
+fn compressed_archive_size(path: &Path) -> Option<u64> {
+    std::fs::metadata(path).ok().map(|metadata| metadata.len())
+}
+
+fn tar_sdist_contains_pkg_info<R: Read>(
+    path: &Path,
+    reader: R,
+    archive_type: &str,
+    compressed_size: u64,
+) -> bool {
+    let Some(entries) = collect_tar_sdist_entries(path, reader, archive_type, compressed_size)
+    else {
         return false;
     };
 
     select_sdist_pkginfo_entry(path, &entries).is_some()
+}
+
+fn tgz_sdist_contains_pkg_info(path: &Path) -> bool {
+    if !path.is_file() {
+        return true;
+    }
+
+    let Some(compressed_size) = compressed_archive_size(path) else {
+        return false;
+    };
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(_) => return false,
+    };
+    let decoder = GzDecoder::new(file);
+    tar_sdist_contains_pkg_info(path, decoder, "tgz", compressed_size)
 }
 
 fn zip_sdist_contains_pkg_info(path: &Path) -> bool {

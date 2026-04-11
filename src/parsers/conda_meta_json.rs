@@ -66,6 +66,10 @@ impl PackageParser for CondaMetaJsonParser {
 
     fn is_match(path: &Path) -> bool {
         path.extension().and_then(|ext| ext.to_str()) == Some("json")
+            && !path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with("expected.json"))
             && path
                 .components()
                 .any(|component| component.as_os_str() == "conda-meta")
