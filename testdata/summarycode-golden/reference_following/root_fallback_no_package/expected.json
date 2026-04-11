@@ -141,7 +141,7 @@
       "identifier": "free-unknown-package_1.RULE",
       "license_expression": "free-unknown",
       "language": null,
-      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/free-unknown-package_1.RULE",
+      "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/free-unknown-package_1.RULE",
       "is_synthetic": false,
       "length": 11,
       "referenced_filenames": ["INHERIT_LICENSE_FROM_PACKAGE"]
@@ -150,7 +150,7 @@
       "identifier": "mit.LICENSE",
       "license_expression": "mit",
       "language": null,
-      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE",
+      "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE",
       "is_synthetic": false,
       "length": 161,
       "referenced_filenames": []
@@ -159,7 +159,7 @@
       "identifier": "mit_14.RULE",
       "license_expression": "mit",
       "language": null,
-      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_14.RULE",
+      "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_14.RULE",
       "is_synthetic": false,
       "length": 2,
       "referenced_filenames": []

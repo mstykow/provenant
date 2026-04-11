@@ -184,7 +184,7 @@
       "identifier": "mit.LICENSE",
       "license_expression": "mit",
       "language": null,
-      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE",
+      "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE",
       "is_synthetic": false,
       "length": 161,
       "referenced_filenames": []
@@ -193,7 +193,7 @@
       "identifier": "mit_14.RULE",
       "license_expression": "mit",
       "language": null,
-      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_14.RULE",
+      "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_14.RULE",
       "is_synthetic": false,
       "length": 2,
       "referenced_filenames": []
@@ -202,7 +202,7 @@
       "identifier": "mit_31.RULE",
       "license_expression": "mit",
       "language": null,
-      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_31.RULE",
+      "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_31.RULE",
       "is_synthetic": false,
       "length": 3,
       "referenced_filenames": []
@@ -211,7 +211,7 @@
       "identifier": "unknown-license-reference_see_license_at_manifest_1.RULE",
       "license_expression": "unknown-license-reference",
       "language": null,
-      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/unknown-license-reference_see_license_at_manifest_1.RULE",
+      "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/unknown-license-reference_see_license_at_manifest_1.RULE",
       "is_synthetic": false,
       "length": 3,
       "referenced_filenames": ["LICENSE"]
