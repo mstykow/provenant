@@ -1240,7 +1240,7 @@ mod tests {
             tallies_by_facet: None,
             headers: vec![Header {
                 tool_name: "provenant".to_string(),
-                tool_version: env!("CARGO_PKG_VERSION").to_string(),
+                tool_version: crate::version::BUILD_VERSION.to_string(),
                 options: serde_json::Map::new(),
                 notice: crate::models::HEADER_NOTICE.to_string(),
                 start_timestamp: "2026-01-01T000000.000000".to_string(),

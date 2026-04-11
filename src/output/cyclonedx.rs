@@ -34,7 +34,7 @@ pub(crate) fn write_cyclonedx_xml(output: &Output, writer: &mut dyn Write) -> io
     xml.push_str("</timestamp>\n");
     xml.push_str("    <tools>\n");
     xml.push_str("      <tool><vendor>Provenant</vendor><name>Provenant</name><version>");
-    xml.push_str(env!("CARGO_PKG_VERSION"));
+    xml.push_str(crate::version::BUILD_VERSION);
     xml.push_str("</version></tool>\n");
     xml.push_str("    </tools>\n");
     xml.push_str("  </metadata>\n");
@@ -233,15 +233,15 @@ fn build_cyclonedx_json(output: &Output) -> Value {
             "specVersion": "1.3",
             "serialNumber": format!("urn:uuid:{}", Uuid::new_v4()),
             "version": 1,
-            "metadata": {
-                "timestamp": timestamp,
-                "tools": [
-                    {
-                        "name": "Provenant",
-                        "version": env!("CARGO_PKG_VERSION")
-                    }
-                ]
-            },
+                "metadata": {
+                    "timestamp": timestamp,
+                    "tools": [
+                        {
+                            "name": "Provenant",
+                            "version": crate::version::BUILD_VERSION
+                        }
+                    ]
+                },
             "components": components,
             "dependencies": dependencies,
         })
