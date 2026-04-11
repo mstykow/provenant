@@ -2444,7 +2444,7 @@ fn create_output_deduplicates_header_summary_errors() {
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
             extra_errors: vec![
-                "Failed to read or parse package.json: project/package.json".to_string()
+                "Failed to read or parse package.json: project/package.json".to_string(),
             ],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -2582,10 +2582,12 @@ fn create_output_gates_summary_tallies_and_generated_sections() {
     assert!(output_without_flags.summary.is_none());
     assert!(output_without_flags.tallies.is_none());
     assert!(output_without_flags.tallies_of_key_files.is_none());
-    assert!(output_without_flags
-        .files
-        .iter()
-        .all(|file| file.is_generated.is_none()));
+    assert!(
+        output_without_flags
+            .files
+            .iter()
+            .all(|file| file.is_generated.is_none())
+    );
 
     let mut enabled_license = file(&license_rel);
     enabled_license.is_generated = Some(true);
@@ -2651,11 +2653,13 @@ fn create_output_gates_summary_tallies_and_generated_sections() {
     assert!(output_with_flags.summary.is_some());
     assert!(output_with_flags.tallies.is_some());
     assert!(output_with_flags.tallies_of_key_files.is_some());
-    assert!(output_with_flags
-        .files
-        .iter()
-        .find(|file| file.path == license_rel)
-        .is_some_and(|file| file.is_generated == Some(true) && file.tallies.is_some()));
+    assert!(
+        output_with_flags
+            .files
+            .iter()
+            .find(|file| file.path == license_rel)
+            .is_some_and(|file| file.is_generated == Some(true) && file.tallies.is_some())
+    );
 }
 
 #[test]
