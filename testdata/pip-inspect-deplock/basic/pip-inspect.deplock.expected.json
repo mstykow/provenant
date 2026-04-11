@@ -6,9 +6,17 @@
     "primary_language": "Python",
     "description": "Python HTTP for Humans.",
     "parties": [],
-    "keywords": ["http,requests"],
     "extracted_license_statement": "Apache 2.0",
     "is_virtual": true,
+    "purl": "pkg:pypi/requests@2.31.0",
+    "dependencies": [
+      {
+        "purl": "pkg:pypi/urllib3@2.0.0",
+        "is_runtime": true,
+        "is_pinned": true,
+        "resolved_package": {}
+      }
+    ],
     "extra_data": {
       "inspect_version": "1",
       "pip_version": "23.0.1"
