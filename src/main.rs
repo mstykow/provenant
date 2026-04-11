@@ -35,6 +35,7 @@ use crate::scanner::{
     LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected_with_memory_limit,
     process_collected_with_memory_limit_sequential, scan_options_fingerprint,
 };
+use crate::time::format_scancode_timestamp;
 use crate::utils::hash::calculate_sha256;
 
 mod assembly;
@@ -51,6 +52,7 @@ mod post_processing;
 mod progress;
 mod scan_result_shaping;
 mod scanner;
+mod time;
 mod utils;
 
 fn main() -> std::io::Result<()> {
@@ -560,7 +562,11 @@ fn run() -> Result<()> {
     progress.record_final_counts(&output.files);
     progress.finish_output();
 
-    progress.display_summary(&start_time.to_rfc3339(), &Utc::now().to_rfc3339());
+    let summary_end = Utc::now();
+    progress.display_summary(
+        &format_scancode_timestamp(&start_time),
+        &format_scancode_timestamp(&summary_end),
+    );
 
     Ok(())
 }
