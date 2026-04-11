@@ -1302,6 +1302,44 @@ pub(super) fn extract_with_additional_hacking_by_authors(
     }
 }
 
+pub(super) fn extract_parenthesized_inline_by_authors(
+    raw_lines: &[&str],
+    authors: &mut Vec<AuthorDetection>,
+) {
+    static RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)^\s*copyright\b.*\((?:written|authored|created|developed)\s+by\s+(?P<who>[^)]+)\)",
+        )
+        .unwrap()
+    });
+
+    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+
+    for (idx, raw) in raw_lines.iter().enumerate() {
+        let ln = idx + 1;
+        let line = raw.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Some(cap) = RE.captures(line) else {
+            continue;
+        };
+        let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
+        if who.is_empty() {
+            continue;
+        }
+        if let Some(author) = refine_author(who)
+            && seen.insert(author.clone())
+        {
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
+            });
+        }
+    }
+}
+
 pub(super) fn merge_metadata_author_and_email_lines(
     prepared_cache: &mut PreparedLineCache<'_>,
     authors: &mut Vec<AuthorDetection>,
@@ -2068,6 +2106,9 @@ pub(super) fn drop_authors_from_copyright_by_lines(
         )
         .unwrap()
     });
+    static INLINE_ATTRIBUTION_PARENS_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)\((?:written|authored|created|developed)\s+by\s+[^)]+\)").unwrap()
+    });
 
     authors.retain(|author| {
         let start = author.start_line.get();
@@ -2077,6 +2118,9 @@ pub(super) fn drop_authors_from_copyright_by_lines(
                 return true;
             };
             let lower = raw.to_ascii_lowercase();
+            if INLINE_ATTRIBUTION_PARENS_RE.is_match(raw) {
+                return true;
+            }
             if lower.trim_start().starts_with("copyright")
                 && lower.contains(" by ")
                 && lower.contains(&author.author.to_ascii_lowercase())
