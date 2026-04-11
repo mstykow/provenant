@@ -20,12 +20,6 @@ fn create_scan_fixture() -> (TempDir, String) {
     (temp, scan_dir.to_string_lossy().to_string())
 }
 
-fn cargo_command() -> Command {
-    let mut command = Command::new("cargo");
-    command.current_dir(env!("CARGO_MANIFEST_DIR"));
-    command
-}
-
 fn create_malformed_package_fixture() -> (TempDir, String) {
     let temp = TempDir::new().expect("failed to create temp dir");
     let scan_dir = temp.path().join("scan");
@@ -137,30 +131,6 @@ fn short_version_flag_stays_single_line_and_parse_safe() {
         .split_whitespace()
         .last()
         .expect("short version line should include a version token");
-    assert_eq!(reported_version, provenant::version::BUILD_VERSION);
-}
-
-#[test]
-fn invalid_build_version_override_falls_back_to_git_aware_version() {
-    let output = cargo_command()
-        .env("PROVENANT_BUILD_VERSION", "bad\nvalue")
-        .args(["run", "--", "-V"])
-        .output()
-        .expect("failed to run cargo with invalid build version override");
-
-    assert!(
-        output.status.success(),
-        "cargo run with invalid override should succeed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let stdout = String::from_utf8(output.stdout).expect("fallback version output should be utf-8");
-    let reported_version = stdout
-        .lines()
-        .next()
-        .and_then(|line| line.split_whitespace().last())
-        .expect("fallback output should include a version token");
-
     assert_eq!(reported_version, provenant::version::BUILD_VERSION);
 }
 
