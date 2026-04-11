@@ -1732,6 +1732,130 @@ mod tests {
     }
 
     #[test]
+    fn test_assemble_cargo_workspace_preserves_member_lock_dependencies() {
+        let mut root = create_test_file_info(
+            "workspace/Cargo.toml",
+            DatasourceId::CargoToml,
+            None,
+            None,
+            None,
+            vec![],
+        );
+        root.package_data[0].package_type = Some(PackageType::Cargo);
+        root.package_data[0].extra_data = Some(HashMap::from([(
+            "workspace".to_string(),
+            json!({ "members": ["crates/app"] }),
+        )]));
+
+        let mut member_manifest = create_test_file_info(
+            "workspace/crates/app/Cargo.toml",
+            DatasourceId::CargoToml,
+            Some("pkg:cargo/app@0.1.0"),
+            Some("app"),
+            Some("0.1.0"),
+            vec![create_test_dependency("pkg:cargo/log", Some("0.4"), None)],
+        );
+        member_manifest.package_data[0].package_type = Some(PackageType::Cargo);
+
+        let mut member_lock = create_test_file_info(
+            "workspace/crates/app/Cargo.lock",
+            DatasourceId::CargoLock,
+            Some("pkg:cargo/app@0.1.0"),
+            Some("app"),
+            Some("0.1.0"),
+            vec![create_test_dependency(
+                "pkg:cargo/log@0.4.22",
+                Some("0.4.22"),
+                None,
+            )],
+        );
+        member_lock.package_data[0].package_type = Some(PackageType::Cargo);
+
+        let mut files = vec![root, member_manifest, member_lock];
+
+        let result = assemble(&mut files);
+
+        assert_eq!(result.packages.len(), 1);
+        let package = &result.packages[0];
+        assert_eq!(package.purl.as_deref(), Some("pkg:cargo/app@0.1.0"));
+        assert!(
+            package
+                .datafile_paths
+                .contains(&"workspace/crates/app/Cargo.toml".to_string())
+        );
+        assert!(
+            package
+                .datafile_paths
+                .contains(&"workspace/crates/app/Cargo.lock".to_string())
+        );
+
+        assert_eq!(result.dependencies.len(), 2);
+        assert!(result.dependencies.iter().any(|dep| {
+            dep.datafile_path == "workspace/crates/app/Cargo.toml"
+                && dep.purl.as_deref() == Some("pkg:cargo/log")
+                && dep.for_package_uid.as_ref() == Some(&package.package_uid)
+        }));
+        assert!(result.dependencies.iter().any(|dep| {
+            dep.datafile_path == "workspace/crates/app/Cargo.lock"
+                && dep.purl.as_deref() == Some("pkg:cargo/log@0.4.22")
+                && dep.for_package_uid.as_ref() == Some(&package.package_uid)
+        }));
+    }
+
+    #[test]
+    fn test_assemble_cargo_workspace_hoists_root_lock_dependencies() {
+        let mut root = create_test_file_info(
+            "workspace/Cargo.toml",
+            DatasourceId::CargoToml,
+            None,
+            None,
+            None,
+            vec![],
+        );
+        root.package_data[0].package_type = Some(PackageType::Cargo);
+        root.package_data[0].extra_data = Some(HashMap::from([(
+            "workspace".to_string(),
+            json!({ "members": ["crates/app"] }),
+        )]));
+
+        let mut root_lock = create_test_file_info(
+            "workspace/Cargo.lock",
+            DatasourceId::CargoLock,
+            Some("pkg:cargo/workspace-root@0.0.0"),
+            Some("workspace-root"),
+            Some("0.0.0"),
+            vec![create_test_dependency(
+                "pkg:cargo/serde@1.0.215",
+                Some("1.0.215"),
+                None,
+            )],
+        );
+        root_lock.package_data[0].package_type = Some(PackageType::Cargo);
+
+        let mut member_manifest = create_test_file_info(
+            "workspace/crates/app/Cargo.toml",
+            DatasourceId::CargoToml,
+            Some("pkg:cargo/app@0.1.0"),
+            Some("app"),
+            Some("0.1.0"),
+            vec![],
+        );
+        member_manifest.package_data[0].package_type = Some(PackageType::Cargo);
+
+        let mut files = vec![root, root_lock, member_manifest];
+
+        let result = assemble(&mut files);
+
+        assert_eq!(result.packages.len(), 1);
+        assert_eq!(result.dependencies.len(), 1);
+
+        let dep = &result.dependencies[0];
+        assert_eq!(dep.datafile_path, "workspace/Cargo.lock");
+        assert_eq!(dep.purl.as_deref(), Some("pkg:cargo/serde@1.0.215"));
+        assert!(dep.for_package_uid.is_none());
+    }
+
+    #[test]
     fn test_assemble_python_pyproject_with_uv_lock() {
         let mut files = vec![
             create_test_file_info(
