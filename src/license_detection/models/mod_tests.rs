@@ -273,7 +273,7 @@ mod tests {
         assert_eq!(
             rule.rule_url(),
             Some(
-                "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_123.RULE"
+                "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_123.RULE"
                     .to_string()
             )
         );
@@ -288,7 +288,7 @@ mod tests {
         assert_eq!(
             rule.rule_url(),
             Some(
-                "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE"
+                "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE"
                     .to_string()
             )
         );
@@ -303,7 +303,7 @@ mod tests {
         assert_eq!(
             rule.rule_url(),
             Some(
-                "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit.LICENSE"
+                "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit.LICENSE"
                     .to_string()
             )
         );

@@ -381,7 +381,7 @@ fn collect_top_level_license_references_applies_custom_license_url_template() {
     assert_eq!(
         license_references[0].scancode_url.as_deref(),
         Some(
-            "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE"
+            "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE"
         )
     );
 }
