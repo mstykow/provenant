@@ -735,6 +735,7 @@ impl PackageParser for AlpineApkParser {
         path.extension().and_then(|e| e.to_str()) == Some("apk")
             && magic::is_gzip(path)
             && !magic::is_zip(path)
+            && apk_contains_pkginfo(path)
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
@@ -750,6 +751,39 @@ impl PackageParser for AlpineApkParser {
             }
         }]
     }
+}
+
+fn apk_contains_pkginfo(path: &Path) -> bool {
+    use flate2::read::GzDecoder;
+
+    let file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(_) => return false,
+    };
+
+    let decoder = GzDecoder::new(file);
+    let mut archive = tar::Archive::new(decoder);
+    let entries = match archive.entries() {
+        Ok(entries) => entries,
+        Err(_) => return false,
+    };
+
+    for entry_result in entries {
+        let entry = match entry_result {
+            Ok(entry) => entry,
+            Err(_) => return false,
+        };
+        let entry_path = match entry.path() {
+            Ok(path) => path,
+            Err(_) => return false,
+        };
+
+        if entry_path.ends_with(".PKGINFO") {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn extract_apk_archive(path: &Path) -> Result<PackageData, String> {
