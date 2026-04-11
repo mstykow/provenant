@@ -4,6 +4,7 @@ use std::sync::Once;
 
 use crate::license_detection::models::{MatchCoordinates, position_span::PositionSpan};
 use crate::models::LineNumber;
+use crate::models::MatchScore;
 
 static TEST_ENGINE: Lazy<LicenseDetectionEngine> = Lazy::new(|| {
     LicenseDetectionEngine::from_embedded().expect("Should initialize from embedded artifact")
@@ -1016,7 +1017,8 @@ SOFTWARE."#;
     );
     assert!(detections.iter().any(|d| {
         d.matches.iter().any(|m| {
-            m.matcher == crate::license_detection::hash_match::MATCH_HASH && m.score == 100.0
+            m.matcher == crate::license_detection::hash_match::MATCH_HASH
+                && m.score == MatchScore::MAX
         })
     }));
 }

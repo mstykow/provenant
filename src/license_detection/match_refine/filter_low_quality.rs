@@ -552,6 +552,7 @@ mod tests {
     use crate::license_detection::models::position_span::PositionSpan;
     use crate::license_detection::unknown_match::MATCH_UNKNOWN;
     use crate::models::LineNumber;
+    use crate::models::MatchScore;
 
     fn parse_rule_id(rule_identifier: &str) -> Option<usize> {
         let trimmed = rule_identifier.trim();
@@ -566,7 +567,7 @@ mod tests {
         rule_identifier: &str,
         start_line: usize,
         end_line: usize,
-        score: f32,
+        score: MatchScore,
         coverage: f32,
         relevance: u8,
     ) -> LicenseMatch {
@@ -627,7 +628,7 @@ mod tests {
             start_token,
             end_token,
             matcher: crate::license_detection::models::MatcherKind::Aho,
-            score: 100.0,
+            score: MatchScore::MAX,
             matched_length,
             rule_length: matched_length,
             match_coverage: 100.0,
@@ -654,8 +655,8 @@ mod tests {
         let _ = index.false_positive_rids.insert(42);
 
         let matches = vec![
-            create_test_match("#42", 1, 10, 0.9, 90.0, 100),
-            create_test_match("#1", 15, 25, 0.85, 85.0, 100),
+            create_test_match("#42", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100),
+            create_test_match("#1", 15, 25, MatchScore::from_percentage(0.85), 85.0, 100),
         ];
 
         let filtered = filter_false_positive_matches(&index, &matches);
@@ -669,8 +670,8 @@ mod tests {
         let index = LicenseIndex::with_legalese_count(10);
 
         let matches = vec![
-            create_test_match("#1", 1, 10, 0.9, 90.0, 100),
-            create_test_match("#2", 15, 25, 0.85, 85.0, 100),
+            create_test_match("#1", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100),
+            create_test_match("#2", 15, 25, MatchScore::from_percentage(0.85), 85.0, 100),
         ];
 
         let filtered = filter_false_positive_matches(&index, &matches);
@@ -685,8 +686,8 @@ mod tests {
         let _ = index.false_positive_rids.insert(43);
 
         let matches = vec![
-            create_test_match("#42", 1, 10, 0.9, 90.0, 100),
-            create_test_match("#43", 15, 25, 0.85, 85.0, 100),
+            create_test_match("#42", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100),
+            create_test_match("#43", 15, 25, MatchScore::from_percentage(0.85), 85.0, 100),
         ];
 
         let filtered = filter_false_positive_matches(&index, &matches);
@@ -710,12 +711,12 @@ mod tests {
             LicenseMatch {
                 matcher: crate::license_detection::models::MatcherKind::Hash,
                 matched_length: 5,
-                ..create_test_match("#1", 1, 10, 1.0, 100.0, 100)
+                ..create_test_match("#1", 1, 10, MatchScore::MAX, 100.0, 100)
             },
             LicenseMatch {
                 matcher: crate::license_detection::models::MatcherKind::Aho,
                 matched_length: 5,
-                ..create_test_match("#2", 1, 10, 1.0, 100.0, 100)
+                ..create_test_match("#2", 1, 10, MatchScore::MAX, 100.0, 100)
             },
         ];
 
@@ -727,7 +728,7 @@ mod tests {
     fn test_filter_spurious_matches_keeps_high_density_seq() {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
-        let mut m = create_test_match("#1", 1, 10, 1.0, 100.0, 100);
+        let mut m = create_test_match("#1", 1, 10, MatchScore::MAX, 100.0, 100);
         m.matcher = crate::license_detection::models::MatcherKind::Seq;
         m.matched_length = 50;
         m.coordinates = MatchCoordinates::rule_aligned(
@@ -745,7 +746,7 @@ mod tests {
     fn test_filter_spurious_matches_filters_low_density_short() {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
-        let mut m = create_test_match("#1", 1, 10, 1.0, 100.0, 100);
+        let mut m = create_test_match("#1", 1, 10, MatchScore::MAX, 100.0, 100);
         m.matcher = crate::license_detection::models::MatcherKind::Seq;
         m.matched_length = 5;
         m.start_token = 0;
@@ -762,7 +763,7 @@ mod tests {
     fn test_filter_spurious_matches_filters_unknown_matcher() {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
-        let mut m = create_test_match("#1", 1, 10, 1.0, 100.0, 100);
+        let mut m = create_test_match("#1", 1, 10, MatchScore::MAX, 100.0, 100);
         m.matcher = MATCH_UNKNOWN;
         m.matched_length = 5;
         m.start_token = 0;
@@ -779,7 +780,7 @@ mod tests {
     fn test_filter_spurious_matches_keeps_medium_length() {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
-        let mut m = create_test_match("#1", 1, 10, 1.0, 100.0, 100);
+        let mut m = create_test_match("#1", 1, 10, MatchScore::MAX, 100.0, 100);
         m.matcher = crate::license_detection::models::MatcherKind::Seq;
         m.matched_length = 25;
         m.start_token = 0;
@@ -810,9 +811,16 @@ mod tests {
         let _ = index.false_positive_rids.insert(42);
 
         let matches = vec![
-            create_test_match("#42", 1, 10, 0.9, 90.0, 100),
-            create_test_match("mit.LICENSE", 15, 25, 0.85, 85.0, 100),
-            create_test_match("#1", 30, 40, 0.8, 80.0, 100),
+            create_test_match("#42", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100),
+            create_test_match(
+                "mit.LICENSE",
+                15,
+                25,
+                MatchScore::from_percentage(0.85),
+                85.0,
+                100,
+            ),
+            create_test_match("#1", 30, 40, MatchScore::from_percentage(0.8), 80.0, 100),
         ];
 
         let filtered = filter_false_positive_matches(&index, &matches);
@@ -826,7 +834,7 @@ mod tests {
     fn test_filter_too_short_matches_non_seq_match_kept() {
         let index = LicenseIndex::with_legalese_count(10);
 
-        let mut m = create_test_match("#1", 1, 10, 0.9, 50.0, 100);
+        let mut m = create_test_match("#1", 1, 10, MatchScore::from_percentage(0.9), 50.0, 100);
         m.matcher = crate::license_detection::models::MatcherKind::Aho;
         m.matched_length = 2;
 
@@ -878,7 +886,7 @@ mod tests {
             stopwords_by_pos: std::collections::HashMap::new(),
         });
 
-        let mut m = create_test_match("#0", 1, 10, 0.9, 50.0, 100);
+        let mut m = create_test_match("#0", 1, 10, MatchScore::from_percentage(0.9), 50.0, 100);
         m.matcher = crate::license_detection::models::MatcherKind::Seq;
         m.matched_length = 5;
         m.coordinates = MatchCoordinates::rule_aligned(
@@ -935,7 +943,7 @@ mod tests {
             stopwords_by_pos: std::collections::HashMap::new(),
         });
 
-        let mut m = create_test_match("#0", 1, 10, 0.9, 90.0, 100);
+        let mut m = create_test_match("#0", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100);
         m.matcher = crate::license_detection::models::MatcherKind::Seq;
         m.matched_length = 15;
         m.coordinates = MatchCoordinates::rule_aligned(
@@ -953,7 +961,7 @@ mod tests {
     #[test]
     fn test_filter_below_rule_minimum_coverage_keeps_non_seq() {
         let index = LicenseIndex::with_legalese_count(10);
-        let mut m = create_test_match("#0", 1, 10, 0.9, 50.0, 100);
+        let mut m = create_test_match("#0", 1, 10, MatchScore::from_percentage(0.9), 50.0, 100);
         m.matcher = crate::license_detection::models::MatcherKind::Aho;
 
         let matches = vec![m];
@@ -1004,7 +1012,7 @@ mod tests {
             stopwords_by_pos: std::collections::HashMap::new(),
         });
 
-        let mut m = create_test_match("#0", 1, 10, 0.9, 50.0, 100);
+        let mut m = create_test_match("#0", 1, 10, MatchScore::from_percentage(0.9), 50.0, 100);
         m.matcher = crate::license_detection::models::MatcherKind::Seq;
 
         let matches = vec![m];
@@ -1055,7 +1063,7 @@ mod tests {
             stopwords_by_pos: std::collections::HashMap::new(),
         });
 
-        let mut m = create_test_match("#0", 1, 10, 0.9, 79.996, 100);
+        let mut m = create_test_match("#0", 1, 10, MatchScore::from_percentage(0.9), 79.996, 100);
         m.matcher = crate::license_detection::models::MatcherKind::Seq;
 
         let filtered = filter_below_rule_minimum_coverage(&index, &[m]);

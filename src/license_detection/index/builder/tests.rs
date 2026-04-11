@@ -1049,7 +1049,7 @@ SOFTWARE."#;
             );
             for m in &d.matches {
                 eprintln!(
-                    "      {} (matcher: {}, coverage: {:.1}%, score: {:.2}, tokens: {}-{})",
+                    "      {} (matcher: {}, coverage: {:.1}%, score: {}, tokens: {}-{})",
                     m.license_expression,
                     m.matcher,
                     m.match_coverage,

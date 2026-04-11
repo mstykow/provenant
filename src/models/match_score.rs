@@ -11,16 +11,20 @@ impl MatchScore {
 
     pub const GOOD_THRESHOLD: f64 = 80.0;
 
-    pub fn from_rounded_percentage(value: f32) -> Self {
-        MatchScore(((value as f64) * 100.0).round() / 100.0)
+    pub fn from_percentage(value: f64) -> Self {
+        MatchScore((value * 100.0).round() / 100.0)
+    }
+
+    pub fn max(self, other: Self) -> Self {
+        if self >= other { self } else { other }
+    }
+
+    pub fn value(self) -> f64 {
+        self.0
     }
 
     pub fn is_good(self) -> bool {
         self.0 >= Self::GOOD_THRESHOLD
-    }
-
-    pub fn to_f32_lossy(self) -> f32 {
-        self.0 as f32
     }
 }
 
@@ -41,8 +45,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_from_rounded_percentage() {
-        let score = MatchScore::from_rounded_percentage(95.5f32);
+    fn test_from_percentage() {
+        let score = MatchScore::from_percentage(95.5);
         assert!(score.is_good());
     }
 
@@ -53,14 +57,14 @@ mod tests {
 
     #[test]
     fn test_is_good() {
-        assert!(!MatchScore::from_rounded_percentage(79.9f32).is_good());
-        assert!(MatchScore::from_rounded_percentage(80.0f32).is_good());
+        assert!(!MatchScore::from_percentage(79.9).is_good());
+        assert!(MatchScore::from_percentage(80.0).is_good());
         assert!(MatchScore::MAX.is_good());
     }
 
     #[test]
     fn test_serde_roundtrip() {
-        let score = MatchScore::from_rounded_percentage(95.5f32);
+        let score = MatchScore::from_percentage(95.5);
         let json = serde_json::to_string(&score).unwrap();
         assert_eq!(json, "95.5");
         let deserialized: MatchScore = serde_json::from_str(&json).unwrap();
@@ -69,17 +73,13 @@ mod tests {
 
     #[test]
     fn test_display() {
-        assert_eq!(
-            format!("{}", MatchScore::from_rounded_percentage(95.5f32)),
-            "95.50"
-        );
+        assert_eq!(format!("{}", MatchScore::from_percentage(95.5)), "95.50");
         assert_eq!(format!("{}", MatchScore::MAX), "100.00");
     }
 
     #[test]
-    fn test_to_f32_lossy() {
-        let score = MatchScore::from_rounded_percentage(95.5f32);
-        let f32_val = score.to_f32_lossy();
-        assert!((f32_val - 95.5f32).abs() < 0.01);
+    fn test_value() {
+        let score = MatchScore::from_percentage(95.5);
+        assert!((score.value() - 95.5).abs() < 0.01);
     }
 }

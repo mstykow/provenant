@@ -8,7 +8,7 @@ use crate::license_detection::detection::{
 };
 use crate::license_detection::expression::parse_expression;
 use crate::models::{
-    FileInfo, FileType, LicenseDetection, Match, MatchScore, Package, PackageUid,
+    FileInfo, FileType, LicenseDetection, Match, Package, PackageUid,
     TopLevelLicenseDetection,
 };
 use crate::utils::spdx::combine_license_expressions;
@@ -1169,7 +1169,7 @@ fn public_match_to_internal(
             .as_deref()
             .and_then(|matcher| matcher.parse().ok())
             .unwrap_or(crate::license_detection::models::MatcherKind::Hash),
-        score: detection_match.score.to_f32_lossy(),
+        score: detection_match.score,
         matched_length: detection_match.matched_length.unwrap_or_default(),
         rule_length: detection_match.matched_length.unwrap_or_default(),
         match_coverage: detection_match.match_coverage.unwrap_or_default() as f32,
@@ -1192,7 +1192,7 @@ fn public_match_to_internal(
 fn internal_match_to_public(
     detection_match: crate::license_detection::models::LicenseMatch,
 ) -> Match {
-    let score = MatchScore::from_rounded_percentage(detection_match.score);
+    let score = detection_match.score;
     let match_coverage = ((detection_match.coverage() as f64) * 100.0).round() / 100.0;
 
     Match {

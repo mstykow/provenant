@@ -202,7 +202,7 @@ fn summary_other_license_expressions_include_license_clues() {
         start_line: LineNumber::new(2).unwrap(),
         end_line: LineNumber::new(2).unwrap(),
         matcher: Some("2-aho".to_string()),
-        score: MatchScore::from_rounded_percentage(65.0),
+        score: MatchScore::from_percentage(65.0),
         matched_length: Some(2),
         match_coverage: Some(65.0),
         rule_relevance: Some(100),

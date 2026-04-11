@@ -6,6 +6,7 @@ mod tests {
     use crate::license_detection::spdx_lid::*;
     use crate::license_detection::test_utils::{create_mock_rule_simple, create_test_index};
     use crate::models::LineNumber;
+    use crate::models::MatchScore;
 
     fn extract_cleaned_spdx_expressions(text: &str) -> Vec<String> {
         text.lines()
@@ -329,7 +330,7 @@ mod tests {
         assert_eq!(matches[0].matcher, MATCH_SPDX_ID);
         assert_eq!(matches[0].matched_length, 4);
         assert_eq!(matches[0].rule_length, 4);
-        assert_eq!(matches[0].score, 100.0);
+        assert_eq!(matches[0].score, MatchScore::MAX);
         assert_eq!(matches[0].rule_relevance, 100);
         assert!(
             matches[0]
@@ -404,7 +405,7 @@ mod tests {
         let matches = spdx_lid_match(&index, &query);
 
         assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].score, 100.0);
+        assert_eq!(matches[0].score, MatchScore::MAX);
         assert_eq!(matches[0].rule_relevance, 100);
         assert!(
             matches[0]
@@ -434,7 +435,7 @@ mod tests {
         assert_eq!(matches[0].end_line, LineNumber::ONE);
         assert_eq!(matches[0].matched_length, 3);
         assert_eq!(matches[0].rule_length, 3);
-        assert_eq!(matches[0].score, 100.0);
+        assert_eq!(matches[0].score, MatchScore::MAX);
     }
 
     #[test]
