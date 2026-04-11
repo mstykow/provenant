@@ -1,6 +1,7 @@
 use std::fs;
 use std::process::Command;
 
+use regex::Regex;
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -108,6 +109,11 @@ fn default_mode_emits_summary_to_stderr() {
     assert!(stderr.contains("Scan complete."));
     assert!(stderr.contains("Summary:"));
     assert!(!stderr.contains("Scanning done."));
+
+    let scan_timestamp_re = Regex::new(r"scan_(start|end):\s+\d{4}-\d{2}-\d{2}T\d{6}\.\d{6}")
+        .expect("timestamp regex should compile");
+    let matches = scan_timestamp_re.find_iter(&stderr).count();
+    assert_eq!(matches, 2, "summary should emit ScanCode-style timestamps");
 }
 
 #[test]
