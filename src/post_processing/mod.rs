@@ -34,7 +34,10 @@ use crate::models::{
     ExtraData, FileInfo, FileType, HEADER_NOTICE, Header, OUTPUT_FORMAT_VERSION, Output, Package,
     SystemEnvironment, TOOL_NAME, TopLevelLicenseDetection,
 };
-use crate::progress::format_default_scan_error_from_list;
+use crate::progress::{
+    format_default_scan_error_from_list, format_default_scan_warning_from_list,
+    is_warning_scan_error,
+};
 use crate::scanner;
 #[cfg(test)]
 use crate::utils::generated::generated_code_hints;
@@ -117,7 +120,7 @@ pub(crate) fn create_output(
         excluded_count: scan_result.excluded_count,
     };
 
-    let mut errors = summarize_header_errors(
+    let (mut errors, file_warnings) = summarize_header_messages(
         &scan_result.files,
         context.extra_errors,
         context.options.verbose,
@@ -125,6 +128,7 @@ pub(crate) fn create_output(
     let mut seen_errors = HashSet::new();
     errors.retain(|error| seen_errors.insert(error.clone()));
     let mut warnings = context.extra_warnings;
+    warnings.extend(file_warnings);
     let mut seen_warnings = HashSet::new();
     warnings.retain(|warning| seen_warnings.insert(warning.clone()));
 
@@ -229,31 +233,52 @@ pub(crate) fn create_output(
     }
 }
 
-fn summarize_header_errors(
+fn summarize_header_messages(
     files: &[FileInfo],
     extra_errors: Vec<String>,
     verbose: bool,
-) -> Vec<String> {
+) -> (Vec<String>, Vec<String>) {
     let mut errors = extra_errors;
+    let mut warnings = Vec::new();
 
-    errors.extend(
-        files
-            .iter()
-            .filter_map(|file| summarize_file_header_error(file, verbose)),
-    );
+    for file in files {
+        let (file_errors, file_warnings) = partition_scan_messages(&file.scan_errors);
 
-    errors
+        if let Some(summary) = summarize_file_header_message(file, &file_errors, verbose, false) {
+            errors.push(summary);
+        }
+        if let Some(summary) = summarize_file_header_message(file, &file_warnings, verbose, true) {
+            warnings.push(summary);
+        }
+    }
+
+    (errors, warnings)
 }
 
-fn summarize_file_header_error(file: &FileInfo, verbose: bool) -> Option<String> {
-    let summary = format_default_scan_error_from_list(Path::new(&file.path), &file.scan_errors)?;
+fn partition_scan_messages(scan_messages: &[String]) -> (Vec<String>, Vec<String>) {
+    scan_messages
+        .iter()
+        .cloned()
+        .partition(|message| !is_warning_scan_error(message))
+}
+
+fn summarize_file_header_message(
+    file: &FileInfo,
+    messages: &[String],
+    verbose: bool,
+    warning: bool,
+) -> Option<String> {
+    let summary = if warning {
+        format_default_scan_warning_from_list(Path::new(&file.path), messages)?
+    } else {
+        format_default_scan_error_from_list(Path::new(&file.path), messages)?
+    };
 
     if !verbose {
         return Some(summary);
     }
 
-    let details = file
-        .scan_errors
+    let details = messages
         .iter()
         .flat_map(|error| error.lines().map(|line| format!("  {line}")))
         .collect::<Vec<_>>();

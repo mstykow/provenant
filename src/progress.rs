@@ -31,6 +31,7 @@ pub struct ScanStats {
     pub final_dirs: usize,
     pub final_size: u64,
     pub error_count: usize,
+    pub warning_count: usize,
     pub total_bytes_scanned: u64,
     pub packages_assembled: usize,
     pub manifests_seen: usize,
@@ -171,24 +172,45 @@ impl ScanProgress {
         let mut stats = self.stats.lock().expect("stats lock poisoned");
         stats.total_bytes_scanned += bytes;
 
-        let has_error = !scan_errors.is_empty();
-        if has_error {
+        let errors = scan_errors
+            .iter()
+            .filter(|error| !is_warning_scan_error(error))
+            .cloned()
+            .collect::<Vec<_>>();
+        let warnings = scan_errors
+            .iter()
+            .filter(|error| is_warning_scan_error(error))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if !errors.is_empty() {
             stats.error_count += 1;
+        } else if !warnings.is_empty() {
+            stats.warning_count += 1;
         }
         drop(stats);
 
         match self.mode {
             ProgressMode::Quiet => {}
             ProgressMode::Default => {
-                if let Some(formatted) = format_default_scan_error_from_list(path, scan_errors) {
+                if let Some(formatted) = format_default_scan_error_from_list(path, &errors) {
                     self.error(&formatted);
+                } else if let Some(formatted) =
+                    format_default_scan_warning_from_list(path, &warnings)
+                {
+                    self.message(&format!("Warning: {formatted}"));
                 }
             }
             ProgressMode::Verbose => {
                 self.message(&path.to_string_lossy());
-                for err in scan_errors {
+                for err in &errors {
                     for line in err.lines() {
                         self.error(&format!("  {line}"));
+                    }
+                }
+                for warning in &warnings {
+                    for line in warning.lines() {
+                        self.message(&format!("  warning: {line}"));
                     }
                 }
             }
@@ -321,6 +343,8 @@ impl ScanProgress {
 
         if stats.error_count > 0 {
             self.error("Some files failed to scan properly:");
+        } else if stats.warning_count > 0 {
+            self.message("Some files reported recoverable scan warnings:");
         }
         for line in build_summary_messages(&stats, scan_start, scan_end) {
             self.message(&line);
@@ -460,6 +484,15 @@ pub(crate) fn format_default_scan_error_from_list(
         .map(|error| format_default_scan_error(path, error))
 }
 
+pub(crate) fn format_default_scan_warning_from_list(
+    path: &Path,
+    scan_warnings: &[String],
+) -> Option<String> {
+    scan_warnings
+        .first()
+        .map(|warning| format_default_scan_error(path, warning))
+}
+
 fn concise_scan_error_reason(err: &str) -> String {
     let first_line = err
         .lines()
@@ -486,6 +519,13 @@ fn is_timeout_scan_error(err: &str) -> bool {
     err.contains("Timeout while ")
         || err.contains("Timeout before ")
         || err.contains("Processing interrupted due to timeout")
+}
+
+pub(crate) fn is_warning_scan_error(err: &str) -> bool {
+    let first_line = err.lines().next().unwrap_or(err).trim();
+    first_line.starts_with("Maven property ")
+        || first_line.starts_with("Skipping Maven template coordinates")
+        || first_line.starts_with("Circular include detected")
 }
 
 fn is_structured_error_prefix(prefix: &str) -> bool {
@@ -565,6 +605,7 @@ fn build_summary_messages(stats: &ScanStats, scan_start: &str, scan_end: &str) -
             stats.processes
         ),
         format!("Errors count:   {}", stats.error_count),
+        format!("Warnings count: {}", stats.warning_count),
         format!(
             "Scan Speed:     {speed_files:.2} files/sec. {}/sec.",
             format_size(speed_bytes as u64)
@@ -699,6 +740,7 @@ mod tests {
             final_dirs: 1,
             final_size: 1_024,
             error_count: 0,
+            warning_count: 0,
             total_bytes_scanned: 800,
             packages_assembled: 3,
             manifests_seen: 5,

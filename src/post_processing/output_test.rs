@@ -2416,6 +2416,59 @@ fn create_output_preserves_extra_warnings_in_header() {
 }
 
 #[test]
+fn create_output_routes_warning_like_scan_errors_into_header_warnings() {
+    let start = Utc::now();
+    let end = start;
+
+    let mut manifest = file("project/pom.xml");
+    manifest.scan_errors = vec![
+        "Maven property missing key compiler.version".to_string(),
+        "Circular include detected: requirements.txt".to_string(),
+    ];
+
+    let output = create_output(
+        start,
+        end,
+        crate::scanner::ProcessResult {
+            files: vec![dir("project"), manifest],
+            excluded_count: 0,
+        },
+        CreateOutputContext {
+            total_dirs: 1,
+            assembly_result: assembly::AssemblyResult {
+                packages: vec![],
+                dependencies: vec![],
+            },
+            license_detections: vec![],
+            license_references: vec![],
+            license_rule_references: vec![],
+            spdx_license_list_version: "3.27".to_string(),
+            extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
+            options: CreateOutputOptions {
+                facet_rules: &[],
+                include_classify: false,
+                include_tallies_by_facet: false,
+                include_summary: false,
+                include_license_clarity_score: false,
+                include_tallies: false,
+                include_tallies_with_details: false,
+                include_tallies_of_key_files: false,
+                include_generated: false,
+                verbose: false,
+            },
+        },
+    );
+
+    assert!(output.headers[0].errors.is_empty());
+    assert_eq!(
+        output.headers[0].warnings,
+        vec!["Maven property missing key compiler.version: project/pom.xml".to_string()]
+    );
+}
+
+#[test]
 fn create_output_deduplicates_header_summary_errors() {
     let start = Utc::now();
     let end = start;
