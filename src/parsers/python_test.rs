@@ -136,6 +136,12 @@ mod tests {
         assert!(!PythonParser::is_match(&bare_metadata_path));
         assert!(PythonParser::is_match(&pip_inspect_path));
         assert!(PythonParser::is_match(&pypi_json_path));
+        assert!(PythonParser::is_match(&PathBuf::from(
+            "testdata/python/golden/archives/demo-1.0.0.tar.gz"
+        )));
+        assert!(!PythonParser::is_match(&PathBuf::from(
+            "testdata/summarycode-golden/summary/end-2-end/bug-1141.tar.gz"
+        )));
         assert!(!PythonParser::is_match(&invalid_path));
     }
 
@@ -1459,6 +1465,25 @@ Test package description.
     }
 
     #[test]
+    fn test_is_match_wheel_requires_metadata_for_real_file() {
+        let (_temp_dir, wheel_path) = create_temp_zip(
+            &[("docs/readme.txt", "not a wheel")],
+            "demo-1.0.0-py3-none-any.whl",
+        );
+
+        assert!(!PythonParser::is_match(&wheel_path));
+        assert!(try_parse_file(&wheel_path).is_none());
+    }
+
+    #[test]
+    fn test_is_match_rejects_placeholder_wheel_fixture() {
+        let wheel_path = PathBuf::from("testdata/about/apipkg-1.4-py2.py3-none-any.whl");
+
+        assert!(!PythonParser::is_match(&wheel_path));
+        assert!(try_parse_file(&wheel_path).is_none());
+    }
+
+    #[test]
     fn test_is_match_egg_extension() {
         let egg_path = PathBuf::from("/some/path/package-1.0.0-py3.9.egg");
         let egg_uppercase = PathBuf::from("/some/path/package-1.0.0-py3.9.EGG");
@@ -1469,9 +1494,27 @@ Test package description.
 
     #[test]
     fn test_is_match_sdist_archive_extensions() {
-        let tar_gz_path = PathBuf::from("/some/path/package-1.0.0.tar.gz");
-        let tar_bz2_path = PathBuf::from("/some/path/package-1.0.0.tar.bz2");
-        let zip_path = PathBuf::from("/some/path/package-1.0.0.zip");
+        let (_tar_gz_dir, tar_gz_path) = create_temp_tar_gz(
+            &[(
+                "package-1.0.0/PKG-INFO",
+                "Metadata-Version: 2.1\nName: package\nVersion: 1.0.0\n",
+            )],
+            "package-1.0.0.tar.gz",
+        );
+        let (_tar_bz2_dir, tar_bz2_path) = create_temp_tar_bz2(
+            &[(
+                "package-1.0.0/PKG-INFO",
+                "Metadata-Version: 2.1\nName: package\nVersion: 1.0.0\n",
+            )],
+            "package-1.0.0.tar.bz2",
+        );
+        let (_zip_dir, zip_path) = create_temp_zip(
+            &[(
+                "package-1.0.0/PKG-INFO",
+                "Metadata-Version: 2.1\nName: package\nVersion: 1.0.0\n",
+            )],
+            "package-1.0.0.zip",
+        );
         let plain_zip_path = PathBuf::from("/some/path/archive.zip");
         let plain_tar_path = PathBuf::from("/some/path/archive.tar.gz");
 

@@ -170,4 +170,18 @@ mod tests {
                     == Some("< 3.10")
         }));
     }
+
+    #[test]
+    fn test_extract_fixture_uses_python_parser_compat_path() {
+        let test_file = PathBuf::from("testdata/python/pip-inspect/pip-inspect.deplock");
+        let pkg = PipInspectDeplockParser::extract_first_package(&test_file);
+
+        assert_eq!(pkg.package_type, Some(PackageType::Pypi));
+        assert_eq!(pkg.datasource_id, Some(DatasourceId::PypiInspectDeplock));
+        assert_eq!(pkg.name.as_deref(), Some("univers"));
+        assert_eq!(pkg.version.as_deref(), Some("0.0.0"));
+        assert_eq!(pkg.primary_language.as_deref(), Some("Python"));
+        assert!(pkg.is_virtual);
+        assert_eq!(pkg.dependencies.len(), 5);
+    }
 }

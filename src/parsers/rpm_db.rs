@@ -90,9 +90,7 @@ impl PackageParser for RpmBdbDatabaseParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn is_match(path: &Path) -> bool {
-        let path_str = path.to_string_lossy();
-        (path_str.ends_with("/Packages") || path_str.contains("/var/lib/rpm/Packages"))
-            && !path_str.ends_with(".db")
+        path.file_name().and_then(|name| name.to_str()) == Some("Packages")
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
@@ -113,8 +111,7 @@ impl PackageParser for RpmNdbDatabaseParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn is_match(path: &Path) -> bool {
-        let path_str = path.to_string_lossy();
-        path_str.ends_with("/Packages.db") || path_str.contains("usr/lib/sysimage/rpm/Packages.db")
+        path.file_name().and_then(|name| name.to_str()) == Some("Packages.db")
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
@@ -137,8 +134,7 @@ impl PackageParser for RpmSqliteDatabaseParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn is_match(path: &Path) -> bool {
-        let path_str = path.to_string_lossy();
-        path_str.ends_with("/rpmdb.sqlite") || path_str.contains("rpm/rpmdb.sqlite")
+        path.file_name().and_then(|name| name.to_str()) == Some("rpmdb.sqlite")
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
@@ -614,6 +610,9 @@ mod tests {
         assert!(!RpmBdbDatabaseParser::is_match(&PathBuf::from(
             "/var/lib/rpm/Packages.db"
         )));
+        assert!(!RpmBdbDatabaseParser::is_match(&PathBuf::from(
+            "testdata/rpm/var/lib/rpm/Packages.expected.json"
+        )));
     }
 
     #[test]
@@ -626,6 +625,9 @@ mod tests {
         )));
         assert!(!RpmNdbDatabaseParser::is_match(&PathBuf::from(
             "usr/lib/rpm/Packages"
+        )));
+        assert!(!RpmNdbDatabaseParser::is_match(&PathBuf::from(
+            "testdata/rpm/usr/lib/sysimage/rpm/Packages.db.expected.json"
         )));
     }
 
@@ -640,6 +642,15 @@ mod tests {
         )));
         assert!(!RpmSqliteDatabaseParser::is_match(&PathBuf::from(
             "/var/lib/rpm/Packages"
+        )));
+        assert!(!RpmSqliteDatabaseParser::is_match(&PathBuf::from(
+            "testdata/rpm/rpmdb.sqlite.expected.json"
+        )));
+        assert!(!RpmSqliteDatabaseParser::is_match(&PathBuf::from(
+            "testdata/rpm/rpmdb.sqlite-shm"
+        )));
+        assert!(!RpmSqliteDatabaseParser::is_match(&PathBuf::from(
+            "testdata/rpm/rpmdb.sqlite-wal"
         )));
     }
 

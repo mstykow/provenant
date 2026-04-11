@@ -26,6 +26,12 @@ mod tests {
             "conda/package.json"
         )));
         assert!(!CondaMetaJsonParser::is_match(&PathBuf::from("meta.yaml")));
+        assert!(!CondaMetaJsonParser::is_match(&PathBuf::from(
+            "testdata/conda/conda-meta/tzdata-expected.json"
+        )));
+        assert!(!CondaMetaJsonParser::is_match(&PathBuf::from(
+            "testdata/conda/conda-meta/tzdata-2024b-h04d1e81_0.json-expected.json"
+        )));
     }
 
     #[test]

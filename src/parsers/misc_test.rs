@@ -576,6 +576,11 @@ fn test_try_parse_file_ignores_malformed_non_alpine_apk_fixture() {
 }
 
 #[test]
+fn test_try_parse_file_ignores_placeholder_alpine_apk_fixture() {
+    assert!(try_parse_file(&PathBuf::from("testdata/misc/test_alpine.apk")).is_none());
+}
+
+#[test]
 fn test_squashfs_recognizer() {
     let squashfs = PathBuf::from("testdata/misc/test.squashfs");
 
