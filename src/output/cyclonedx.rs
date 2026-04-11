@@ -4,6 +4,7 @@ use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
 use crate::output_schema::{Output, OutputPackage as Package};
+use crate::utils::time::{convert_header_timestamp_to_iso_utc, fallback_iso_utc_timestamp};
 
 use super::shared::{io_other, xml_escape};
 
@@ -18,8 +19,8 @@ pub(crate) fn write_cyclonedx_xml(output: &Output, writer: &mut dyn Write) -> io
     let timestamp = output
         .headers
         .first()
-        .map(|h| h.end_timestamp.as_str())
-        .unwrap_or("1970-01-01T00:00:00Z");
+        .and_then(|h| convert_header_timestamp_to_iso_utc(&h.end_timestamp))
+        .unwrap_or_else(|| fallback_iso_utc_timestamp().to_string());
 
     let mut xml = String::new();
     xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
@@ -29,7 +30,7 @@ pub(crate) fn write_cyclonedx_xml(output: &Output, writer: &mut dyn Write) -> io
     ));
     xml.push_str("  <metadata>\n");
     xml.push_str("    <timestamp>");
-    xml.push_str(&xml_escape(timestamp));
+    xml.push_str(&xml_escape(&timestamp));
     xml.push_str("</timestamp>\n");
     xml.push_str("    <tools>\n");
     xml.push_str("      <tool><vendor>Provenant</vendor><name>Provenant</name><version>");
@@ -134,8 +135,8 @@ fn build_cyclonedx_json(output: &Output) -> Value {
     let timestamp = output
         .headers
         .first()
-        .map(|h| h.end_timestamp.clone())
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+        .and_then(|h| convert_header_timestamp_to_iso_utc(&h.end_timestamp))
+        .unwrap_or_else(|| fallback_iso_utc_timestamp().to_string());
 
     let components = output
         .packages

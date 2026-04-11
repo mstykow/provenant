@@ -116,7 +116,7 @@ mod tests {
     use crate::models::{
         Author, Copyright, ExtraData, FileInfo, FileType, GitSha1, Header, Holder,
         LicenseDetection, LineNumber, Match, MatchScore, Md5Digest, OutputEmail, OutputURL,
-        PackageData, PackageUid, Sha1Digest, Sha256Digest, SystemEnvironment,
+        Package, PackageData, PackageUid, Sha1Digest, Sha256Digest, SystemEnvironment,
     };
     use crate::output_schema::OutputFileInfo;
 
@@ -415,6 +415,55 @@ mod tests {
         let rendered = String::from_utf8(bytes).expect("rdf should be utf-8");
         assert!(rendered.contains("<rdf:RDF"));
         assert!(rendered.contains("<spdx:SpdxDocument"));
+        assert!(rendered.contains("<spdx:created>2026-01-01T00:00:00Z</spdx:created>"));
+    }
+
+    #[test]
+    fn test_cyclonedx_writers_keep_iso_timestamps_when_headers_use_scancode_format() {
+        let mut internal = sample_internal_output();
+        internal.packages.push(Package::from_package_data(
+            &PackageData {
+                name: Some("demo".to_string()),
+                version: Some("1.0.0".to_string()),
+                ..PackageData::default()
+            },
+            "scan/package.json".to_string(),
+        ));
+        let output = Output::from(&internal);
+
+        let mut json_bytes = Vec::new();
+        writer_for_format(OutputFormat::CycloneDxJson)
+            .write(
+                &output,
+                &mut json_bytes,
+                &OutputWriteConfig {
+                    format: OutputFormat::CycloneDxJson,
+                    custom_template: None,
+                    scanned_path: Some("scan".to_string()),
+                },
+            )
+            .expect("cyclonedx json write should succeed");
+        let json_value: Value =
+            serde_json::from_slice(&json_bytes).expect("cyclonedx json should parse");
+        assert_eq!(
+            json_value["metadata"]["timestamp"].as_str(),
+            Some("2026-01-01T00:00:01Z")
+        );
+
+        let mut xml_bytes = Vec::new();
+        writer_for_format(OutputFormat::CycloneDxXml)
+            .write(
+                &output,
+                &mut xml_bytes,
+                &OutputWriteConfig {
+                    format: OutputFormat::CycloneDxXml,
+                    custom_template: None,
+                    scanned_path: Some("scan".to_string()),
+                },
+            )
+            .expect("cyclonedx xml write should succeed");
+        let xml = String::from_utf8(xml_bytes).expect("cyclonedx xml should be utf-8");
+        assert!(xml.contains("<timestamp>2026-01-01T00:00:01Z</timestamp>"));
     }
 
     #[test]
@@ -1194,8 +1243,8 @@ mod tests {
                 tool_version: env!("CARGO_PKG_VERSION").to_string(),
                 options: serde_json::Map::new(),
                 notice: crate::models::HEADER_NOTICE.to_string(),
-                start_timestamp: "2026-01-01T00:00:00Z".to_string(),
-                end_timestamp: "2026-01-01T00:00:01Z".to_string(),
+                start_timestamp: "2026-01-01T000000.000000".to_string(),
+                end_timestamp: "2026-01-01T000001.000000".to_string(),
                 output_format_version: "4.1.0".to_string(),
                 duration: 1.0,
                 errors: vec![],
