@@ -1621,7 +1621,7 @@ mod tests {
     #[test]
     fn test_convert_detection_to_model_preserves_rule_url() {
         let detection = make_detection(
-            "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE",
+            "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE",
         );
 
         let (converted, clues) =
@@ -1631,7 +1631,7 @@ mod tests {
         assert_eq!(
             converted.matches[0].rule_url.as_deref(),
             Some(
-                "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE"
+                "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE"
             )
         );
         assert!(clues.is_empty());
@@ -1670,7 +1670,7 @@ mod tests {
     #[test]
     fn test_convert_detection_to_model_routes_expressionless_detection_to_license_clues() {
         let mut detection = make_detection(
-            "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/license-clue_1.RULE",
+            "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/license-clue_1.RULE",
         );
         detection.license_expression = None;
         detection.license_expression_spdx = None;
@@ -1779,7 +1779,7 @@ mod tests {
         );
         let query = Query::from_extracted_text(text, &index, false).expect("query should build");
         let mut detection = make_detection(
-            "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/fsf-ap.LICENSE",
+            "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/fsf-ap.LICENSE",
         );
         detection.detection_log = vec!["imperfect-match-coverage".to_string()];
         detection.matches[0].license_expression = "fsf-ap".to_string();
