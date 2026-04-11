@@ -342,6 +342,7 @@ fn build_pattern_list() -> Vec<(String, PosTag)> {
 
     // weird year
     add(r"today.year", PosTag::Yr);
+    add(r"(?i)^current_year$", PosTag::Yr);
     add(r"^\$?LastChangedDate\$?$", PosTag::Yr);
 
     // Copyright templates in W3C documents

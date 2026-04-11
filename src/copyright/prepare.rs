@@ -484,7 +484,10 @@ pub fn prepare_text_line(line: &str) -> String {
         for cap in TAG_VALUE_ATTR_DQ_RE.captures_iter(&s) {
             let v = cap.get(1).map(|m| m.as_str()).unwrap_or("");
             let lower = v.to_ascii_lowercase();
-            if lower.contains("copyright") || lower.contains("(c)") || lower.contains("today.year")
+            if lower.contains("copyright")
+                || lower.contains("(c)")
+                || lower.contains("today.year")
+                || lower.contains("current_year")
             {
                 extracted.push(v.to_string());
             }
@@ -492,7 +495,10 @@ pub fn prepare_text_line(line: &str) -> String {
         for cap in TAG_VALUE_ATTR_SQ_RE.captures_iter(&s) {
             let v = cap.get(1).map(|m| m.as_str()).unwrap_or("");
             let lower = v.to_ascii_lowercase();
-            if lower.contains("copyright") || lower.contains("(c)") || lower.contains("today.year")
+            if lower.contains("copyright")
+                || lower.contains("(c)")
+                || lower.contains("today.year")
+                || lower.contains("current_year")
             {
                 extracted.push(v.to_string());
             }
