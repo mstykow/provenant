@@ -68,6 +68,8 @@ use super::pep508::parse_pep508_requirement;
 const FIELD_PROJECT: &str = "project";
 const FIELD_NAME: &str = "name";
 const FIELD_VERSION: &str = "version";
+const FIELD_DESCRIPTION: &str = "description";
+const FIELD_KEYWORDS: &str = "keywords";
 const FIELD_LICENSE: &str = "license";
 const FIELD_AUTHORS: &str = "authors";
 const FIELD_MAINTAINERS: &str = "maintainers";
@@ -76,6 +78,14 @@ const FIELD_HOMEPAGE: &str = "homepage";
 const FIELD_REPOSITORY: &str = "repository";
 const FIELD_DEPENDENCIES: &str = "dependencies";
 const FIELD_OPTIONAL_DEPENDENCIES: &str = "optional-dependencies";
+
+type ProjectUrls = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
 const FIELD_DEPENDENCY_GROUPS: &str = "dependency-groups";
 const FIELD_DEV_DEPENDENCIES: &str = "dev-dependencies";
 const MAX_SETUP_PY_BYTES: usize = 1_048_576;
@@ -2219,16 +2229,38 @@ fn extract_from_pyproject_toml(path: &Path) -> PackageData {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    let (classifier_keywords, license_classifiers) = split_classifiers(&classifiers);
 
     let extracted_license_statement = extract_raw_license_string(&project_table);
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         normalize_spdx_declared_license(extract_license_expression_candidate(&project_table));
 
+    let description = project_table
+        .get(FIELD_DESCRIPTION)
+        .and_then(|value| value.as_str())
+        .map(|value| value.to_string());
+    let mut keywords = project_table
+        .get(FIELD_KEYWORDS)
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str().map(ToOwned::to_owned))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    for classifier in classifier_keywords {
+        if !keywords.contains(&classifier) {
+            keywords.push(classifier);
+        }
+    }
+
     // URLs can be in different formats depending on the tool (poetry, flit, etc.)
-    let (homepage_url, repository_url) = extract_urls(&project_table);
+    let mut extra_data = extract_pyproject_extra_data(&toml_content).unwrap_or_default();
+    let (homepage_url, download_url, bug_tracking_url, code_view_url, repository_url) =
+        extract_urls(&project_table, &mut extra_data);
 
     let (dependencies, optional_dependencies) = extract_dependencies(&project_table, &toml_content);
-    let extra_data = extract_pyproject_extra_data(&toml_content);
 
     // Create package URL
     let purl = name.as_ref().and_then(|n| {
@@ -2288,19 +2320,21 @@ fn extract_from_pyproject_toml(path: &Path) -> PackageData {
         qualifiers: None,
         subpath: None,
         primary_language: None,
-        description: None,
+        description,
         release_date: None,
         parties: extract_parties(&project_table),
-        keywords: Vec::new(),
+        keywords,
         homepage_url: homepage_url.or(pypi_homepage_url),
-        download_url: repository_url.clone().or(pypi_download_url),
+        download_url: download_url
+            .or_else(|| repository_url.clone())
+            .or(pypi_download_url),
         size: None,
         sha1: None,
         md5: None,
         sha256: None,
         sha512: None,
-        bug_tracking_url: None,
-        code_view_url: None,
+        bug_tracking_url,
+        code_view_url,
         vcs_url: repository_url,
         copyright: None,
         holder: None,
@@ -2310,13 +2344,18 @@ fn extract_from_pyproject_toml(path: &Path) -> PackageData {
         other_license_expression: None,
         other_license_expression_spdx: None,
         other_license_detections: Vec::new(),
-        extracted_license_statement,
+        extracted_license_statement: extracted_license_statement
+            .or_else(|| build_extracted_license_statement(None, &license_classifiers)),
         notice_text: None,
         source_packages: Vec::new(),
         file_references: Vec::new(),
         is_private: has_private_classifier(&classifiers),
         is_virtual: false,
-        extra_data,
+        extra_data: if extra_data.is_empty() {
+            None
+        } else {
+            Some(extra_data)
+        },
         dependencies: [dependencies, optional_dependencies].concat(),
         repository_homepage_url: None,
         repository_download_url: None,
@@ -2370,20 +2409,53 @@ fn extract_license_expression_candidate(project: &TomlMap<String, TomlValue>) ->
     }
 }
 
-fn extract_urls(project: &TomlMap<String, TomlValue>) -> (Option<String>, Option<String>) {
+fn extract_urls(
+    project: &TomlMap<String, TomlValue>,
+    extra_data: &mut HashMap<String, serde_json::Value>,
+) -> ProjectUrls {
     let mut homepage_url = None;
+    let mut download_url = None;
+    let mut bug_tracking_url = None;
+    let mut code_view_url = None;
     let mut repository_url = None;
 
     // Check for URLs table
     if let Some(urls) = project.get(FIELD_URLS).and_then(|v| v.as_table()) {
-        homepage_url = urls
-            .get(FIELD_HOMEPAGE)
+        let parsed_urls: Vec<(String, String)> = urls
+            .iter()
+            .filter_map(|(label, value)| {
+                value
+                    .as_str()
+                    .map(|url| (label.to_string(), url.to_string()))
+            })
+            .collect();
+        apply_project_url_mappings(
+            &parsed_urls,
+            &mut homepage_url,
+            &mut bug_tracking_url,
+            &mut code_view_url,
+            &mut repository_url,
+            extra_data,
+        );
+
+        download_url = urls
+            .get("Downloads")
+            .or_else(|| urls.get("downloads"))
             .and_then(|v| v.as_str())
             .map(String::from);
-        repository_url = urls
-            .get(FIELD_REPOSITORY)
-            .and_then(|v| v.as_str())
-            .map(String::from);
+
+        if homepage_url.is_none() {
+            homepage_url = urls
+                .get(FIELD_HOMEPAGE)
+                .and_then(|v| v.as_str())
+                .map(String::from);
+        }
+        if repository_url.is_none() {
+            repository_url = urls
+                .get(FIELD_REPOSITORY)
+                .and_then(|v| v.as_str())
+                .map(String::from);
+        }
     }
 
     // If not found in URLs table, check for top-level keys
@@ -2401,7 +2473,13 @@ fn extract_urls(project: &TomlMap<String, TomlValue>) -> (Option<String>, Option
             .map(String::from);
     }
 
-    (homepage_url, repository_url)
+    (
+        homepage_url,
+        download_url,
+        bug_tracking_url,
+        code_view_url,
+        repository_url,
+    )
 }
 
 fn extract_parties(project: &TomlMap<String, TomlValue>) -> Vec<Party> {
@@ -2421,6 +2499,27 @@ fn extract_parties(project: &TomlMap<String, TomlValue>) -> Vec<Party> {
                     organization_url: None,
                     timezone: None,
                 });
+            } else if let Some(author_table) = author.as_table() {
+                let name = author_table
+                    .get("name")
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.to_string());
+                let email = author_table
+                    .get("email")
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.to_string());
+                if name.is_some() || email.is_some() {
+                    parties.push(Party {
+                        r#type: None,
+                        role: Some("author".to_string()),
+                        name,
+                        email,
+                        url: None,
+                        organization: None,
+                        organization_url: None,
+                        timezone: None,
+                    });
+                }
             }
         }
     }
@@ -2439,6 +2538,27 @@ fn extract_parties(project: &TomlMap<String, TomlValue>) -> Vec<Party> {
                     organization_url: None,
                     timezone: None,
                 });
+            } else if let Some(maintainer_table) = maintainer.as_table() {
+                let name = maintainer_table
+                    .get("name")
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.to_string());
+                let email = maintainer_table
+                    .get("email")
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.to_string());
+                if name.is_some() || email.is_some() {
+                    parties.push(Party {
+                        r#type: None,
+                        role: Some("maintainer".to_string()),
+                        name,
+                        email,
+                        url: None,
+                        organization: None,
+                        organization_url: None,
+                        timezone: None,
+                    });
+                }
             }
         }
     }

@@ -1762,6 +1762,22 @@ mod tests {
             ),
         ];
 
+        files[0].package_data[0].description = Some("Demo package".to_string());
+        files[0].package_data[0].keywords = vec!["workflow".to_string(), "dag".to_string()];
+        files[0].package_data[0].homepage_url = Some("https://example.com/home".to_string());
+        files[0].package_data[0].bug_tracking_url = Some("https://example.com/issues".to_string());
+        files[0].package_data[0].code_view_url = Some("https://example.com/source".to_string());
+        files[0].package_data[0].parties = vec![crate::models::Party {
+            r#type: None,
+            role: Some("author".to_string()),
+            name: Some("Example Author".to_string()),
+            email: Some("author@example.com".to_string()),
+            url: None,
+            organization: None,
+            organization_url: None,
+            timezone: None,
+        }];
+
         let result = assemble(&mut files);
 
         assert_eq!(
@@ -1771,6 +1787,25 @@ mod tests {
         );
         let package = &result.packages[0];
         assert_eq!(package.name, Some("uv-demo".to_string()));
+        assert_eq!(package.description.as_deref(), Some("Demo package"));
+        assert_eq!(
+            package.keywords,
+            vec!["workflow".to_string(), "dag".to_string()]
+        );
+        assert_eq!(
+            package.homepage_url.as_deref(),
+            Some("https://example.com/home")
+        );
+        assert_eq!(
+            package.bug_tracking_url.as_deref(),
+            Some("https://example.com/issues")
+        );
+        assert_eq!(
+            package.code_view_url.as_deref(),
+            Some("https://example.com/source")
+        );
+        assert_eq!(package.parties.len(), 1);
+        assert_eq!(package.parties[0].name.as_deref(), Some("Example Author"));
         assert!(
             package
                 .datafile_paths
