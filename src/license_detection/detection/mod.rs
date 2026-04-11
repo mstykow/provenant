@@ -585,6 +585,7 @@ mod tests {
     use crate::license_detection::models::{License, LicenseMatch, MatchCoordinates, PositionSpan};
     use crate::license_detection::spdx_mapping::build_spdx_mapping;
     use crate::models::LineNumber;
+    use crate::models::MatchScore;
 
     fn create_test_match(
         start_line: usize,
@@ -604,7 +605,7 @@ mod tests {
             start_token: start_line,
             end_token: end_line + 1,
             matcher: matcher.parse().expect("invalid test matcher"),
-            score: 95.0,
+            score: MatchScore::from_percentage(95.0),
             matched_length: 100,
             match_coverage: 95.0,
             rule_relevance: 100,
@@ -628,7 +629,7 @@ mod tests {
     fn create_perfect_match(start_line: usize, end_line: usize) -> LicenseMatch {
         let mut m = create_test_match(start_line, end_line, "1-hash", "mit.LICENSE");
         m.match_coverage = 100.0;
-        m.score = 100.0;
+        m.score = MatchScore::MAX;
         m
     }
 
@@ -731,7 +732,7 @@ mod tests {
         referenced_notice.license_expression_spdx = Some("GPL-1.0-or-later OR MIT".to_string());
         referenced_notice.referenced_filenames = Some(vec!["LICENSE".to_string()]);
         referenced_notice.match_coverage = 41.79;
-        referenced_notice.score = 41.79;
+        referenced_notice.score = MatchScore::from_percentage(41.79);
 
         let mut referenced_license =
             create_test_match(1, 582, "1-hash", "npsl-exception-0.95.LICENSE");
@@ -740,7 +741,7 @@ mod tests {
             Some("LicenseRef-scancode-npsl-exception-0.95".to_string());
         referenced_license.from_file = Some("LICENSE".to_string());
         referenced_license.match_coverage = 100.0;
-        referenced_license.score = 100.0;
+        referenced_license.score = MatchScore::MAX;
 
         let selected = select_matches_for_expression(
             &[referenced_notice, referenced_license.clone()],
@@ -844,7 +845,7 @@ mod tests {
     fn test_populate_detection_from_group_false_positive() {
         let mut m = create_test_match(2000, 2005, "2-aho", "gpl_bare.LICENSE");
         m.rule_relevance = 50;
-        m.score = 30.0;
+        m.score = MatchScore::from_percentage(30.0);
         m.match_coverage = 30.0;
         m.rule_length = 3;
         let group = DetectionGroup::new(vec![m]);
@@ -896,7 +897,7 @@ mod tests {
     fn test_populate_detection_from_group_low_quality_matches_have_no_expression() {
         let mut m = create_test_match(1, 3, "2-aho", "mit.LICENSE");
         m.match_coverage = 50.0;
-        m.score = 50.0;
+        m.score = MatchScore::from_percentage(50.0);
         let group = DetectionGroup::new(vec![m]);
         let mut detection = LicenseDetection {
             license_expression: None,
@@ -985,7 +986,7 @@ mod tests {
 
         let mut m = create_test_match(1, 10, "2-aho", "gpl_bare.LICENSE");
         m.rule_relevance = 50;
-        m.score = 30.0;
+        m.score = MatchScore::from_percentage(30.0);
         m.match_coverage = 30.0;
         let mut d2 = LicenseDetection {
             license_expression: Some("gpl".to_string()),
@@ -1005,7 +1006,7 @@ mod tests {
     fn test_filter_detections_by_score_all_filtered() {
         let mut m = create_test_match(1, 10, "2-aho", "gpl_bare.LICENSE");
         m.rule_relevance = 50;
-        m.score = 30.0;
+        m.score = MatchScore::from_percentage(30.0);
         m.match_coverage = 30.0;
         let mut detection = LicenseDetection {
             license_expression: Some("gpl".to_string()),
@@ -1095,7 +1096,7 @@ mod tests {
             license_expression_spdx: Some("Apache-2.0".to_string()),
             matches: vec![{
                 let mut m = create_test_match(20, 30, "1-hash", "apache.LICENSE");
-                m.score = 80.0;
+                m.score = MatchScore::from_percentage(80.0);
                 m
             }],
             detection_log: vec![],
@@ -1111,7 +1112,7 @@ mod tests {
     #[test]
     fn test_rank_detections_by_coverage_when_scores_equal() {
         let mut m1 = create_test_match(1, 10, "1-hash", "mit.LICENSE");
-        m1.score = 90.0;
+        m1.score = MatchScore::from_percentage(90.0);
         m1.match_coverage = 100.0;
         let mut d1 = LicenseDetection {
             license_expression: Some("mit".to_string()),
@@ -1122,7 +1123,7 @@ mod tests {
             file_regions: Vec::new(),
         };
         let mut m2 = create_test_match(20, 30, "1-hash", "apache.LICENSE");
-        m2.score = 90.0;
+        m2.score = MatchScore::from_percentage(90.0);
         m2.match_coverage = 80.0;
         let mut d2 = LicenseDetection {
             license_expression: Some("apache-2.0".to_string()),
@@ -1274,7 +1275,7 @@ mod tests {
     fn test_post_process_detections_all_filtered() {
         let mut m = create_test_match(1, 10, "2-aho", "gpl_bare.LICENSE");
         m.rule_relevance = 50;
-        m.score = 30.0;
+        m.score = MatchScore::from_percentage(30.0);
         m.match_coverage = 30.0;
         let mut d = LicenseDetection {
             license_expression: Some("gpl".to_string()),
@@ -1305,7 +1306,7 @@ mod tests {
         low_quality_match.license_expression = "bsd-new".to_string();
         low_quality_match.license_expression_spdx = Some("BSD-3-Clause".to_string());
         low_quality_match.match_coverage = 32.96;
-        low_quality_match.score = 32.96;
+        low_quality_match.score = MatchScore::from_percentage(32.96);
 
         let proper = LicenseDetection {
             license_expression: Some("bsd-new".to_string()),
@@ -1523,7 +1524,7 @@ mod tests {
         m.license_expression = "zlib".to_string();
         m.license_expression_spdx = Some("Zlib".to_string());
         m.match_coverage = 100.0;
-        m.score = 100.0;
+        m.score = MatchScore::MAX;
         m.rule_relevance = 100;
         m.referenced_filenames = Some(vec!["zlib.h".to_string()]);
 

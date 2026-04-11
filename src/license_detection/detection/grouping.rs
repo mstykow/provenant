@@ -133,6 +133,7 @@ mod tests {
     use super::*;
     use crate::license_detection::models::{LicenseMatch, MatchCoordinates, PositionSpan};
     use crate::models::LineNumber;
+    use crate::models::MatchScore;
 
     fn create_test_match(
         start_line: usize,
@@ -152,7 +153,7 @@ mod tests {
             start_token: start_line,
             end_token: end_line + 1,
             matcher: matcher.parse().expect("invalid test matcher"),
-            score: 95.0,
+            score: MatchScore::from_percentage(95.0),
             matched_length: 100,
             match_coverage: 95.0,
             rule_relevance: 100,
@@ -191,7 +192,7 @@ mod tests {
             start_token,
             end_token,
             matcher: crate::license_detection::models::MatcherKind::Hash,
-            score: 95.0,
+            score: MatchScore::from_percentage(95.0),
             matched_length: 100,
             match_coverage: 95.0,
             rule_relevance: 100,

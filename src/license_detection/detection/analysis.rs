@@ -54,8 +54,8 @@ pub(super) fn has_unknown_matches(matches: &[LicenseMatch]) -> bool {
 /// and has_extra_words() at detection.py:1139
 pub(super) fn has_extra_words(matches: &[LicenseMatch]) -> bool {
     matches.iter().any(|m| {
-        let score_coverage_relevance = m.coverage() * m.rule_relevance as f32 / 100.0;
-        score_coverage_relevance - m.score > 0.01
+        let score_coverage_relevance = m.coverage() as f64 * m.rule_relevance as f64 / 100.0;
+        score_coverage_relevance - m.score.value() > 0.01
     })
 }
 
@@ -383,17 +383,17 @@ pub fn compute_detection_score(matches: &[LicenseMatch]) -> f32 {
         return 0.0;
     }
 
-    let total_length: f32 = matches.iter().map(|m| m.matched_length as f32).sum();
+    let total_length: f64 = matches.iter().map(|m| m.matched_length as f64).sum();
     if total_length == 0.0 {
         return 0.0;
     }
 
-    let weighted_score: f32 = matches
+    let weighted_score: f64 = matches
         .iter()
-        .map(|m| m.score * (m.matched_length as f32 / total_length))
+        .map(|m| m.score.value() * (m.matched_length as f64 / total_length))
         .sum();
 
-    ((weighted_score * 100.0).round() / 100.0).min(100.0)
+    ((weighted_score * 100.0).round() / 100.0).min(100.0) as f32
 }
 
 /// Determine license expression from matches.
@@ -613,6 +613,7 @@ mod tests {
         LicenseMatch, MatchCoordinates, MatcherKind, PositionSpan,
     };
     use crate::models::LineNumber;
+    use crate::models::MatchScore;
 
     fn create_test_match(coverage: f32, rule_identifier: &str) -> LicenseMatch {
         LicenseMatch {
@@ -625,7 +626,7 @@ mod tests {
             start_token: 1,
             end_token: 11,
             matcher: crate::license_detection::models::MatcherKind::Hash,
-            score: 95.0,
+            score: MatchScore::from_percentage(95.0),
             matched_length: 100,
             match_coverage: coverage,
             rule_relevance: 100,
@@ -649,7 +650,7 @@ mod tests {
         matcher: &str,
         start_line: usize,
         end_line: usize,
-        score: f32,
+        score: MatchScore,
         matched_length: usize,
         rule_length: usize,
         match_coverage: f32,
@@ -708,7 +709,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            60.0,
+            MatchScore::from_percentage(60.0),
             100,
             100,
             60.0,
@@ -725,7 +726,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            80.0,
+            MatchScore::from_percentage(80.0),
             100,
             100,
             79.996,
@@ -742,7 +743,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             99.99,
@@ -789,7 +790,7 @@ mod tests {
     #[test]
     fn test_has_extra_words_true() {
         let mut m = create_test_match(95.0, "mit.LICENSE");
-        m.score = 50.0;
+        m.score = MatchScore::from_percentage(50.0);
         let matches = vec![m];
         assert!(has_extra_words(&matches));
     }
@@ -807,7 +808,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            95.0,
+            MatchScore::from_percentage(95.0),
             100,
             100,
             100.0,
@@ -824,7 +825,7 @@ mod tests {
             "2-aho",
             2000,
             2005,
-            30.0,
+            MatchScore::from_percentage(30.0),
             3,
             3,
             30.0,
@@ -841,7 +842,7 @@ mod tests {
             "2-aho",
             1,
             10,
-            50.0,
+            MatchScore::from_percentage(50.0),
             2,
             1,
             50.0,
@@ -858,7 +859,7 @@ mod tests {
             "2-aho",
             6,
             8,
-            50.0,
+            MatchScore::from_percentage(50.0),
             1,
             1,
             100.0,
@@ -875,7 +876,7 @@ mod tests {
             "2-aho",
             1500,
             1505,
-            30.0,
+            MatchScore::from_percentage(30.0),
             3,
             1,
             30.0,
@@ -892,7 +893,7 @@ mod tests {
             "2-aho",
             1,
             10,
-            100.0,
+            MatchScore::MAX,
             1,
             1,
             100.0,
@@ -911,7 +912,7 @@ mod tests {
             "2-aho",
             1,
             10,
-            100.0,
+            MatchScore::MAX,
             10,
             10,
             100.0,
@@ -930,7 +931,7 @@ mod tests {
             "2-aho",
             1,
             10,
-            100.0,
+            MatchScore::MAX,
             1,
             1,
             100.0,
@@ -949,7 +950,7 @@ mod tests {
             "2-aho",
             1,
             10,
-            50.0,
+            MatchScore::from_percentage(50.0),
             100,
             1,
             50.0,
@@ -964,7 +965,16 @@ mod tests {
     #[test]
     fn test_is_false_positive_with_c_symbol() {
         let mut m = create_test_match_full(
-            "mit", "2-aho", 1500, 1510, 30.0, 10, 2, 30.0, 50, "mit.RULE",
+            "mit",
+            "2-aho",
+            1500,
+            1510,
+            MatchScore::from_percentage(30.0),
+            10,
+            2,
+            30.0,
+            50,
+            "mit.RULE",
         );
         m.matched_text = Some("Licensed under MIT (c) 2024".to_string());
         let matches = vec![m];
@@ -978,7 +988,7 @@ mod tests {
             "2-aho",
             1,
             10,
-            50.0,
+            MatchScore::from_percentage(50.0),
             5,
             1,
             50.0,
@@ -997,7 +1007,7 @@ mod tests {
             "2-aho",
             1,
             5,
-            50.0,
+            MatchScore::from_percentage(50.0),
             10,
             1,
             50.0,
@@ -1010,7 +1020,7 @@ mod tests {
             "2-aho",
             6,
             10,
-            50.0,
+            MatchScore::from_percentage(50.0),
             10,
             1,
             50.0,
@@ -1029,7 +1039,7 @@ mod tests {
             "2-aho",
             1,
             5,
-            50.0,
+            MatchScore::from_percentage(50.0),
             10,
             1,
             50.0,
@@ -1042,7 +1052,7 @@ mod tests {
             "2-aho",
             6,
             10,
-            50.0,
+            MatchScore::from_percentage(50.0),
             10,
             1,
             50.0,
@@ -1061,7 +1071,7 @@ mod tests {
             "2-aho",
             1,
             10,
-            50.0,
+            MatchScore::from_percentage(50.0),
             5,
             1,
             50.0,
@@ -1075,8 +1085,18 @@ mod tests {
 
     #[test]
     fn test_is_false_positive_copyright_case_insensitive() {
-        let mut m =
-            create_test_match_full("mit", "2-aho", 1, 10, 50.0, 10, 1, 50.0, 50, "mit.RULE");
+        let mut m = create_test_match_full(
+            "mit",
+            "2-aho",
+            1,
+            10,
+            MatchScore::from_percentage(50.0),
+            10,
+            1,
+            50.0,
+            50,
+            "mit.RULE",
+        );
         m.matched_text = Some("COPYRIGHT HOLDER NAME".to_string());
         let matches = vec![m];
         assert!(!is_false_positive(&matches));
@@ -1089,7 +1109,7 @@ mod tests {
             "2-aho",
             1,
             10,
-            50.0,
+            MatchScore::from_percentage(50.0),
             5,
             1,
             50.0,
@@ -1108,7 +1128,7 @@ mod tests {
             "2-aho",
             1,
             10,
-            40.0,
+            MatchScore::from_percentage(40.0),
             20,
             20,
             40.0,
@@ -1125,7 +1145,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            95.0,
+            MatchScore::from_percentage(95.0),
             100,
             100,
             100.0,
@@ -1155,7 +1175,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            90.0,
+            MatchScore::from_percentage(90.0),
             100,
             100,
             90.0,
@@ -1167,7 +1187,7 @@ mod tests {
             "1-hash",
             11,
             20,
-            90.0,
+            MatchScore::from_percentage(90.0),
             100,
             100,
             90.0,
@@ -1186,7 +1206,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            80.0,
+            MatchScore::from_percentage(80.0),
             100,
             100,
             80.0,
@@ -1198,7 +1218,7 @@ mod tests {
             "1-hash",
             11,
             20,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,
@@ -1224,7 +1244,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,
@@ -1243,7 +1263,7 @@ mod tests {
             "1-hash",
             1,
             100,
-            50.0,
+            MatchScore::from_percentage(50.0),
             100,
             100,
             100.0,
@@ -1255,7 +1275,7 @@ mod tests {
             "1-hash",
             101,
             200,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,
@@ -1274,7 +1294,7 @@ mod tests {
             "1-hash",
             1,
             100,
-            80.0,
+            MatchScore::from_percentage(80.0),
             100,
             100,
             20.0,
@@ -1286,7 +1306,7 @@ mod tests {
             "1-hash",
             101,
             110,
-            100.0,
+            MatchScore::MAX,
             10,
             100,
             100.0,
@@ -1313,7 +1333,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,
@@ -1325,7 +1345,7 @@ mod tests {
             "1-hash",
             11,
             20,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,
@@ -1361,7 +1381,7 @@ mod tests {
                     "1-hash",
                     index + 1,
                     index + 1,
-                    100.0,
+                    MatchScore::MAX,
                     100,
                     100,
                     100.0,
@@ -1390,7 +1410,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,
@@ -1402,7 +1422,7 @@ mod tests {
             "1-hash",
             11,
             20,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,
@@ -1430,7 +1450,7 @@ mod tests {
             "3-seq",
             3,
             7,
-            93.75,
+            MatchScore::from_percentage(93.75),
             15,
             16,
             93.75,
@@ -1444,7 +1464,7 @@ mod tests {
             "3-seq",
             10,
             12,
-            51.43,
+            MatchScore::from_percentage(51.43),
             18,
             35,
             51.43,
@@ -1467,7 +1487,7 @@ mod tests {
             "3-seq",
             3,
             7,
-            93.75,
+            MatchScore::from_percentage(93.75),
             15,
             16,
             93.75,
@@ -1482,7 +1502,7 @@ mod tests {
             "3-seq",
             10,
             12,
-            51.43,
+            MatchScore::from_percentage(51.43),
             18,
             35,
             51.43,
@@ -1497,7 +1517,7 @@ mod tests {
             "3-seq",
             14,
             16,
-            57.45,
+            MatchScore::from_percentage(57.45),
             27,
             47,
             57.45,
@@ -1525,7 +1545,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            95.0,
+            MatchScore::from_percentage(95.0),
             100,
             100,
             100.0,
@@ -1550,7 +1570,7 @@ mod tests {
             "2-aho",
             1,
             10,
-            30.0,
+            MatchScore::from_percentage(30.0),
             100,
             100,
             30.0,
@@ -1575,7 +1595,7 @@ mod tests {
             "2-aho",
             2000,
             2005,
-            30.0,
+            MatchScore::from_percentage(30.0),
             3,
             3,
             30.0,
@@ -1613,7 +1633,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            45.0,
+            MatchScore::from_percentage(45.0),
             100,
             100,
             45.0,
@@ -1639,7 +1659,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,
@@ -1672,7 +1692,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,
@@ -1684,7 +1704,7 @@ mod tests {
             "1-hash",
             11,
             20,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,
@@ -1704,7 +1724,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,
@@ -1718,7 +1738,7 @@ mod tests {
             "1-hash",
             11,
             20,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,
@@ -1787,7 +1807,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,
@@ -1805,7 +1825,7 @@ mod tests {
             "2-aho",
             2000,
             2005,
-            30.0,
+            MatchScore::from_percentage(30.0),
             3,
             3,
             30.0,
@@ -1831,7 +1851,7 @@ mod tests {
             "1-hash",
             1,
             10,
-            80.0,
+            MatchScore::from_percentage(80.0),
             100,
             100,
             80.0,
@@ -1852,7 +1872,7 @@ mod tests {
             "2-aho",
             1,
             3,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,
@@ -1866,7 +1886,7 @@ mod tests {
             "1-hash",
             4,
             20,
-            100.0,
+            MatchScore::MAX,
             100,
             100,
             100.0,

@@ -22,6 +22,7 @@ use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind};
 use crate::license_detection::query::Query;
 use crate::models::LineNumber;
+use crate::models::MatchScore;
 
 pub const MATCH_SPDX_ID: MatcherKind = MatcherKind::SpdxId;
 
@@ -347,7 +348,7 @@ pub fn spdx_lid_match(index: &LicenseIndex, query: &Query) -> Vec<LicenseMatch> 
             let rule_url = String::new();
             let rule_length = matched_length;
             let referenced_filenames = None;
-            let score = 100.0;
+            let score = MatchScore::MAX;
 
             let qspan = PositionSpan::range(*start_token, *end_token);
 

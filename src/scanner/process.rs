@@ -26,7 +26,7 @@ use crate::license_detection::models::LicenseMatch as InternalLicenseMatch;
 use crate::license_detection::query::Query;
 use crate::models::{
     Author, Copyright, DatasourceId, FileInfo, FileInfoBuilder, FileType, Holder, LicenseDetection,
-    LineNumber, Match, MatchScore, OutputEmail, OutputURL, Sha256Digest,
+    LineNumber, Match, OutputEmail, OutputURL, Sha256Digest,
 };
 use crate::parsers::utils::split_name_email;
 use crate::progress::ScanProgress;
@@ -1375,7 +1375,7 @@ fn convert_match_to_model(
         start_line: m.start_line,
         end_line: m.end_line,
         matcher: Some(m.matcher.to_string()),
-        score: MatchScore::from_rounded_percentage(m.score),
+        score: m.score,
         matched_length: Some(m.matched_length),
         match_coverage: Some(((m.coverage() as f64) * 100.0).round() / 100.0),
         rule_relevance: Some(m.rule_relevance),
@@ -1582,7 +1582,7 @@ mod tests {
             start_token: 0,
             end_token: 1,
             matcher: MatcherKind::Hash,
-            score: 1.0,
+            score: MatchScore::from_percentage(1.0),
             matched_length: 3,
             rule_length: 3,
             match_coverage: 100.0,
@@ -1652,7 +1652,7 @@ mod tests {
     #[test]
     fn test_convert_detection_to_model_rounds_match_coverage() {
         let mut detection = make_detection("");
-        detection.matches[0].score = 81.82;
+        detection.matches[0].score = MatchScore::from_percentage(81.82);
         detection.matches[0].match_coverage = 33.334;
 
         let (converted, clues) =
@@ -1661,7 +1661,7 @@ mod tests {
 
         assert_eq!(
             converted.matches[0].score,
-            MatchScore::from_rounded_percentage(81.82)
+            MatchScore::from_percentage(81.82)
         );
         assert_eq!(converted.matches[0].match_coverage, Some(33.33));
         assert!(clues.is_empty());

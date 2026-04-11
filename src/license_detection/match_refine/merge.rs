@@ -6,6 +6,7 @@
 use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind};
 use crate::license_detection::position_set::PositionSet;
 use crate::license_detection::query::Query;
+use crate::models::MatchScore;
 
 const MAX_DIST: usize = 50;
 
@@ -285,25 +286,25 @@ pub(super) fn update_match_scores(matches: &mut [LicenseMatch], query: &Query) {
     }
 }
 
-fn compute_match_score(m: &LicenseMatch, query: &Query) -> f32 {
-    let relevance = m.rule_relevance as f32 / 100.0;
+fn compute_match_score(m: &LicenseMatch, query: &Query) -> MatchScore {
+    let relevance = m.rule_relevance as f64 / 100.0;
     if relevance < 0.001 {
-        return 0.0;
+        return MatchScore::default();
     }
 
     let qmagnitude = m.qmagnitude(query);
     if qmagnitude == 0 {
-        return 0.0;
+        return MatchScore::default();
     }
 
-    let query_coverage = m.len() as f32 / qmagnitude as f32;
-    let rule_coverage = m.icoverage();
+    let query_coverage = m.len() as f64 / qmagnitude as f64;
+    let rule_coverage = m.icoverage() as f64;
 
     if query_coverage < 1.0 && rule_coverage < 1.0 {
-        return ((rule_coverage * relevance * 100.0) * 100.0).round() / 100.0;
+        return MatchScore::from_percentage(rule_coverage * relevance * 100.0);
     }
 
-    ((query_coverage * rule_coverage * relevance * 100.0) * 100.0).round() / 100.0
+    MatchScore::from_percentage(query_coverage * rule_coverage * relevance * 100.0)
 }
 
 /// Filter license reference matches when a license text match exists for the same expression
@@ -384,7 +385,7 @@ mod tests {
         rule_identifier: &str,
         start_line: usize,
         end_line: usize,
-        score: f32,
+        score: MatchScore,
         coverage: f32,
         relevance: u8,
     ) -> LicenseMatch {
@@ -440,7 +441,7 @@ mod tests {
             start_token,
             end_token,
             matcher: crate::license_detection::models::MatcherKind::Aho,
-            score: 100.0,
+            score: MatchScore::MAX,
             matched_length,
             rule_length: matched_length,
             match_coverage: 100.0,
@@ -479,7 +480,7 @@ mod tests {
             start_token,
             end_token,
             matcher: crate::license_detection::models::MatcherKind::Aho,
-            score: 100.0,
+            score: MatchScore::MAX,
             matched_length,
             rule_length: matched_length,
             match_coverage: 100.0,
@@ -528,7 +529,7 @@ mod tests {
 
     #[test]
     fn test_merge_overlapping_matches_same_rule() {
-        let mut m1 = create_test_match("#1", 1, 10, 90.0, 100.0, 100);
+        let mut m1 = create_test_match("#1", 1, 10, MatchScore::from_percentage(90.0), 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
         m1.coordinates = MatchCoordinates::rule_aligned(
@@ -536,7 +537,7 @@ mod tests {
             PositionSpan::range(0, 10),
             PositionSpan::empty(),
         );
-        let mut m2 = create_test_match("#1", 5, 15, 85.0, 100.0, 100);
+        let mut m2 = create_test_match("#1", 5, 15, MatchScore::from_percentage(85.0), 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 4;
         m2.coordinates = MatchCoordinates::rule_aligned(
@@ -553,12 +554,12 @@ mod tests {
         assert_eq!(merged[0].rule_identifier, "#1");
         assert_eq!(merged[0].start_line, LineNumber::ONE);
         assert_eq!(merged[0].end_line, LineNumber::new(15).unwrap());
-        assert_eq!(merged[0].score, 90.0);
+        assert_eq!(merged[0].score, MatchScore::from_percentage(90.0));
     }
 
     #[test]
     fn test_merge_adjacent_matches_same_rule() {
-        let mut m1 = create_test_match("#1", 1, 10, 90.0, 100.0, 100);
+        let mut m1 = create_test_match("#1", 1, 10, MatchScore::from_percentage(90.0), 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
         m1.coordinates = MatchCoordinates::rule_aligned(
@@ -566,7 +567,7 @@ mod tests {
             PositionSpan::range(0, 10),
             PositionSpan::empty(),
         );
-        let mut m2 = create_test_match("#1", 10, 20, 85.0, 100.0, 100);
+        let mut m2 = create_test_match("#1", 10, 20, MatchScore::from_percentage(85.0), 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 9;
         m2.coordinates = MatchCoordinates::rule_aligned(
@@ -583,7 +584,7 @@ mod tests {
         assert_eq!(merged[0].rule_identifier, "#1");
         assert_eq!(merged[0].start_line, LineNumber::ONE);
         assert_eq!(merged[0].end_line, LineNumber::new(20).unwrap());
-        assert_eq!(merged[0].score, 90.0);
+        assert_eq!(merged[0].score, MatchScore::from_percentage(90.0));
     }
 
     #[test]
@@ -621,8 +622,8 @@ mod tests {
     #[test]
     fn test_merge_no_overlap_different_rules() {
         let matches = vec![
-            create_test_match("#1", 1, 10, 90.0, 90.0, 100),
-            create_test_match("#2", 5, 15, 85.0, 85.0, 100),
+            create_test_match("#1", 1, 10, MatchScore::from_percentage(90.0), 90.0, 100),
+            create_test_match("#2", 5, 15, MatchScore::from_percentage(85.0), 85.0, 100),
         ];
 
         let merged = merge_overlapping_matches(&matches);
@@ -633,8 +634,8 @@ mod tests {
     #[test]
     fn test_merge_no_overlap_same_rule() {
         let matches = vec![
-            create_test_match("#1", 1, 10, 90.0, 90.0, 100),
-            create_test_match("#1", 20, 30, 85.0, 85.0, 100),
+            create_test_match("#1", 1, 10, MatchScore::from_percentage(90.0), 90.0, 100),
+            create_test_match("#1", 20, 30, MatchScore::from_percentage(85.0), 85.0, 100),
         ];
 
         let merged = merge_overlapping_matches(&matches);
@@ -644,7 +645,7 @@ mod tests {
 
     #[test]
     fn test_merge_multiple_matches_same_rule() {
-        let mut m1 = create_test_match("#1", 1, 5, 80.0, 100.0, 100);
+        let mut m1 = create_test_match("#1", 1, 5, MatchScore::from_percentage(80.0), 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
         m1.coordinates = MatchCoordinates::rule_aligned(
@@ -652,7 +653,7 @@ mod tests {
             PositionSpan::range(0, 5),
             PositionSpan::empty(),
         );
-        let mut m2 = create_test_match("#1", 5, 10, 90.0, 100.0, 100);
+        let mut m2 = create_test_match("#1", 5, 10, MatchScore::from_percentage(90.0), 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 4;
         m2.coordinates = MatchCoordinates::rule_aligned(
@@ -660,7 +661,7 @@ mod tests {
             PositionSpan::range(4, 10),
             PositionSpan::empty(),
         );
-        let mut m3 = create_test_match("#1", 10, 15, 85.0, 100.0, 100);
+        let mut m3 = create_test_match("#1", 10, 15, MatchScore::from_percentage(85.0), 100.0, 100);
         m3.rule_length = 100;
         m3.rule_start_token = 9;
         m3.coordinates = MatchCoordinates::rule_aligned(
@@ -687,7 +688,14 @@ mod tests {
 
     #[test]
     fn test_merge_single_match() {
-        let matches = vec![create_test_match("#1", 1, 10, 90.0, 90.0, 100)];
+        let matches = vec![create_test_match(
+            "#1",
+            1,
+            10,
+            MatchScore::from_percentage(90.0),
+            90.0,
+            100,
+        )];
         let merged = merge_overlapping_matches(&matches);
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].start_line, LineNumber::ONE);
@@ -698,11 +706,18 @@ mod tests {
     fn test_update_match_scores_basic() {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
-        let mut matches = vec![create_test_match("#1", 1, 10, 50.0, 100.0, 100)];
+        let mut matches = vec![create_test_match(
+            "#1",
+            1,
+            10,
+            MatchScore::from_percentage(50.0),
+            100.0,
+            100,
+        )];
 
         update_match_scores(&mut matches, &query);
 
-        assert_eq!(matches[0].score, 100.0);
+        assert_eq!(matches[0].score, MatchScore::MAX);
     }
 
     #[test]
@@ -710,21 +725,28 @@ mod tests {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
         let mut matches = vec![
-            create_test_match("#1", 1, 10, 50.0, 100.0, 80),
-            create_test_match("#2", 15, 25, 50.0, 100.0, 100),
+            create_test_match("#1", 1, 10, MatchScore::from_percentage(50.0), 100.0, 80),
+            create_test_match("#2", 15, 25, MatchScore::from_percentage(50.0), 100.0, 100),
         ];
 
         update_match_scores(&mut matches, &query);
 
-        assert_eq!(matches[0].score, 80.0);
-        assert_eq!(matches[1].score, 100.0);
+        assert_eq!(matches[0].score, MatchScore::from_percentage(80.0));
+        assert_eq!(matches[1].score, MatchScore::MAX);
     }
 
     #[test]
     fn test_update_match_scores_idempotent() {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
-        let mut matches = vec![create_test_match("#1", 1, 10, 50.0, 50.0, 100)];
+        let mut matches = vec![create_test_match(
+            "#1",
+            1,
+            10,
+            MatchScore::from_percentage(50.0),
+            50.0,
+            100,
+        )];
 
         update_match_scores(&mut matches, &query);
         let score1 = matches[0].score;
@@ -748,17 +770,24 @@ mod tests {
     fn test_update_match_scores_keeps_two_decimal_precision() {
         let index = LicenseIndex::with_legalese_count(10);
         let query = Query::from_extracted_text("test text", &index, false).unwrap();
-        let mut matches = vec![create_test_match("#1", 1, 2, 0.0, 0.0, 100)];
+        let mut matches = vec![create_test_match(
+            "#1",
+            1,
+            2,
+            MatchScore::default(),
+            0.0,
+            100,
+        )];
         matches[0].rule_length = 3;
 
         update_match_scores(&mut matches, &query);
 
-        assert!((matches[0].score - 66.67).abs() < 0.001);
+        assert!((matches[0].score.value() - 66.67).abs() < 0.01);
     }
 
     #[test]
     fn test_merge_partially_overlapping_matches_same_rule() {
-        let mut m1 = create_test_match("#1", 1, 15, 90.0, 100.0, 100);
+        let mut m1 = create_test_match("#1", 1, 15, MatchScore::from_percentage(90.0), 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
         m1.coordinates = MatchCoordinates::rule_aligned(
@@ -766,7 +795,7 @@ mod tests {
             PositionSpan::range(0, 15),
             PositionSpan::empty(),
         );
-        let mut m2 = create_test_match("#1", 10, 25, 85.0, 100.0, 100);
+        let mut m2 = create_test_match("#1", 10, 25, MatchScore::from_percentage(85.0), 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 9;
         m2.coordinates = MatchCoordinates::rule_aligned(
@@ -786,14 +815,14 @@ mod tests {
 
     #[test]
     fn test_merge_matches_with_gap_larger_than_one() {
-        let mut m1 = create_test_match("#1", 1, 10, 90.0, 100.0, 100);
+        let mut m1 = create_test_match("#1", 1, 10, MatchScore::from_percentage(90.0), 100.0, 100);
         m1.rule_length = 10;
         m1.coordinates = MatchCoordinates::rule_aligned(
             PositionSpan::range(1, 11),
             PositionSpan::range(0, 10),
             PositionSpan::empty(),
         );
-        let mut m2 = create_test_match("#1", 20, 30, 85.0, 100.0, 100);
+        let mut m2 = create_test_match("#1", 20, 30, MatchScore::from_percentage(85.0), 100.0, 100);
         m2.rule_length = 11;
         m2.coordinates = MatchCoordinates::rule_aligned(
             PositionSpan::range(20, 31),
@@ -814,7 +843,7 @@ mod tests {
 
     #[test]
     fn test_merge_preserves_max_score() {
-        let mut m1 = create_test_match("#1", 1, 10, 70.0, 100.0, 100);
+        let mut m1 = create_test_match("#1", 1, 10, MatchScore::from_percentage(70.0), 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
         m1.coordinates = MatchCoordinates::rule_aligned(
@@ -822,7 +851,7 @@ mod tests {
             PositionSpan::range(0, 10),
             PositionSpan::empty(),
         );
-        let mut m2 = create_test_match("#1", 5, 15, 95.0, 100.0, 100);
+        let mut m2 = create_test_match("#1", 5, 15, MatchScore::from_percentage(95.0), 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 4;
         m2.coordinates = MatchCoordinates::rule_aligned(
@@ -830,7 +859,7 @@ mod tests {
             PositionSpan::range(4, 15),
             PositionSpan::empty(),
         );
-        let mut m3 = create_test_match("#1", 12, 20, 80.0, 100.0, 100);
+        let mut m3 = create_test_match("#1", 12, 20, MatchScore::from_percentage(80.0), 100.0, 100);
         m3.rule_length = 100;
         m3.rule_start_token = 11;
         m3.coordinates = MatchCoordinates::rule_aligned(
@@ -844,12 +873,12 @@ mod tests {
         let merged = merge_overlapping_matches(&matches);
 
         assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].score, 95.0);
+        assert_eq!(merged[0].score, MatchScore::from_percentage(95.0));
     }
 
     #[test]
     fn test_qspan_magnitude_contiguous() {
-        let mut m = create_test_match("#1", 1, 10, 90.0, 90.0, 100);
+        let mut m = create_test_match("#1", 1, 10, MatchScore::from_percentage(90.0), 90.0, 100);
         m.start_token = 5;
         m.end_token = 15;
         m.coordinates = MatchCoordinates::rule_aligned(
@@ -862,7 +891,7 @@ mod tests {
 
     #[test]
     fn test_qspan_magnitude_non_contiguous() {
-        let mut m = create_test_match("#1", 1, 10, 90.0, 90.0, 100);
+        let mut m = create_test_match("#1", 1, 10, MatchScore::from_percentage(90.0), 90.0, 100);
         m.coordinates = MatchCoordinates::rule_aligned(
             PositionSpan::from_positions(vec![4, 8]),
             PositionSpan::empty(),
@@ -873,7 +902,7 @@ mod tests {
 
     #[test]
     fn test_qspan_magnitude_empty() {
-        let mut m = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
+        let mut m = create_test_match("#1", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100);
         m.start_token = 5;
         m.end_token = 5;
         m.coordinates = MatchCoordinates::query_region(PositionSpan::empty());

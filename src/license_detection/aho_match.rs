@@ -14,6 +14,7 @@ use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKi
 use crate::license_detection::position_set::PositionSet;
 use crate::license_detection::query::QueryRun;
 use crate::models::LineNumber;
+use crate::models::MatchScore;
 
 pub const MATCH_AHO: MatcherKind = MatcherKind::Aho;
 
@@ -146,9 +147,9 @@ pub fn aho_match_with_extra_matchables(
             };
 
             let score = if rule_length > 0 {
-                (matched_length as f32 / rule_length as f32) * 100.0
+                MatchScore::from_percentage((matched_length as f64 / rule_length as f64) * 100.0)
             } else {
-                100.0
+                MatchScore::MAX
             };
 
             let qspan = PositionSpan::range(qstart, qend);
@@ -336,7 +337,7 @@ mod tests {
 
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].matcher, MATCH_AHO);
-        assert_eq!(matches[0].score, 100.0);
+        assert_eq!(matches[0].score, MatchScore::MAX);
         assert_eq!(matches[0].match_coverage, 100.0);
     }
 
@@ -819,7 +820,7 @@ mod tests {
 
         assert_eq!(matches.len(), 1);
         assert!(
-            (matches[0].score - 100.0).abs() < 0.001,
+            (matches[0].score.value() - 100.0).abs() < 0.001,
             "Full match should have score 100.0"
         );
         assert_eq!(matches[0].matched_length, 5);

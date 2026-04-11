@@ -8,6 +8,7 @@ use crate::license_detection::models::RuleKind;
 use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::position_set::PositionSet;
 use crate::models::LineNumber;
+use crate::models::MatchScore;
 
 /// Coordinate data for a license match.
 ///
@@ -176,7 +177,7 @@ pub struct LicenseMatch {
     pub matcher: MatcherKind,
 
     /// Match score 0.0-100.0
-    pub score: f32,
+    pub score: MatchScore,
 
     /// Length of matched text in characters
     pub matched_length: usize,
@@ -245,7 +246,7 @@ struct SerializableLicenseMatch<'a> {
     start_token: usize,
     end_token: usize,
     matcher: MatcherKind,
-    score: f32,
+    score: MatchScore,
     matched_length: usize,
     rule_length: usize,
     match_coverage: f32,
@@ -318,7 +319,7 @@ impl Default for LicenseMatch {
             start_token: 0,
             end_token: 0,
             matcher: MatcherKind::default(),
-            score: 0.0,
+            score: MatchScore::default(),
             matched_length: 0,
             rule_length: 0,
             match_coverage: 0.0,
