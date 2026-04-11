@@ -22,9 +22,7 @@
       "path": "cli/composer.json",
       "type": "file",
       "facets": ["data"],
-      "scan_errors": [
-        "Failed to read composer.json at \"testdata/summarycode-golden/facet/cli/composer.json\": Failed to parse JSON: EOF while parsing a value at line 1 column 0"
-      ]
+      "scan_errors": []
     },
     {
       "path": "cli/docs",
@@ -186,9 +184,7 @@
       "path": "cli/haxelib.json",
       "type": "file",
       "facets": ["data"],
-      "scan_errors": [
-        "Failed to read or parse haxelib.json at \"testdata/summarycode-golden/facet/cli/haxelib.json\": Failed to parse JSON: EOF while parsing a value at line 1 column 0"
-      ]
+      "scan_errors": []
     },
     {
       "path": "cli/manifest",
@@ -206,9 +202,7 @@
       "path": "cli/manifest/bower.json",
       "type": "file",
       "facets": ["data"],
-      "scan_errors": [
-        "Failed to read or parse bower.json at \"testdata/summarycode-golden/facet/cli/manifest/bower.json\": Failed to parse JSON: EOF while parsing a value at line 1 column 0"
-      ]
+      "scan_errors": []
     },
     {
       "path": "cli/manifest/build.gradle",
@@ -226,9 +220,7 @@
       "path": "cli/manifest/composer.json",
       "type": "file",
       "facets": ["data"],
-      "scan_errors": [
-        "Failed to read composer.json at \"testdata/summarycode-golden/facet/cli/manifest/composer.json\": Failed to parse JSON: EOF while parsing a value at line 1 column 0"
-      ]
+      "scan_errors": []
     },
     {
       "path": "cli/manifest/debian",
@@ -264,9 +256,7 @@
       "path": "cli/manifest/haxelib.json",
       "type": "file",
       "facets": ["data"],
-      "scan_errors": [
-        "Failed to read or parse haxelib.json at \"testdata/summarycode-golden/facet/cli/manifest/haxelib.json\": Failed to parse JSON: EOF while parsing a value at line 1 column 0"
-      ]
+      "scan_errors": []
     },
     {
       "path": "cli/manifest/meta-inf",
@@ -296,9 +286,7 @@
       "path": "cli/manifest/package.json",
       "type": "file",
       "facets": ["data"],
-      "scan_errors": [
-        "Failed to read or parse package.json at \"testdata/summarycode-golden/facet/cli/manifest/package.json\": Failed to parse JSON: EOF while parsing a value at line 1 column 0"
-      ]
+      "scan_errors": []
     },
     {
       "path": "cli/manifest/pipfile",
@@ -316,9 +304,7 @@
       "path": "cli/manifest/project.clj",
       "type": "file",
       "facets": ["core"],
-      "scan_errors": [
-        "Failed to parse project.clj at \"testdata/summarycode-golden/facet/cli/manifest/project.clj\": project.clj did not contain a defproject form"
-      ]
+      "scan_errors": []
     },
     {
       "path": "cli/manifest/setup.cfg",
@@ -396,9 +382,7 @@
       "path": "cli/tests/composer.json",
       "type": "file",
       "facets": ["data", "tests"],
-      "scan_errors": [
-        "Failed to read composer.json at \"testdata/summarycode-golden/facet/cli/tests/composer.json\": Failed to parse JSON: EOF while parsing a value at line 1 column 0"
-      ]
+      "scan_errors": []
     },
     {
       "path": "cli/tests/some.c",
