@@ -27,6 +27,7 @@ Method rules:
 - Fix issues where **ScanCode is better than Provenant**.
 - When scanners disagree, inspect the underlying file text enough to decide whether the extra or missing finding is justified. If both scanners agree, lighter spot-checking is usually sufficient.
 - Do **not** mark a row `🟢 Verified` while any ScanCode-better deltas remain unresolved for that target. Treat `comparison_status: potential_regressions_detected` as a triage-required signal, not an automatic failure: each such delta must be reviewed and either fixed or documented as not actually worse before the row becomes `🟢 Verified`.
+- Fixes found during compare work must be **generic scanner improvements**, not target-specific tuning for one benchmark repository or artifact. If a proposed change only makes a single compare target look better without improving general scan quality, reject it and find the broader root cause instead.
 - Record end-state Provenant-over-ScanCode outcomes in [`../../BENCHMARKS.md`](../../BENCHMARKS.md), not in this table.
 - Do **not** treat normalization improvements as regressions when Provenant is more correct, for example preserving `René` instead of degrading to `Rene`. Parity is the bottom line, not the upper limit.
 - This scorecard's notes column is for **stable priority, scope, target-shape, and watch-out guidance**. It is not a verification-results column.
