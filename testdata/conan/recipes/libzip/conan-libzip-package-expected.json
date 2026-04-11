@@ -43,7 +43,7 @@
               "match_coverage": 100.0,
               "rule_relevance": 100,
               "rule_identifier": "bsd-new_10.RULE",
-              "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_10.RULE",
+              "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_10.RULE",
               "matched_text": "- BSD-3-Clause"
             }
           ],
@@ -110,7 +110,7 @@
               "match_coverage": 100.0,
               "rule_relevance": 100,
               "rule_identifier": "bsd-new_10.RULE",
-              "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_10.RULE",
+              "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_10.RULE",
               "matched_text": "- BSD-3-Clause"
             }
           ],
@@ -177,7 +177,7 @@
               "match_coverage": 100.0,
               "rule_relevance": 100,
               "rule_identifier": "bsd-new_10.RULE",
-              "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_10.RULE",
+              "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_10.RULE",
               "matched_text": "- BSD-3-Clause"
             }
           ],
@@ -244,7 +244,7 @@
               "match_coverage": 100.0,
               "rule_relevance": 100,
               "rule_identifier": "bsd-new_10.RULE",
-              "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_10.RULE",
+              "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_10.RULE",
               "matched_text": "- BSD-3-Clause"
             }
           ],
@@ -311,7 +311,7 @@
               "match_coverage": 100.0,
               "rule_relevance": 100,
               "rule_identifier": "bsd-new_10.RULE",
-              "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_10.RULE",
+              "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_10.RULE",
               "matched_text": "BSD-3-Clause"
             }
           ],
@@ -665,7 +665,7 @@
                   "match_coverage": 100.0,
                   "rule_relevance": 100,
                   "rule_identifier": "bsd-new_10.RULE",
-                  "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_10.RULE",
+                  "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_10.RULE",
                   "matched_text": "BSD-3-Clause"
                 }
               ],
