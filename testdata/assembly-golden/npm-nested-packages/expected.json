@@ -66,6 +66,9 @@
       "datafile_paths": [".pnp.cjs", "package.json"],
       "datasource_ids": ["npm_package_json", "yarn_pnp_cjs"],
       "download_url": "https://registry.npmjs.org/root-app/-/root-app-1.0.0.tgz",
+      "extra_data": {
+        "package_registry_entries": 1
+      },
       "name": "root-app",
       "package_uid": "pkg:npm/root-app@1.0.0?uuid=fixed-uid-done-for-testing-5642512d1758",
       "parties": [],
