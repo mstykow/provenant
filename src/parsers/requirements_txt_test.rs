@@ -268,4 +268,32 @@ mod tests {
         )
         .expect("Failed to remove egg-info temp dir");
     }
+
+    #[test]
+    fn test_extract_ignores_hash_only_generated_requirement_line() {
+        let generated_requirements =
+            unique_temp_path("output_sbom_generate-providers-requirements.txt");
+        fs::write(
+            &generated_requirements,
+            "cb4611abc6764a8d7c1aacad63da03e3\n",
+        )
+        .expect("Failed to write generated requirements file");
+
+        let package_data = RequirementsTxtParser::extract_first_package(&generated_requirements);
+
+        assert!(
+            package_data.dependencies.is_empty(),
+            "dependencies: {:?}",
+            package_data.dependencies
+        );
+
+        fs::remove_file(&generated_requirements)
+            .expect("Failed to remove generated requirements file");
+        fs::remove_dir_all(
+            generated_requirements
+                .parent()
+                .expect("generated requirements file should have a parent"),
+        )
+        .expect("Failed to remove generated requirements temp dir");
+    }
 }
