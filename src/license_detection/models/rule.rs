@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 use crate::license_detection::index::dictionary::TokenId;
 
 const SCANCODE_LICENSE_URL_BASE: &str =
-    "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses";
+    "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/licenses";
 const SCANCODE_RULE_URL_BASE: &str =
-    "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules";
+    "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules";
 
 mod range_serde {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};

@@ -9,7 +9,7 @@ use crate::models::{
 };
 
 const SCANCODE_LICENSE_URL_BASE: &str =
-    "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses";
+    "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/licenses";
 const SPDX_LICENSE_URL_BASE: &str = "https://spdx.org/licenses";
 
 pub(crate) fn collect_top_level_license_references(
