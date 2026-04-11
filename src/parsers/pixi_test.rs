@@ -37,6 +37,8 @@ version = "1.2.3"
 authors = ["Jane Doe <jane@example.com>"]
 description = "Example Pixi workspace"
 license = "MIT"
+license-file = "LICENSE"
+readme = "README.md"
 homepage = "https://example.com/pixi-demo"
 repository = "https://github.com/example/pixi-demo"
 documentation = "https://docs.example.com/pixi-demo"
@@ -98,6 +100,14 @@ index-url = "https://pypi.org/simple"
         assert_eq!(
             package_data.extracted_license_statement.as_deref(),
             Some("MIT")
+        );
+        assert_eq!(
+            package_data
+                .file_references
+                .iter()
+                .map(|reference| reference.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["LICENSE", "README.md"]
         );
         assert_eq!(package_data.parties.len(), 1);
         assert_eq!(package_data.parties[0].name.as_deref(), Some("Jane Doe"));
