@@ -9,7 +9,6 @@ fn main() {
 
     let package_version =
         env::var("CARGO_PKG_VERSION").expect("Cargo should set CARGO_PKG_VERSION");
-    emit_git_rerun_hints(&package_version);
 
     let build_version = env::var("PROVENANT_BUILD_VERSION")
         .ok()
@@ -31,25 +30,6 @@ fn derive_build_version(package_version: &str) -> String {
     let short_sha = git_output(&["rev-parse", "--short", "HEAD"]);
 
     version_format::derive_build_version(package_version, describe.as_deref(), short_sha.as_deref())
-}
-
-fn emit_git_rerun_hints(package_version: &str) {
-    for git_path in [
-        "HEAD".to_string(),
-        "index".to_string(),
-        "packed-refs".to_string(),
-        format!("refs/tags/v{package_version}"),
-    ] {
-        if let Some(path) = git_output(&["rev-parse", "--git-path", &git_path]) {
-            println!("cargo:rerun-if-changed={path}");
-        }
-    }
-
-    if let Some(reference) = git_output(&["symbolic-ref", "-q", "HEAD"])
-        && let Some(path) = git_output(&["rev-parse", "--git-path", &reference])
-    {
-        println!("cargo:rerun-if-changed={path}");
-    }
 }
 
 fn git_output(args: &[&str]) -> Option<String> {
