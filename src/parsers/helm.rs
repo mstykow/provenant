@@ -66,6 +66,12 @@ fn parse_chart_yaml(yaml_content: &Value) -> PackageData {
     let version = extract_string_field(yaml_content, "version");
     let description = extract_string_field(yaml_content, "description");
     let homepage_url = extract_string_field(yaml_content, "home");
+    let code_view_url = yaml_content
+        .get("sources")
+        .map(extract_string_values)
+        .unwrap_or_default()
+        .into_iter()
+        .find(|value| !value.trim().is_empty());
     let keywords = extract_string_list_field(yaml_content, "keywords");
     let parties = extract_maintainers(yaml_content);
     let dependencies = extract_chart_yaml_dependencies(yaml_content);
@@ -80,6 +86,7 @@ fn parse_chart_yaml(yaml_content: &Value) -> PackageData {
         parties,
         keywords,
         homepage_url,
+        code_view_url,
         is_private: false,
         extra_data,
         dependencies,
