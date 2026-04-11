@@ -377,6 +377,10 @@ fn build_dependency(line: &str, scope: &str, is_runtime: bool) -> Option<Depende
         return None;
     }
 
+    if looks_like_hash_only_requirement(requirement) {
+        return None;
+    }
+
     let parsed = parse_requirement(requirement);
 
     let pinned_version = parsed
@@ -455,6 +459,24 @@ fn build_dependency(line: &str, scope: &str, is_runtime: bool) -> Option<Depende
         resolved_package: None,
         extra_data: Some(extra_data),
     })
+}
+
+fn looks_like_hash_only_requirement(requirement: &str) -> bool {
+    let trimmed = requirement.trim();
+    if !matches!(trimmed.len(), 32 | 40 | 64 | 96 | 128) {
+        return false;
+    }
+
+    if trimmed.contains(char::is_whitespace)
+        || trimmed.contains(['[', ']', '@', ';', '/', '\\'])
+        || trimmed.contains("==")
+        || trimmed.contains("://")
+        || trimmed.contains("git+")
+    {
+        return false;
+    }
+
+    trimmed.chars().all(|ch| ch.is_ascii_hexdigit())
 }
 
 fn split_hash_options(input: &str) -> (String, Vec<String>) {
