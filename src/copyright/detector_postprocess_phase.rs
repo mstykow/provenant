@@ -55,6 +55,7 @@ pub(super) fn run_phase_postprocess(
     super::author_heuristics::extract_developed_by_phrase_authors(prepared_cache, authors);
     super::author_heuristics::extract_developed_by_contributors_authors(prepared_cache, authors);
     super::author_heuristics::extract_with_additional_hacking_by_authors(prepared_cache, authors);
+    super::author_heuristics::extract_parenthesized_inline_by_authors(raw_lines, authors);
     super::author_heuristics::extract_developed_and_created_by_authors(prepared_cache, authors);
     super::author_heuristics::extract_author_colon_blocks(prepared_cache, authors);
     super::author_heuristics::extract_module_author_macros(content, copyrights, holders, authors);

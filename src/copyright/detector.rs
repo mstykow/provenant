@@ -12859,9 +12859,38 @@ fn build_author_with_trailing(
 }
 
 fn extract_author_from_copyright_node(node: &ParseNode) -> Option<AuthorDetection> {
+    static INLINE_ATTRIBUTION_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)(?:\(|\b)(?:written|authored|created|developed)\s+by\s+(?P<who>[A-Z][^()]*?)(?:\)|$)",
+        )
+        .unwrap()
+    });
+
     let all_leaves = collect_all_leaves(node);
     if all_leaves.len() < 2 {
         return None;
+    }
+
+    let raw_text = normalize_whitespace(
+        &all_leaves
+            .iter()
+            .map(|t| t.value.as_str())
+            .collect::<Vec<_>>()
+            .join(" "),
+    );
+    if let Some(cap) = INLINE_ATTRIBUTION_RE.captures(&raw_text) {
+        let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
+        if !who.is_empty()
+            && let Some(author) = refine_author(who)
+        {
+            let start_line = all_leaves.first()?.start_line;
+            let end_line = all_leaves.last()?.start_line;
+            return Some(AuthorDetection {
+                author,
+                start_line,
+                end_line,
+            });
+        }
     }
 
     let auth_idx = all_leaves.iter().position(|t| {
@@ -13876,6 +13905,10 @@ fn build_holder_from_copyright_node(
     ignored_labels: &[TreeLabel],
     ignored_pos_tags: &[PosTag],
 ) -> Option<HolderDetection> {
+    static HELD_BY_PROJECT_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)copyright\s+is\s+held\s+by\s+the\s+[\p{L}0-9._-]+(?:\s+[\p{L}0-9._-]+){0,3}\s+project\b").unwrap()
+    });
+
     let copy_line = collect_all_leaves(node)
         .iter()
         .filter(|t| t.tag == PosTag::Copy && t.value.eq_ignore_ascii_case("copyright"))
@@ -13898,7 +13931,18 @@ fn build_holder_from_copyright_node(
         .iter()
         .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
 
-    build_holder_from_tokens(&filtered, allow_single_word_contributors)
+    let det = build_holder_from_tokens(&filtered, allow_single_word_contributors)?;
+    let raw_text = normalize_whitespace(
+        &collect_all_leaves(node)
+            .iter()
+            .map(|t| t.value.as_str())
+            .collect::<Vec<_>>()
+            .join(" "),
+    );
+    if HELD_BY_PROJECT_RE.is_match(&raw_text) {
+        return None;
+    }
+    Some(det)
 }
 
 fn signal_lines_before_copy_line(node: &ParseNode, copy_line: LineNumber) -> HashSet<usize> {
