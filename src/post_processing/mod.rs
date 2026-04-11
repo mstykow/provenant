@@ -39,6 +39,7 @@ use crate::progress::{
     is_warning_scan_error,
 };
 use crate::scanner;
+use crate::time::format_scancode_timestamp;
 #[cfg(test)]
 use crate::utils::generated::generated_code_hints;
 
@@ -216,8 +217,8 @@ pub(crate) fn create_output(
             tool_version: env!("CARGO_PKG_VERSION").to_string(),
             options: context.header_options,
             notice: HEADER_NOTICE.to_string(),
-            start_timestamp: start_time.to_rfc3339(),
-            end_timestamp: end_time.to_rfc3339(),
+            start_timestamp: format_scancode_timestamp(&start_time),
+            end_timestamp: format_scancode_timestamp(&end_time),
             output_format_version: OUTPUT_FORMAT_VERSION.to_string(),
             duration,
             errors,
