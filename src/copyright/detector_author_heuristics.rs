@@ -964,17 +964,11 @@ pub(super) fn extract_author_colon_blocks(
                 break;
             }
 
-            let mut include = false;
             if next_line.contains(':') {
-                if next_lower.starts_with("devices")
-                    || next_lower.starts_with("status")
-                    || next_lower.starts_with("return")
-                {
-                    include = true;
-                } else {
-                    break;
-                }
+                break;
             }
+
+            let mut include = false;
             if !include {
                 include = next_line.contains('@')
                     || next_line.contains('<')
@@ -994,18 +988,6 @@ pub(super) fn extract_author_colon_blocks(
                 let combined_len: usize = segments.iter().map(|s| s.len()).sum();
                 if combined_len > 320 {
                     break;
-                }
-                if next_lower.starts_with("return") {
-                    break;
-                }
-                if next_lower.starts_with("devices") {
-                    let tail = next_line
-                        .split_once(':')
-                        .map(|(_, t)| t.trim())
-                        .unwrap_or("");
-                    if !tail.is_empty() {
-                        break;
-                    }
                 }
                 continue;
             }
@@ -1774,6 +1756,105 @@ pub(super) fn extract_developed_by_phrase_authors(
     }
 }
 
+pub(super) fn extract_developed_by_contributors_authors(
+    prepared_cache: &mut PreparedLineCache<'_>,
+    authors: &mut Vec<AuthorDetection>,
+) {
+    if prepared_cache.is_empty() {
+        return;
+    }
+
+    static DEVELOPED_BY_CONTRIBUTORS_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)\bdeveloped\s+by\s+(?P<who>(?:the\s+)?.+?\band\s+its\s+contributors)\.?(?:\s|$)",
+        )
+        .unwrap()
+    });
+
+    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+
+    for idx in 0..prepared_cache.len() {
+        let ln = idx + 1;
+        let Some(line) = prepared_cache
+            .get_by_index(idx)
+            .map(|p| p.trim().to_string())
+        else {
+            continue;
+        };
+        if !line.to_ascii_lowercase().contains("developed by") {
+            continue;
+        }
+
+        let mut window = line.clone();
+        let mut end_line = ln;
+        if !window.to_ascii_lowercase().contains("contributors")
+            && let Some(next) = prepared_cache
+                .get_by_index(idx + 1)
+                .map(|p| p.trim().to_string())
+            && !next.is_empty()
+        {
+            window.push(' ');
+            window.push_str(&next);
+            end_line = idx + 2;
+        }
+
+        let Some(cap) = DEVELOPED_BY_CONTRIBUTORS_RE.captures(&window) else {
+            continue;
+        };
+        let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
+        if who.is_empty() {
+            continue;
+        }
+
+        let Some(author) = refine_author(who) else {
+            continue;
+        };
+
+        if seen.insert(author.clone()) {
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(end_line).expect("invalid line number"),
+            });
+        }
+    }
+}
+
+pub(super) fn extract_json_author_object_authors(
+    raw_lines: &[&str],
+    authors: &mut Vec<AuthorDetection>,
+) {
+    if raw_lines.is_empty() {
+        return;
+    }
+
+    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+
+    for (idx, line) in raw_lines.iter().enumerate() {
+        if !line.contains("\"author\"") {
+            continue;
+        }
+
+        let start = idx.saturating_sub(1);
+        let end = (idx + 4).min(raw_lines.len());
+        let window = raw_lines[start..end].join(" ");
+        let Some(name) = extract_author_name_from_json_window(&window) else {
+            continue;
+        };
+        let Some(author) = refine_author(&name) else {
+            continue;
+        };
+
+        if seen.insert(author.clone()) {
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(idx + 1).expect("invalid line number"),
+                end_line: LineNumber::new(end).expect("invalid line number"),
+            });
+        }
+    }
+}
+
 pub(super) fn extract_maintained_by_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
     authors: &mut Vec<AuthorDetection>,
@@ -1953,6 +2034,12 @@ pub(super) fn drop_authors_embedded_in_copyrights(
                 return false;
             }
             let c_lower = c.copyright.to_lowercase();
+            if a.author.contains('@')
+                && c_lower.starts_with("copyright")
+                && c_lower.contains(&a_lower)
+            {
+                return true;
+            }
             if c_lower.contains("authors") {
                 if a.author.contains('@') {
                     return false;
@@ -1963,6 +2050,53 @@ pub(super) fn drop_authors_embedded_in_copyrights(
                 return c_lower.contains(&a_lower);
             }
             false
+        })
+    });
+}
+
+pub(super) fn drop_authors_from_copyright_by_lines(
+    prepared_cache: &PreparedLineCache<'_>,
+    authors: &mut Vec<AuthorDetection>,
+) {
+    if authors.is_empty() || prepared_cache.is_empty() {
+        return;
+    }
+
+    static YEAR_PREFIX_BY_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)^\s*(?:[/#*;!-]+\s*)?(?:\d{4}(?:[-–/]\d{1,4})*|\d{4}\s*[-–]\s*\d{4})\s+by\s+",
+        )
+        .unwrap()
+    });
+
+    authors.retain(|author| {
+        let start = author.start_line.get();
+        let end = author.end_line.get();
+        (start..=end).all(|line_no| {
+            let Some(raw) = prepared_cache.raw_by_index(line_no - 1) else {
+                return true;
+            };
+            let lower = raw.to_ascii_lowercase();
+            if lower.trim_start().starts_with("copyright")
+                && lower.contains(" by ")
+                && lower.contains(&author.author.to_ascii_lowercase())
+            {
+                return false;
+            }
+
+            if line_no > 1
+                && let Some(prev) = prepared_cache.raw_by_index(line_no - 2)
+            {
+                let prev_lower = prev.to_ascii_lowercase();
+                if prev_lower.contains("copyright")
+                    && YEAR_PREFIX_BY_RE.is_match(raw)
+                    && lower.contains(&author.author.to_ascii_lowercase())
+                {
+                    return false;
+                }
+            }
+
+            true
         })
     });
 }
@@ -2169,41 +2303,6 @@ fn extract_author_name_from_json_window(window: &str) -> Option<String> {
 fn json_window_contains_developed_by(window: &str, author: &str) -> bool {
     let needle = format!("developed by {}", author.trim().to_ascii_lowercase());
     window.to_ascii_lowercase().contains(&needle)
-}
-
-pub(super) fn drop_comedi_ds_status_devices_authors(
-    content: &str,
-    copyrights: &[CopyrightDetection],
-    authors: &mut Vec<AuthorDetection>,
-) {
-    if authors.is_empty() {
-        return;
-    }
-
-    let lower = content.to_ascii_lowercase();
-    if !lower.contains("author") || !lower.contains("status") {
-        return;
-    }
-    if !content.lines().any(|l| l.contains("Author: ds")) {
-        return;
-    }
-
-    let has_any_copyright = !copyrights.is_empty();
-    let drop_for_national_instruments = lower.contains("national instruments");
-
-    authors.retain(|a| {
-        let s = a.author.trim();
-        if !s.to_ascii_lowercase().starts_with("ds status") {
-            return true;
-        }
-        if !has_any_copyright {
-            return false;
-        }
-        if drop_for_national_instruments {
-            return false;
-        }
-        true
-    });
 }
 
 pub(super) fn drop_written_by_authors_preceded_by_copyright(

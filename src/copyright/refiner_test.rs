@@ -84,6 +84,39 @@ fn test_refine_author_discards_laboriously_took_the_trouble_junk() {
 }
 
 #[test]
+fn test_refine_author_drops_generic_role_and_prose_fragments() {
+    assert_eq!(refine_author("Philip"), None);
+    assert_eq!(refine_author("john"), None);
+    assert_eq!(refine_author("chunchu"), Some("chunchu".to_string()));
+    assert_eq!(refine_author("Guide"), None);
+    assert_eq!(refine_author("maintainers with write access"), None);
+    assert_eq!(refine_author("schedule and monitor workflows"), None);
+    assert_eq!(refine_author("for the sample crypto project"), None);
+    assert_eq!(
+        refine_author("the pkg-bazaar team"),
+        Some("the pkg-bazaar team".to_string())
+    );
+    assert_eq!(
+        refine_author("the University of California, Berkeley and its contributors"),
+        Some("the University of California, Berkeley and its contributors".to_string())
+    );
+    assert_eq!(
+        refine_author(
+            "transition .transition https://github.com/d3/d3-transition/blob/master/README.md"
+        ),
+        None
+    );
+    assert_eq!(
+        refine_author("Daniel Vaz Gaspar (https://github.com/dpgaspar/Flask-AppBuilder)"),
+        Some("Daniel Vaz Gaspar (https://github.com/dpgaspar/Flask-AppBuilder)".to_string())
+    );
+    assert_eq!(
+        refine_author("Daniel Vaz Gaspar"),
+        Some("Daniel Vaz Gaspar".to_string())
+    );
+}
+
+#[test]
 fn test_refine_holder_discards_symbol_table_run_junk() {
     assert_eq!(
         refine_holder("(r), & 175, & 176, & 177, & 178, & 179, & 180, & 181, & 182, & 183"),
@@ -927,10 +960,7 @@ fn test_refine_holder_junk_legal_disclaimer_fragments() {
 #[test]
 fn test_refine_holder_junk_short_rsa_and_ecos_title() {
     assert_eq!(refine_holder("RSA"), None);
-    assert_eq!(
-        refine_holder("the Embedded Configurable Operating System"),
-        None
-    );
+    assert_eq!(refine_holder("the Sample Embedded Operating System"), None);
 }
 
 #[test]
@@ -942,7 +972,7 @@ fn test_refine_holder_junk_math_c_functions() {
 #[test]
 fn test_refine_holder_strips_ecos_title_prefix_keeps_company() {
     assert_eq!(
-        refine_holder("the Embedded Configurable Operating System., Red Hat, Inc."),
+        refine_holder("the Sample Embedded Operating System., Red Hat, Inc."),
         Some("Red Hat, Inc.".to_string())
     );
 }
@@ -951,7 +981,7 @@ fn test_refine_holder_strips_ecos_title_prefix_keeps_company() {
 fn test_refine_holder_junk_all_caps_placeholders() {
     assert_eq!(refine_holder("MODULEAUTHOR endif"), None);
     assert_eq!(refine_holder("THE PACKAGE'S"), None);
-    assert_eq!(refine_holder("THE cpufrequtils'S"), None);
+    assert_eq!(refine_holder("THE TOOLKIT'S"), None);
 }
 
 #[test]

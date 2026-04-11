@@ -304,6 +304,102 @@ fn test_modified_portion_developed_by_author_with_url_is_extracted() {
 }
 
 #[test]
+fn test_current_year_placeholder_copyright_holder_detected() {
+    let input = "Copyright 2016- CURRENT_YEAR The Apache Software Foundation";
+
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        copyrights.iter().any(|c| {
+            c.copyright == "Copyright 2016-CURRENT_YEAR The Apache Software Foundation"
+                || c.copyright == "Copyright 2016- CURRENT_YEAR The Apache Software Foundation"
+        }),
+        "copyrights: {:?}",
+        copyrights.iter().map(|c| &c.copyright).collect::<Vec<_>>()
+    );
+    assert!(
+        holders
+            .iter()
+            .any(|h| h.holder == "The Apache Software Foundation"),
+        "holders: {:?}",
+        holders.iter().map(|h| &h.holder).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_author_colon_block_stops_at_status_and_devices_metadata() {
+    let input = "Author: ds\nStatus: works in immediate mode\nDevices: [standard] parallel port\n";
+
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.is_empty(),
+        "authors: {:?}",
+        authors.iter().map(|a| &a.author).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_author_colon_block_keeps_named_author_without_devices_tail() {
+    let input =
+        "Author: Pablo Mejia <pablo.mejia@cctechnol.com>\nDevices: [Access I/O] PC-104 AIO12-8\n";
+
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors
+            .iter()
+            .any(|a| a.author == "Pablo Mejia <pablo.mejia@cctechnol.com>"),
+        "authors: {:?}",
+        authors.iter().map(|a| &a.author).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_written_by_comma_and_copyright_keeps_parenthesized_email_author() {
+    let input =
+        "written by Philip Hazel, and copyright\nby the University of Cambridge, England.\n";
+
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.iter().any(|a| a.author == "Philip Hazel"),
+        "authors: {:?}",
+        authors.iter().map(|a| &a.author).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_with_additional_hacking_by_keeps_parenthesized_email_author() {
+    let input = "With additional hacking by Jeffrey Kuskin (jsk@mojave.stanford.edu)\n";
+
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors
+            .iter()
+            .any(|a| a.author == "Jeffrey Kuskin (jsk@mojave.stanford.edu)"),
+        "authors: {:?}",
+        authors.iter().map(|a| &a.author).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_adapted_written_by_keeps_parenthesized_email_author() {
+    let input = "Adapted from baycom.c driver written by Thomas Sailer (sailer@ife.ee.ethz.ch)\n";
+
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors
+            .iter()
+            .any(|a| a.author == "Thomas Sailer (sailer@ife.ee.ethz.ch)"),
+        "authors: {:?}",
+        authors.iter().map(|a| &a.author).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn test_copyright_prefix_preserved_multiline_debian() {
     let input = "Copyright:\n\n    Copyright \u{00A9} 1999-2009  Red Hat, Inc.\n    Copyright \u{00A9} 1998       Tom Tromey\n    Copyright \u{00A9} 1999       Free Software Foundation, Inc.";
     let (c, _h, _a) = detect_copyrights_from_text(input);
@@ -4141,6 +4237,22 @@ fn test_json_author_object_name_preferred_over_url_tail() {
             .map(|a| a.author.as_str())
             .collect::<Vec<_>>(),
         vec!["Chen Fengyuan"],
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_multiline_json_author_object_name_detected() {
+    let input = concat!(
+        "  \"author\": {\n",
+        "    \"name\": \"Chen Fengyuan\",\n",
+        "    \"url\": \"https://chenfengyuan.com/\"\n",
+        "  }\n",
+    );
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.iter().any(|a| a.author == "Chen Fengyuan"),
         "authors: {authors:?}"
     );
 }

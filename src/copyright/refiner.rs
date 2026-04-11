@@ -142,6 +142,11 @@ static AUTHORS_JUNK: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
         "guice",
         "incorporated",
         "ds",
+        "guide",
+        "recommend",
+        "recheck",
+        "volunteer",
+        "donald becker",
     ]
     .into_iter()
     .collect()
@@ -161,10 +166,7 @@ static AUTHORS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^time to time\b",
         r"(?i)^the group of people\b",
         r"(?i)^by,? or\b",
-        r"(?i)^lucene commit\b",
         r"(?i)^group conversion\b",
-        r"(?i)^grunt and npm\b",
-        r"(?i)^bigscience\.\b",
         r"(?i)^ctnewmethod\b",
         r"(?i)\bplugins?\. fixes\b",
         r"(?i)\bnormalized to upper\b",
@@ -180,7 +182,6 @@ static AUTHORS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^register\b",
         r"(?i)^communication sent\b",
         r"(?i)^developers tom\b",
-        r"(?i)^donald becker$",
         r"(?i)^ext4\.\b",
         r"(?i)\bmore documentation\b",
         r"(?i)\breturn enum\b",
@@ -191,7 +192,8 @@ static AUTHORS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)\bbut not limited to communication\b",
         r"(?i)\bfor have helping\b",
         r"(?i)\bunit of \d+mb\b",
-        r"(?i)\bfor the openssl project\b",
+        r"(?i)\bfor the\s+[\p{L}0-9._+-]+(?:\s+[\p{L}0-9._+-]+){0,2}\s+project\b",
+        r"(?i)\bTenable licenses\b",
         r"(?i)\bwith participation of the open\b",
         r"(?i)\bfurthermore\b",
         r"(?i)\bits cell\. we\b",
@@ -205,15 +207,11 @@ static AUTHORS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^grateful to\b",
         r"(?i)^would also like to thank\b",
         r"(?i)^would like to thank\b",
-        r"(?i)^intellij idea$",
         r"(?i)^date modified$",
         r"(?i)^date header id name\b",
         r"(?i)^technical committee$",
         r"(?i)^users of the program$",
         r"(?i)^should not be interpreted\b",
-        r"(?i)^philip$",
-        r"(?i)^john$",
-        r"(?i)^arnaldo carvalho de melo\b",
         r"(?i)^works devices national\b",
         r"(?i)\band its \d+\.\s*neither\b",
         r"(?i)\band its effective immediately\b",
@@ -221,11 +219,9 @@ static AUTHORS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^effective immediately\b",
         r"(?i)^(?:\d+\.)?\s*neither\b",
         r"(?i)\blastmod\b.*\bstream.*\bregisterfield\b",
-        r"(?i)^hillion$",
         r"(?i)^who\s+hopes\b",
         r"(?i)^so preceded by\b",
         r"(?i)^bounce, so we\b",
-        r"(?i)^transition\s+\.transition\s+https?://github\.com/d3/d3-transition/blob/master/README\.md(?:#\w+)?$",
         r"(?i)^the current user$",
         r"(?i)^select\s+\.\w+$",
         r"(?i)^with inkscape\b",
@@ -535,7 +531,6 @@ static COPYRIGHTS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^copyright and license, contributing",
         r"(?i)^copyright as is group",
         r"(?i)^copyright \(c\) , and others",
-        r"(?i)^copyright-check writable-files m4-check author_mark_check",
         r"(?i)^copyright \(c\) <holders>",
         r"(?i)^copyright copyright and",
         r"(?i)^copyright\s+and\s+conditions\b",
@@ -612,7 +607,6 @@ static COPYRIGHTS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^u\.s\. copyright act",
         r"(?i)^\(c\) Object c$",
         r"(?i)^copyright headers?",
-        r"(?i)Copyright \(c\) 2021 Dot",
         r"(?i)^\(c\) \(c\) B$",
         r"(?i)^\(c\) group$",
         r"(?i)^\(c\) \(c\) A$",
@@ -1458,7 +1452,6 @@ static HOLDERS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)\bCopying and distribution\b",
         r"(?i)\bGPLd\b",
         r"(?i)\bLicense-Alias\b",
-        r"(?i)\bcontributors Thomas\b",
         r"(?i)\bWritten by\b",
         r"(?i)\bModified by the\b",
         r"(?i)\btitle Legal\b",
@@ -1466,9 +1459,7 @@ static HOLDERS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)\b- Placed\b",
         r"(?i)\bUnder the terms\b",
         r"(?i)\binfo have been\b",
-        r"(?i)\bAuthors Havoc\b",
         r"(?i)\bicon support\b",
-        r"(?i)\bmaintainer Paolo\b",
         r"(?i)\bfull list\b",
         r"(?i)^proprietary$",
         r"(?i)^not limited to\b",
@@ -1482,17 +1473,23 @@ static HOLDERS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^the\s+standard$",
         r"(?i)^the\s+product$",
         r"(?i)^rsa$",
+        r"(?i)^xerox corporation$",
+        r"(?i)^david j\. bradshaw$",
+        r"(?i)^gias kay lee$",
+        r"(?i)^tim ruffles$",
+        r"(?i)^products\.\s+tenable licenses$",
         r"(?i)^the Embedded Configurable Operating System\.?$",
         r"(?i)^(?:convert|multiply)\s+(?:a\s+)?(?:chebyshev|hermite|laguerre|legendre)\b",
         r"(?i)^treaties$",
         r"(?i)\bpatent\s+or\s+other\s+licenses\s+necessary\b",
         r"(?i)\bMODULEAUTHOR\b",
-        r"(?i)^THE\s+PACKAGE'S\b",
-        r"(?i)^THE\s+cpufrequtils'S\b",
+        r"(?i)^THE\s+[\p{L}0-9._-]+'S\b",
+        r"(?i)^the\s+(?:[\p{L}0-9._-]+\s+){1,5}operating\s+system\.?$",
         r"(?i)\bpkg\.(author|homepage)\b",
         r"(?i)\bdate\.year\b",
         r"(?i)\bYYYY-MM-DD\b",
         r"(?i)<\s*pkg\.[a-zA-Z0-9_.-]+\s*>",
+        r"(?i)^http://www\.quirksmode\b",
         r"[→⟶]",
         r"(?i)\bSTATEMENTS AND\b",
         r"(?i)\bAS IS$",
@@ -1505,7 +1502,6 @@ static HOLDERS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)\bAS PER APPLICABLE\b",
         r"(?i)\bSection 105\b",
         r"(?i)\bGNU AGPL\b",
-        r"(?i)\bTenable licenses\b",
         r"(?i)\bagreement with the\b",
         r"(?i)\bgives Customer\b",
         r"(?i)\bshall mean\b",
@@ -1515,7 +1511,6 @@ static HOLDERS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)\bSource Code to\b",
         r"(?i)\bPROTECTION AND IS\b",
         r"(?i)\bnot removed\b",
-        r"(?i)\bthe GPSD project\b",
         r"(?i)\bversion 3\.1 of\b",
         r"(?i)\bGPL version\b",
         r"(?i)\bCopyright/g\b",
@@ -1679,10 +1674,6 @@ static HOLDERS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^tj et\b",
         r"(?i)^adobe.*\bairtm\b",
         r"(?i)^adobe.*\bair\u{2122}\b",
-        r"(?i)^xerox corporation$",
-        r"(?i)^david j\. bradshaw$",
-        r"(?i)^gias kay lee$",
-        r"(?i)^tim ruffles$",
         r"[\x00-\x1f]",
         r"°°°",
         r"ÿÿÿ",
@@ -1729,7 +1720,6 @@ static HOLDERS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^u1e\b",
         r"(?i)^degu\b",
         r"(?i)^xmlns\b",
-        r"(?i)^http://www\.quirksmode\b",
         r"(?i)^\u{201c}adobe\b",
         r"(?i)\bthe resulting\b",
         r"(?i)\ball source code included in\b",
@@ -1743,10 +1733,8 @@ static HOLDERS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^compute hessian\b",
         r"(?i)^nat\d+\.is",
         r"(?i)^a\.compatibility\b",
-        r"(?i)^opencensus authors \d",
         r"(?i)^retained at the\b",
         r"(?i)^timer code\b",
-        r"(?i)^ds status works\b",
         r"(?i)^an sr-iov\b",
         r"(?i)^applies to the regex\b",
         r"(?i)^apple's sf pro\b",
@@ -2458,7 +2446,7 @@ fn strip_trailing_paren_at_without_domain(s: &str) -> String {
 fn strip_trailing_inc_after_today_year_placeholder(s: &str) -> String {
     let trimmed = s.trim();
     let lower = trimmed.to_ascii_lowercase();
-    if !lower.contains("today.year") {
+    if !(lower.contains("today.year") || lower.contains("current_year")) {
         return s.to_string();
     }
     if !(lower.ends_with(" inc.") || lower.ends_with(" inc")) {
@@ -3164,7 +3152,7 @@ fn refine_holder_impl(s: &str, in_copyright_context: bool) -> Option<String> {
     }
     h = strip_trailing_by_person_clause_after_company(&h);
     h = strip_trailing_division_of_company_suffix(&h);
-    h = strip_leading_ecos_title(&h);
+    h = strip_leading_product_operating_system_title(&h);
     h = strip_trailing_et_al(&h);
     h = strip_trailing_authors_clause(&h);
     h = strip_trailing_document_authors_clause(&h);
@@ -3430,9 +3418,12 @@ fn strip_trailing_at_sign(s: &str) -> String {
     s.to_string()
 }
 
-fn strip_leading_ecos_title(s: &str) -> String {
-    let lower = s.to_lowercase();
-    if !lower.starts_with("the embedded configurable operating system") {
+fn strip_leading_product_operating_system_title(s: &str) -> String {
+    static PRODUCT_OPERATING_SYSTEM_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)^the\s+(?:[\p{L}0-9._-]+\s+){1,5}operating\s+system(?:[.,]|\s|$)").unwrap()
+    });
+
+    if !PRODUCT_OPERATING_SYSTEM_RE.is_match(s.trim()) {
         return s.to_string();
     }
 
