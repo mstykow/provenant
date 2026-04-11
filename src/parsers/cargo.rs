@@ -146,6 +146,9 @@ impl PackageParser for CargoParser {
         let keywords = extract_keywords_and_categories(&toml_content);
 
         let extra_data = extract_extra_data(&toml_content);
+        let is_private = package
+            .and_then(|p| p.get(FIELD_PUBLISH))
+            .is_some_and(|value| matches!(value, Value::Boolean(false)));
         vec![PackageData {
             package_type: Some(Self::PACKAGE_TYPE),
             namespace: None,
@@ -180,7 +183,7 @@ impl PackageParser for CargoParser {
             notice_text: None,
             source_packages: Vec::new(),
             file_references,
-            is_private: false,
+            is_private,
             is_virtual: false,
             extra_data,
             dependencies: [dependencies, dev_dependencies, build_dependencies].concat(),

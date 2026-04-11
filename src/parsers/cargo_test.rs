@@ -378,6 +378,7 @@ publish = false
         let extra_data = package_data.extra_data.unwrap();
         assert_eq!(extra_data.get("readme_file"), Some(&json!("README.md")));
         assert_eq!(extra_data.get("publish"), Some(&json!(false)));
+        assert!(package_data.is_private);
     }
 
     #[test]
