@@ -70,6 +70,10 @@ fn looks_like_prose_fragment_author(s: &str) -> bool {
         return false;
     }
 
+    if contains_dollar_prefixed_code_token(trimmed) {
+        return true;
+    }
+
     if (trimmed.contains("http://") || trimmed.contains("https://"))
         && !looks_like_name_with_parenthesized_url(trimmed)
     {
@@ -111,6 +115,13 @@ fn looks_like_prose_fragment_author(s: &str) -> bool {
         .count();
 
     starts_lowercase || capitalized_word_count < 2
+}
+
+fn contains_dollar_prefixed_code_token(s: &str) -> bool {
+    s.split_whitespace().any(|word| {
+        word.trim_matches(|ch: char| matches!(ch, ',' | ';' | ':' | '.' | '(' | ')' | '[' | ']'))
+            .starts_with('$')
+    })
 }
 
 fn looks_like_name_with_parenthesized_url(s: &str) -> bool {

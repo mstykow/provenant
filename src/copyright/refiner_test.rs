@@ -1417,6 +1417,12 @@ fn test_refine_author_drops_path_like_fragment() {
 }
 
 #[test]
+fn test_refine_author_drops_dollar_prefixed_code_tokens() {
+    assert_eq!(refine_author("Agatha Christie, $sort"), None);
+    assert_eq!(refine_author("$limit 10"), None);
+}
+
+#[test]
 fn test_refine_author_drops_the_current_user_phrase() {
     assert_eq!(refine_author("the current user"), None);
 }
