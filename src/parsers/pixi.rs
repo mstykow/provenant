@@ -7,7 +7,7 @@ use serde_json::{Map as JsonMap, Value as JsonValue};
 use toml::Value as TomlValue;
 use toml::map::Map as TomlMap;
 
-use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
+use crate::models::{DatasourceId, Dependency, FileReference, PackageData, PackageType, Party};
 use crate::parsers::conda::build_purl as build_conda_purl;
 use crate::parsers::python::read_toml_file;
 use crate::parsers::utils::{read_file_to_string, split_name_email};
@@ -128,6 +128,7 @@ fn parse_pixi_toml(toml_content: &TomlValue) -> PackageData {
         .and_then(|table| table.get(FIELD_LICENSE))
         .and_then(TomlValue::as_str)
         .map(ToOwned::to_owned);
+    package.file_references = extract_manifest_file_references(identity);
     package.purl = name
         .as_deref()
         .and_then(|value| build_pixi_purl(value, version.as_deref()));
@@ -199,6 +200,51 @@ fn extract_authors(identity: Option<&TomlMap<String, TomlValue>>) -> Vec<Party> 
             }
         })
         .collect()
+}
+
+fn extract_manifest_file_references(
+    identity: Option<&TomlMap<String, TomlValue>>,
+) -> Vec<FileReference> {
+    let Some(identity) = identity else {
+        return Vec::new();
+    };
+
+    let mut references = Vec::new();
+
+    if let Some(path) = identity.get(FIELD_LICENSE_FILE).and_then(TomlValue::as_str) {
+        let path = path.trim();
+        if !path.is_empty() {
+            references.push(FileReference {
+                path: path.to_string(),
+                size: None,
+                sha1: None,
+                md5: None,
+                sha256: None,
+                sha512: None,
+                extra_data: None,
+            });
+        }
+    }
+
+    if let Some(path) = identity.get(FIELD_README).and_then(TomlValue::as_str) {
+        let path = path.trim();
+        if !path.is_empty() {
+            let already_present = references.iter().any(|reference| reference.path == path);
+            if !already_present {
+                references.push(FileReference {
+                    path: path.to_string(),
+                    size: None,
+                    sha1: None,
+                    md5: None,
+                    sha256: None,
+                    sha512: None,
+                    extra_data: None,
+                });
+            }
+        }
+    }
+
+    references
 }
 
 fn extract_manifest_dependencies(toml_content: &TomlValue) -> Vec<Dependency> {
