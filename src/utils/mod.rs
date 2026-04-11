@@ -8,3 +8,4 @@ pub mod path;
 pub mod sourcemap;
 pub mod spdx;
 pub mod text;
+pub mod time;
