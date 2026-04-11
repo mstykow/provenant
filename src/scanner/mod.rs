@@ -79,7 +79,7 @@ pub fn scan_options_fingerprint(
 
     format!(
         "tool_version={};info={};packages={};app_packages={};system_packages={};compiled_packages={};copyrights={};generated={};emails={};urls={};max_emails={};max_urls={};timeout={:.6};license_enabled={};rules_count={};first_rule_id={};last_rule_id={};license_text={};license_text_diagnostics={};license_diagnostics={};unknown_licenses={};license_score={}",
-        env!("CARGO_PKG_VERSION"),
+        crate::version::BUILD_VERSION,
         text_options.collect_info,
         text_options.detect_packages,
         text_options.detect_application_packages,
