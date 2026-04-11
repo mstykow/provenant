@@ -13,6 +13,7 @@ use crate::license_detection::position_set::PositionSet;
 use crate::license_detection::query::Query;
 use crate::license_detection::tokenize::STOPWORDS;
 use crate::models::LineNumber;
+use crate::models::MatchScore;
 
 pub const MATCH_UNKNOWN: MatcherKind = MatcherKind::Unknown;
 
@@ -551,14 +552,14 @@ fn python_str_repr(text: &str) -> String {
     format!("{quote}{escaped}{quote}")
 }
 
-fn calculate_score(ngram_count: usize, match_len: usize) -> f32 {
+fn calculate_score(ngram_count: usize, match_len: usize) -> MatchScore {
     if match_len == 0 {
-        return 0.0;
+        return MatchScore::default();
     }
 
-    let density = ngram_count as f32 / match_len as f32;
+    let density = ngram_count as f64 / match_len as f64;
 
-    (density.min(1.0)) * 100.0
+    MatchScore::from_percentage(density.min(1.0) * 100.0)
 }
 
 #[cfg(test)]
@@ -772,8 +773,8 @@ mod tests {
         let score3 = calculate_score(0, 10);
 
         assert!(score2 > score1);
-        assert!(score2 <= 100.0);
-        assert_eq!(score3, 0.0);
+        assert!(score2 <= MatchScore::MAX);
+        assert_eq!(score3, MatchScore::default());
     }
 
     #[test]
@@ -821,7 +822,7 @@ mod tests {
             start_token: 0,
             end_token: 10,
             matcher: MatcherKind::Aho,
-            score: 100.0,
+            score: MatchScore::MAX,
             matched_length: 6,
             rule_length: 6,
             match_coverage: 100.0,
@@ -870,7 +871,7 @@ mod tests {
             start_token: 5,
             end_token: 10,
             matcher: MatcherKind::Aho,
-            score: 100.0,
+            score: MatchScore::MAX,
             matched_length: 5,
             rule_length: 5,
             match_coverage: 100.0,
@@ -918,7 +919,7 @@ mod tests {
             start_token: 0,
             end_token: 15,
             matcher: MatcherKind::Aho,
-            score: 100.0,
+            score: MatchScore::MAX,
             matched_length: 8,
             rule_length: 8,
             match_coverage: 100.0,
@@ -1001,7 +1002,7 @@ mod tests {
             start_token: 0,
             end_token: 5,
             matcher: MatcherKind::Aho,
-            score: 100.0,
+            score: MatchScore::MAX,
             matched_length: 5,
             rule_length: 5,
             match_coverage: 100.0,
@@ -1029,14 +1030,23 @@ mod tests {
     #[test]
     fn test_calculate_score_edge_cases() {
         let score_zero_length = calculate_score(10, 0);
-        assert_eq!(score_zero_length, 0.0, "Zero length should have zero score");
+        assert_eq!(
+            score_zero_length,
+            MatchScore::default(),
+            "Zero length should have zero score"
+        );
 
         let score_zero_ngrams = calculate_score(0, 100);
-        assert_eq!(score_zero_ngrams, 0.0, "Zero ngrams should have zero score");
+        assert_eq!(
+            score_zero_ngrams,
+            MatchScore::default(),
+            "Zero ngrams should have zero score"
+        );
 
         let score_high_density = calculate_score(100, 50);
         assert_eq!(
-            score_high_density, 100.0,
+            score_high_density,
+            MatchScore::MAX,
             "High density should be capped at 100.0"
         );
     }

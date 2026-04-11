@@ -454,6 +454,7 @@ mod tests {
     use crate::license_detection::models::MatchCoordinates;
     use crate::license_detection::models::position_span::PositionSpan;
     use crate::models::LineNumber;
+    use crate::models::MatchScore;
 
     fn parse_rule_id(rule_identifier: &str) -> Option<usize> {
         let trimmed = rule_identifier.trim();
@@ -468,7 +469,7 @@ mod tests {
         rule_identifier: &str,
         start_line: usize,
         end_line: usize,
-        score: f32,
+        score: MatchScore,
         coverage: f32,
         relevance: u8,
     ) -> LicenseMatch {
@@ -529,7 +530,7 @@ mod tests {
             start_token,
             end_token,
             matcher: crate::license_detection::models::MatcherKind::Aho,
-            score: 100.0,
+            score: MatchScore::MAX,
             matched_length,
             rule_length: matched_length,
             match_coverage: 100.0,
@@ -554,8 +555,8 @@ mod tests {
     #[test]
     fn test_filter_contained_matches_simple() {
         let matches = vec![
-            create_test_match("#1", 1, 20, 0.9, 90.0, 100),
-            create_test_match("#1", 5, 15, 0.85, 85.0, 100),
+            create_test_match("#1", 1, 20, MatchScore::from_percentage(0.9), 90.0, 100),
+            create_test_match("#1", 5, 15, MatchScore::from_percentage(0.85), 85.0, 100),
         ];
 
         let (filtered, _) = filter_contained_matches(&matches);
@@ -568,9 +569,9 @@ mod tests {
     #[test]
     fn test_filter_contained_matches_multiple() {
         let matches = vec![
-            create_test_match("#1", 1, 30, 0.9, 90.0, 100),
-            create_test_match("#1", 5, 10, 0.8, 80.0, 100),
-            create_test_match("#1", 15, 20, 0.85, 85.0, 100),
+            create_test_match("#1", 1, 30, MatchScore::from_percentage(0.9), 90.0, 100),
+            create_test_match("#1", 5, 10, MatchScore::from_percentage(0.8), 80.0, 100),
+            create_test_match("#1", 15, 20, MatchScore::from_percentage(0.85), 85.0, 100),
         ];
 
         let (filtered, _) = filter_contained_matches(&matches);
@@ -582,10 +583,10 @@ mod tests {
 
     #[test]
     fn test_filter_contained_matches_different_rules() {
-        let mut m1 = create_test_match("#1", 1, 20, 0.9, 90.0, 100);
+        let mut m1 = create_test_match("#1", 1, 20, MatchScore::from_percentage(0.9), 90.0, 100);
         m1.matched_length = 200;
         m1.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 21));
-        let mut m2 = create_test_match("#2", 5, 15, 0.85, 85.0, 100);
+        let mut m2 = create_test_match("#2", 5, 15, MatchScore::from_percentage(0.85), 85.0, 100);
         m2.matched_length = 100;
         m2.coordinates = MatchCoordinates::query_region(PositionSpan::range(5, 16));
         let matches = vec![m1, m2];
@@ -598,9 +599,9 @@ mod tests {
 
     #[test]
     fn test_filter_contained_matches_no_containment() {
-        let mut m1 = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
+        let mut m1 = create_test_match("#1", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100);
         m1.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 11));
-        let mut m2 = create_test_match("#1", 15, 25, 0.85, 85.0, 100);
+        let mut m2 = create_test_match("#1", 15, 25, MatchScore::from_percentage(0.85), 85.0, 100);
         m2.coordinates = MatchCoordinates::query_region(PositionSpan::range(15, 26));
         let matches = vec![m1, m2];
 
@@ -618,17 +619,24 @@ mod tests {
 
     #[test]
     fn test_filter_contained_matches_single() {
-        let matches = vec![create_test_match("#1", 1, 10, 0.9, 90.0, 100)];
+        let matches = vec![create_test_match(
+            "#1",
+            1,
+            10,
+            MatchScore::from_percentage(0.9),
+            90.0,
+            100,
+        )];
         let (filtered, _) = filter_contained_matches(&matches);
         assert_eq!(filtered.len(), 1);
     }
 
     #[test]
     fn test_filter_contained_matches_partial_overlap_no_containment() {
-        let mut m1 = create_test_match("#1", 1, 20, 0.9, 90.0, 100);
+        let mut m1 = create_test_match("#1", 1, 20, MatchScore::from_percentage(0.9), 90.0, 100);
         m1.matched_length = 150;
         m1.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 21));
-        let mut m2 = create_test_match("#2", 15, 30, 0.85, 85.0, 100);
+        let mut m2 = create_test_match("#2", 15, 30, MatchScore::from_percentage(0.85), 85.0, 100);
         m2.matched_length = 100;
         m2.coordinates = MatchCoordinates::query_region(PositionSpan::range(15, 31));
         let matches = vec![m1, m2];
@@ -640,9 +648,9 @@ mod tests {
 
     #[test]
     fn test_filter_contained_matches_equal_start_different_end() {
-        let mut m1 = create_test_match("#1", 1, 30, 0.9, 90.0, 100);
+        let mut m1 = create_test_match("#1", 1, 30, MatchScore::from_percentage(0.9), 90.0, 100);
         m1.matched_length = 200;
-        let mut m2 = create_test_match("#2", 1, 15, 0.85, 85.0, 100);
+        let mut m2 = create_test_match("#2", 1, 15, MatchScore::from_percentage(0.85), 85.0, 100);
         m2.matched_length = 100;
         let matches = vec![m1, m2];
 
@@ -654,11 +662,13 @@ mod tests {
 
     #[test]
     fn test_filter_contained_matches_nested_containment() {
-        let mut outer = create_test_match("#1", 1, 50, 0.9, 90.0, 100);
+        let mut outer = create_test_match("#1", 1, 50, MatchScore::from_percentage(0.9), 90.0, 100);
         outer.matched_length = 300;
-        let mut middle = create_test_match("#2", 10, 40, 0.85, 85.0, 100);
+        let mut middle =
+            create_test_match("#2", 10, 40, MatchScore::from_percentage(0.85), 85.0, 100);
         middle.matched_length = 200;
-        let mut inner = create_test_match("#3", 15, 35, 0.8, 80.0, 100);
+        let mut inner =
+            create_test_match("#3", 15, 35, MatchScore::from_percentage(0.8), 80.0, 100);
         inner.matched_length = 100;
         let matches = vec![inner, middle, outer];
 
@@ -671,9 +681,9 @@ mod tests {
 
     #[test]
     fn test_filter_contained_matches_same_boundaries_different_matched_length() {
-        let mut m1 = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
+        let mut m1 = create_test_match("#1", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100);
         m1.matched_length = 200;
-        let mut m2 = create_test_match("#2", 1, 10, 0.85, 85.0, 100);
+        let mut m2 = create_test_match("#2", 1, 10, MatchScore::from_percentage(0.85), 85.0, 100);
         m2.matched_length = 100;
         let matches = vec![m1, m2];
 
@@ -801,15 +811,28 @@ mod tests {
 
     #[test]
     fn test_filter_contained_matches_prefers_reference_rule_for_same_qspan() {
-        let mut referenced =
-            create_test_match("gpl-1.0-plus_or_mit_2.RULE", 1, 1, 50.75, 50.75, 100);
+        let mut referenced = create_test_match(
+            "gpl-1.0-plus_or_mit_2.RULE",
+            1,
+            1,
+            MatchScore::from_percentage(50.75),
+            50.75,
+            100,
+        );
         referenced.license_expression = "gpl-1.0-plus OR mit".to_string();
         referenced.license_expression_spdx = Some("GPL-1.0-or-later OR MIT".to_string());
         referenced.matched_length = 34;
         referenced.coordinates = MatchCoordinates::query_region(PositionSpan::range(2166, 2200));
         referenced.referenced_filenames = Some(vec!["LICENSE".to_string()]);
 
-        let mut plain = create_test_match("gpl-2.0_290.RULE", 1, 1, 60.71, 60.71, 100);
+        let mut plain = create_test_match(
+            "gpl-2.0_290.RULE",
+            1,
+            1,
+            MatchScore::from_percentage(60.71),
+            60.71,
+            100,
+        );
         plain.license_expression = "gpl-2.0".to_string();
         plain.license_expression_spdx = Some("GPL-2.0-only".to_string());
         plain.matched_length = 34;
@@ -823,14 +846,28 @@ mod tests {
 
     #[test]
     fn test_filter_contained_matches_does_not_prefer_non_license_filename_reference() {
-        let mut referenced = create_test_match("ruby_or_gpl_1.RULE", 1, 1, 86.83, 86.83, 100);
+        let mut referenced = create_test_match(
+            "ruby_or_gpl_1.RULE",
+            1,
+            1,
+            MatchScore::from_percentage(86.83),
+            86.83,
+            100,
+        );
         referenced.license_expression = "ruby OR gpl-2.0".to_string();
         referenced.license_expression_spdx = Some("Ruby OR GPL-2.0-only".to_string());
         referenced.matched_length = 323;
         referenced.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 324));
         referenced.referenced_filenames = Some(vec!["COPYING.txt".to_string()]);
 
-        let mut plain = create_test_match("ruby_1.RULE", 1, 1, 95.0, 95.0, 100);
+        let mut plain = create_test_match(
+            "ruby_1.RULE",
+            1,
+            1,
+            MatchScore::from_percentage(95.0),
+            95.0,
+            100,
+        );
         plain.license_expression = "ruby".to_string();
         plain.license_expression_spdx = Some("Ruby".to_string());
         plain.matched_length = 323;
@@ -856,7 +893,14 @@ mod tests {
     #[test]
     fn test_filter_overlapping_matches_single() {
         let index = LicenseIndex::with_legalese_count(10);
-        let matches = vec![create_test_match("#1", 1, 10, 0.9, 90.0, 100)];
+        let matches = vec![create_test_match(
+            "#1",
+            1,
+            10,
+            MatchScore::from_percentage(0.9),
+            90.0,
+            100,
+        )];
 
         let (kept, discarded) = filter_overlapping_matches(matches, &index);
 
@@ -868,8 +912,8 @@ mod tests {
     fn test_filter_overlapping_matches_non_overlapping() {
         let index = LicenseIndex::with_legalese_count(10);
         let matches = vec![
-            create_test_match("#1", 1, 10, 0.9, 90.0, 100),
-            create_test_match("#2", 20, 30, 0.85, 85.0, 100),
+            create_test_match("#1", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100),
+            create_test_match("#2", 20, 30, MatchScore::from_percentage(0.85), 85.0, 100),
         ];
 
         let (kept, discarded) = filter_overlapping_matches(matches, &index);
@@ -881,10 +925,10 @@ mod tests {
     #[test]
     fn test_filter_overlapping_matches_extra_large_discard_shorter() {
         let index = LicenseIndex::with_legalese_count(10);
-        let mut m1 = create_test_match("#1", 1, 100, 0.9, 90.0, 100);
+        let mut m1 = create_test_match("#1", 1, 100, MatchScore::from_percentage(0.9), 90.0, 100);
         m1.matched_length = 100;
         m1.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 101));
-        let mut m2 = create_test_match("#2", 5, 100, 0.85, 85.0, 100);
+        let mut m2 = create_test_match("#2", 5, 100, MatchScore::from_percentage(0.85), 85.0, 100);
         m2.matched_length = 10;
         m2.coordinates = MatchCoordinates::query_region(PositionSpan::range(5, 101));
 
@@ -900,10 +944,10 @@ mod tests {
     #[test]
     fn test_filter_overlapping_matches_large_with_hilen() {
         let index = LicenseIndex::with_legalese_count(10);
-        let mut m1 = create_test_match("#1", 1, 100, 0.9, 90.0, 100);
+        let mut m1 = create_test_match("#1", 1, 100, MatchScore::from_percentage(0.9), 90.0, 100);
         m1.matched_length = 100;
         m1.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 101));
-        let mut m2 = create_test_match("#2", 30, 100, 0.85, 85.0, 100);
+        let mut m2 = create_test_match("#2", 30, 100, MatchScore::from_percentage(0.85), 85.0, 100);
         m2.matched_length = 10;
         m2.coordinates = MatchCoordinates::query_region(PositionSpan::range(30, 101));
 
@@ -921,9 +965,9 @@ mod tests {
         let _ = index.false_positive_rids.insert(1);
         let _ = index.false_positive_rids.insert(2);
 
-        let mut m1 = create_test_match("#1", 1, 20, 0.9, 90.0, 100);
+        let mut m1 = create_test_match("#1", 1, 20, MatchScore::from_percentage(0.9), 90.0, 100);
         m1.matched_length = 100;
-        let mut m2 = create_test_match("#2", 10, 30, 0.85, 85.0, 100);
+        let mut m2 = create_test_match("#2", 10, 30, MatchScore::from_percentage(0.85), 85.0, 100);
         m2.matched_length = 100;
 
         let matches = vec![m1, m2];
@@ -938,11 +982,12 @@ mod tests {
     fn test_filter_overlapping_matches_sandwich_detection() {
         let index = LicenseIndex::with_legalese_count(10);
 
-        let mut prev = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
+        let mut prev = create_test_match("#1", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100);
         prev.matched_length = 100;
-        let mut current = create_test_match("#2", 5, 15, 0.85, 85.0, 100);
+        let mut current =
+            create_test_match("#2", 5, 15, MatchScore::from_percentage(0.85), 85.0, 100);
         current.matched_length = 50;
-        let mut next = create_test_match("#3", 12, 25, 0.8, 80.0, 100);
+        let mut next = create_test_match("#3", 12, 25, MatchScore::from_percentage(0.8), 80.0, 100);
         next.matched_length = 100;
 
         let matches = vec![prev, current, next];
@@ -957,9 +1002,9 @@ mod tests {
     fn test_filter_overlapping_matches_sorting_order() {
         let index = LicenseIndex::with_legalese_count(10);
 
-        let m1 = create_test_match("#1", 25, 35, 0.9, 90.0, 100);
-        let m2 = create_test_match("#2", 1, 10, 0.85, 85.0, 100);
-        let m3 = create_test_match("#3", 40, 50, 0.8, 80.0, 100);
+        let m1 = create_test_match("#1", 25, 35, MatchScore::from_percentage(0.9), 90.0, 100);
+        let m2 = create_test_match("#2", 1, 10, MatchScore::from_percentage(0.85), 85.0, 100);
+        let m3 = create_test_match("#3", 40, 50, MatchScore::from_percentage(0.8), 80.0, 100);
 
         let matches = vec![m1, m2, m3];
 
@@ -975,9 +1020,9 @@ mod tests {
     fn test_filter_overlapping_matches_partial_overlap_no_filter() {
         let index = LicenseIndex::with_legalese_count(10);
 
-        let mut m1 = create_test_match("#1", 1, 20, 0.9, 90.0, 100);
+        let mut m1 = create_test_match("#1", 1, 20, MatchScore::from_percentage(0.9), 90.0, 100);
         m1.matched_length = 200;
-        let mut m2 = create_test_match("#2", 15, 35, 0.85, 85.0, 100);
+        let mut m2 = create_test_match("#2", 15, 35, MatchScore::from_percentage(0.85), 85.0, 100);
         m2.matched_length = 150;
 
         let matches = vec![m1, m2];
@@ -992,10 +1037,12 @@ mod tests {
     fn test_filter_overlapping_matches_surround_check() {
         let index = LicenseIndex::with_legalese_count(10);
 
-        let mut outer = create_test_match("#1", 1, 100, 0.9, 90.0, 100);
+        let mut outer =
+            create_test_match("#1", 1, 100, MatchScore::from_percentage(0.9), 90.0, 100);
         outer.matched_length = 500;
         outer.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 101));
-        let mut inner = create_test_match("#2", 20, 30, 0.85, 85.0, 100);
+        let mut inner =
+            create_test_match("#2", 20, 30, MatchScore::from_percentage(0.85), 85.0, 100);
         inner.matched_length = 50;
         inner.coordinates = MatchCoordinates::query_region(PositionSpan::range(20, 31));
 
@@ -1010,9 +1057,9 @@ mod tests {
 
     #[test]
     fn test_calculate_overlap_no_overlap() {
-        let mut m1 = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
+        let mut m1 = create_test_match("#1", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100);
         m1.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 11));
-        let mut m2 = create_test_match("#2", 20, 30, 0.85, 85.0, 100);
+        let mut m2 = create_test_match("#2", 20, 30, MatchScore::from_percentage(0.85), 85.0, 100);
         m2.coordinates = MatchCoordinates::query_region(PositionSpan::range(20, 31));
 
         assert_eq!(m1.qoverlap(&m2), 0);
@@ -1021,9 +1068,9 @@ mod tests {
 
     #[test]
     fn test_calculate_overlap_partial() {
-        let mut m1 = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
+        let mut m1 = create_test_match("#1", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100);
         m1.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 11));
-        let mut m2 = create_test_match("#2", 5, 15, 0.85, 85.0, 100);
+        let mut m2 = create_test_match("#2", 5, 15, MatchScore::from_percentage(0.85), 85.0, 100);
         m2.coordinates = MatchCoordinates::query_region(PositionSpan::range(5, 16));
 
         assert_eq!(m1.qoverlap(&m2), 6);
@@ -1032,9 +1079,9 @@ mod tests {
 
     #[test]
     fn test_calculate_overlap_contained() {
-        let mut m1 = create_test_match("#1", 1, 20, 0.9, 90.0, 100);
+        let mut m1 = create_test_match("#1", 1, 20, MatchScore::from_percentage(0.9), 90.0, 100);
         m1.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 21));
-        let mut m2 = create_test_match("#2", 5, 15, 0.85, 85.0, 100);
+        let mut m2 = create_test_match("#2", 5, 15, MatchScore::from_percentage(0.85), 85.0, 100);
         m2.coordinates = MatchCoordinates::query_region(PositionSpan::range(5, 16));
 
         assert_eq!(m1.qoverlap(&m2), 11);
@@ -1043,9 +1090,9 @@ mod tests {
 
     #[test]
     fn test_calculate_overlap_identical() {
-        let mut m1 = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
+        let mut m1 = create_test_match("#1", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100);
         m1.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 11));
-        let mut m2 = create_test_match("#2", 1, 10, 0.85, 85.0, 100);
+        let mut m2 = create_test_match("#2", 1, 10, MatchScore::from_percentage(0.85), 85.0, 100);
         m2.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 11));
 
         assert_eq!(m1.qoverlap(&m2), 10);
@@ -1053,9 +1100,9 @@ mod tests {
 
     #[test]
     fn test_calculate_overlap_adjacent() {
-        let mut m1 = create_test_match("#1", 1, 10, 0.9, 90.0, 100);
+        let mut m1 = create_test_match("#1", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100);
         m1.coordinates = MatchCoordinates::query_region(PositionSpan::range(1, 11));
-        let mut m2 = create_test_match("#2", 11, 20, 0.85, 85.0, 100);
+        let mut m2 = create_test_match("#2", 11, 20, MatchScore::from_percentage(0.85), 85.0, 100);
         m2.coordinates = MatchCoordinates::query_region(PositionSpan::range(11, 21));
 
         assert_eq!(m1.qoverlap(&m2), 0);
@@ -1076,8 +1123,8 @@ mod tests {
     fn test_restore_non_overlapping_empty_kept() {
         let kept: Vec<LicenseMatch> = vec![];
         let discarded = vec![
-            create_test_match("#1", 1, 10, 0.9, 90.0, 100),
-            create_test_match("#2", 20, 30, 0.85, 85.0, 100),
+            create_test_match("#1", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100),
+            create_test_match("#2", 20, 30, MatchScore::from_percentage(0.85), 85.0, 100),
         ];
 
         let (to_keep, to_discard) = restore_non_overlapping(&kept, discarded);
@@ -1088,7 +1135,14 @@ mod tests {
 
     #[test]
     fn test_restore_non_overlapping_empty_discarded() {
-        let kept = vec![create_test_match("#1", 1, 10, 0.9, 90.0, 100)];
+        let kept = vec![create_test_match(
+            "#1",
+            1,
+            10,
+            MatchScore::from_percentage(0.9),
+            90.0,
+            100,
+        )];
         let discarded: Vec<LicenseMatch> = vec![];
 
         let (to_keep, to_discard) = restore_non_overlapping(&kept, discarded);
@@ -1099,10 +1153,17 @@ mod tests {
 
     #[test]
     fn test_restore_non_overlapping_non_overlapping_restored() {
-        let kept = vec![create_test_match("#1", 1, 10, 0.9, 90.0, 100)];
+        let kept = vec![create_test_match(
+            "#1",
+            1,
+            10,
+            MatchScore::from_percentage(0.9),
+            90.0,
+            100,
+        )];
         let discarded = vec![
-            create_test_match("#2", 50, 60, 0.85, 85.0, 100),
-            create_test_match("#3", 100, 110, 0.8, 80.0, 100),
+            create_test_match("#2", 50, 60, MatchScore::from_percentage(0.85), 85.0, 100),
+            create_test_match("#3", 100, 110, MatchScore::from_percentage(0.8), 80.0, 100),
         ];
 
         let (to_keep, to_discard) = restore_non_overlapping(&kept, discarded);
@@ -1113,10 +1174,17 @@ mod tests {
 
     #[test]
     fn test_restore_non_overlapping_overlapping_not_restored() {
-        let kept = vec![create_test_match("#1", 1, 20, 0.9, 90.0, 100)];
+        let kept = vec![create_test_match(
+            "#1",
+            1,
+            20,
+            MatchScore::from_percentage(0.9),
+            90.0,
+            100,
+        )];
         let discarded = vec![
-            create_test_match("#2", 5, 15, 0.85, 85.0, 100),
-            create_test_match("#3", 10, 25, 0.8, 80.0, 100),
+            create_test_match("#2", 5, 15, MatchScore::from_percentage(0.85), 85.0, 100),
+            create_test_match("#3", 10, 25, MatchScore::from_percentage(0.8), 80.0, 100),
         ];
 
         let (to_keep, to_discard) = restore_non_overlapping(&kept, discarded);
@@ -1127,11 +1195,18 @@ mod tests {
 
     #[test]
     fn test_restore_non_overlapping_partial_overlap() {
-        let kept = vec![create_test_match("#1", 10, 20, 0.9, 90.0, 100)];
+        let kept = vec![create_test_match(
+            "#1",
+            10,
+            20,
+            MatchScore::from_percentage(0.9),
+            90.0,
+            100,
+        )];
         let discarded = vec![
-            create_test_match("#2", 1, 5, 0.85, 85.0, 100),
-            create_test_match("#3", 15, 25, 0.8, 80.0, 100),
-            create_test_match("#4", 50, 60, 0.9, 90.0, 100),
+            create_test_match("#2", 1, 5, MatchScore::from_percentage(0.85), 85.0, 100),
+            create_test_match("#3", 15, 25, MatchScore::from_percentage(0.8), 80.0, 100),
+            create_test_match("#4", 50, 60, MatchScore::from_percentage(0.9), 90.0, 100),
         ];
 
         let (to_keep, to_discard) = restore_non_overlapping(&kept, discarded);
@@ -1150,13 +1225,13 @@ mod tests {
     #[test]
     fn test_restore_non_overlapping_multiple_kept() {
         let kept = vec![
-            create_test_match("#1", 1, 10, 0.9, 90.0, 100),
-            create_test_match("#2", 30, 40, 0.85, 85.0, 100),
+            create_test_match("#1", 1, 10, MatchScore::from_percentage(0.9), 90.0, 100),
+            create_test_match("#2", 30, 40, MatchScore::from_percentage(0.85), 85.0, 100),
         ];
         let discarded = vec![
-            create_test_match("#3", 15, 20, 0.8, 80.0, 100),
-            create_test_match("#4", 5, 15, 0.9, 90.0, 100),
-            create_test_match("#5", 50, 60, 0.9, 90.0, 100),
+            create_test_match("#3", 15, 20, MatchScore::from_percentage(0.8), 80.0, 100),
+            create_test_match("#4", 5, 15, MatchScore::from_percentage(0.9), 90.0, 100),
+            create_test_match("#5", 50, 60, MatchScore::from_percentage(0.9), 90.0, 100),
         ];
 
         let (to_keep, to_discard) = restore_non_overlapping(&kept, discarded);
@@ -1174,8 +1249,15 @@ mod tests {
 
     #[test]
     fn test_restore_non_overlapping_merges_discarded() {
-        let kept = vec![create_test_match("#1", 1, 10, 0.9, 100.0, 100)];
-        let mut m1 = create_test_match("#2", 50, 60, 0.85, 100.0, 100);
+        let kept = vec![create_test_match(
+            "#1",
+            1,
+            10,
+            MatchScore::from_percentage(0.9),
+            100.0,
+            100,
+        )];
+        let mut m1 = create_test_match("#2", 50, 60, MatchScore::from_percentage(0.85), 100.0, 100);
         m1.rule_length = 100;
         m1.rule_start_token = 0;
         m1.coordinates = MatchCoordinates::rule_aligned(
@@ -1183,7 +1265,7 @@ mod tests {
             PositionSpan::range(0, 11),
             PositionSpan::empty(),
         );
-        let mut m2 = create_test_match("#2", 55, 65, 0.8, 100.0, 100);
+        let mut m2 = create_test_match("#2", 55, 65, MatchScore::from_percentage(0.8), 100.0, 100);
         m2.rule_length = 100;
         m2.rule_start_token = 5;
         m2.coordinates = MatchCoordinates::rule_aligned(
@@ -1204,8 +1286,22 @@ mod tests {
 
     #[test]
     fn test_restore_non_overlapping_adjacent_not_overlapping() {
-        let kept = vec![create_test_match("#1", 1, 10, 0.9, 90.0, 100)];
-        let discarded = vec![create_test_match("#2", 11, 20, 0.85, 85.0, 100)];
+        let kept = vec![create_test_match(
+            "#1",
+            1,
+            10,
+            MatchScore::from_percentage(0.9),
+            90.0,
+            100,
+        )];
+        let discarded = vec![create_test_match(
+            "#2",
+            11,
+            20,
+            MatchScore::from_percentage(0.85),
+            85.0,
+            100,
+        )];
 
         let (to_keep, to_discard) = restore_non_overlapping(&kept, discarded);
 
@@ -1215,8 +1311,22 @@ mod tests {
 
     #[test]
     fn test_restore_non_overlapping_touching_is_overlapping() {
-        let kept = vec![create_test_match("#1", 1, 10, 0.9, 90.0, 100)];
-        let discarded = vec![create_test_match("#2", 10, 20, 0.85, 85.0, 100)];
+        let kept = vec![create_test_match(
+            "#1",
+            1,
+            10,
+            MatchScore::from_percentage(0.9),
+            90.0,
+            100,
+        )];
+        let discarded = vec![create_test_match(
+            "#2",
+            10,
+            20,
+            MatchScore::from_percentage(0.85),
+            85.0,
+            100,
+        )];
 
         let (to_keep, to_discard) = restore_non_overlapping(&kept, discarded);
 
@@ -1228,7 +1338,14 @@ mod tests {
     fn test_filter_overlapping_matches_prefers_higher_coverage() {
         let index = LicenseIndex::with_legalese_count(10);
 
-        let mut m1 = create_test_match("gfdl-1.1_13.RULE", 1, 10, 78.7, 78.7, 100);
+        let mut m1 = create_test_match(
+            "gfdl-1.1_13.RULE",
+            1,
+            10,
+            MatchScore::from_percentage(78.7),
+            78.7,
+            100,
+        );
         m1.start_token = 5;
         m1.end_token = 77;
         m1.matched_length = 48;
@@ -1239,7 +1356,14 @@ mod tests {
             PositionSpan::range(0, 14),
         );
 
-        let mut m2 = create_test_match("gfdl-1.1-plus_5.RULE", 1, 10, 68.6, 68.6, 100);
+        let mut m2 = create_test_match(
+            "gfdl-1.1-plus_5.RULE",
+            1,
+            10,
+            MatchScore::from_percentage(68.6),
+            68.6,
+            100,
+        );
         m2.start_token = 5;
         m2.end_token = 77;
         m2.matched_length = 48;
@@ -1263,8 +1387,14 @@ mod tests {
     fn test_filter_overlapping_matches_prefers_reference_rule_over_plain_overlap() {
         let index = LicenseIndex::with_legalese_count(10);
 
-        let mut referenced =
-            create_test_match("gpl-1.0-plus_or_mit_2.RULE", 1, 1, 50.75, 50.75, 100);
+        let mut referenced = create_test_match(
+            "gpl-1.0-plus_or_mit_2.RULE",
+            1,
+            1,
+            MatchScore::from_percentage(50.75),
+            50.75,
+            100,
+        );
         referenced.license_expression = "gpl-1.0-plus OR mit".to_string();
         referenced.license_expression_spdx = Some("GPL-1.0-or-later OR MIT".to_string());
         referenced.matched_length = 34;
@@ -1272,7 +1402,14 @@ mod tests {
         referenced.coordinates = MatchCoordinates::query_region(PositionSpan::range(2166, 2200));
         referenced.referenced_filenames = Some(vec!["LICENSE".to_string()]);
 
-        let mut plain = create_test_match("gpl-2.0_290.RULE", 1, 1, 60.71, 60.71, 100);
+        let mut plain = create_test_match(
+            "gpl-2.0_290.RULE",
+            1,
+            1,
+            MatchScore::from_percentage(60.71),
+            60.71,
+            100,
+        );
         plain.license_expression = "gpl-2.0".to_string();
         plain.license_expression_spdx = Some("GPL-2.0-only".to_string());
         plain.matched_length = 34;

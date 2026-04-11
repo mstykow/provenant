@@ -26,7 +26,7 @@ pub(super) fn python_safe_name(s: &str) -> String {
     }
 }
 
-pub(super) fn get_uuid_on_content(content: &[(&str, f32, Vec<String>)]) -> String {
+pub(super) fn get_uuid_on_content(content: &[(&str, f64, Vec<String>)]) -> String {
     let repr_str = format_python_tuple_repr(content);
 
     use sha1::{Digest, Sha1};
@@ -43,19 +43,19 @@ pub(super) fn get_uuid_on_content(content: &[(&str, f32, Vec<String>)]) -> Strin
 }
 
 pub(super) fn compute_content_identifier(matches: &[LicenseMatch]) -> String {
-    let content: Vec<(&str, f32, Vec<String>)> = matches
+    let content: Vec<(&str, f64, Vec<String>)> = matches
         .iter()
         .map(|m| {
             let matched_text = m.matched_text.as_deref().unwrap_or("");
             let tokens = tokenize_without_stopwords(matched_text);
-            (m.rule_identifier.as_str(), m.score, tokens)
+            (m.rule_identifier.as_str(), m.score.value(), tokens)
         })
         .collect();
 
     get_uuid_on_content(&content)
 }
 
-pub(super) fn format_python_tuple_repr(content: &[(&str, f32, Vec<String>)]) -> String {
+pub(super) fn format_python_tuple_repr(content: &[(&str, f64, Vec<String>)]) -> String {
     let mut result = String::from("(");
 
     for (i, (rule_id, score, tokens)) in content.iter().enumerate() {
@@ -86,8 +86,8 @@ pub(super) fn python_str_repr(s: &str) -> String {
     }
 }
 
-pub(super) fn format_score_for_repr(score: f32) -> String {
-    format!("{:?}", score)
+pub(super) fn format_score_for_repr(score: f64) -> String {
+    format!("{:?}", score as f32)
 }
 
 fn python_token_tuple_repr(tokens: &[String]) -> String {
@@ -163,6 +163,7 @@ mod tests {
     use super::*;
     use crate::license_detection::models::{LicenseMatch, MatchCoordinates, PositionSpan};
     use crate::models::LineNumber;
+    use crate::models::MatchScore;
 
     fn create_test_match() -> LicenseMatch {
         LicenseMatch {
@@ -175,7 +176,7 @@ mod tests {
             start_token: 1,
             end_token: 11,
             matcher: crate::license_detection::models::MatcherKind::Hash,
-            score: 95.0,
+            score: MatchScore::from_percentage(95.0),
             matched_length: 100,
             match_coverage: 95.0,
             rule_relevance: 100,
@@ -217,7 +218,7 @@ mod tests {
 
     #[test]
     fn test_python_tuple_repr_format() {
-        let result = format_python_tuple_repr(&[("rule1", 95.0, vec!["token1".to_string()])]);
+        let result = format_python_tuple_repr(&[("rule1", 95.0_f64, vec!["token1".to_string()])]);
         assert!(result.starts_with("("));
         assert!(result.ends_with(")"));
     }

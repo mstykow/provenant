@@ -366,7 +366,7 @@ fn format_public_detection_content(detection: &LicenseDetection) -> String {
                     .or(detection_match.matcher.as_deref())
                     .unwrap_or("parser-declared-license")
             ),
-            detection_match.score.to_f32_lossy(),
+            detection_match.score.value() as f32,
             python_token_tuple_repr(&tokenize_without_stopwords(
                 detection_match.matched_text.as_deref().unwrap_or_default(),
             )),

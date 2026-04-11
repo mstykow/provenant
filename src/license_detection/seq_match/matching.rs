@@ -6,6 +6,7 @@ use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::{LicenseMatch, MatchCoordinates};
 use crate::license_detection::query::QueryRun;
 use crate::models::LineNumber;
+use crate::models::MatchScore;
 use bit_set::BitSet;
 use std::collections::HashMap;
 
@@ -309,7 +310,9 @@ pub(crate) fn seq_match_with_candidates(
                     let rule_coverage = mlen as f32 / rule_length as f32;
                     let match_coverage = LicenseMatch::round_metric(rule_coverage * 100.0);
 
-                    let score = match_coverage * candidate.rule.relevance as f32 / 100.0;
+                    let score = MatchScore::from_percentage(
+                        match_coverage as f64 * candidate.rule.relevance as f64 / 100.0,
+                    );
 
                     let license_match = LicenseMatch {
                         license_expression: candidate.rule.license_expression.clone(),

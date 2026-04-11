@@ -28,7 +28,7 @@ license is included in the section entitled "GNU Free Documentation License"."#;
         eprintln!("Detection: {:?}", det.license_expression);
         for m in &det.matches {
             eprintln!(
-                "  Rule: {}, score: {:.2}, coverage: {:.2}%",
+                "  Rule: {}, score: {}, coverage: {:.2}%",
                 m.rule_identifier, m.score, m.match_coverage
             );
         }

@@ -171,6 +171,7 @@ mod tests {
     use super::*;
     use crate::license_detection::models::{MatchCoordinates, PositionSpan};
     use crate::models::LineNumber;
+    use crate::models::MatchScore;
 
     #[allow(clippy::too_many_arguments)]
     fn create_test_match_with_flags(
@@ -198,7 +199,7 @@ mod tests {
             start_token: 0,
             end_token: 0,
             matcher: matcher.parse().expect("invalid test matcher"),
-            score: 100.0,
+            score: MatchScore::MAX,
             matched_length,
             rule_length,
             match_coverage,
