@@ -13905,11 +13905,17 @@ fn build_holder_from_copyright_node(
     ignored_labels: &[TreeLabel],
     ignored_pos_tags: &[PosTag],
 ) -> Option<HolderDetection> {
-    static HELD_BY_PROJECT_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?i)copyright\s+is\s+held\s+by\s+the\s+[\p{L}0-9._-]+(?:\s+[\p{L}0-9._-]+){0,3}\s+project\b").unwrap()
-    });
+    let all_leaves = collect_all_leaves(node);
+    let held_by_clause = all_leaves.len() >= 4
+        && all_leaves[0].tag == PosTag::Copy
+        && all_leaves[1].tag == PosTag::Is
+        && all_leaves[2].tag == PosTag::Held
+        && all_leaves[3].tag == PosTag::By;
+    if held_by_clause {
+        return None;
+    }
 
-    let copy_line = collect_all_leaves(node)
+    let copy_line = all_leaves
         .iter()
         .filter(|t| t.tag == PosTag::Copy && t.value.eq_ignore_ascii_case("copyright"))
         .map(|t| t.start_line)
@@ -13927,22 +13933,11 @@ fn build_holder_from_copyright_node(
         });
     }
 
-    let allow_single_word_contributors = collect_all_leaves(node)
+    let allow_single_word_contributors = all_leaves
         .iter()
         .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
 
-    let det = build_holder_from_tokens(&filtered, allow_single_word_contributors)?;
-    let raw_text = normalize_whitespace(
-        &collect_all_leaves(node)
-            .iter()
-            .map(|t| t.value.as_str())
-            .collect::<Vec<_>>()
-            .join(" "),
-    );
-    if HELD_BY_PROJECT_RE.is_match(&raw_text) {
-        return None;
-    }
-    Some(det)
+    build_holder_from_tokens(&filtered, allow_single_word_contributors)
 }
 
 fn signal_lines_before_copy_line(node: &ParseNode, copy_line: LineNumber) -> HashSet<usize> {
