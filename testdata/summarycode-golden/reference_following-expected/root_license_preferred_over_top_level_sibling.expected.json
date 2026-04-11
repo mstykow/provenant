@@ -169,7 +169,7 @@
       "identifier": "bsd-new_1145.RULE",
       "license_expression": "bsd-new",
       "language": null,
-      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_1145.RULE",
+      "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_1145.RULE",
       "is_synthetic": false,
       "length": 230,
       "referenced_filenames": []
@@ -178,7 +178,7 @@
       "identifier": "mit.LICENSE",
       "license_expression": "mit",
       "language": null,
-      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE",
+      "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.LICENSE",
       "is_synthetic": false,
       "length": 161,
       "referenced_filenames": []
@@ -187,7 +187,7 @@
       "identifier": "mit_14.RULE",
       "license_expression": "mit",
       "language": null,
-      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_14.RULE",
+      "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_14.RULE",
       "is_synthetic": false,
       "length": 2,
       "referenced_filenames": []
@@ -196,7 +196,7 @@
       "identifier": "mit_1471.RULE",
       "license_expression": "mit",
       "language": null,
-      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_1471.RULE",
+      "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/mit_1471.RULE",
       "is_synthetic": false,
       "length": 14,
       "referenced_filenames": ["LICENSE"]

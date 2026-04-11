@@ -139,7 +139,7 @@
       "identifier": "bsd-new_195.RULE",
       "license_expression": "bsd-new",
       "language": null,
-      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_195.RULE",
+      "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/bsd-new_195.RULE",
       "is_synthetic": false,
       "length": 4,
       "referenced_filenames": []
@@ -148,7 +148,7 @@
       "identifier": "free-unknown-package_1.RULE",
       "license_expression": "free-unknown",
       "language": null,
-      "rule_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/rules/free-unknown-package_1.RULE",
+      "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/free-unknown-package_1.RULE",
       "is_synthetic": false,
       "length": 11,
       "referenced_filenames": ["INHERIT_LICENSE_FROM_PACKAGE"]
