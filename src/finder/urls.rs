@@ -55,7 +55,7 @@ fn end_of_url_cleaner(url: &str) -> String {
             .replace("&amp;", "&")
     };
 
-    for marker in ['\\', '<', '>', '(', ')', '[', ']', '"', '\''] {
+    for marker in ['\\', '<', '>', '(', ')', '[', ']', '"', '\'', '`'] {
         if let Some((before, _)) = cleaned.split_once(marker) {
             cleaned = before.to_string();
         }

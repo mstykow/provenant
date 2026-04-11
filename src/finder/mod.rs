@@ -104,11 +104,44 @@ mod tests {
 
     #[test]
     fn test_find_urls_strips_template_credentials_from_git_urls() {
-        let text = "Repo: https://user:{ACCESS_TOKEN}@github.com/apache/airflow.git";
+        let text = "Repo: https://user:{ACCESS_TOKEN}@github.com/example/project.git";
         let config = DetectionConfig::default();
         let urls = find_urls(text, &config);
 
         assert_eq!(urls.len(), 1, "urls: {urls:#?}");
-        assert_eq!(urls[0].url, "https://github.com/apache/airflow.git");
+        assert_eq!(urls[0].url, "https://github.com/example/project.git");
+    }
+
+    #[test]
+    fn test_find_urls_strips_percent_encoded_template_credentials_from_git_urls() {
+        let text = "Repo: https://user:%7BACCESS_TOKEN%7D@github.com/example/project.git";
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        assert_eq!(urls.len(), 1, "urls: {urls:#?}");
+        assert_eq!(urls[0].url, "https://github.com/example/project.git");
+    }
+
+    #[test]
+    fn test_find_urls_dedupes_plain_and_templated_git_urls_after_sanitization() {
+        let text = concat!(
+            "https://github.com/example/project.git\n",
+            "https://user:%7BACCESS_TOKEN%7D@github.com/example/project.git\n",
+        );
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        assert_eq!(urls.len(), 1, "urls: {urls:#?}");
+        assert_eq!(urls[0].url, "https://github.com/example/project.git");
+    }
+
+    #[test]
+    fn test_find_urls_strips_trailing_backticks() {
+        let text = "Docs: https://github.com/example/project.git``";
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        assert_eq!(urls.len(), 1, "urls: {urls:#?}");
+        assert_eq!(urls[0].url, "https://github.com/example/project.git");
     }
 }
