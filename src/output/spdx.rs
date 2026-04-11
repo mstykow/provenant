@@ -6,6 +6,7 @@ use sha1::{Digest, Sha1};
 
 use crate::models::FileType;
 use crate::output_schema::{Output, OutputFileInfo as FileInfo, OutputMatch as Match};
+use crate::utils::time::{convert_header_timestamp_to_iso_utc, fallback_iso_utc_timestamp};
 
 use super::shared::{sorted_files, xml_escape};
 use super::{OutputWriteConfig, SPDX_DOCUMENT_NOTICE};
@@ -144,9 +145,9 @@ pub(crate) fn write_spdx_rdf_xml(
     let created_raw = output
         .headers
         .first()
-        .map(|h| h.start_timestamp.as_str())
-        .unwrap_or("1970-01-01T00:00:00Z");
-    let created = xml_escape(created_raw);
+        .and_then(|h| convert_header_timestamp_to_iso_utc(&h.start_timestamp))
+        .unwrap_or_else(|| fallback_iso_utc_timestamp().to_string());
+    let created = xml_escape(&created_raw);
 
     let mut xml = String::new();
     xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
