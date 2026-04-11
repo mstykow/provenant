@@ -214,7 +214,7 @@ pub(crate) fn create_output(
         tallies_by_facet,
         headers: vec![Header {
             tool_name: TOOL_NAME.to_string(),
-            tool_version: env!("CARGO_PKG_VERSION").to_string(),
+            tool_version: crate::version::BUILD_VERSION.to_string(),
             options: context.header_options,
             notice: HEADER_NOTICE.to_string(),
             start_timestamp: format_scancode_timestamp(&start_time),
