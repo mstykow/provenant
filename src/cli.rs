@@ -57,12 +57,8 @@ fn parse_license_policy_arg(value: &str) -> Result<String, String> {
 #[derive(Parser, Debug)]
 #[command(
     author = "The Provenant contributors",
-    version = env!("CARGO_PKG_VERSION"),
-    long_version = concat!(
-        env!("CARGO_PKG_VERSION"),
-        "\n",
-        "License detection uses data from ScanCode Toolkit (CC-BY-4.0). See NOTICE file or --show-attribution option."
-    ),
+    version = crate::version::BUILD_VERSION,
+    long_version = crate::version::build_long_version(),
     after_help = PDF_OXIDE_LOG_HELP,
     about,
     long_about = None,

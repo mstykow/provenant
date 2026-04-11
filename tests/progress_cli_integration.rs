@@ -20,6 +20,12 @@ fn create_scan_fixture() -> (TempDir, String) {
     (temp, scan_dir.to_string_lossy().to_string())
 }
 
+fn cargo_command() -> Command {
+    let mut command = Command::new("cargo");
+    command.current_dir(env!("CARGO_MANIFEST_DIR"));
+    command
+}
+
 fn create_malformed_package_fixture() -> (TempDir, String) {
     let temp = TempDir::new().expect("failed to create temp dir");
     let scan_dir = temp.path().join("scan");
@@ -64,6 +70,98 @@ fn normalize_multi_parser_header(output: &mut Value) {
         Value::String("<platform_version>".to_string());
     header["extra_data"]["system_environment"]["rust_version"] =
         Value::String("<rust_version>".to_string());
+}
+
+#[test]
+fn version_flag_reports_git_aware_build_version() {
+    let output = provenant_command()
+        .arg("--version")
+        .output()
+        .expect("failed to run provenant --version");
+
+    assert!(output.status.success(), "--version should succeed");
+
+    let stdout = String::from_utf8(output.stdout).expect("version output should be utf-8");
+    let first_line = stdout
+        .lines()
+        .next()
+        .expect("version output should contain at least one line");
+
+    let reported_version = first_line
+        .split_whitespace()
+        .last()
+        .expect("version line should include a version token");
+
+    assert_eq!(reported_version, provenant::version::BUILD_VERSION);
+}
+
+#[test]
+fn json_header_uses_git_aware_build_version() {
+    let (_temp, scan_dir) = create_scan_fixture();
+
+    let output = provenant_command()
+        .args(["--json-pp", "-", &scan_dir])
+        .output()
+        .expect("failed to run provenant for json header version test");
+
+    assert!(output.status.success(), "json scan should succeed");
+
+    let json: Value = serde_json::from_slice(&output.stdout).expect("stdout should be valid json");
+    let tool_version = json["headers"]
+        .as_array()
+        .and_then(|headers| headers.first())
+        .and_then(|header| header["tool_version"].as_str())
+        .expect("headers[0].tool_version should exist");
+
+    assert_eq!(tool_version, provenant::version::BUILD_VERSION);
+}
+
+#[test]
+fn short_version_flag_stays_single_line_and_parse_safe() {
+    let output = provenant_command()
+        .arg("-V")
+        .output()
+        .expect("failed to run provenant -V");
+
+    assert!(output.status.success(), "-V should succeed");
+
+    let stdout = String::from_utf8(output.stdout).expect("short version output should be utf-8");
+    let lines: Vec<_> = stdout.lines().collect();
+    assert_eq!(
+        lines.len(),
+        1,
+        "-V should remain single-line for xtask parsing"
+    );
+
+    let reported_version = lines[0]
+        .split_whitespace()
+        .last()
+        .expect("short version line should include a version token");
+    assert_eq!(reported_version, provenant::version::BUILD_VERSION);
+}
+
+#[test]
+fn invalid_build_version_override_falls_back_to_git_aware_version() {
+    let output = cargo_command()
+        .env("PROVENANT_BUILD_VERSION", "bad\nvalue")
+        .args(["run", "--", "-V"])
+        .output()
+        .expect("failed to run cargo with invalid build version override");
+
+    assert!(
+        output.status.success(),
+        "cargo run with invalid override should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).expect("fallback version output should be utf-8");
+    let reported_version = stdout
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().last())
+        .expect("fallback output should include a version token");
+
+    assert_eq!(reported_version, provenant::version::BUILD_VERSION);
 }
 
 #[test]
