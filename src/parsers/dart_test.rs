@@ -42,6 +42,8 @@ name: example
 version: 1.2.3
 description: Example package
 homepage: https://example.com
+issue_tracker: https://example.com/issues
+repository: https://github.com/example/example
 dependencies:
   http: ^0.13.0
   path: 1.8.0
@@ -59,6 +61,14 @@ dependency_overrides:
         assert_eq!(
             package_data.homepage_url.as_deref(),
             Some("https://example.com")
+        );
+        assert_eq!(
+            package_data.bug_tracking_url.as_deref(),
+            Some("https://example.com/issues")
+        );
+        assert_eq!(
+            package_data.vcs_url.as_deref(),
+            Some("https://github.com/example/example")
         );
         assert_eq!(package_data.purl.as_deref(), Some("pkg:dart/example@1.2.3"));
         assert_eq!(package_data.dependencies.len(), 3);
@@ -240,6 +250,23 @@ packages:
         );
         assert!(package_data.name.is_none());
         assert!(package_data.dependencies.is_empty());
+    }
+
+    #[test]
+    fn test_extract_pubspec_issue_tracker_to_bug_tracking_url() {
+        let content = r#"
+name: issue-demo
+version: 0.1.0
+issue_tracker: https://example.com/bugs
+"#;
+
+        let (_temp_dir, pubspec_path) = create_temp_file("pubspec.yaml", content);
+        let package_data = PubspecYamlParser::extract_first_package(&pubspec_path);
+
+        assert_eq!(
+            package_data.bug_tracking_url.as_deref(),
+            Some("https://example.com/bugs")
+        );
     }
 
     #[test]
