@@ -781,6 +781,90 @@ fn add_found_at_short_variants(
     holders.extend(new_h);
 }
 
+fn add_missing_holders_from_email_bearing_copyrights(
+    copyrights: &[CopyrightDetection],
+    holders: &mut Vec<HolderDetection>,
+) {
+    static COPYRIGHT_NAME_EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)^copyright(?:\s*\(c\))?\s+[0-9][0-9,\-–/ ]*\s+(?:by\s+)?(?P<name>[^<]+?)\s*<[^>\s]*@[^>\s]*>\s*$",
+        )
+        .unwrap()
+    });
+
+    let existing: HashSet<(usize, usize, String)> = holders
+        .iter()
+        .map(|h| {
+            (
+                h.start_line.get(),
+                h.end_line.get(),
+                normalize_whitespace(&h.holder),
+            )
+        })
+        .collect();
+
+    let mut additions = Vec::new();
+    for c in copyrights {
+        let Some(cap) = COPYRIGHT_NAME_EMAIL_RE.captures(c.copyright.trim()) else {
+            continue;
+        };
+        let raw_name = cap.name("name").map(|m| m.as_str()).unwrap_or("");
+        let cleaned_name = normalize_email_copyright_holder_candidate(raw_name);
+        if cleaned_name.is_empty() {
+            continue;
+        }
+
+        let Some(name) = refine_holder_in_copyright_context(&cleaned_name) else {
+            continue;
+        };
+        let domain_only = name.contains('.')
+            && name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'));
+        if domain_only {
+            continue;
+        }
+
+        let key = (c.start_line.get(), c.end_line.get(), name.clone());
+        if existing.contains(&key) {
+            continue;
+        }
+
+        additions.push(HolderDetection {
+            holder: name,
+            start_line: c.start_line,
+            end_line: c.end_line,
+        });
+    }
+
+    holders.extend(additions);
+}
+
+fn normalize_email_copyright_holder_candidate(raw_name: &str) -> String {
+    static LEADING_COPY_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)^\(c\)\s+").unwrap());
+    static INLINE_YEAR_PERSON_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"^(?P<prefix>.+?)\s+(?:19\d{2}|20\d{2})\s+(?P<name>[A-Z][\p{L}'\-.]+(?:\s+[A-Z][\p{L}'\-.]+){1,4})$",
+        )
+        .unwrap()
+    });
+
+    let mut cleaned = raw_name.trim_start_matches("by ").trim().to_string();
+    cleaned = LEADING_COPY_RE.replace(&cleaned, "").trim().to_string();
+    cleaned = normalize_whitespace(&cleaned);
+
+    if let Some(cap) = INLINE_YEAR_PERSON_RE.captures(&cleaned) {
+        let prefix = cap.name("prefix").map(|m| m.as_str()).unwrap_or("").trim();
+        let name = cap.name("name").map(|m| m.as_str()).unwrap_or("").trim();
+        if !prefix.is_empty() && !name.is_empty() {
+            cleaned = format!("{prefix} {name}");
+        }
+    }
+
+    normalize_whitespace(&cleaned)
+}
+
 fn drop_combined_semicolon_shadowed_copyrights(copyrights: &mut Vec<CopyrightDetection>) {
     if copyrights.len() < 2 {
         return;
@@ -3601,7 +3685,7 @@ fn strip_inc_suffix_from_holders_for_today_year_copyrights(
 
     let has_today_year = copyrights
         .iter()
-        .any(|c| c.copyright.to_ascii_lowercase().contains("today.year"));
+        .any(|c| contains_year_placeholder(&c.copyright.to_ascii_lowercase()));
     if !has_today_year {
         return;
     }
@@ -3630,11 +3714,15 @@ fn strip_inc_suffix_from_holders_for_today_year_copyrights(
         let base_lower = base.to_ascii_lowercase();
         if copyright_texts
             .iter()
-            .any(|c| c.contains("today.year") && c.contains(&base_lower))
+            .any(|c| contains_year_placeholder(c) && c.contains(&base_lower))
         {
             h.holder = base.to_string();
         }
     }
+}
+
+fn contains_year_placeholder(lower: &str) -> bool {
+    lower.contains("today.year") || lower.contains("current_year")
 }
 
 fn extend_copyrights_with_authors_blocks(
@@ -5471,7 +5559,7 @@ fn drop_url_embedded_suffix_variants_same_span(
 fn extract_following_authors_holders(
     raw_lines: &[&str],
     prepared_cache: &mut PreparedLineCache<'_>,
-    holders: &mut Vec<HolderDetection>,
+    authors: &mut Vec<AuthorDetection>,
 ) {
     if raw_lines.is_empty() {
         return;
@@ -5481,15 +5569,10 @@ fn extract_following_authors_holders(
         Regex::new(r"(?i)^\s*copyright\b.*\bby\s+the\s+following\s+authors\b.*$")
             .expect("valid following authors header regex")
     });
-    static ANGLE_EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"\s*<[^>\s]*@[^>\s]*>\s*").expect("valid angle email removal regex")
-    });
-
-    let mut seen: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     let mut i = 0;
     while i < raw_lines.len() {
-        let ln = i + 1;
         let Some(header) = prepared_cache.get_by_index(i).map(|p| p.trim().to_string()) else {
             i += 1;
             continue;
@@ -5503,8 +5586,7 @@ fn extract_following_authors_holders(
             continue;
         }
 
-        let mut segments: Vec<String> = Vec::new();
-        let mut end_ln = ln;
+        let mut extracted_any = false;
         let mut j = i + 1;
         while j < raw_lines.len() {
             let next_ln = j + 1;
@@ -5516,28 +5598,22 @@ fn extract_following_authors_holders(
                 break;
             }
             let mut item = raw.trim_start().trim_start_matches('-').trim().to_string();
-            item = ANGLE_EMAIL_RE.replace_all(&item, " ").into_owned();
             item = normalize_whitespace(&item);
-            if !item.is_empty() {
-                segments.push(item);
-                end_ln = next_ln;
+            if !item.is_empty()
+                && let Some(author) = refine_author(&item)
+                && seen.insert(author.clone())
+            {
+                authors.push(AuthorDetection {
+                    author,
+                    start_line: LineNumber::new(next_ln).unwrap(),
+                    end_line: LineNumber::new(next_ln).unwrap(),
+                });
+                extracted_any = true;
             }
             j += 1;
         }
 
-        if !segments.is_empty() {
-            let holder =
-                normalize_whitespace(&format!("the following authors - {}", segments.join(" - ")));
-            if seen.insert(holder.clone()) {
-                holders.push(HolderDetection {
-                    holder,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(end_ln).expect("valid"),
-                });
-            }
-        }
-
-        i = j;
+        i = if extracted_any { j } else { i + 1 };
     }
 }
 
