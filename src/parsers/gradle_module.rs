@@ -253,8 +253,12 @@ fn extract_variant_data(variants: Option<&Vec<Value>>) -> ExtractedVariantData {
             .to_string();
         let scope = classify_variant_scope(variant);
         let precedence = scope_precedence(scope.as_deref());
-        let is_runtime = Some(scope.as_deref() != Some("test"));
-        let is_optional = Some(scope.as_deref() == Some("test"));
+        let is_runtime = match scope.as_deref() {
+            Some("compile") | Some("runtime") => Some(true),
+            Some("test") => Some(false),
+            _ => None,
+        };
+        let is_optional = None;
 
         let mut variant_entry = JsonMap::new();
         variant_entry.insert("name".to_string(), Value::String(variant_name.clone()));
@@ -495,33 +499,32 @@ fn merge_string_arrays(
 }
 
 fn classify_variant_scope(variant: &JsonMap<String, Value>) -> Option<String> {
-    let variant_name = variant
-        .get("name")
+    let attributes = variant.get(FIELD_ATTRIBUTES).and_then(Value::as_object);
+
+    let category = attributes
+        .and_then(|attributes| attributes.get("org.gradle.category"))
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_ascii_lowercase();
 
-    if variant_name.contains("test") {
+    if category == "verification" {
         return Some("test".to_string());
     }
 
-    let usage = variant
-        .get(FIELD_ATTRIBUTES)
-        .and_then(Value::as_object)
+    let usage = attributes
         .and_then(|attributes| attributes.get("org.gradle.usage"))
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_ascii_lowercase();
 
-    if usage.contains("api") || (variant_name.contains("api") && !variant_name.contains("runtime"))
-    {
+    if usage.contains("api") {
         return Some("compile".to_string());
     }
-    if usage.contains("runtime") || variant_name.contains("runtime") {
+    if usage.contains("runtime") {
         return Some("runtime".to_string());
     }
 
-    (!variant_name.is_empty()).then_some(variant_name)
+    None
 }
 
 fn scope_precedence(scope: Option<&str>) -> u8 {
