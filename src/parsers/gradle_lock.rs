@@ -9,12 +9,12 @@
 //! # Key Features
 //! - Exact version resolution from lockfile
 //! - Group and artifact extraction
-//! - Dependency classification (direct/transitive)
+//! - Preserves lockfile configuration membership per dependency
 //! - Package URL (purl) generation for Maven packages
 //!
 //! # Implementation Notes
 //! - gradle.lockfile is a simple text format with dependency lines
-//! - Format: `<group>:<artifact>:<version>=<hash>` (one per line)
+//! - Format: `<group>:<artifact>:<version>=<configuration>[,<configuration>...]` (one per line)
 //! - Comments and empty lines are skipped
 //! - All dependencies are pinned (is_pinned: true)
 
@@ -121,7 +121,7 @@ fn extract_dependencies<R: BufRead>(reader: R) -> Vec<Dependency> {
             continue;
         }
 
-        // Parse dependency line format: group:artifact:version=hash
+        // Parse dependency line format: group:artifact:version=config[,config...]
         if let Some(dep) = parse_dependency_line(line) {
             dependencies.push(dep);
         }
@@ -132,16 +132,22 @@ fn extract_dependencies<R: BufRead>(reader: R) -> Vec<Dependency> {
 
 /// Parse a single dependency line from gradle.lockfile
 ///
-/// Expected format: `group:artifact:version=hash`
-/// Example: `com.example:my-lib:1.0.0=abc123def456`
+/// Expected format: `group:artifact:version=configuration[,configuration...]`
+/// Example: `com.example:my-lib:1.0.0=compileClasspath,runtimeClasspath`
 fn parse_dependency_line(line: &str) -> Option<Dependency> {
-    // Split by = to separate GAV from hash
-    let (gav_part, hash_part) = line.split_once('=')?;
-    let hash = if hash_part.is_empty() {
-        None
-    } else {
-        Some(hash_part.to_string())
-    };
+    // Split by = to separate GAV from the list of configurations that include this dependency.
+    let (gav_part, configurations_part) = line.split_once('=')?;
+
+    if gav_part == "empty" {
+        return None;
+    }
+
+    let configurations: Vec<String> = configurations_part
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .collect();
 
     // Parse GAV (group:artifact:version)
     let parts: Vec<&str> = gav_part.split(':').collect();
@@ -176,8 +182,17 @@ fn parse_dependency_line(line: &str) -> Option<Dependency> {
                 serde_json::Value::String(artifact.clone()),
             );
         }
-        if let Some(ref h) = hash {
-            map.insert("hash".to_string(), serde_json::Value::String(h.clone()));
+        if !configurations.is_empty() {
+            map.insert(
+                "configurations".to_string(),
+                serde_json::Value::Array(
+                    configurations
+                        .iter()
+                        .cloned()
+                        .map(serde_json::Value::String)
+                        .collect(),
+                ),
+            );
         }
         extra_data = Some(map);
     }
@@ -207,8 +222,8 @@ fn parse_dependency_line(line: &str) -> Option<Dependency> {
         scope: None,
         is_pinned: Some(true),
         is_direct: None,
-        is_optional: Some(false),
-        is_runtime: Some(true),
+        is_optional: None,
+        is_runtime: None,
         resolved_package: Some(Box::new(resolved_package)),
         extra_data,
     })
@@ -245,7 +260,7 @@ mod tests {
 
     #[test]
     fn test_parse_dependency_line_simple() {
-        let line = "com.example:my-lib:1.0.0=abc123";
+        let line = "com.example:my-lib:1.0.0=compileClasspath,runtimeClasspath";
         let dep = parse_dependency_line(line).expect("Failed to parse dependency");
 
         assert_eq!(
@@ -268,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_parse_dependency_line_complex_group() {
-        let line = "org.springframework.boot:spring-boot-starter-web:2.7.0=def456";
+        let line = "org.springframework.boot:spring-boot-starter-web:2.7.0=compileClasspath";
         let dep = parse_dependency_line(line).expect("Failed to parse dependency");
 
         assert_eq!(
@@ -286,8 +301,8 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_dependency_line_no_hash() {
-        let line = "com.example:my-lib:1.0.0=";
+    fn test_parse_dependency_line_with_single_configuration() {
+        let line = "com.example:my-lib:1.0.0=runtimeClasspath";
         let dep = parse_dependency_line(line).expect("Failed to parse dependency");
 
         assert_eq!(
@@ -306,15 +321,14 @@ mod tests {
         let line = "com.example:my-lib=abc123";
         assert!(parse_dependency_line(line).is_none());
 
-        // No hash separator
+        // No configuration separator
         let line = "com.example:my-lib:1.0.0";
         assert!(parse_dependency_line(line).is_none());
     }
 
     #[test]
     fn test_extract_dependencies_multiple_lines() {
-        let content =
-            "com.example:lib1:1.0.0=hash1\ncom.example:lib2:2.0.0=hash2\ncom.test:lib3:3.0.0=hash3";
+        let content = "com.example:lib1:1.0.0=compileClasspath\ncom.example:lib2:2.0.0=runtimeClasspath\ncom.test:lib3:3.0.0=testRuntimeClasspath";
         let reader = Cursor::new(content);
         let deps = extract_dependencies(reader);
 
@@ -326,7 +340,7 @@ mod tests {
 
     #[test]
     fn test_extract_dependencies_with_comments_and_empty_lines() {
-        let content = "# This is a comment\ncom.example:lib1:1.0.0=hash1\n\n# Another comment\ncom.example:lib2:2.0.0=hash2\n";
+        let content = "# This is a comment\ncom.example:lib1:1.0.0=compileClasspath\n\n# Another comment\ncom.example:lib2:2.0.0=runtimeClasspath\n";
         let reader = Cursor::new(content);
         let deps = extract_dependencies(reader);
 
@@ -355,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_extract_first_package_returns_correct_package_type() {
-        let content = "com.example:lib:1.0.0=hash";
+        let content = "com.example:lib:1.0.0=compileClasspath";
         let reader = Cursor::new(content);
         let deps = extract_dependencies(reader);
 
@@ -368,7 +382,7 @@ mod tests {
 
     #[test]
     fn test_parse_dependency_generates_purl() {
-        let line = "com.google.guava:guava:30.1-jre=abc123";
+        let line = "com.google.guava:guava:30.1-jre=runtimeClasspath";
         let dep = parse_dependency_line(line).expect("Failed to parse dependency");
 
         assert!(dep.purl.is_some());
@@ -380,19 +394,20 @@ mod tests {
 
     #[test]
     fn test_parse_dependency_extra_data_contains_group_and_artifact() {
-        let line = "org.junit.jupiter:junit-jupiter-api:5.8.0=hash123";
+        let line =
+            "org.junit.jupiter:junit-jupiter-api:5.8.0=testRuntimeClasspath,compileClasspath";
         let dep = parse_dependency_line(line).expect("Failed to parse dependency");
 
         assert!(dep.extra_data.is_some());
         let extra = dep.extra_data.unwrap();
         assert!(extra.contains_key("group"));
         assert!(extra.contains_key("artifact"));
-        assert!(extra.contains_key("hash"));
+        assert!(extra.contains_key("configurations"));
     }
 
     #[test]
     fn test_extract_dependencies_malformed_lines_ignored() {
-        let content = "com.example:lib1:1.0.0=hash1\ninvalid-line\ncom.example:lib2:2.0.0=hash2";
+        let content = "com.example:lib1:1.0.0=compileClasspath\ninvalid-line\ncom.example:lib2:2.0.0=runtimeClasspath";
         let reader = Cursor::new(content);
         let deps = extract_dependencies(reader);
 
@@ -404,12 +419,33 @@ mod tests {
 
     #[test]
     fn test_dependency_has_correct_flags() {
-        let line = "com.example:lib:1.0.0=hash";
+        let line = "com.example:lib:1.0.0=compileClasspath";
         let dep = parse_dependency_line(line).expect("Failed to parse dependency");
 
         assert_eq!(dep.is_pinned, Some(true));
-        assert_eq!(dep.is_optional, Some(false));
-        assert_eq!(dep.is_runtime, Some(true));
+        assert_eq!(dep.is_optional, None);
+        assert_eq!(dep.is_runtime, None);
+    }
+
+    #[test]
+    fn test_parse_dependency_line_preserves_configurations_not_runtime_semantics() {
+        let line = "com.example:my-lib:1.0.0=compileClasspath,runtimeClasspath";
+        let dep = parse_dependency_line(line).expect("Failed to parse dependency");
+
+        assert_eq!(dep.is_runtime, None);
+        assert_eq!(dep.is_optional, None);
+        assert_eq!(dep.is_direct, None);
+
+        let extra = dep.extra_data.as_ref().expect("expected extra_data");
+        assert_eq!(
+            extra.get("configurations"),
+            Some(&serde_json::json!(["compileClasspath", "runtimeClasspath"]))
+        );
+    }
+
+    #[test]
+    fn test_parse_dependency_line_skips_empty_configuration_marker() {
+        assert!(parse_dependency_line("empty=annotationProcessor").is_none());
     }
 }
 

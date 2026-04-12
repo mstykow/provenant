@@ -15,7 +15,7 @@ Without lockfile parsing, a scan can see declared Gradle intent but miss the exa
 Rust extracts resolved dependency information from `gradle.lockfile` entries such as:
 
 ```text
-com.google.guava:guava:30.1-jre=abc123
+com.google.guava:guava:30.1-jre=compileClasspath,runtimeClasspath
 ```
 
 For each dependency, Rust can preserve:
@@ -23,7 +23,7 @@ For each dependency, Rust can preserve:
 - the Maven-style package identity
 - the exact locked version
 - the fact that the dependency is pinned
-- the hash fragment Gradle records alongside the locked coordinate
+- the Gradle configurations that include the locked coordinate
 
 Comments and empty lines are ignored cleanly.
 
@@ -31,7 +31,7 @@ Comments and empty lines are ignored cleanly.
 
 - **Better SBOM accuracy**: lockfiles describe the resolved versions a build actually pinned
 - **Reproducibility context**: the locked dependency set is visible to downstream tooling
-- **Supply chain visibility**: hashes and exact coordinates can be audited together
+- **Build-context visibility**: configuration membership stays visible alongside the locked coordinates
 
 ## Reference
 

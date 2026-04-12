@@ -1,4 +1,4 @@
 # Gradle lockfile for golden testing
-org.springframework.boot:spring-boot-starter-web:2.7.0=2e4f5b3c8d9a1f2e3a4b5c6d7e8f9a0b
-com.google.guava:guava:30.1-jre=1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p
-org.junit.jupiter:junit-jupiter-api:5.8.0=hash123
+org.springframework.boot:spring-boot-starter-web:2.7.0=compileClasspath,runtimeClasspath
+com.google.guava:guava:30.1-jre=runtimeClasspath
+org.junit.jupiter:junit-jupiter-api:5.8.0=testRuntimeClasspath
