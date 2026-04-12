@@ -7,7 +7,7 @@
 //! The expected output files are owned by this repo so we can adjust them for
 //! intentional differences (e.g., unicode name preservation, bug fixes).
 
-#[cfg(test)]
+#[cfg(all(test, feature = "golden-tests"))]
 mod tests {
     use std::collections::BTreeSet;
     use std::fs;

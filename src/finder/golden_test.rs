@@ -1,4 +1,4 @@
-#[cfg(test)]
+#[cfg(all(test, feature = "golden-tests"))]
 mod tests {
     use std::fs;
     use std::path::PathBuf;
