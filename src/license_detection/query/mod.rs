@@ -1008,7 +1008,7 @@ impl<'a> QueryRun<'a> {
         self.tokens_with_pos()
             .map(|(pos, tid)| {
                 if matchables.contains(pos) {
-                    tid.raw() as i32
+                    i32::from(tid.raw())
                 } else {
                     -1
                 }

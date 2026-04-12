@@ -56,7 +56,7 @@ impl ParseNumber for yaml_serde::Number {
     fn as_u8(&self) -> Option<u8> {
         self.as_i64()
             .and_then(|n| {
-                if n >= 0 && n <= u8::MAX as i64 {
+                if u8::try_from(n).is_ok() {
                     Some(n as u8)
                 } else {
                     None
@@ -64,7 +64,7 @@ impl ParseNumber for yaml_serde::Number {
             })
             .or_else(|| {
                 self.as_f64().and_then(|f| {
-                    if f >= 0.0 && f <= u8::MAX as f64 {
+                    if f >= 0.0 && f <= f64::from(u8::MAX) {
                         Some(f as u8)
                     } else {
                         None

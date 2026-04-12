@@ -609,7 +609,7 @@ mod tests {
         let query_len = 20;
         let covered_positions: PositionSet = [0, 1, 2, 12, 13, 14, 15, 16, 17, 18, 19]
             .iter()
-            .cloned()
+            .copied()
             .collect();
 
         let regions = find_unmatched_regions(query_len, &covered_positions);
@@ -621,7 +621,7 @@ mod tests {
     #[test]
     fn test_find_unmatched_regions_trailing_unmatched() {
         let query_len = 20;
-        let covered_positions: PositionSet = [0, 1, 2, 3, 4, 5].iter().cloned().collect();
+        let covered_positions: PositionSet = [0, 1, 2, 3, 4, 5].iter().copied().collect();
 
         let regions = find_unmatched_regions(query_len, &covered_positions);
 
@@ -782,7 +782,7 @@ mod tests {
         let query_len = 20;
         let covered_positions: PositionSet = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
             .iter()
-            .cloned()
+            .copied()
             .collect();
 
         let regions = find_unmatched_regions(query_len, &covered_positions);
@@ -797,7 +797,7 @@ mod tests {
         let covered_positions: PositionSet =
             [0, 1, 2, 3, 4, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
                 .iter()
-                .cloned()
+                .copied()
                 .collect();
 
         let regions = find_unmatched_regions(query_len, &covered_positions);

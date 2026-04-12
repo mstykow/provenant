@@ -287,7 +287,7 @@ pub(super) fn update_match_scores(matches: &mut [LicenseMatch], query: &Query) {
 }
 
 fn compute_match_score(m: &LicenseMatch, query: &Query) -> MatchScore {
-    let relevance = m.rule_relevance as f64 / 100.0;
+    let relevance = f64::from(m.rule_relevance) / 100.0;
     if relevance < 0.001 {
         return MatchScore::default();
     }
@@ -298,7 +298,7 @@ fn compute_match_score(m: &LicenseMatch, query: &Query) -> MatchScore {
     }
 
     let query_coverage = m.len() as f64 / qmagnitude as f64;
-    let rule_coverage = m.icoverage() as f64;
+    let rule_coverage = f64::from(m.icoverage());
 
     if query_coverage < 1.0 && rule_coverage < 1.0 {
         return MatchScore::from_percentage(rule_coverage * relevance * 100.0);

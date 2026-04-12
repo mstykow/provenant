@@ -80,7 +80,7 @@ pub(crate) fn filter_below_rule_minimum_coverage(
             if let Some(rule) = index.rules_by_rid.get(rid)
                 && let Some(min_cov) = rule.minimum_coverage
             {
-                return m.coverage() >= min_cov as f32;
+                return m.coverage() >= f32::from(min_cov);
             }
 
             true
