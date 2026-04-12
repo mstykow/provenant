@@ -31,10 +31,7 @@ impl PackageParser for MesonParser {
 
         match parse_meson_build(&content) {
             Ok(package) => vec![package],
-            Err(error) => {
-                warn!("Failed to parse meson.build at {:?}: {}", path, error);
-                vec![default_package_data()]
-            }
+            Err(_) => vec![default_package_data()],
         }
     }
 }
