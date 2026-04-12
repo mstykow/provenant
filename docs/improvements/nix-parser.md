@@ -17,6 +17,7 @@ The supported surface focuses on the highest-value official and commonly used Ni
 
 - Rust now recognizes `flake.nix` and extracts literal top-level `description` plus direct `inputs` metadata.
 - Literal URL-style flake inputs are emitted as direct Nix dependencies, and `inputs.*.follows` relationships are preserved as dependency metadata instead of being guessed away.
+- Shallow `let ... in` bindings and direct alias references are resolved when they stay within local literal values, so `description = descriptionText;` and `inputs.nixpkgs.url = nixpkgsUrl;` can still be recovered statically.
 - Root packages fall back to the containing directory name when the flake does not declare a literal package identity of its own, producing stable Nix package identities such as `pkg:nix/flake-demo`.
 
 ### Official `flake.lock` root-input support
@@ -29,6 +30,7 @@ The supported surface focuses on the highest-value official and commonly used Ni
 
 - Rust now recognizes `default.nix` files containing a direct `mkDerivation` call and extracts literal `pname`, `name`, `version`, `homepage`, `meta.description`, and `meta.license` values.
 - Literal dependency lists from `nativeBuildInputs`, `buildInputs`, `propagatedBuildInputs`, and `checkInputs` are emitted as Nix dependencies with preserved native-vs-runtime intent.
+- The bounded surface now also covers shallow `let` aliasing, plain `inherit` / `inherit (expr) ...` forwarding, local `import ./file.nix { ... }` wrappers, local `callPackage ./file.nix { ... }` wrappers, and selected local attrset exports such as `(callPackage ./release.nix { }).defaultNix`.
 - This slice intentionally stays narrow: it targets the most common literal derivation metadata without trying to interpret arbitrary Nix evaluation semantics.
 
 ### Flake sibling assembly
@@ -39,6 +41,7 @@ The supported surface focuses on the highest-value official and commonly used Ni
 ## Guardrails
 
 - Rust does **not** evaluate Nix expressions, fetch remote inputs, execute `builtins`, interpret generic `shell.nix`, or attempt full derivation normalization.
+- Local wrapper traversal is limited to explicit relative `.nix` paths and a shallow recursion depth; remote fetchers and computed import paths remain out of scope.
 - Non-literal or unsupported constructs fall back safely with datasource identity preserved instead of being guessed.
 - The bounded `default.nix` slice is intentionally restricted to direct `mkDerivation` metadata recovery and does not claim general Nix-language coverage.
 
