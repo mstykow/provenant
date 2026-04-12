@@ -383,11 +383,15 @@ fn create_member_packages(
         let datasource_id = DatasourceId::CargoToml;
         let mut package = Package::from_package_data(&resolved_pkg_data, datafile_path.clone());
 
-        let lock_package_data = member
+        let matched_lock_package_data = member
             .cargo_lock_idx
             .and_then(|idx| lock_package_data_for_member(files, idx, &resolved_pkg_data));
 
-        if let Some(lock_pkg_data) = lock_package_data {
+        let lock_dependencies_source = member.cargo_lock_idx.and_then(|idx| {
+            matched_lock_package_data.or_else(|| first_cargo_lock_package_data(files, idx))
+        });
+
+        if let Some(lock_pkg_data) = matched_lock_package_data {
             package.update(
                 lock_pkg_data,
                 files[member.cargo_lock_idx.expect("lock index")]
@@ -413,7 +417,7 @@ fn create_member_packages(
             .collect();
 
         if let Some(lock_idx) = member.cargo_lock_idx
-            && let Some(lock_pkg_data) = lock_package_data
+            && let Some(lock_pkg_data) = lock_dependencies_source
         {
             deps.extend(
                 lock_pkg_data
@@ -446,6 +450,13 @@ fn lock_package_data_for_member<'a>(
         lock_pkg_data.datasource_id == Some(DatasourceId::CargoLock)
             && cargo_package_identity_matches(lock_pkg_data, pkg_data)
     })
+}
+
+fn first_cargo_lock_package_data(files: &[FileInfo], lock_idx: usize) -> Option<&PackageData> {
+    files[lock_idx]
+        .package_data
+        .iter()
+        .find(|lock_pkg_data| lock_pkg_data.datasource_id == Some(DatasourceId::CargoLock))
 }
 
 fn cargo_package_identity_matches(left: &PackageData, right: &PackageData) -> bool {
