@@ -188,7 +188,7 @@ fn build_opam_urls(
 ) -> (Option<String>, Option<String>, Option<String>) {
     let repository_homepage_url = name
         .as_ref()
-        .map(|_| "{https://opam.ocaml.org/packages}/{name}".to_string());
+        .map(|n| format!("https://opam.ocaml.org/packages/{}", n));
 
     let api_data_url = match (name, version) {
         (Some(n), Some(v)) => Some(format!(
