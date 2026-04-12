@@ -12,6 +12,7 @@ mod conda_rootfs_merge;
 pub mod file_ref_resolve;
 mod hackage_merge;
 mod nested_merge;
+mod nix_flake_compat_merge;
 mod npm_resource_assign;
 mod npm_workspace_merge;
 mod nuget_cpm_resolve;
