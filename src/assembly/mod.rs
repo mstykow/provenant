@@ -1,5 +1,5 @@
 mod assemblers;
-#[cfg(test)]
+#[cfg(all(test, feature = "golden-tests"))]
 mod assembly_golden_test;
 #[cfg(test)]
 mod assembly_test;
