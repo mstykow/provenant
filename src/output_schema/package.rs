@@ -25,13 +25,9 @@ pub struct OutputPackage {
     pub homepage_url: Option<String>,
     pub download_url: Option<String>,
     pub size: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub sha1: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub md5: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub sha256: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub sha512: Option<String>,
     pub bug_tracking_url: Option<String>,
     pub code_view_url: Option<String>,

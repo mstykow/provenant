@@ -24,7 +24,7 @@ pub struct Output {
     pub headers: Vec<OutputHeader>,
     pub packages: Vec<OutputPackage>,
     pub dependencies: Vec<OutputTopLevelDependency>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub license_detections: Vec<OutputTopLevelLicenseDetection>,
     pub files: Vec<OutputFileInfo>,
     pub license_references: Vec<OutputLicenseReference>,

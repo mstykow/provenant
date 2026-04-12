@@ -83,7 +83,7 @@ pub struct OutputFileInfo {
 }
 
 impl OutputFileInfo {
-    fn should_serialize_info_surface(&self) -> bool {
+    pub(crate) fn should_serialize_info_surface(&self) -> bool {
         self.date.is_some()
             || self.sha1.is_some()
             || self.md5.is_some()
@@ -101,6 +101,13 @@ impl OutputFileInfo {
             || self.files_count.is_some()
             || self.dirs_count.is_some()
             || self.size_count.is_some()
+    }
+
+    pub(crate) fn should_serialize_license_surface(&self) -> bool {
+        self.license_expression.is_some()
+            || !self.license_detections.is_empty()
+            || !self.license_clues.is_empty()
+            || self.percentage_of_license_text.is_some()
     }
 }
 
@@ -144,7 +151,7 @@ impl Serialize for OutputFileInfo {
             &self.license_expression,
         )?;
         insert_json(&mut map, "license_detections", &self.license_detections)?;
-        if !self.license_clues.is_empty() {
+        if self.should_serialize_license_surface() {
             insert_json(&mut map, "license_clues", &self.license_clues)?;
         }
         if self.percentage_of_license_text.is_some() {
