@@ -10,7 +10,7 @@
 All internal model types in Provenant originally derived both `Serialize` and `Deserialize` from serde and carried output-formatting attributes (`skip_serializing_if`, `rename`, `serialize_with`, custom `Serialize` impls). This conflated two distinct concerns:
 
 1. **Internal domain logic** — scanning, parsing, assembly, and post-processing operate on strongly-typed domain values (`LineNumber`, `Sha1Digest`, `FileType`, `DatasourceId`).
-2. **ScanCode-compatible JSON output** — the public JSON schema requires specific field names (`"type"` for `package_type`), conditional field omission (`skip_serializing_if`), `None` serialized as `{}` for maps, and a hand-rolled `FileInfo` serializer with info-surface gating and controlled field ordering.
+2. **ScanCode-compatible JSON output** — the public JSON schema requires specific field names (`"type"` for `package_type`), conditional field omission (`skip_serializing_if`), package-like optional map normalization in the final public output writers, and a hand-rolled `FileInfo` serializer with info-surface gating and controlled field ordering.
 
 Mixing these concerns in one type meant:
 
@@ -26,7 +26,7 @@ Separate the ScanCode-compatible output schema from internal types:
 1. **Output schema types** (`src/output_schema/`) are dedicated serde-enabled types, one file per type, that define the ScanCode-compatible JSON schema explicitly. They own all output-formatting logic:
    - Field renames (`package_type` → `"type"`, `license_expression` → `"detected_license_expression_spdx"`)
    - Conditional field omission (`skip_serializing_if`)
-   - `None` → `{}` serialization for optional maps
+   - Package-like optional map normalization for the final public output contract
    - The `FileInfo` info-surface gating logic
    - Type widening: `LineNumber` → `u64`, `Sha1Digest` → `Option<String>` (hex)
 

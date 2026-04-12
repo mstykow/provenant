@@ -341,6 +341,125 @@ fn test_json_contract_includes_facets_and_tallies_by_facet() {
 }
 
 #[test]
+fn test_json_contract_preserves_scancode_style_nulls_for_package_like_objects() {
+    let package_data = PackageData {
+        package_type: Some(PackageType::Npm),
+        name: Some("left-pad".to_string()),
+        version: Some("1.3.0".to_string()),
+        ..Default::default()
+    };
+    let package = Package::from_package_data(&package_data, "package.json".to_string());
+
+    let file = sample_plain_text_file(
+        "package.json",
+        "package",
+        ".json",
+        "scan/package.json",
+        12,
+        EMPTY_SHA1,
+        vec![package_data.clone()],
+    );
+
+    let dependency = TopLevelDependency {
+        purl: Some("pkg:npm/dep@2.0.0".to_string()),
+        extracted_requirement: None,
+        scope: Some("dependencies".to_string()),
+        is_runtime: Some(true),
+        is_optional: Some(false),
+        is_pinned: Some(true),
+        is_direct: Some(true),
+        resolved_package: Some(Box::new(ResolvedPackage::new(
+            PackageType::Npm,
+            String::new(),
+            "dep".to_string(),
+            "2.0.0".to_string(),
+        ))),
+        extra_data: None,
+        dependency_uid: DependencyUid::from_raw(
+            "pkg:npm/dep@2.0.0?uuid=00000000-0000-0000-0000-000000000001".to_string(),
+        ),
+        for_package_uid: Some(PackageUid::from_raw(
+            "pkg:npm/left-pad@1.3.0?uuid=00000000-0000-0000-0000-000000000000".to_string(),
+        )),
+        datafile_path: "scan/package-lock.json".to_string(),
+        datasource_id: DatasourceId::NpmPackageLockJson,
+        namespace: None,
+    };
+
+    let output = sample_output_with_sections(1, 0, vec![package], vec![dependency], vec![file]);
+    let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
+    writer_for_format(OutputFormat::Json)
+        .write(&schema_output, &mut bytes, &OutputWriteConfig::default())
+        .expect("json output should be generated");
+
+    let value: Value = serde_json::from_slice(&bytes).expect("json output should parse");
+
+    assert_eq!(value["license_detections"], Value::Array(vec![]));
+
+    let package = &value["packages"][0];
+    assert!(package.get("qualifiers").is_some());
+    assert!(package["qualifiers"].is_null());
+    assert!(package["extra_data"].is_null());
+    assert!(package["sha1"].is_null());
+    assert!(package["md5"].is_null());
+    assert!(package["sha256"].is_null());
+    assert!(package["sha512"].is_null());
+
+    let package_data = &value["files"][0]["package_data"][0];
+    assert!(package_data.get("qualifiers").is_some());
+    assert!(package_data["qualifiers"].is_null());
+    assert!(package_data["extra_data"].is_null());
+    assert!(package_data["sha1"].is_null());
+    assert!(package_data["md5"].is_null());
+    assert!(package_data["sha256"].is_null());
+    assert!(package_data["sha512"].is_null());
+
+    let dependency = &value["dependencies"][0];
+    assert!(dependency["extra_data"].is_null());
+
+    let resolved_package = &dependency["resolved_package"];
+    assert!(resolved_package.get("qualifiers").is_some());
+    assert!(resolved_package["qualifiers"].is_null());
+    assert!(resolved_package["extra_data"].is_null());
+    assert!(resolved_package["sha1"].is_null());
+    assert!(resolved_package["md5"].is_null());
+    assert!(resolved_package["sha256"].is_null());
+    assert!(resolved_package["sha512"].is_null());
+}
+
+#[test]
+fn test_json_contract_keeps_empty_license_clues_when_license_surface_active() {
+    let mut file = sample_plain_text_file(
+        "README",
+        "README",
+        "",
+        "scan/README",
+        10,
+        EMPTY_SHA1,
+        vec![],
+    );
+    file.percentage_of_license_text = Some(0.0);
+    file.license_expression = None;
+    file.license_detections = vec![];
+    file.license_clues = vec![];
+
+    let output = sample_output_with_sections(1, 0, vec![], vec![], vec![file]);
+    let mut bytes = Vec::new();
+    let schema_output = OutputSchemaOutput::from(&output);
+    writer_for_format(OutputFormat::Json)
+        .write(&schema_output, &mut bytes, &OutputWriteConfig::default())
+        .expect("json output should be generated");
+
+    let value: Value = serde_json::from_slice(&bytes).expect("json output should parse");
+    assert_eq!(value["files"][0]["license_clues"], Value::Array(vec![]));
+    assert_eq!(
+        value["files"][0]["percentage_of_license_text"],
+        serde_json::json!(0.0)
+    );
+}
+
+#[test]
 fn test_json_lines_matches_local_fixture_file_semantics() {
     let fixture = fs::read_to_string("testdata/output-formats/json-simple-expected.jsonlines")
         .expect("json-lines fixture should be readable");
