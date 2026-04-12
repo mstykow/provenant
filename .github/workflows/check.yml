@@ -203,8 +203,6 @@ jobs:
             shared_key: rust-scan-integration-tests-release-contracts
           - shard: integration
             shared_key: rust-scan-integration-tests-release-integration
-          - shard: cli
-            shared_key: rust-scan-integration-tests-release-cli
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
@@ -235,11 +233,11 @@ jobs:
         run: cargo test --test scanner_copyright_credits --release --verbose
 
       - name: Run progress CLI integration suite
-        if: matrix.shard == 'cli'
+        if: matrix.shard == 'integration'
         run: cargo test --test progress_cli_integration --release --verbose
 
       - name: Run output contract fixture suite
-        if: matrix.shard == 'cli'
+        if: matrix.shard == 'integration'
         run: cargo test --test output_format_golden --release --verbose
 
   golden-tests:
