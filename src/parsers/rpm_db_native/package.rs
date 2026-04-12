@@ -10,19 +10,19 @@ use super::tags::{
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct InstalledRpmPackage {
-    pub(crate) epoch: i32,
+    pub(crate) epoch: u32,
     pub(crate) name: String,
     pub(crate) version: String,
     pub(crate) release: String,
     pub(crate) arch: String,
     pub(crate) source_rpm: String,
-    pub(crate) size: i32,
+    pub(crate) size: u32,
     pub(crate) license: String,
     pub(crate) vendor: String,
     pub(crate) distribution: String,
     pub(crate) platform: String,
     pub(crate) base_names: Vec<String>,
-    pub(crate) dir_indexes: Vec<i32>,
+    pub(crate) dir_indexes: Vec<u32>,
     pub(crate) dir_names: Vec<String>,
     pub(crate) file_names: Vec<String>,
     pub(crate) provides: Vec<String>,
@@ -32,10 +32,10 @@ pub(crate) struct InstalledRpmPackage {
 pub(crate) fn parse_installed_rpm_package(entries: Vec<IndexEntry>) -> Result<InstalledRpmPackage> {
     let mut package = InstalledRpmPackage::default();
     for entry in entries {
-        match entry.info.tag as u32 {
+        match entry.info.tag {
             RPMTAG_DIRINDEXES => {
                 ensure_kind(&entry, RPM_INT32_TYPE, "dir indexes")?;
-                package.dir_indexes = entry.read_i32_array()?;
+                package.dir_indexes = entry.read_u32_array()?;
             }
             RPMTAG_DIRNAMES => {
                 ensure_kind(&entry, RPM_STRING_ARRAY_TYPE, "dir names")?;
@@ -55,7 +55,7 @@ pub(crate) fn parse_installed_rpm_package(entries: Vec<IndexEntry>) -> Result<In
             }
             RPMTAG_EPOCH => {
                 ensure_kind(&entry, RPM_INT32_TYPE, "epoch")?;
-                package.epoch = entry.read_i32()?;
+                package.epoch = entry.read_u32()?;
             }
             RPMTAG_VERSION => {
                 ensure_kind(&entry, RPM_STRING_TYPE, "version")?;
@@ -91,7 +91,7 @@ pub(crate) fn parse_installed_rpm_package(entries: Vec<IndexEntry>) -> Result<In
             }
             RPMTAG_SIZE => {
                 ensure_kind(&entry, RPM_INT32_TYPE, "size")?;
-                package.size = entry.read_i32()?;
+                package.size = entry.read_u32()?;
             }
             RPMTAG_PROVIDENAME => {
                 ensure_kind(&entry, RPM_STRING_ARRAY_TYPE, "provide names")?;

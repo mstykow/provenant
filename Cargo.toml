@@ -157,6 +157,7 @@ checked_conversions = "warn"
 cloned_instead_of_copied = "warn"
 clone_on_ref_ptr = "warn"
 filetype_is_file = "warn"
+cast_sign_loss = "warn"
 
 [profile.release]
 # Enable link-time optimization for better cross-module optimizations

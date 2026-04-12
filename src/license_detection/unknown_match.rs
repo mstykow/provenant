@@ -685,9 +685,8 @@ mod tests {
     #[test]
     fn test_compute_hispan_from_qspan() {
         let mut index = LicenseIndex::with_legalese_count(0);
-        let legalese_entries: Vec<(String, u16)> = (0..15)
-            .map(|i| (format!("legalese-{i}"), i as u16))
-            .collect();
+        let legalese_entries: Vec<(String, u16)> =
+            (0u16..15).map(|i| (format!("legalese-{i}"), i)).collect();
         index.dictionary =
             crate::license_detection::index::dictionary::TokenDictionary::new_with_legalese(
                 &legalese_entries

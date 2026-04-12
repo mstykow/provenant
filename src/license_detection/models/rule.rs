@@ -40,20 +40,23 @@ mod stopwords_serde {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::collections::HashMap;
 
-    pub fn serialize<S>(map: &HashMap<usize, usize>, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn serialize<S>(
+        map: &HashMap<Option<usize>, usize>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let mut entries: Vec<(usize, usize)> = map.iter().map(|(k, v)| (*k, *v)).collect();
+        let mut entries: Vec<(Option<usize>, usize)> = map.iter().map(|(k, v)| (*k, *v)).collect();
         entries.sort_by_key(|(k, _)| *k);
         entries.serialize(serializer)
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<usize, usize>, D::Error>
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<Option<usize>, usize>, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let entries: Vec<(usize, usize)> = Vec::deserialize(deserializer)?;
+        let entries: Vec<(Option<usize>, usize)> = Vec::deserialize(deserializer)?;
         Ok(entries.into_iter().collect())
     }
 }
@@ -183,7 +186,7 @@ pub struct Rule {
     /// Mapping from token position to count of stopwords at that position.
     /// Used for required phrase validation.
     #[serde(with = "stopwords_serde", default)]
-    pub stopwords_by_pos: HashMap<usize, usize>,
+    pub stopwords_by_pos: HashMap<Option<usize>, usize>,
 
     /// Filenames where this rule should be considered
     pub referenced_filenames: Option<Vec<String>>,

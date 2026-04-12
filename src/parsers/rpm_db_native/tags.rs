@@ -1,8 +1,8 @@
-pub(crate) const RPMTAG_HEADERIMAGE: i32 = 61;
-pub(crate) const RPMTAG_HEADERSIGNATURES: i32 = 62;
-pub(crate) const RPMTAG_HEADERIMMUTABLE: i32 = 63;
-pub(crate) const HEADER_I18NTABLE: i32 = 100;
-pub(crate) const RPMTAG_HEADERI18NTABLE: i32 = HEADER_I18NTABLE;
+pub(crate) const RPMTAG_HEADERIMAGE: u32 = 61;
+pub(crate) const RPMTAG_HEADERSIGNATURES: u32 = 62;
+pub(crate) const RPMTAG_HEADERIMMUTABLE: u32 = 63;
+pub(crate) const HEADER_I18NTABLE: u32 = 100;
+pub(crate) const RPMTAG_HEADERI18NTABLE: u32 = HEADER_I18NTABLE;
 
 pub(crate) const RPMTAG_NAME: u32 = 1000;
 pub(crate) const RPMTAG_VERSION: u32 = 1001;

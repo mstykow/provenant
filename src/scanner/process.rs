@@ -4,6 +4,7 @@ use crate::parsers::compiled_binary::{
 };
 use crate::parsers::try_parse_file;
 use crate::parsers::windows_executable::try_parse_windows_executable_bytes;
+
 use crate::utils::hash::{calculate_md5, calculate_sha1, calculate_sha1_git, calculate_sha256};
 use crate::utils::text::{
     remove_verbatim_escape_sequences, should_remove_verbatim_escape_sequences,
@@ -38,6 +39,23 @@ use crate::utils::file::{
 };
 use crate::utils::generated::generated_code_hints_from_bytes;
 use tempfile::TempDir;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryMode {
+    CollectFirst,
+    StreamUnlimited,
+    Limit(usize),
+}
+
+impl std::fmt::Display for MemoryMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MemoryMode::CollectFirst => write!(f, "0"),
+            MemoryMode::StreamUnlimited => write!(f, "-1"),
+            MemoryMode::Limit(n) => write!(f, "{n}"),
+        }
+    }
+}
 
 const PEM_CERTIFICATE_HEADERS: &[(&str, &str)] = &[
     ("-----BEGIN CERTIFICATE-----", "-----END CERTIFICATE-----"),
@@ -130,27 +148,26 @@ pub fn process_collected_with_memory_limit(
     license_engine: Option<Arc<LicenseDetectionEngine>>,
     license_options: LicenseScanOptions,
     text_options: &TextDetectionOptions,
-    max_in_memory: i64,
+    max_in_memory: MemoryMode,
 ) -> ProcessResult {
-    if max_in_memory == 0 {
-        return process_collected(
-            collected,
-            progress,
-            license_engine,
-            license_options,
-            text_options,
-        );
+    match max_in_memory {
+        MemoryMode::CollectFirst => {
+            return process_collected(
+                collected,
+                progress,
+                license_engine,
+                license_options,
+                text_options,
+            );
+        }
+        MemoryMode::StreamUnlimited => {}
+        MemoryMode::Limit(_) => {}
     }
 
-    let memory_limit = if max_in_memory < 0 {
-        0
-    } else {
-        max_in_memory as usize
-    };
-    let chunk_size = if max_in_memory < 0 {
-        256
-    } else {
-        memory_limit.max(1)
+    let (memory_limit, chunk_size) = match max_in_memory {
+        MemoryMode::CollectFirst => unreachable!(),
+        MemoryMode::StreamUnlimited => (0, 256),
+        MemoryMode::Limit(n) => (n, n.max(1)),
     };
 
     let mut retained_files = Vec::new();
@@ -212,27 +229,26 @@ pub fn process_collected_with_memory_limit_sequential(
     license_engine: Option<Arc<LicenseDetectionEngine>>,
     license_options: LicenseScanOptions,
     text_options: &TextDetectionOptions,
-    max_in_memory: i64,
+    max_in_memory: MemoryMode,
 ) -> ProcessResult {
-    if max_in_memory == 0 {
-        return process_collected_sequential(
-            collected,
-            progress,
-            license_engine,
-            license_options,
-            text_options,
-        );
+    match max_in_memory {
+        MemoryMode::CollectFirst => {
+            return process_collected_sequential(
+                collected,
+                progress,
+                license_engine,
+                license_options,
+                text_options,
+            );
+        }
+        MemoryMode::StreamUnlimited => {}
+        MemoryMode::Limit(_) => {}
     }
 
-    let memory_limit = if max_in_memory < 0 {
-        0
-    } else {
-        max_in_memory as usize
-    };
-    let chunk_size = if max_in_memory < 0 {
-        256
-    } else {
-        memory_limit.max(1)
+    let (memory_limit, chunk_size) = match max_in_memory {
+        MemoryMode::CollectFirst => unreachable!(),
+        MemoryMode::StreamUnlimited => (0, 256),
+        MemoryMode::Limit(n) => (n, n.max(1)),
     };
 
     let mut retained_files = Vec::new();

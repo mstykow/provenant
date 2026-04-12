@@ -454,7 +454,7 @@ impl LicenseMatch {
         let unknowns_in_match: usize = span
             .iter()
             .filter(|&pos| pos != max_pos)
-            .filter_map(|pos| query.unknowns_by_pos.get(&Some(pos as i32)))
+            .filter_map(|pos| query.unknowns_by_pos.get(&Some(pos)))
             .sum();
         qregion_len + unknowns_in_match
     }

@@ -8,7 +8,7 @@ use crate::license_detection::models::Rule;
 use crate::license_detection::query::QueryRun;
 use std::collections::{HashMap, HashSet};
 
-use super::HIGH_RESEMBLANCE_THRESHOLD;
+use super::HIGH_RESEMBLANCE_THRESHOLD_TENTHS;
 
 /// Score vector for ranking candidates using set similarity.
 ///
@@ -85,14 +85,13 @@ impl CandidateMetrics {
     }
 
     fn rounded_is_highly_resemblant(&self) -> bool {
-        self.rounded_resemblance_threshold_tenths()
-            >= (HIGH_RESEMBLANCE_THRESHOLD * 10.0).round() as u32
+        self.rounded_resemblance_threshold_tenths() >= HIGH_RESEMBLANCE_THRESHOLD_TENTHS
     }
 
     fn full_is_highly_resemblant(&self) -> bool {
         let matched = self.matched_length as u64;
         let union = self.union_len() as u64;
-        let threshold_tenths = (HIGH_RESEMBLANCE_THRESHOLD * 10.0).round() as u64;
+        let threshold_tenths = u64::from(HIGH_RESEMBLANCE_THRESHOLD_TENTHS);
 
         u128::from(matched) * 10 >= u128::from(union) * u128::from(threshold_tenths)
     }
@@ -214,11 +213,7 @@ impl QueryData {
             return None;
         }
 
-        let query_token_ids: Vec<TokenId> = query_tokens
-            .iter()
-            .filter(|&&tid| tid >= 0)
-            .map(|&tid| TokenId::new(tid as u16))
-            .collect();
+        let query_token_ids: Vec<TokenId> = query_tokens.iter().filter_map(|tid| *tid).collect();
 
         if query_token_ids.is_empty() {
             return None;

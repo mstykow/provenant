@@ -31,11 +31,11 @@ mod tests {
         Query::with_source_options(text, index, line_threshold, None)
     }
 
-    fn query_unknown_count_after(query: &Query<'_>, pos: Option<i32>) -> usize {
+    fn query_unknown_count_after(query: &Query<'_>, pos: Option<usize>) -> usize {
         query.unknowns_by_pos.get(&pos).copied().unwrap_or(0)
     }
 
-    fn query_stopword_count_after(query: &Query<'_>, pos: Option<i32>) -> usize {
+    fn query_stopword_count_after(query: &Query<'_>, pos: Option<usize>) -> usize {
         query.stopwords_by_pos.get(&pos).copied().unwrap_or(0)
     }
 
@@ -324,9 +324,9 @@ mod tests {
 
         let tokens = run.matchable_tokens();
         assert_eq!(tokens.len(), 3);
-        assert_eq!(tokens[0], 0);
-        assert_eq!(tokens[1], 1);
-        assert_eq!(tokens[2], 2);
+        assert_eq!(tokens[0], Some(tid(0)));
+        assert_eq!(tokens[1], Some(tid(1)));
+        assert_eq!(tokens[2], Some(tid(2)));
     }
 
     #[test]

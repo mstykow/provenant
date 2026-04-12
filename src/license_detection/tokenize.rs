@@ -368,7 +368,7 @@ static REQUIRED_PHRASE_PATTERN: Lazy<Regex> = Lazy::new(|| {
 /// Based on Python: `index_tokenizer_with_stopwords()` in tokenize.py:247-306
 pub fn tokenize_with_stopwords(
     text: &str,
-) -> (Vec<String>, std::collections::HashMap<usize, usize>) {
+) -> (Vec<String>, std::collections::HashMap<Option<usize>, usize>) {
     if text.is_empty() {
         return (Vec::new(), std::collections::HashMap::new());
     }
@@ -376,7 +376,7 @@ pub fn tokenize_with_stopwords(
     let mut tokens = Vec::new();
     let mut stopwords_by_pos = std::collections::HashMap::new();
 
-    let mut pos: i64 = -1;
+    let mut pos: Option<usize> = None;
     let lowercase_text = text.to_lowercase();
 
     for cap in QUERY_PATTERN.find_iter(&lowercase_text) {
@@ -386,9 +386,9 @@ pub fn tokenize_with_stopwords(
         }
 
         if STOPWORDS.contains(token) {
-            *stopwords_by_pos.entry(pos as usize).or_insert(0) += 1;
+            *stopwords_by_pos.entry(pos).or_insert(0) += 1;
         } else {
-            pos += 1;
+            pos = Some(pos.map_or(0, |p| p + 1));
             tokens.push(token.to_string());
         }
     }
@@ -722,8 +722,8 @@ mod tests {
         let (tokens, stopwords) = tokenize_with_stopwords(text);
         assert_eq!(tokens, vec!["hello", "world", "test"]);
         // "div" is stopword after "hello" (pos 0), "p" is stopword after "world" (pos 1)
-        assert_eq!(stopwords.get(&0), Some(&1));
-        assert_eq!(stopwords.get(&1), Some(&1));
+        assert_eq!(stopwords.get(&Some(0)), Some(&1));
+        assert_eq!(stopwords.get(&Some(1)), Some(&1));
     }
 
     #[test]

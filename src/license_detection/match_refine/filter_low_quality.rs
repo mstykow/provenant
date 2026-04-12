@@ -194,7 +194,7 @@ pub(crate) fn filter_matches_missing_required_phrases(
                     let contains_unknown = qspan
                         .iter()
                         .take(qspan.len() - 1)
-                        .any(|&qpos| query.unknowns_by_pos.contains_key(&Some(qpos as i32)));
+                        .any(|&qpos| query.unknowns_by_pos.contains_key(&Some(qpos)));
 
                     if contains_unknown {
                         discarded.push(m.clone());
@@ -212,10 +212,10 @@ pub(crate) fn filter_matches_missing_required_phrases(
                             continue;
                         }
 
-                        let i_stop = rule.stopwords_by_pos.get(&ipos).copied().unwrap_or(0);
+                        let i_stop = rule.stopwords_by_pos.get(&Some(ipos)).copied().unwrap_or(0);
                         let q_stop = query
                             .stopwords_by_pos
-                            .get(&Some(qpos as i32))
+                            .get(&Some(qpos))
                             .copied()
                             .unwrap_or(0);
 
@@ -276,7 +276,7 @@ pub(crate) fn filter_matches_missing_required_phrases(
                 let contains_unknown = qkey_span
                     .iter()
                     .take(qkey_span.len() - 1)
-                    .any(|&qpos| query.unknowns_by_pos.contains_key(&Some(qpos as i32)));
+                    .any(|&qpos| query.unknowns_by_pos.contains_key(&Some(qpos)));
 
                 if contains_unknown {
                     is_valid = false;
@@ -294,10 +294,10 @@ pub(crate) fn filter_matches_missing_required_phrases(
                         continue;
                     }
 
-                    let i_stop = rule.stopwords_by_pos.get(&ipos).copied().unwrap_or(0);
+                    let i_stop = rule.stopwords_by_pos.get(&Some(ipos)).copied().unwrap_or(0);
                     let q_stop = query
                         .stopwords_by_pos
-                        .get(&Some(qpos as i32))
+                        .get(&Some(qpos))
                         .copied()
                         .unwrap_or(0);
 
@@ -355,7 +355,7 @@ pub(crate) fn filter_matches_to_spurious_single_token(
 
             let before = query
                 .unknowns_by_pos
-                .get(&Some(qstart as i32 - 1))
+                .get(&Some(qstart.saturating_sub(1)))
                 .copied()
                 .unwrap_or(0)
                 + (qstart.saturating_sub(unknown_count)..qstart)
@@ -368,7 +368,7 @@ pub(crate) fn filter_matches_to_spurious_single_token(
 
             let after = query
                 .unknowns_by_pos
-                .get(&Some(qstart as i32))
+                .get(&Some(qstart))
                 .copied()
                 .unwrap_or(0)
                 + (qstart + 1..qstart + 1 + unknown_count)
