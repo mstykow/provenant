@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io::{self, Write};
 
 use serde_json::{Map, Value, json};
@@ -288,26 +289,20 @@ fn component_hashes(pkg: &Package) -> Vec<(&'static str, String)> {
 
 fn component_external_references(pkg: &Package) -> Vec<(&'static str, String)> {
     let mut refs = Vec::new();
-    if let Some(url) = &pkg.api_data_url {
-        refs.push(("bom", url.clone()));
-    }
-    if let Some(url) = &pkg.bug_tracking_url {
-        refs.push(("issue-tracker", url.clone()));
-    }
-    if let Some(url) = &pkg.download_url {
-        refs.push(("distribution", url.clone()));
-    }
-    if let Some(url) = &pkg.repository_download_url {
-        refs.push(("distribution", url.clone()));
-    }
-    if let Some(url) = &pkg.homepage_url {
-        refs.push(("website", url.clone()));
-    }
-    if let Some(url) = &pkg.repository_homepage_url {
-        refs.push(("website", url.clone()));
-    }
-    if let Some(url) = &pkg.vcs_url {
-        refs.push(("vcs", url.clone()));
-    }
+    let mut seen = HashSet::new();
+    let mut push_ref = |ref_type: &'static str, url: &Option<String>| {
+        if let Some(url) = url
+            && seen.insert((ref_type, url.clone()))
+        {
+            refs.push((ref_type, url.clone()));
+        }
+    };
+    push_ref("bom", &pkg.api_data_url);
+    push_ref("issue-tracker", &pkg.bug_tracking_url);
+    push_ref("distribution", &pkg.download_url);
+    push_ref("distribution", &pkg.repository_download_url);
+    push_ref("website", &pkg.homepage_url);
+    push_ref("website", &pkg.repository_homepage_url);
+    push_ref("vcs", &pkg.vcs_url);
     refs
 }

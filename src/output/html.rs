@@ -196,7 +196,7 @@ const HTML_REPORT_TEMPLATE: &str = r#"<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Custom Template</title>
+    <title>Provenant HTML Report</title>
     <style type="text/css">
       table {
         border-collapse: collapse;

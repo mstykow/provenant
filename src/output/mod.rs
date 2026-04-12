@@ -7,6 +7,7 @@ mod cyclonedx;
 mod debian;
 mod html;
 mod jsonl;
+mod public_serialize;
 mod shared;
 mod spdx;
 mod template;
@@ -63,11 +64,13 @@ impl OutputWriter for FormatWriter {
     ) -> io::Result<()> {
         match self.format {
             OutputFormat::Json => {
-                serde_json::to_writer(&mut *writer, output).map_err(shared::io_other)?;
+                serde_json::to_writer(&mut *writer, &public_serialize::PublicOutput(output))
+                    .map_err(shared::io_other)?;
                 writer.write_all(b"\n")
             }
             OutputFormat::JsonPretty => {
-                serde_json::to_writer_pretty(&mut *writer, output).map_err(shared::io_other)?;
+                serde_json::to_writer_pretty(&mut *writer, &public_serialize::PublicOutput(output))
+                    .map_err(shared::io_other)?;
                 writer.write_all(b"\n")
             }
             OutputFormat::Yaml => write_yaml(output, writer),
@@ -103,7 +106,8 @@ pub fn write_output_file(
 }
 
 fn write_yaml(output: &Output, writer: &mut dyn Write) -> io::Result<()> {
-    yaml_serde::to_writer(&mut *writer, output).map_err(shared::io_other)?;
+    yaml_serde::to_writer(&mut *writer, &public_serialize::PublicOutput(output))
+        .map_err(shared::io_other)?;
     writer.write_all(b"\n")
 }
 
@@ -1050,6 +1054,64 @@ mod tests {
     }
 
     #[test]
+    fn test_json_and_json_lines_writers_keep_empty_top_level_license_detections() {
+        let output = Output::from(&sample_internal_output());
+
+        let mut json_bytes = Vec::new();
+        writer_for_format(OutputFormat::Json)
+            .write(&output, &mut json_bytes, &OutputWriteConfig::default())
+            .expect("json write should succeed");
+        let json_value: Value =
+            serde_json::from_slice(&json_bytes).expect("json output should parse");
+        assert_eq!(json_value["license_detections"], Value::Array(vec![]));
+
+        let mut jsonl_bytes = Vec::new();
+        writer_for_format(OutputFormat::JsonLines)
+            .write(&output, &mut jsonl_bytes, &OutputWriteConfig::default())
+            .expect("json-lines write should succeed");
+        let rendered = String::from_utf8(jsonl_bytes).expect("json-lines should be utf-8");
+        assert!(
+            rendered
+                .lines()
+                .any(|line| line == r#"{"license_detections":[]}"#)
+        );
+    }
+
+    #[test]
+    fn test_public_writer_normalizes_empty_package_maps_without_changing_schema_output() {
+        let mut internal = sample_internal_output();
+        internal.packages.push(Package::from_package_data(
+            &PackageData {
+                package_type: Some(crate::models::PackageType::Npm),
+                name: Some("demo".to_string()),
+                version: Some("1.0.0".to_string()),
+                ..PackageData::default()
+            },
+            "scan/package.json".to_string(),
+        ));
+
+        let output = Output::from(&internal);
+        let raw_schema = serde_json::to_value(&output).expect("schema output should serialize");
+        assert_eq!(
+            raw_schema["packages"][0]["qualifiers"],
+            serde_json::json!({})
+        );
+        assert_eq!(
+            raw_schema["packages"][0]["extra_data"],
+            serde_json::json!({})
+        );
+
+        let mut bytes = Vec::new();
+        writer_for_format(OutputFormat::Json)
+            .write(&output, &mut bytes, &OutputWriteConfig::default())
+            .expect("json write should succeed");
+        let public_value: Value = serde_json::from_slice(&bytes).expect("public json should parse");
+
+        assert!(public_value["packages"][0]["qualifiers"].is_null());
+        assert!(public_value["packages"][0]["extra_data"].is_null());
+    }
+
+    #[test]
     fn test_cyclonedx_xml_writer_outputs_xml() {
         let output = Output::from(&sample_internal_output());
         let mut bytes = Vec::new();
@@ -1128,6 +1190,89 @@ mod tests {
     }
 
     #[test]
+    fn test_cyclonedx_external_references_are_deduplicated() {
+        let mut internal = sample_internal_output();
+        internal.packages = vec![Package::from_package_data(
+            &PackageData {
+                package_type: Some(crate::models::PackageType::Npm),
+                name: Some("demo".to_string()),
+                version: Some("1.0.0".to_string()),
+                download_url: Some("https://example.com/download.tgz".to_string()),
+                repository_download_url: Some("https://example.com/download.tgz".to_string()),
+                homepage_url: Some("https://example.com".to_string()),
+                repository_homepage_url: Some("https://example.com".to_string()),
+                ..PackageData::default()
+            },
+            "scan/package.json".to_string(),
+        )];
+        let output = Output::from(&internal);
+
+        let mut json_bytes = Vec::new();
+        writer_for_format(OutputFormat::CycloneDxJson)
+            .write(&output, &mut json_bytes, &OutputWriteConfig::default())
+            .expect("cyclonedx json write should succeed");
+        let value: Value = serde_json::from_slice(&json_bytes).expect("valid cyclonedx json");
+        let refs = value["components"][0]["externalReferences"]
+            .as_array()
+            .expect("external references should be an array");
+        assert_eq!(refs.len(), 2);
+
+        let mut xml_bytes = Vec::new();
+        writer_for_format(OutputFormat::CycloneDxXml)
+            .write(&output, &mut xml_bytes, &OutputWriteConfig::default())
+            .expect("cyclonedx xml write should succeed");
+        let xml = String::from_utf8(xml_bytes).expect("cyclonedx xml should be utf-8");
+        assert_eq!(xml.matches("https://example.com/download.tgz").count(), 1);
+        assert_eq!(xml.matches("https://example.com</url>").count(), 1);
+    }
+
+    #[test]
+    fn test_spdx_prefers_single_detected_package_name_over_scan_root() {
+        let mut internal = sample_internal_output();
+        internal.packages = vec![Package::from_package_data(
+            &PackageData {
+                package_type: Some(crate::models::PackageType::Npm),
+                name: Some("detected-package".to_string()),
+                version: Some("1.0.0".to_string()),
+                ..PackageData::default()
+            },
+            "scan/package.json".to_string(),
+        )];
+        let output = Output::from(&internal);
+
+        let mut tv_bytes = Vec::new();
+        writer_for_format(OutputFormat::SpdxTv)
+            .write(
+                &output,
+                &mut tv_bytes,
+                &OutputWriteConfig {
+                    format: OutputFormat::SpdxTv,
+                    custom_template: None,
+                    scanned_path: Some("scan-root".to_string()),
+                },
+            )
+            .expect("spdx tv write should succeed");
+        let tv = String::from_utf8(tv_bytes).expect("spdx tv should be utf-8");
+        assert!(tv.contains("PackageName: detected-package"));
+        assert!(tv.contains("DocumentNamespace: http://spdx.org/spdxdocs/detected-package"));
+
+        let mut rdf_bytes = Vec::new();
+        writer_for_format(OutputFormat::SpdxRdf)
+            .write(
+                &output,
+                &mut rdf_bytes,
+                &OutputWriteConfig {
+                    format: OutputFormat::SpdxRdf,
+                    custom_template: None,
+                    scanned_path: Some("scan-root".to_string()),
+                },
+            )
+            .expect("spdx rdf write should succeed");
+        let rdf = String::from_utf8(rdf_bytes).expect("spdx rdf should be utf-8");
+        assert!(rdf.contains("<spdx:name>detected-package</spdx:name>"));
+    }
+
+    #[test]
     fn test_spdx_empty_scan_tag_value_matches_python_sentinel() {
         let output = Output {
             summary: None,
@@ -1200,7 +1345,7 @@ mod tests {
             .expect("html write should succeed");
         let rendered = String::from_utf8(bytes).expect("html should be utf-8");
         assert!(rendered.contains("<!doctype html>"));
-        assert!(rendered.contains("Custom Template"));
+        assert!(rendered.contains("Provenant HTML Report"));
     }
 
     #[test]
