@@ -193,21 +193,26 @@ fn build_dependency_from_package(package_table: &TomlMap<String, TomlValue>) -> 
 
     let resolved_package = build_resolved_package(package_table, &name, &version);
 
-    let is_optional = package_table
+    let poetry_optional = package_table
         .get("optional")
         .and_then(|value| value.as_bool())
         .unwrap_or(false);
+
+    let extra_data = Some(HashMap::from([(
+        "poetry_optional".to_string(),
+        serde_json::Value::Bool(poetry_optional),
+    )]));
 
     Some(Dependency {
         purl,
         extracted_requirement: None,
         scope: None,
-        is_runtime: Some(!is_optional),
-        is_optional: Some(is_optional),
+        is_runtime: None,
+        is_optional: None,
         is_pinned: Some(true),
         is_direct: Some(false),
         resolved_package: Some(Box::new(resolved_package)),
-        extra_data: None,
+        extra_data,
     })
 }
 
@@ -283,13 +288,19 @@ fn extract_package_dependencies(package_table: &TomlMap<String, TomlValue>) -> V
 }
 
 fn build_dependency_from_table(dep_name: &str, dep_value: &TomlValue) -> Option<Dependency> {
-    let requirement = match dep_value {
-        TomlValue::String(value) => Some(value.to_string()),
-        TomlValue::Table(table) => table
-            .get(FIELD_VERSION)
-            .and_then(|value| value.as_str())
-            .map(|value| value.to_string()),
-        _ => None,
+    let (requirement, is_optional) = match dep_value {
+        TomlValue::String(value) => (Some(value.to_string()), false),
+        TomlValue::Table(table) => (
+            table
+                .get(FIELD_VERSION)
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
+            table
+                .get("optional")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false),
+        ),
+        _ => (None, false),
     };
 
     let normalized_name = normalize_pypi_name(dep_name);
@@ -300,7 +311,7 @@ fn build_dependency_from_table(dep_name: &str, dep_value: &TomlValue) -> Option<
         extracted_requirement: requirement,
         scope: Some(FIELD_DEPENDENCIES.to_string()),
         is_runtime: Some(true),
-        is_optional: Some(false),
+        is_optional: Some(is_optional),
         is_pinned: Some(false),
         is_direct: Some(true),
         resolved_package: None,
@@ -316,8 +327,8 @@ fn build_dependency_from_extra(extra_name: &str, spec: &str) -> Option<Dependenc
         purl,
         extracted_requirement: requirement,
         scope: Some(extra_name.to_string()),
-        is_runtime: Some(false),
-        is_optional: Some(false),
+        is_runtime: None,
+        is_optional: Some(true),
         is_pinned: Some(false),
         is_direct: Some(true),
         resolved_package: None,
