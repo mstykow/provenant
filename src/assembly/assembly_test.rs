@@ -1459,6 +1459,61 @@ mod tests {
     }
 
     #[test]
+    fn test_assemble_nix_flake_attaches_anonymous_flake_compat_default_nix() {
+        let mut default_info = create_test_file_info(
+            "repo/default.nix",
+            DatasourceId::NixDefaultNix,
+            None,
+            None,
+            None,
+            vec![],
+        );
+        default_info.package_data[0].extra_data = Some(std::collections::HashMap::from([(
+            "nix_wrapper_kind".to_string(),
+            serde_json::Value::String("flake_compat".to_string()),
+        )]));
+
+        let mut files = vec![
+            create_test_file_info(
+                "repo/flake.nix",
+                DatasourceId::NixFlakeNix,
+                Some("pkg:nix/demo-flake"),
+                Some("demo-flake"),
+                None,
+                vec![],
+            ),
+            create_test_file_info(
+                "repo/flake.lock",
+                DatasourceId::NixFlakeLock,
+                Some("pkg:nix/demo-flake"),
+                Some("demo-flake"),
+                None,
+                vec![],
+            ),
+            default_info,
+        ];
+
+        let result = assemble(&mut files);
+
+        assert_eq!(result.packages.len(), 1);
+        let flake_package = &result.packages[0];
+        assert!(
+            flake_package
+                .datafile_paths
+                .contains(&"repo/default.nix".to_string())
+        );
+        assert!(
+            flake_package
+                .datasource_ids
+                .contains(&DatasourceId::NixDefaultNix)
+        );
+        assert_eq!(
+            files[2].for_packages,
+            vec![flake_package.package_uid.clone()]
+        );
+    }
+
+    #[test]
     fn test_assemble_npm_package_json_skips_lockfile_with_same_name_different_version() {
         let mut files = vec![
             create_test_file_info(
