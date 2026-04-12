@@ -565,6 +565,17 @@ mod tests {
     }
 
     #[test]
+    fn test_assembly_nix_flake_compat_basic() {
+        match run_assembly_golden_test("nix-flake-compat-basic") {
+            Ok(_) => (),
+            Err(e) => panic!(
+                "Assembly golden test failed for nix-flake-compat-basic: {}",
+                e
+            ),
+        }
+    }
+
+    #[test]
     fn test_assembly_helm_basic() {
         match run_assembly_golden_test("helm-basic") {
             Ok(_) => (),

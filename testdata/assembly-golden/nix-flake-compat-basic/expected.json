@@ -1,0 +1,191 @@
+{
+  "packages": [
+    {
+      "type": "nix",
+      "namespace": null,
+      "name": "nix-flake-compat-basic",
+      "version": null,
+      "qualifiers": {},
+      "subpath": null,
+      "primary_language": "Nix",
+      "description": "Demo flake package",
+      "release_date": null,
+      "parties": [],
+      "keywords": [],
+      "homepage_url": null,
+      "download_url": null,
+      "size": null,
+      "bug_tracking_url": null,
+      "code_view_url": null,
+      "vcs_url": null,
+      "copyright": null,
+      "holder": null,
+      "declared_license_expression": null,
+      "declared_license_expression_spdx": null,
+      "license_detections": [],
+      "other_license_expression": null,
+      "other_license_expression_spdx": null,
+      "other_license_detections": [],
+      "extracted_license_statement": null,
+      "notice_text": null,
+      "source_packages": [],
+      "is_private": false,
+      "is_virtual": false,
+      "extra_data": {
+        "root": "root",
+        "lock_version": 7,
+        "nix_wrapper_kind": "flake_compat"
+      },
+      "repository_homepage_url": null,
+      "repository_download_url": null,
+      "api_data_url": null,
+      "purl": "pkg:nix/nix-flake-compat-basic",
+      "package_uid": "pkg:nix/nix-flake-compat-basic?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "datafile_paths": ["default.nix", "flake.lock", "flake.nix"],
+      "datasource_ids": ["nix_default_nix", "nix_flake_lock", "nix_flake_nix"]
+    }
+  ],
+  "dependencies": [
+    {
+      "purl": "pkg:nix/crate2nix@ghi789",
+      "extracted_requirement": "github:nix-community/crate2nix",
+      "scope": "inputs",
+      "is_runtime": false,
+      "is_optional": false,
+      "is_pinned": true,
+      "is_direct": true,
+      "resolved_package": null,
+      "extra_data": {
+        "nar_hash": "sha256-crate2nix",
+        "last_modified": 1710000002,
+        "flake": false,
+        "original_type": "github",
+        "source_type": "github",
+        "owner": "nix-community",
+        "repo": "crate2nix"
+      },
+      "dependency_uid": "pkg:nix/crate2nix@ghi789?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "for_package_uid": "pkg:nix/nix-flake-compat-basic?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "datafile_path": "flake.lock",
+      "datasource_id": "nix_flake_lock",
+      "namespace": null
+    },
+    {
+      "purl": "pkg:nix/flake-utils",
+      "extracted_requirement": "github:numtide/flake-utils",
+      "scope": "inputs",
+      "is_runtime": false,
+      "is_optional": false,
+      "is_pinned": false,
+      "is_direct": true,
+      "resolved_package": null,
+      "extra_data": {
+        "follows": "nixpkgs"
+      },
+      "dependency_uid": "pkg:nix/flake-utils?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "for_package_uid": "pkg:nix/nix-flake-compat-basic?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "datafile_path": "flake.nix",
+      "datasource_id": "nix_flake_nix",
+      "namespace": null
+    },
+    {
+      "purl": "pkg:nix/flake-utils@def456",
+      "extracted_requirement": "github:numtide/flake-utils",
+      "scope": "inputs",
+      "is_runtime": false,
+      "is_optional": false,
+      "is_pinned": true,
+      "is_direct": true,
+      "resolved_package": null,
+      "extra_data": {
+        "owner": "numtide",
+        "nar_hash": "sha256-flake-utils",
+        "last_modified": 1710000001,
+        "original_type": "github",
+        "repo": "flake-utils",
+        "source_type": "github"
+      },
+      "dependency_uid": "pkg:nix/flake-utils@def456?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "for_package_uid": "pkg:nix/nix-flake-compat-basic?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "datafile_path": "flake.lock",
+      "datasource_id": "nix_flake_lock",
+      "namespace": null
+    },
+    {
+      "purl": "pkg:nix/nixpkgs",
+      "extracted_requirement": "github:NixOS/nixpkgs/nixos-24.11",
+      "scope": "inputs",
+      "is_runtime": false,
+      "is_optional": false,
+      "is_pinned": false,
+      "is_direct": true,
+      "resolved_package": null,
+      "extra_data": {},
+      "dependency_uid": "pkg:nix/nixpkgs?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "for_package_uid": "pkg:nix/nix-flake-compat-basic?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "datafile_path": "flake.nix",
+      "datasource_id": "nix_flake_nix",
+      "namespace": null
+    },
+    {
+      "purl": "pkg:nix/nixpkgs@abc123",
+      "extracted_requirement": "github:NixOS/nixpkgs",
+      "scope": "inputs",
+      "is_runtime": false,
+      "is_optional": false,
+      "is_pinned": true,
+      "is_direct": true,
+      "resolved_package": null,
+      "extra_data": {
+        "last_modified": 1710000000,
+        "original_type": "indirect",
+        "nar_hash": "sha256-nixpkgs",
+        "repo": "nixpkgs",
+        "original_id": "nixpkgs",
+        "source_type": "github",
+        "owner": "NixOS"
+      },
+      "dependency_uid": "pkg:nix/nixpkgs@abc123?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "for_package_uid": "pkg:nix/nix-flake-compat-basic?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "datafile_path": "flake.lock",
+      "datasource_id": "nix_flake_lock",
+      "namespace": null
+    },
+    {
+      "purl": "pkg:nix/rust-overlay",
+      "extracted_requirement": "github:oxalica/rust-overlay",
+      "scope": "inputs",
+      "is_runtime": false,
+      "is_optional": false,
+      "is_pinned": false,
+      "is_direct": true,
+      "resolved_package": null,
+      "extra_data": {},
+      "dependency_uid": "pkg:nix/rust-overlay?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "for_package_uid": "pkg:nix/nix-flake-compat-basic?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "datafile_path": "flake.nix",
+      "datasource_id": "nix_flake_nix",
+      "namespace": null
+    }
+  ],
+  "files_with_packages": [
+    {
+      "path": "default.nix",
+      "for_packages": [
+        "pkg:nix/nix-flake-compat-basic?uuid=fixed-uid-done-for-testing-5642512d1758"
+      ]
+    },
+    {
+      "path": "flake.lock",
+      "for_packages": [
+        "pkg:nix/nix-flake-compat-basic?uuid=fixed-uid-done-for-testing-5642512d1758"
+      ]
+    },
+    {
+      "path": "flake.nix",
+      "for_packages": [
+        "pkg:nix/nix-flake-compat-basic?uuid=fixed-uid-done-for-testing-5642512d1758"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "version": 7,
+  "root": "root",
+  "nodes": {
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "flake-utils": "flake-utils",
+        "crate2nix": "crate2nix"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "type": "github",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "abc123",
+        "narHash": "sha256-nixpkgs",
+        "lastModified": 1710000000
+      },
+      "original": {
+        "type": "indirect",
+        "id": "nixpkgs"
+      }
+    },
+    "flake-utils": {
+      "locked": {
+        "type": "github",
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "rev": "def456",
+        "narHash": "sha256-flake-utils",
+        "lastModified": 1710000001
+      },
+      "original": {
+        "type": "github",
+        "owner": "numtide",
+        "repo": "flake-utils"
+      }
+    },
+    "crate2nix": {
+      "locked": {
+        "type": "github",
+        "owner": "nix-community",
+        "repo": "crate2nix",
+        "rev": "ghi789",
+        "narHash": "sha256-crate2nix",
+        "lastModified": 1710000002
+      },
+      "original": {
+        "type": "github",
+        "owner": "nix-community",
+        "repo": "crate2nix"
+      },
+      "flake": false
+    }
+  }
+}
