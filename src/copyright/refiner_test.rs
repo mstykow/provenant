@@ -1268,6 +1268,24 @@ fn test_refine_holder_strips_trailing_javadoc_tags() {
 }
 
 #[test]
+fn test_refine_holder_strips_trailing_batch_comment_marker() {
+    let result = refine_holder_in_copyright_context("the original author or authors. @rem");
+    assert_eq!(result, Some("the original author or authors".to_string()));
+}
+
+#[test]
+fn test_refine_holder_drops_compare_triage_code_fragments() {
+    assert_eq!(refine_holder("isInstanceOf"), None);
+    assert_eq!(refine_holder("contributor, path"), None);
+    assert_eq!(
+        refine_holder(
+            "handle(argument) Stream result LambdaSafe .callbacks(GenericFactory.class, Collections.singleton(callbackInstance), argument)"
+        ),
+        None
+    );
+}
+
+#[test]
 fn test_refine_copyright_strips_see_authors_suffix() {
     let result = refine_copyright(
         "Copyright (c) 2000 Carsten Haitzler and various contributors (see AUTHORS)",
@@ -1282,6 +1300,20 @@ fn test_refine_copyright_strips_see_authors_suffix() {
 fn test_refine_copyright_strips_trailing_javadoc_tags() {
     let result = refine_copyright("copyright 2005 Michal Migurski @version 1.0");
     assert_eq!(result, Some("copyright 2005 Michal Migurski".to_string()));
+}
+
+#[test]
+fn test_refine_copyright_strips_trailing_batch_comment_marker() {
+    let result = refine_copyright("Copyright 2015 the original author or authors. @rem");
+    assert_eq!(
+        result,
+        Some("Copyright 2015 the original author or authors".to_string())
+    );
+}
+
+#[test]
+fn test_refine_copyright_drops_compare_triage_code_fragments() {
+    assert!(is_junk_copyright("(c) contributor, path"));
 }
 
 // ── refine_author ────────────────────────────────────────────────
