@@ -47,6 +47,8 @@ const PEM_CERTIFICATE_HEADERS: &[(&str, &str)] = &[
     ),
 ];
 
+const LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES: usize = 128 * 1024;
+
 pub fn process_collected(
     collected: &CollectedPaths,
     progress: Arc<ScanProgress>,
@@ -611,7 +613,12 @@ fn extract_information_from_content(
     };
     let text_content_for_license_detection =
         augment_license_detection_text(path, &text_content_for_license_detection);
-    let text_content_for_license_detection = text_content_for_license_detection.into_owned();
+    let text_content_for_license_detection = cap_non_source_json_license_text(
+        path,
+        &classification,
+        text_content_for_license_detection.as_ref(),
+    )
+    .into_owned();
 
     if license_enabled {
         let started = Instant::now();
@@ -635,6 +642,13 @@ fn extract_information_from_content(
             license_options,
             from_binary_strings,
         )?;
+    }
+
+    if is_timeout_exceeded(started, text_options.timeout_seconds) {
+        return Err(Error::msg(format!(
+            "Timeout during license scan (> {:.2}s)",
+            text_options.timeout_seconds
+        )));
     }
 
     Ok((is_generated, sha256, classification.is_source))
@@ -674,7 +688,51 @@ fn maybe_record_processing_timeout(
 fn is_timeout_scan_error(error: &str) -> bool {
     error.contains("Timeout while ")
         || error.contains("Timeout before ")
+        || error.contains("Timeout during ")
         || error.contains("Processing interrupted due to timeout")
+}
+
+fn cap_non_source_json_license_text<'a>(
+    path: &Path,
+    classification: &crate::utils::file::FileInfoClassification,
+    text: &'a str,
+) -> std::borrow::Cow<'a, str> {
+    if classification.is_source
+        || crate::utils::sourcemap::is_sourcemap(path)
+        || !is_json_like_text(classification, path)
+        || text.len() <= LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES
+    {
+        return std::borrow::Cow::Borrowed(text);
+    }
+
+    std::borrow::Cow::Owned(
+        truncate_at_char_boundary(text, LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES).to_string(),
+    )
+}
+
+fn is_json_like_text(
+    classification: &crate::utils::file::FileInfoClassification,
+    path: &Path,
+) -> bool {
+    classification.file_type == "JSON text data"
+        || classification.mime_type == "application/json"
+        || classification.mime_type.ends_with("+json")
+        || path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
+}
+
+fn truncate_at_char_boundary(text: &str, max_bytes: usize) -> &str {
+    if text.len() <= max_bytes {
+        return text;
+    }
+
+    let mut end = max_bytes;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
 }
 
 fn is_system_datasource(datasource_id: &DatasourceId) -> bool {
@@ -1558,6 +1616,7 @@ fn process_directory(
 #[cfg(test)]
 mod tests {
     use super::{
+        LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES, cap_non_source_json_license_text,
         compute_percentage_of_license_text, convert_detection_to_model,
         extract_email_url_information, extract_named_author_from_binary_line,
         is_binary_string_author_candidate, is_binary_string_copyright_candidate,
@@ -1574,7 +1633,9 @@ mod tests {
     use crate::progress::{ProgressMode, ScanProgress};
     use crate::scanner::scan_options_fingerprint;
     use crate::scanner::{LicenseScanOptions, TextDetectionOptions};
+    use crate::utils::file::FileInfoClassification;
     use std::fs;
+    use std::path::Path;
     use std::time::{Duration, Instant};
     use tempfile::tempdir;
 
@@ -1760,6 +1821,55 @@ mod tests {
             scan_errors,
             vec!["Processing interrupted due to timeout after 1.00 seconds"]
         );
+    }
+
+    #[test]
+    fn test_cap_non_source_json_license_text_truncates_large_json() {
+        let classification = FileInfoClassification {
+            mime_type: "application/json".to_string(),
+            file_type: "JSON text data".to_string(),
+            programming_language: None,
+            is_binary: false,
+            is_text: true,
+            is_archive: false,
+            is_media: false,
+            is_source: false,
+            is_script: false,
+        };
+        let large_json = format!("{{\"items\":\"{}\"}}", "x".repeat(200_000));
+
+        let capped = cap_non_source_json_license_text(
+            Path::new("resolution.json"),
+            &classification,
+            &large_json,
+        );
+
+        assert!(capped.len() <= LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES);
+        assert!(capped.len() < large_json.len());
+    }
+
+    #[test]
+    fn test_cap_non_source_json_license_text_keeps_sourcemaps_intact() {
+        let classification = FileInfoClassification {
+            mime_type: "application/json".to_string(),
+            file_type: "JSON text data".to_string(),
+            programming_language: None,
+            is_binary: false,
+            is_text: true,
+            is_archive: false,
+            is_media: false,
+            is_source: false,
+            is_script: false,
+        };
+        let large_json = format!("{{\"mappings\":\"{}\"}}", "x".repeat(200_000));
+
+        let capped = cap_non_source_json_license_text(
+            Path::new("bundle.js.map"),
+            &classification,
+            &large_json,
+        );
+
+        assert_eq!(capped.as_ref(), large_json);
     }
 
     #[test]
