@@ -478,4 +478,88 @@ dev = ["typing_extensions", "helper[cli]==1.2.3"]
             )]))
         );
     }
+
+    #[test]
+    fn test_python_pyproject_scan_attaches_poetry_group_dependencies() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        fs::write(
+            temp_dir.path().join("pyproject.toml"),
+            r#"[project]
+name = "poetry-groups-demo"
+version = "1.0.0"
+dependencies = ["requests>=2.32"]
+
+[tool.poetry]
+requires-poetry = ">=2.0"
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = ">=3.0"
+
+[tool.poetry.group.test.dependencies]
+pytest = ">=8.0"
+
+[tool.poetry.group.github-actions]
+optional = true
+
+[tool.poetry.group.github-actions.dependencies]
+pytest-github-actions-annotate-failures = "^0.1.7"
+"#,
+        )
+        .expect("write pyproject.toml");
+
+        let (_files, result) = scan_and_assemble(temp_dir.path());
+        let package = result
+            .packages
+            .iter()
+            .find(|package| package.name.as_deref() == Some("poetry-groups-demo"))
+            .expect("pyproject should assemble into a Python package");
+
+        let runtime = result
+            .dependencies
+            .iter()
+            .find(|dep| {
+                dep.purl.as_deref() == Some("pkg:pypi/requests")
+                    && dep.for_package_uid.as_deref() == Some(package.package_uid.as_str())
+            })
+            .expect("runtime dependency");
+        assert_eq!(runtime.scope, None);
+        assert_eq!(runtime.is_runtime, Some(true));
+        assert_eq!(runtime.is_optional, Some(false));
+
+        let pre_commit = result
+            .dependencies
+            .iter()
+            .find(|dep| {
+                dep.purl.as_deref() == Some("pkg:pypi/pre-commit")
+                    && dep.for_package_uid.as_deref() == Some(package.package_uid.as_str())
+            })
+            .expect("dev dependency");
+        assert_eq!(pre_commit.scope.as_deref(), Some("dev"));
+        assert_eq!(pre_commit.is_runtime, Some(false));
+        assert_eq!(pre_commit.is_optional, Some(true));
+
+        let pytest = result
+            .dependencies
+            .iter()
+            .find(|dep| {
+                dep.purl.as_deref() == Some("pkg:pypi/pytest")
+                    && dep.for_package_uid.as_deref() == Some(package.package_uid.as_str())
+            })
+            .expect("test dependency");
+        assert_eq!(pytest.scope.as_deref(), Some("test"));
+        assert_eq!(pytest.is_runtime, Some(false));
+        assert_eq!(pytest.is_optional, Some(true));
+
+        let gha = result
+            .dependencies
+            .iter()
+            .find(|dep| {
+                dep.purl.as_deref() == Some("pkg:pypi/pytest-github-actions-annotate-failures")
+                    && dep.for_package_uid.as_deref() == Some(package.package_uid.as_str())
+            })
+            .expect("github-actions dependency");
+        assert_eq!(gha.scope.as_deref(), Some("github-actions"));
+        assert_eq!(gha.is_runtime, Some(false));
+        assert_eq!(gha.is_optional, Some(true));
+    }
 }

@@ -78,6 +78,7 @@ const FIELD_HOMEPAGE: &str = "homepage";
 const FIELD_REPOSITORY: &str = "repository";
 const FIELD_DEPENDENCIES: &str = "dependencies";
 const FIELD_OPTIONAL_DEPENDENCIES: &str = "optional-dependencies";
+const FIELD_EXTRAS: &str = "extras";
 
 type ProjectUrls = (
     Option<String>,
@@ -2634,7 +2635,14 @@ fn extract_dependencies(
     }
 
     // Handle Poetry dependency groups: [tool.poetry.group.<name>]
-    if let Some(groups_table) = project.get("group").and_then(|v| v.as_table()) {
+    if let Some(groups_table) = toml_content
+        .get("tool")
+        .and_then(|value| value.as_table())
+        .and_then(|tool| tool.get("poetry"))
+        .and_then(|value| value.as_table())
+        .and_then(|poetry| poetry.get("group"))
+        .and_then(|value| value.as_table())
+    {
         for (group_name, group_data) in groups_table {
             if let Some(group_deps) = group_data.as_table().and_then(|t| t.get("dependencies")) {
                 match group_deps {
@@ -2646,7 +2654,7 @@ fn extract_dependencies(
                         ));
                     }
                     TomlValue::Table(table) => {
-                        optional_dependencies.extend(parse_dependency_table(
+                        optional_dependencies.extend(parse_poetry_group_dependency_table(
                             table,
                             true,
                             Some(group_name),
@@ -2770,6 +2778,88 @@ fn parse_dependency_table(
             })
         })
         .collect()
+}
+
+fn parse_poetry_group_dependency_table(
+    table: &TomlMap<String, TomlValue>,
+    is_optional: bool,
+    scope: Option<&str>,
+) -> Vec<Dependency> {
+    table
+        .iter()
+        .filter_map(|(name, value)| build_poetry_group_dependency(name, value, is_optional, scope))
+        .collect()
+}
+
+fn build_poetry_group_dependency(
+    name: &str,
+    value: &TomlValue,
+    is_optional: bool,
+    scope: Option<&str>,
+) -> Option<Dependency> {
+    let normalized_name = normalize_python_dependency_name(name);
+    let (version_spec, extras, marker) = match value {
+        TomlValue::String(spec) => (Some(spec.trim().to_string()), Vec::new(), None),
+        TomlValue::Table(table) => {
+            let version_spec = table
+                .get(FIELD_VERSION)
+                .and_then(|value| value.as_str())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned);
+            let extras = table
+                .get(FIELD_EXTRAS)
+                .and_then(|value| value.as_array())
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(|value| value.as_str().map(ToOwned::to_owned))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let marker = table
+                .get("markers")
+                .and_then(|value| value.as_str())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned);
+
+            (version_spec, extras, marker)
+        }
+        _ => return None,
+    };
+
+    let pinned_version = version_spec
+        .as_deref()
+        .and_then(extract_exact_pinned_version);
+    let purl = build_python_dependency_purl(&normalized_name, pinned_version.as_deref())?;
+
+    let mut extra_data = HashMap::new();
+    if let Some(marker) = marker {
+        extra_data.insert("marker".to_string(), JsonValue::String(marker));
+    }
+    if !extras.is_empty() {
+        extra_data.insert(
+            "extras".to_string(),
+            JsonValue::Array(extras.into_iter().map(JsonValue::String).collect()),
+        );
+    }
+
+    Some(Dependency {
+        purl: Some(purl),
+        extracted_requirement: version_spec,
+        scope: scope.map(|value| value.to_string()),
+        is_runtime: Some(!is_optional),
+        is_optional: Some(is_optional),
+        is_pinned: Some(pinned_version.is_some()),
+        is_direct: Some(true),
+        resolved_package: None,
+        extra_data: if extra_data.is_empty() {
+            None
+        } else {
+            Some(extra_data)
+        },
+    })
 }
 
 fn parse_dependency_array(

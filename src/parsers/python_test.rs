@@ -2638,6 +2638,102 @@ requests = { git = "https://github.com/psf/requests" }
     }
 
     #[test]
+    fn test_pep_621_pyproject_extracts_poetry_dependency_groups() {
+        let content = r#"
+[project]
+name = "poetry-groups-demo"
+version = "1.0.0"
+dependencies = ["requests>=2.32"]
+
+[tool.poetry]
+requires-poetry = ">=2.0"
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = ">=3.0"
+
+[tool.poetry.group.test.dependencies]
+pytest = ">=8.0"
+pytest-xdist = { version = ">=3.1", extras = ["psutil"] }
+
+[tool.poetry.group.github-actions]
+optional = true
+
+[tool.poetry.group.github-actions.dependencies]
+pytest-github-actions-annotate-failures = "^0.1.7"
+"#;
+
+        let (_temp_dir, file_path) = create_temp_file(content, "pyproject.toml");
+        let package_data = PythonParser::extract_first_package(&file_path);
+
+        assert_eq!(package_data.name.as_deref(), Some("poetry-groups-demo"));
+
+        let requests = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:pypi/requests"))
+            .expect("runtime dependency");
+        assert_eq!(requests.scope, None);
+        assert_eq!(requests.is_runtime, Some(true));
+        assert_eq!(requests.is_optional, Some(false));
+
+        let pre_commit = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:pypi/pre-commit"))
+            .expect("dev dependency");
+        assert_eq!(pre_commit.scope.as_deref(), Some("dev"));
+        assert_eq!(pre_commit.is_runtime, Some(false));
+        assert_eq!(pre_commit.is_optional, Some(true));
+        assert_eq!(pre_commit.extracted_requirement.as_deref(), Some(">=3.0"));
+        assert_eq!(pre_commit.is_pinned, Some(false));
+
+        let pytest = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:pypi/pytest"))
+            .expect("test dependency");
+        assert_eq!(pytest.scope.as_deref(), Some("test"));
+        assert_eq!(pytest.is_runtime, Some(false));
+        assert_eq!(pytest.is_optional, Some(true));
+        assert_eq!(pytest.extracted_requirement.as_deref(), Some(">=8.0"));
+        assert_eq!(pytest.is_pinned, Some(false));
+
+        let pytest_xdist = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:pypi/pytest-xdist"))
+            .expect("pytest-xdist dependency");
+        assert_eq!(pytest_xdist.scope.as_deref(), Some("test"));
+        assert_eq!(pytest_xdist.is_runtime, Some(false));
+        assert_eq!(pytest_xdist.is_optional, Some(true));
+        assert_eq!(pytest_xdist.extracted_requirement.as_deref(), Some(">=3.1"));
+        assert_eq!(pytest_xdist.is_pinned, Some(false));
+        let pytest_xdist_extra = pytest_xdist
+            .extra_data
+            .as_ref()
+            .expect("pytest-xdist extras should be preserved");
+        assert_eq!(
+            pytest_xdist_extra.get("extras"),
+            Some(&serde_json::Value::Array(vec![serde_json::Value::String(
+                "psutil".to_string()
+            )]))
+        );
+
+        let gha = package_data
+            .dependencies
+            .iter()
+            .find(|dep| {
+                dep.purl.as_deref() == Some("pkg:pypi/pytest-github-actions-annotate-failures")
+            })
+            .expect("github-actions dependency");
+        assert_eq!(gha.scope.as_deref(), Some("github-actions"));
+        assert_eq!(gha.is_runtime, Some(false));
+        assert_eq!(gha.is_optional, Some(true));
+        assert_eq!(gha.extracted_requirement.as_deref(), Some("^0.1.7"));
+        assert_eq!(gha.is_pinned, Some(false));
+    }
+
+    #[test]
     fn test_setup_cfg_extras_require_scopes() {
         let content = r#"
 [metadata]
