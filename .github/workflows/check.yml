@@ -1,4 +1,4 @@
-name: Quality Checks
+name: CI
 
 on:
   push:
@@ -190,8 +190,8 @@ jobs:
       - name: Build and run Intel macOS CLI smoke check
         run: cargo run --quiet --locked --bin provenant -- --show-attribution > /dev/null
 
-  rust-contract-integration-tests:
-    name: Contract and Integration Tests (${{ matrix.shard }})
+  rust-sharded-tests:
+    name: Tests (${{ matrix.shard }})
     runs-on: ubuntu-latest
     if: |
       !(github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/'))
@@ -201,8 +201,8 @@ jobs:
         include:
           - shard: contracts
             shared_key: rust-scan-integration-tests-release-contracts
-          - shard: system-integration
-            shared_key: rust-scan-integration-tests-release-system-integration
+          - shard: integration
+            shared_key: rust-scan-integration-tests-release-integration
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
@@ -225,11 +225,11 @@ jobs:
         run: "cargo test --lib --release --verbose _scan_test::"
 
       - name: Run scanner integration suite
-        if: matrix.shard == 'system-integration'
+        if: matrix.shard == 'integration'
         run: cargo test --test scanner_integration --release --verbose
 
       - name: Run scanner copyright/credits integration suite
-        if: matrix.shard == 'system-integration'
+        if: matrix.shard == 'integration'
         run: cargo test --test scanner_copyright_credits --release --verbose
 
       - name: Run progress CLI integration suite
