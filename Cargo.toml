@@ -150,6 +150,11 @@ zstd = { workspace = true }
 
 [dev-dependencies]
 
+[lints.clippy]
+cargo = { level = "warn", priority = -1 }
+clone_on_ref_ptr = "warn"
+filetype_is_file = "warn"
+
 [profile.release]
 # Enable link-time optimization for better cross-module optimizations
 lto = true
