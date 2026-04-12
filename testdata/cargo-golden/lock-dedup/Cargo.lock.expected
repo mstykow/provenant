@@ -8,18 +8,18 @@
       {
         "purl": "pkg:cargo/helper@1.0.0",
         "extracted_requirement": "1.0.0",
-        "scope": "dependencies",
-        "is_runtime": true,
-        "is_optional": false,
+        "scope": null,
+        "is_runtime": null,
+        "is_optional": null,
         "is_pinned": true,
         "is_direct": true
       },
       {
         "purl": "pkg:cargo/serde@1.0.228",
         "extracted_requirement": "1.0.228",
-        "scope": "dependencies",
-        "is_runtime": true,
-        "is_optional": false,
+        "scope": null,
+        "is_runtime": null,
+        "is_optional": null,
         "is_pinned": true,
         "is_direct": true
       }
