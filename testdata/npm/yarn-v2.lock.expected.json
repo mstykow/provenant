@@ -1,44 +1,163 @@
 [
   {
     "type": "npm",
+    "namespace": null,
+    "name": null,
+    "version": null,
+    "qualifiers": null,
+    "subpath": null,
+    "primary_language": null,
+    "description": null,
+    "release_date": null,
     "parties": [],
+    "keywords": [],
+    "homepage_url": null,
+    "download_url": null,
+    "size": null,
+    "sha1": null,
+    "md5": null,
+    "sha256": null,
+    "sha512": null,
+    "bug_tracking_url": null,
+    "code_view_url": null,
+    "vcs_url": null,
+    "copyright": null,
+    "holder": null,
+    "declared_license_expression": null,
+    "declared_license_expression_spdx": null,
+    "license_detections": [],
+    "other_license_expression": null,
+    "other_license_expression_spdx": null,
+    "other_license_detections": [],
+    "extracted_license_statement": null,
+    "notice_text": null,
+    "source_packages": [],
+    "file_references": [],
+    "is_private": false,
+    "is_virtual": false,
+    "extra_data": {
+      "cacheKey": 9,
+      "version": 6
+    },
     "dependencies": [
       {
         "purl": "pkg:npm/%40actions/core@1.2.6",
         "extracted_requirement": "1.2.6",
-        "scope": "dependencies",
-        "is_runtime": true,
-        "is_optional": false,
+        "scope": null,
+        "is_runtime": null,
+        "is_optional": null,
         "is_pinned": true,
-        "is_direct": false,
+        "is_direct": null,
         "resolved_package": {
           "type": "npm",
           "namespace": "@actions",
           "name": "core",
           "version": "1.2.6",
+          "qualifiers": null,
+          "subpath": null,
           "primary_language": "JavaScript",
+          "description": null,
+          "release_date": null,
+          "parties": [],
+          "keywords": [],
+          "homepage_url": null,
+          "download_url": null,
+          "size": null,
+          "sha1": null,
+          "md5": null,
+          "sha256": null,
           "sha512": "034e57fcb5f944d5fb0ef55be1b212dd88e23d1a50aaffda874cb94e8f4bfa633a66f108f26e81a7cce287cd2b349aa88c97d2023135c8879495326db37a7feb",
+          "bug_tracking_url": null,
+          "code_view_url": null,
+          "vcs_url": null,
+          "copyright": null,
+          "holder": null,
+          "declared_license_expression": null,
+          "declared_license_expression_spdx": null,
+          "license_detections": [],
+          "other_license_expression": null,
+          "other_license_expression_spdx": null,
+          "other_license_detections": [],
+          "extracted_license_statement": null,
+          "notice_text": null,
+          "source_packages": [],
+          "file_references": [],
+          "is_private": false,
           "is_virtual": true,
+          "extra_data": {
+            "linkType": "hard",
+            "resolution": "@actions/core@npm:1.2.6",
+            "languageName": "node"
+          },
           "dependencies": [],
-          "datasource_id": "yarn_lock_v2"
+          "repository_homepage_url": null,
+          "repository_download_url": null,
+          "api_data_url": null,
+          "datasource_id": "yarn_lock_v2",
+          "purl": null
+        },
+        "extra_data": {
+          "resolution": "@actions/core@npm:1.2.6"
         }
       },
       {
         "purl": "pkg:npm/%40babel/cli@7.10.1",
         "extracted_requirement": "7.10.1",
-        "scope": "dependencies",
-        "is_runtime": true,
-        "is_optional": false,
+        "scope": null,
+        "is_runtime": null,
+        "is_optional": null,
         "is_pinned": true,
-        "is_direct": false,
+        "is_direct": null,
         "resolved_package": {
           "type": "npm",
           "namespace": "@babel",
           "name": "cli",
           "version": "7.10.1",
+          "qualifiers": null,
+          "subpath": null,
           "primary_language": "JavaScript",
+          "description": null,
+          "release_date": null,
+          "parties": [],
+          "keywords": [],
+          "homepage_url": null,
+          "download_url": null,
+          "size": null,
+          "sha1": null,
+          "md5": null,
+          "sha256": null,
           "sha512": "a2f9d52e2f866c4c6e5c4fdb4e64820ebbc6acb2aeaeac3e4d97cee16054684f015f253a6f036a2065729a520e595da085cf476501d3bc279d50ffc0dc891641",
+          "bug_tracking_url": null,
+          "code_view_url": null,
+          "vcs_url": null,
+          "copyright": null,
+          "holder": null,
+          "declared_license_expression": null,
+          "declared_license_expression_spdx": null,
+          "license_detections": [],
+          "other_license_expression": null,
+          "other_license_expression_spdx": null,
+          "other_license_detections": [],
+          "extracted_license_statement": null,
+          "notice_text": null,
+          "source_packages": [],
+          "file_references": [],
+          "is_private": false,
           "is_virtual": true,
+          "extra_data": {
+            "bin": {
+              "babel": "./bin/babel.js",
+              "babel-external-helpers": "./bin/babel-external-helpers.js"
+            },
+            "languageName": "node",
+            "resolution": "@babel/cli@npm:7.10.1",
+            "linkType": "hard",
+            "dependenciesMeta": {
+              "chokidar": {
+                "optional": true
+              }
+            }
+          },
           "dependencies": [
             {
               "purl": "pkg:npm/chokidar@%5E2.1.8",
@@ -47,7 +166,9 @@
               "is_runtime": true,
               "is_optional": false,
               "is_pinned": false,
-              "is_direct": false
+              "is_direct": false,
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:npm/source-map@%5E0.5.0",
@@ -56,7 +177,9 @@
               "is_runtime": true,
               "is_optional": false,
               "is_pinned": false,
-              "is_direct": false
+              "is_direct": false,
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:npm/%40babel/core@%5E7.0.0-0",
@@ -65,13 +188,26 @@
               "is_runtime": false,
               "is_optional": true,
               "is_pinned": false,
-              "is_direct": false
+              "is_direct": false,
+              "resolved_package": null,
+              "extra_data": null
             }
           ],
-          "datasource_id": "yarn_lock_v2"
+          "repository_homepage_url": null,
+          "repository_download_url": null,
+          "api_data_url": null,
+          "datasource_id": "yarn_lock_v2",
+          "purl": null
+        },
+        "extra_data": {
+          "resolution": "@babel/cli@npm:7.10.1"
         }
       }
     ],
-    "datasource_id": "yarn_lock_v2"
+    "repository_homepage_url": null,
+    "repository_download_url": null,
+    "api_data_url": null,
+    "datasource_id": "yarn_lock_v2",
+    "purl": null
   }
 ]

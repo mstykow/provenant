@@ -175,29 +175,22 @@ fn parse_yarn_v2(
         let (scope, is_runtime, is_optional, is_direct) = manifest_info
             .map(|info| {
                 (
-                    info.scope.to_string(),
-                    info.is_runtime,
-                    info.is_optional,
-                    true,
+                    Some(info.scope.to_string()),
+                    Some(info.is_runtime),
+                    Some(info.is_optional),
+                    Some(true),
                 )
             })
-            .unwrap_or_else(|| {
-                (
-                    "dependencies".to_string(),
-                    true,
-                    false,
-                    resolution.contains("workspace:"),
-                )
-            });
+            .unwrap_or((None, None, None, None));
 
         let dependency = Dependency {
             purl,
             extracted_requirement: Some(resolved_version.clone()),
-            scope: Some(scope),
-            is_runtime: Some(is_runtime),
-            is_optional: Some(is_optional),
+            scope,
+            is_runtime,
+            is_optional,
             is_pinned: Some(true),
-            is_direct: Some(is_direct),
+            is_direct,
             resolved_package: Some(Box::new(resolved_package)),
             extra_data: Some(HashMap::from([(
                 "resolution".to_string(),
@@ -447,13 +440,13 @@ fn parse_yarn_v1_block(
     let (scope, is_runtime, is_optional, is_direct) = manifest_info
         .map(|info| {
             (
-                info.scope.to_string(),
-                info.is_runtime,
-                info.is_optional,
-                true,
+                Some(info.scope.to_string()),
+                Some(info.is_runtime),
+                Some(info.is_optional),
+                Some(true),
             )
         })
-        .unwrap_or_else(|| ("dependencies".to_string(), true, false, false));
+        .unwrap_or((None, None, None, None));
 
     let resolved_package = ResolvedPackage {
         primary_language: Some("JavaScript".to_string()),
@@ -485,11 +478,11 @@ fn parse_yarn_v1_block(
     Some(Dependency {
         purl,
         extracted_requirement: Some(constraint),
-        scope: Some(scope),
-        is_runtime: Some(is_runtime),
-        is_optional: Some(is_optional),
+        scope,
+        is_runtime,
+        is_optional,
         is_pinned: Some(true),
-        is_direct: Some(is_direct),
+        is_direct,
         resolved_package: Some(Box::new(resolved_package)),
         extra_data: None,
     })
