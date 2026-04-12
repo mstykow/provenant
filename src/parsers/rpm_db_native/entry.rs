@@ -11,16 +11,33 @@ use super::tags::{
     RPMTAG_HEADERSIGNATURES,
 };
 
-const REGION_TAG_COUNT: i32 = mem::size_of::<EntryInfo>() as i32;
+const REGION_TAG_COUNT: u32 = mem::size_of::<EntryInfo>() as u32;
 const REGION_TAG_TYPE: u32 = 7;
 const HEADER_MAX_BYTES: usize = 256 * 1024 * 1024;
 
-const TYPE_SIZES: [i32; 16] = [1, 1, 1, 2, 4, 8, -1, 1, -1, -1, 0, 0, 0, 0, 0, 0];
-const TYPE_ALIGN: [i32; 16] = [1, 1, 1, 2, 4, 8, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0];
+const TYPE_SIZES: [Option<u32>; 16] = [
+    Some(1),
+    Some(1),
+    Some(1),
+    Some(2),
+    Some(4),
+    Some(8),
+    None,
+    Some(1),
+    None,
+    None,
+    Some(0),
+    Some(0),
+    Some(0),
+    Some(0),
+    Some(0),
+    Some(0),
+];
+const TYPE_ALIGN: [u32; 16] = [1, 1, 1, 2, 4, 8, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0];
 
 #[derive(Clone, Debug)]
 pub(crate) struct EntryInfo {
-    pub(crate) tag: i32,
+    pub(crate) tag: u32,
     pub(crate) kind: u32,
     pub(crate) offset: i32,
     pub(crate) count: u32,
@@ -29,7 +46,7 @@ pub(crate) struct EntryInfo {
 impl EntryInfo {
     fn swap_be(&self) -> EntryInfo {
         EntryInfo {
-            tag: i32::from_be(self.tag),
+            tag: u32::from_be(self.tag),
             kind: u32::from_be(self.kind),
             offset: i32::from_be(self.offset),
             count: u32::from_be(self.count),
@@ -44,14 +61,14 @@ pub(crate) struct IndexEntry {
 }
 
 impl IndexEntry {
-    pub(crate) fn read_i32(&self) -> Result<i32> {
+    pub(crate) fn read_u32(&self) -> Result<u32> {
         let bytes: [u8; 4] = self
             .data
             .get(..4)
-            .context("expected 4 bytes for int32 entry")?
+            .context("expected 4 bytes for uint32 entry")?
             .try_into()
-            .map_err(|_| anyhow!("failed to read int32 entry bytes"))?;
-        Ok(i32::from_be_bytes(bytes))
+            .map_err(|_| anyhow!("failed to read uint32 entry bytes"))?;
+        Ok(u32::from_be_bytes(bytes))
     }
 
     pub(crate) fn read_string(&self) -> Result<String> {
@@ -60,13 +77,13 @@ impl IndexEntry {
             .to_string())
     }
 
-    pub(crate) fn read_i32_array(&self) -> Result<Vec<i32>> {
+    pub(crate) fn read_u32_array(&self) -> Result<Vec<u32>> {
         let mut values = Vec::new();
         for chunk in self.data.chunks_exact(4).take(self.info.count as usize) {
-            values.push(i32::from_be_bytes(
+            values.push(u32::from_be_bytes(
                 chunk
                     .try_into()
-                    .map_err(|_| anyhow!("failed to parse int32 array chunk"))?,
+                    .map_err(|_| anyhow!("failed to parse uint32 array chunk"))?,
             ));
         }
         Ok(values)
@@ -98,28 +115,28 @@ impl Eq for IndexEntry {}
 
 pub(crate) struct HeaderBlob {
     entry_infos: Vec<EntryInfo>,
-    index_length: i32,
-    data_length: i32,
-    data_start: i32,
-    data_end: i32,
-    region_tag: i32,
-    region_index_length: i32,
-    region_data_length: i32,
+    index_length: u32,
+    data_length: u32,
+    data_start: u32,
+    data_end: u32,
+    region_tag: u32,
+    region_index_length: u32,
+    region_data_length: u32,
 }
 
 impl HeaderBlob {
     pub(crate) fn parse(data: &[u8]) -> Result<HeaderBlob> {
         let mut cursor = Cursor::new(data);
-        let index_length = read_be_i32(&mut cursor)?;
-        let data_length = read_be_i32(&mut cursor)?;
-        let entry_info_size = mem::size_of::<EntryInfo>() as i32;
+        let index_length = read_be_u32(&mut cursor)?;
+        let data_length = read_be_u32(&mut cursor)?;
+        let entry_info_size = mem::size_of::<EntryInfo>() as u32;
         let data_start = 8 + index_length * entry_info_size;
         let total_length = data_start + data_length;
         let data_end = data_start + data_length;
         if index_length < 1 {
             return Err(anyhow!("RPM header blob has no index entries"));
         }
-        if total_length >= HEADER_MAX_BYTES as i32 {
+        if total_length >= HEADER_MAX_BYTES as u32 {
             return Err(anyhow!(
                 "RPM header blob too large: total={} index_length={} data_length={}",
                 total_length,
@@ -176,10 +193,7 @@ impl HeaderBlob {
                 self.data_start,
                 self.data_end,
             )?;
-            if computed_length < 0 {
-                return Err(anyhow!("RPM region length became negative"));
-            }
-            if self.region_index_length < self.entry_infos.len() as i32 - 1 {
+            if self.region_index_length < self.entry_infos.len() as u32 - 1 {
                 let (extra_entries, dribble_length) = swab_region(
                     data,
                     self.entry_infos[region_index_length as usize..].to_vec(),
@@ -187,9 +201,6 @@ impl HeaderBlob {
                     self.data_start,
                     self.data_end,
                 )?;
-                if dribble_length < 0 {
-                    return Err(anyhow!("RPM dribble region length became negative"));
-                }
                 entries.extend(extra_entries);
                 entries = entries
                     .into_iter()
@@ -198,7 +209,7 @@ impl HeaderBlob {
                     .collect();
                 computed_length = dribble_length;
             }
-            computed_length += mem::size_of::<EntryInfo>() as i32;
+            computed_length += mem::size_of::<EntryInfo>() as u32;
             (entries, computed_length)
         };
 
@@ -234,14 +245,19 @@ impl HeaderBlob {
         if entry.tag != region_tag {
             return Ok(());
         }
-        if !(entry.kind == REGION_TAG_TYPE && entry.count == REGION_TAG_COUNT as u32) {
+        if !(entry.kind == REGION_TAG_TYPE && entry.count == REGION_TAG_COUNT) {
             return Err(anyhow!("invalid RPM region tag header"));
         }
-        if is_out_of_range(self.data_length, entry.offset + REGION_TAG_COUNT) {
+        if entry.offset < 0
+            || is_out_of_range(
+                self.data_length,
+                u32::try_from(entry.offset + REGION_TAG_COUNT as i32)?,
+            )
+        {
             return Err(anyhow!("invalid RPM region tag offset"));
         }
 
-        let region_end = self.data_start + entry.offset;
+        let region_end = self.data_start + positive_offset(entry.offset)?;
         let trailer = parse_entry_info_le(
             data.get(region_end as usize..(region_end + REGION_TAG_COUNT) as usize)
                 .context("invalid RPM region trailer slice")?,
@@ -253,15 +269,15 @@ impl HeaderBlob {
         }
         if !(entry.tag == region_tag
             && entry.kind == REGION_TAG_TYPE
-            && entry.count == REGION_TAG_COUNT as u32)
+            && entry.count == REGION_TAG_COUNT)
         {
             return Err(anyhow!("invalid RPM region trailer header"));
         }
 
         let mut trailer = trailer.swap_be();
         trailer.offset = -trailer.offset;
-        self.region_index_length = trailer.offset / REGION_TAG_COUNT;
-        if trailer.offset % REGION_TAG_COUNT != 0
+        self.region_index_length = positive_offset(trailer.offset)? / REGION_TAG_COUNT;
+        if trailer.offset % REGION_TAG_COUNT as i32 != 0
             || is_out_of_range(self.index_length, self.region_index_length)
             || is_out_of_range(self.data_length, self.region_data_length)
         {
@@ -272,11 +288,13 @@ impl HeaderBlob {
     }
 
     fn verify_entries(&self, data: &[u8]) -> Result<()> {
-        let mut end = 0;
+        let mut end: u32 = 0;
         let entry_offset = usize::from(self.region_tag != 0);
         for entry in &self.entry_infos[entry_offset..] {
             let info = entry.swap_be();
-            if end > info.offset {
+            let offset_u32 = positive_offset(info.offset)
+                .map_err(|_| anyhow!("RPM header entry offset out of range"))?;
+            if end > offset_u32 {
                 return Err(anyhow!("RPM header entry offsets are not sorted"));
             }
             if is_reserved_tag(info.tag) {
@@ -291,7 +309,7 @@ impl HeaderBlob {
                     info.offset
                 ));
             }
-            if is_out_of_range(self.data_length, info.offset) {
+            if is_out_of_range(self.data_length, offset_u32) {
                 return Err(anyhow!("RPM header entry offset out of range"));
             }
 
@@ -299,11 +317,15 @@ impl HeaderBlob {
                 data,
                 info.kind,
                 info.count,
-                self.data_start + info.offset,
+                self.data_start + offset_u32,
                 self.data_end,
             );
-            end = info.offset + length as i32;
-            if is_out_of_range(self.data_length, end) || length <= 0 {
+            let length = match length {
+                Some(l) => l,
+                None => return Err(anyhow!("invalid RPM header entry length")),
+            };
+            end = offset_u32 + length as u32;
+            if is_out_of_range(self.data_length, end) {
                 return Err(anyhow!("invalid RPM header entry length"));
             }
         }
@@ -315,97 +337,107 @@ impl HeaderBlob {
 fn swab_region(
     data: &[u8],
     entry_infos: Vec<EntryInfo>,
-    mut running_length: i32,
-    data_start: i32,
-    data_end: i32,
-) -> Result<(Vec<IndexEntry>, i32)> {
+    mut running_length: u32,
+    data_start: u32,
+    data_end: u32,
+) -> Result<(Vec<IndexEntry>, u32)> {
     let mut entries = Vec::new();
     for (index, entry_info) in entry_infos.iter().enumerate() {
         let info = entry_info.swap_be();
-        let start = data_start + info.offset;
+        let start = data_start + positive_offset(info.offset)?;
         if start >= data_end {
             return Err(anyhow!("RPM entry data offset is outside payload"));
         }
 
         let length =
-            if index < entry_infos.len() - 1 && TYPE_SIZES.get(info.kind as usize) == Some(&-1) {
+            if index < entry_infos.len() - 1 && TYPE_SIZES.get(info.kind as usize) == Some(&None) {
                 let next_offset = entry_infos[index + 1].swap_be().offset;
-                (next_offset - info.offset) as isize
+                positive_offset(next_offset - info.offset)? as usize
             } else {
                 compute_data_length(data, info.kind, info.count, start, data_end)
+                    .ok_or_else(|| anyhow!("RPM entry data length is invalid"))?
             };
-        if length < 0 {
-            return Err(anyhow!("RPM entry data length is invalid"));
-        }
 
-        let end = start as isize + length;
+        let end = start as usize + length;
         entries.push(IndexEntry {
             info: info.clone(),
-            data: data[start as usize..end as usize].to_vec(),
+            data: data[start as usize..end].to_vec(),
         });
-        running_length += length as i32 + alignment_padding(info.kind, running_length as u32);
+        running_length += length as u32 + alignment_padding(info.kind, running_length);
     }
 
     Ok((entries, running_length))
 }
 
-fn compute_data_length(data: &[u8], kind: u32, count: u32, start: i32, data_end: i32) -> isize {
+fn compute_data_length(
+    data: &[u8],
+    kind: u32,
+    count: u32,
+    start: u32,
+    data_end: u32,
+) -> Option<usize> {
     match kind {
-        RPM_STRING_TYPE if count != 1 => -1,
+        RPM_STRING_TYPE if count != 1 => None,
         RPM_STRING_TYPE => string_tag_length(data, 1, start, data_end),
         RPM_STRING_ARRAY_TYPE | RPM_I18NSTRING_TYPE => {
             string_tag_length(data, count, start, data_end)
         }
         _ => {
-            if TYPE_SIZES.get(kind as usize) == Some(&-1) {
-                return -1;
+            if TYPE_SIZES.get(kind as usize) == Some(&None) {
+                return None;
             }
-            let size = TYPE_SIZES.get((kind & 0xf) as usize).copied().unwrap_or(0) * count as i32;
-            if size < 0 || (data_end > 0 && start + size > data_end) {
-                -1
+            let size = TYPE_SIZES
+                .get((kind & 0xf) as usize)
+                .copied()
+                .flatten()
+                .unwrap_or(0)
+                * count;
+            if start + size > data_end {
+                None
             } else {
-                size as isize
+                Some(size as usize)
             }
         }
     }
 }
 
-fn string_tag_length(data: &[u8], count: u32, start: i32, data_end: i32) -> isize {
+fn string_tag_length(data: &[u8], count: u32, start: u32, data_end: u32) -> Option<usize> {
     if start >= data_end {
-        return -1;
+        return None;
     }
-    let mut length = 0isize;
+    let mut length: usize = 0;
     for _ in 0..count {
-        let offset = start + length as i32;
-        if offset > data.len() as i32 {
-            return -1;
+        let offset = start as usize + length;
+        if offset > data.len() {
+            return None;
         }
-        let Some(position) = data[offset as usize..data_end as usize]
+        let position = data[offset..data_end as usize]
             .iter()
-            .position(|&byte| byte == 0)
-        else {
-            return -1;
-        };
-        length += position as isize + 1;
+            .position(|&byte| byte == 0)?;
+        length += position + 1;
     }
-    length
+    Some(length)
 }
 
-fn alignment_padding(kind: u32, current_length: u32) -> i32 {
-    match TYPE_SIZES.get(kind as usize) {
-        Some(&size) if size > 1 => {
-            let diff = size - (current_length as i32 % size);
+fn alignment_padding(kind: u32, current_length: u32) -> u32 {
+    match TYPE_SIZES.get(kind as usize).and_then(|opt| *opt) {
+        Some(size) if size > 1 => {
+            let diff = size - (current_length % size);
             if diff == size { 0 } else { diff }
         }
         _ => 0,
     }
 }
 
-fn is_out_of_range(length: i32, offset: i32) -> bool {
-    offset < 0 || offset > length
+fn is_out_of_range(length: u32, offset: u32) -> bool {
+    offset > length
 }
 
-fn is_reserved_tag(tag: i32) -> bool {
+fn positive_offset(offset: i32) -> Result<u32> {
+    u32::try_from(offset).map_err(|_| anyhow!("RPM header offset is negative: {offset}"))
+}
+
+fn is_reserved_tag(tag: u32) -> bool {
     tag < HEADER_I18NTABLE
 }
 
@@ -415,13 +447,13 @@ fn is_invalid_type(kind: u32) -> bool {
 
 fn is_misaligned(kind: u32, offset: i32) -> bool {
     let align = TYPE_ALIGN.get(kind as usize).copied().unwrap_or(0);
-    offset & (align - 1) != 0
+    offset & (align as i32 - 1) != 0
 }
 
-fn read_be_i32(cursor: &mut Cursor<&[u8]>) -> Result<i32> {
+fn read_be_u32(cursor: &mut Cursor<&[u8]>) -> Result<u32> {
     let mut bytes = [0_u8; 4];
     std::io::Read::read_exact(cursor, &mut bytes)?;
-    Ok(i32::from_be_bytes(bytes))
+    Ok(u32::from_be_bytes(bytes))
 }
 
 fn read_entry_info_le(cursor: &mut Cursor<&[u8]>) -> Result<EntryInfo> {
@@ -433,7 +465,7 @@ fn read_entry_info_le(cursor: &mut Cursor<&[u8]>) -> Result<EntryInfo> {
 fn parse_entry_info_le(data: &[u8]) -> Result<EntryInfo> {
     let mut offset = 0;
     Ok(EntryInfo {
-        tag: read_i32_le(data, &mut offset)?,
+        tag: read_u32_le(data, &mut offset)?,
         kind: read_u32_le(data, &mut offset)?,
         offset: read_i32_le(data, &mut offset)?,
         count: read_u32_le(data, &mut offset)?,

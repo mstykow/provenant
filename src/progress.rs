@@ -10,6 +10,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use indicatif_log_bridge::LogWrapper;
 use log::LevelFilter;
 
+use crate::cli::ProcessMode;
 use crate::models::{FileInfo, FileType};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,7 +22,7 @@ pub enum ProgressMode {
 
 #[derive(Debug, Default, Clone)]
 pub struct ScanStats {
-    pub processes: i32,
+    pub processes: ProcessMode,
     pub scan_names: String,
     pub initial_files: usize,
     pub initial_dirs: usize,
@@ -97,7 +98,7 @@ impl ScanProgress {
         self.finish_top_level_phase("setup");
     }
 
-    pub fn set_processes(&self, processes: i32) {
+    pub fn set_processes(&self, processes: ProcessMode) {
         let mut stats = self.stats.lock().expect("stats lock poisoned");
         stats.processes = processes;
     }
@@ -602,27 +603,27 @@ fn build_summary_messages(stats: &ScanStats, scan_start: &str, scan_end: &str) -
     let mut lines = vec![
         format!(
             "Summary:        {scan_names} with {} process(es)",
-            stats.processes
+            stats.processes.to_i32()
         ),
         format!("Errors count:   {}", stats.error_count),
         format!("Warnings count: {}", stats.warning_count),
         format!(
             "Scan Speed:     {speed_files:.2} files/sec. {}/sec.",
-            format_size(speed_bytes as u64)
+            format_size(speed_bytes)
         ),
         format!(
             "Initial counts: {} resource(s): {} file(s) and {} directorie(s) for {}",
             stats.initial_files + stats.initial_dirs,
             stats.initial_files,
             stats.initial_dirs,
-            format_size(stats.initial_size)
+            format_size(stats.initial_size as f64)
         ),
         format!(
             "Final counts:   {} resource(s): {} file(s) and {} directorie(s) for {}",
             stats.final_files + stats.final_dirs,
             stats.final_files,
             stats.final_dirs,
-            format_size(stats.final_size)
+            format_size(stats.final_size as f64)
         ),
         format!("Excluded count: {}", stats.excluded_count),
         format!(
@@ -683,15 +684,15 @@ fn detail_parent_phase(detail_name: &str) -> Option<&'static str> {
     }
 }
 
-pub fn format_size(bytes: u64) -> String {
-    if bytes == 0 {
+pub fn format_size(bytes: f64) -> String {
+    if bytes < 1.0 {
         return "0 Bytes".to_string();
     }
-    if bytes == 1 {
+    if bytes == 1.0 {
         return "1 Byte".to_string();
     }
 
-    let mut size = bytes as f64;
+    let mut size = bytes;
     let units = ["Bytes", "KB", "MB", "GB", "TB"];
     let mut idx = 0;
     while size >= 1024.0 && idx < units.len() - 1 {
@@ -700,7 +701,7 @@ pub fn format_size(bytes: u64) -> String {
     }
 
     if idx == 0 {
-        format!("{} {}", bytes, units[idx])
+        format!("{:.0} {}", size, units[idx])
     } else {
         format!("{size:.2} {}", units[idx])
     }
@@ -714,6 +715,7 @@ mod tests {
         format_size, pdf_oxide_default_log_filter_from, pluralize_files,
         should_filter_pdf_oxide_default_warnings_from,
     };
+    use crate::cli::ProcessMode;
 
     use std::path::Path;
 
@@ -721,16 +723,16 @@ mod tests {
 
     #[test]
     fn format_size_matches_expected_shape() {
-        assert_eq!(format_size(0), "0 Bytes");
-        assert_eq!(format_size(1), "1 Byte");
-        assert_eq!(format_size(1024), "1.00 KB");
-        assert_eq!(format_size(2_567_000), "2.45 MB");
+        assert_eq!(format_size(0.0), "0 Bytes");
+        assert_eq!(format_size(1.0), "1 Byte");
+        assert_eq!(format_size(1024.0), "1.00 KB");
+        assert_eq!(format_size(2_567_000.0), "2.45 MB");
     }
 
     #[test]
     fn summary_messages_render_detail_timings_hierarchically() {
         let stats = ScanStats {
-            processes: 4,
+            processes: ProcessMode::Parallel(4),
             scan_names: "licenses, packages".to_string(),
             initial_files: 10,
             initial_dirs: 2,

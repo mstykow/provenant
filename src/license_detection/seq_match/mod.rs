@@ -29,8 +29,10 @@ use crate::license_detection::models::MatcherKind;
 
 pub const MATCH_SEQ: MatcherKind = MatcherKind::Seq;
 
-/// Default threshold for high resemblance (0.8 = 80% similarity).
-pub const HIGH_RESEMBLANCE_THRESHOLD: f32 = 0.8;
+pub const HIGH_RESEMBLANCE_THRESHOLD_TENTHS: u32 = 8;
+
+#[cfg(test)]
+pub const HIGH_RESEMBLANCE_THRESHOLD: f32 = HIGH_RESEMBLANCE_THRESHOLD_TENTHS as f32 / 10.0;
 
 /// Default number of top near-duplicate candidates to consider.
 pub const MAX_NEAR_DUPE_CANDIDATES: usize = 10;

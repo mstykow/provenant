@@ -107,8 +107,8 @@ pub fn scan_options_fingerprint(
 pub use self::collect::{CollectedPaths, collect_paths};
 #[allow(unused_imports)]
 pub use self::process::{
-    process_collected, process_collected_sequential, process_collected_with_memory_limit,
-    process_collected_with_memory_limit_sequential,
+    MemoryMode, process_collected, process_collected_sequential,
+    process_collected_with_memory_limit, process_collected_with_memory_limit_sequential,
 };
 
 #[cfg(test)]
@@ -123,7 +123,7 @@ mod tests {
     use crate::progress::{ProgressMode, ScanProgress};
 
     use super::{
-        LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected,
+        LicenseScanOptions, MemoryMode, TextDetectionOptions, collect_paths, process_collected,
         process_collected_with_memory_limit,
     };
 
@@ -1554,7 +1554,7 @@ mod tests {
                 max_urls: 50,
                 timeout_seconds: 120.0,
             },
-            1,
+            MemoryMode::Limit(1),
         );
 
         assert_eq!(result.files.len(), 3);
@@ -1585,7 +1585,7 @@ mod tests {
                 max_urls: 50,
                 timeout_seconds: 120.0,
             },
-            -1,
+            MemoryMode::StreamUnlimited,
         );
 
         assert_eq!(result.files.len(), 2);

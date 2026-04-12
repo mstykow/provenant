@@ -63,18 +63,17 @@ pub struct Query<'a> {
     ///
     /// Unknown tokens are those not found in the dictionary. We track them by
     /// counting how many unknown tokens appear after each known position.
-    /// Unknown tokens before the first known token are tracked at position -1
-    /// (using the key `None` in Rust).
+    /// Unknown tokens before the first known token are tracked with the key `None`.
     ///
     /// Corresponds to Python: `self.unknowns_by_pos = {}` (line 236)
-    pub unknowns_by_pos: HashMap<Option<i32>, usize>,
+    pub unknowns_by_pos: HashMap<Option<usize>, usize>,
 
     /// Mapping from token position to count of stopwords after that position
     ///
     /// Similar to unknown_tokens, but for stopwords.
     ///
     /// Corresponds to Python: `self.stopwords_by_pos = {}` (line 244)
-    pub stopwords_by_pos: HashMap<Option<i32>, usize>,
+    pub stopwords_by_pos: HashMap<Option<usize>, usize>,
 
     /// Set of positions with single-character or digit-only tokens
     ///
@@ -475,12 +474,12 @@ impl<'a> Query<'a> {
 
         let mut tokens = Vec::new();
         let mut line_by_pos = Vec::new();
-        let mut unknowns_by_pos: HashMap<Option<i32>, usize> = HashMap::new();
-        let mut stopwords_by_pos: HashMap<Option<i32>, usize> = HashMap::new();
+        let mut unknowns_by_pos: HashMap<Option<usize>, usize> = HashMap::new();
+        let mut stopwords_by_pos: HashMap<Option<usize>, usize> = HashMap::new();
         let mut shorts_and_digits_pos = PositionSet::new();
         let mut spdx_lines: Vec<(String, usize, usize)> = Vec::new();
 
-        let mut known_pos = -1i32;
+        let mut known_pos: Option<usize> = None;
         let mut started = false;
         let mut current_line = 1usize;
 
@@ -497,18 +496,18 @@ impl<'a> Query<'a> {
             for query_token in &line_query_tokens {
                 match query_token {
                     QueryToken::Known(known_token) => {
-                        known_pos += 1;
+                        known_pos = Some(known_pos.map_or(0, |p| p + 1));
                         started = true;
                         tokens.push(known_token.id);
                         line_by_pos.push(current_line);
                         line_tokens.push(Some(*known_token));
 
                         if line_first_known_pos.is_none() {
-                            line_first_known_pos = Some(known_pos);
+                            line_first_known_pos = known_pos;
                         }
 
                         if known_token.is_short_or_digit {
-                            let _ = shorts_and_digits_pos.insert(known_pos as usize);
+                            let _ = shorts_and_digits_pos.insert(known_pos.unwrap());
                         }
                     }
                     QueryToken::Unknown if !started => {
@@ -516,14 +515,14 @@ impl<'a> Query<'a> {
                         line_tokens.push(None);
                     }
                     QueryToken::Unknown => {
-                        *unknowns_by_pos.entry(Some(known_pos)).or_insert(0) += 1;
+                        *unknowns_by_pos.entry(known_pos).or_insert(0) += 1;
                         line_tokens.push(None);
                     }
                     QueryToken::Stopword if !started => {
                         *stopwords_by_pos.entry(None).or_insert(0) += 1;
                     }
                     QueryToken::Stopword => {
-                        *stopwords_by_pos.entry(Some(known_pos)).or_insert(0) += 1;
+                        *stopwords_by_pos.entry(known_pos).or_insert(0) += 1;
                     }
                 }
             }
@@ -538,12 +537,11 @@ impl<'a> Query<'a> {
             {
                 let (spdx_prefix, spdx_expression) = split_spdx_lid(line);
                 let spdx_text = format!("{}{}", spdx_prefix.unwrap_or_default(), spdx_expression);
-                let spdx_start_known_pos = line_first_known_pos + offset as i32;
+                let spdx_start_known_pos = line_first_known_pos + offset;
 
-                if spdx_start_known_pos <= line_last_known_pos {
-                    let spdx_start = spdx_start_known_pos as usize;
-                    let spdx_end = (line_last_known_pos + 1) as usize;
-                    spdx_lines.push((spdx_text, spdx_start, spdx_end));
+                if spdx_start_known_pos <= line_last_known_pos.unwrap() {
+                    let spdx_end = line_last_known_pos.unwrap() + 1;
+                    spdx_lines.push((spdx_text, spdx_start_known_pos, spdx_end));
                 }
             }
 
@@ -998,7 +996,7 @@ impl<'a> QueryRun<'a> {
         }
     }
 
-    pub fn matchable_tokens(&self) -> Vec<i32> {
+    pub fn matchable_tokens(&self) -> Vec<Option<TokenId>> {
         let high_matchables = self.high_matchables();
         if high_matchables.is_empty() {
             return Vec::new();
@@ -1008,9 +1006,9 @@ impl<'a> QueryRun<'a> {
         self.tokens_with_pos()
             .map(|(pos, tid)| {
                 if matchables.contains(pos) {
-                    i32::from(tid.raw())
+                    Some(tid)
                 } else {
-                    -1
+                    None
                 }
             })
             .collect()

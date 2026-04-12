@@ -6,6 +6,65 @@ use yaml_serde::Value as YamlValue;
 
 use crate::license_detection::DEFAULT_LICENSEDB_URL_TEMPLATE;
 use crate::output::OutputFormat;
+use crate::scanner::MemoryMode;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessMode {
+    Parallel(usize),
+    SequentialWithTimeouts,
+    SequentialWithoutTimeouts,
+}
+
+impl Default for ProcessMode {
+    fn default() -> Self {
+        let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
+        if cpus > 1 {
+            ProcessMode::Parallel(cpus - 1)
+        } else {
+            ProcessMode::Parallel(1)
+        }
+    }
+}
+
+impl ProcessMode {
+    fn default_value() -> Self {
+        let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
+        if cpus > 1 {
+            ProcessMode::Parallel(cpus - 1)
+        } else {
+            ProcessMode::Parallel(1)
+        }
+    }
+
+    pub fn to_i32(self) -> i32 {
+        match self {
+            ProcessMode::Parallel(n) => n as i32,
+            ProcessMode::SequentialWithTimeouts => 0,
+            ProcessMode::SequentialWithoutTimeouts => -1,
+        }
+    }
+}
+
+impl std::fmt::Display for ProcessMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_i32())
+    }
+}
+
+fn parse_processes(value: &str) -> Result<ProcessMode, String> {
+    let parsed: i32 = value
+        .parse()
+        .map_err(|e| format!("invalid integer for --processes: {e}"))?;
+    if parsed > 0 {
+        Ok(ProcessMode::Parallel(
+            u32::try_from(parsed).unwrap() as usize
+        ))
+    } else if parsed == 0 {
+        Ok(ProcessMode::SequentialWithTimeouts)
+    } else {
+        Ok(ProcessMode::SequentialWithoutTimeouts)
+    }
+}
 
 const PDF_OXIDE_LOG_HELP: &str = "Troubleshooting PDF parser logs:\n  Provenant suppresses noisy pdf_oxide logs by default.\n  To inspect raw pdf_oxide logs for debugging, rerun with RUST_LOG=pdf_oxide=warn (or =error).";
 
@@ -157,8 +216,8 @@ pub struct Cli {
     #[arg(short, long, default_value = "0")]
     pub max_depth: usize,
 
-    #[arg(short = 'n', long, default_value_t = default_processes(), allow_hyphen_values = true)]
-    pub processes: i32,
+    #[arg(short = 'n', long, default_value_t = ProcessMode::default_value(), value_parser = parse_processes, allow_hyphen_values = true)]
+    pub processes: ProcessMode,
 
     #[arg(long, default_value_t = 120.0)]
     pub timeout: f64,
@@ -196,11 +255,11 @@ pub struct Cli {
     #[arg(
         long = "max-in-memory",
         value_name = "INT",
-        default_value_t = 10000,
+        default_value_t = MemoryMode::Limit(10000),
         value_parser = parse_max_in_memory,
         allow_hyphen_values = true
     )]
-    pub max_in_memory: i64,
+    pub max_in_memory: MemoryMode,
 
     /// Collect file information such as checksums, type hints, and source/script flags.
     #[arg(short = 'i', long)]
@@ -370,19 +429,19 @@ pub struct Cli {
     pub show_attribution: bool,
 }
 
-fn default_processes() -> i32 {
-    let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
-    if cpus > 1 { (cpus - 1) as i32 } else { 1 }
-}
-
-fn parse_max_in_memory(value: &str) -> Result<i64, String> {
+fn parse_max_in_memory(value: &str) -> Result<MemoryMode, String> {
     let parsed = value
         .parse::<i64>()
         .map_err(|_| format!("invalid integer value: {value}"))?;
     if parsed < -1 {
         return Err("--max-in-memory must be -1, 0, or a positive integer".to_string());
     }
-    Ok(parsed)
+    match parsed {
+        -1 => Ok(MemoryMode::StreamUnlimited),
+        0 => Ok(MemoryMode::CollectFirst),
+        n if n > 0 => Ok(MemoryMode::Limit(usize::try_from(n).unwrap_or(usize::MAX))),
+        _ => Ok(MemoryMode::CollectFirst),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -568,7 +627,21 @@ impl Cli {
             DEFAULT_LICENSEDB_URL_TEMPLATE,
         );
         push_non_default_usize_option(&mut flags, "--max-depth", self.max_depth, 0);
-        push_non_default_i64_option(&mut flags, "--max-in-memory", self.max_in_memory, 10000);
+        match self.max_in_memory {
+            MemoryMode::Limit(10000) => {}
+            MemoryMode::CollectFirst => {
+                flags.push(("--max-in-memory".to_string(), JsonValue::Number(0.into())));
+            }
+            MemoryMode::StreamUnlimited => {
+                flags.push((
+                    "--max-in-memory".to_string(),
+                    JsonValue::Number((-1i64).into()),
+                ));
+            }
+            MemoryMode::Limit(n) => {
+                flags.push(("--max-in-memory".to_string(), JsonValue::Number(n.into())));
+            }
+        }
         if self.email {
             push_non_default_usize_option(&mut flags, "--max-email", self.max_email, 50);
         }
@@ -585,11 +658,11 @@ impl Cli {
             self.package_in_compiled,
         );
         push_bool_option(&mut flags, "--package-only", self.package_only);
-        push_non_default_i32_option(
+        push_non_default_process_mode_option(
             &mut flags,
             "--processes",
             self.processes,
-            default_processes(),
+            ProcessMode::default_value(),
         );
         push_bool_option(&mut flags, "--quiet", self.quiet);
         push_string_option(&mut flags, "--spdx-rdf", self.output_spdx_rdf.as_ref());
@@ -674,25 +747,14 @@ fn push_non_default_u8_option(
     }
 }
 
-fn push_non_default_i32_option(
+fn push_non_default_process_mode_option(
     options: &mut Vec<(String, JsonValue)>,
     key: &str,
-    value: i32,
-    default: i32,
+    value: ProcessMode,
+    default: ProcessMode,
 ) {
     if value != default {
-        options.push((key.to_string(), JsonValue::Number(value.into())));
-    }
-}
-
-fn push_non_default_i64_option(
-    options: &mut Vec<(String, JsonValue)>,
-    key: &str,
-    value: i64,
-    default: i64,
-) {
-    if value != default {
-        options.push((key.to_string(), JsonValue::Number(value.into())));
+        options.push((key.to_string(), JsonValue::Number(value.to_i32().into())));
     }
 }
 
@@ -959,7 +1021,7 @@ mod tests {
         ])
         .expect("cli parse should succeed");
 
-        assert_eq!(parsed.processes, 4);
+        assert_eq!(parsed.processes, ProcessMode::Parallel(4));
         assert_eq!(parsed.timeout, 30.0);
     }
 
@@ -1487,12 +1549,12 @@ mod tests {
         let zero =
             Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "-n", "0", "samples"])
                 .expect("cli parse should accept processes=0");
-        assert_eq!(zero.processes, 0);
+        assert_eq!(zero.processes, ProcessMode::SequentialWithTimeouts);
 
         let parsed =
             Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "-n", "-1", "samples"])
                 .expect("cli parse should accept processes=-1");
-        assert_eq!(parsed.processes, -1);
+        assert_eq!(parsed.processes, ProcessMode::SequentialWithoutTimeouts);
     }
 
     #[test]
@@ -1513,7 +1575,7 @@ mod tests {
         assert_eq!(parsed.cache_dir.as_deref(), Some("/tmp/sc-cache"));
         assert!(parsed.cache_clear);
         assert!(!parsed.incremental);
-        assert_eq!(parsed.max_in_memory, 5000);
+        assert_eq!(parsed.max_in_memory, MemoryMode::Limit(5000));
     }
 
     #[test]
@@ -1535,7 +1597,7 @@ mod tests {
         let default_parsed =
             Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "samples"])
                 .expect("default max-in-memory should parse");
-        assert_eq!(default_parsed.max_in_memory, 10000);
+        assert_eq!(default_parsed.max_in_memory, MemoryMode::Limit(10000));
 
         let disk_only = Cli::try_parse_from([
             "provenant",
@@ -1546,7 +1608,7 @@ mod tests {
             "samples",
         ])
         .expect("-1 should parse");
-        assert_eq!(disk_only.max_in_memory, -1);
+        assert_eq!(disk_only.max_in_memory, MemoryMode::StreamUnlimited);
 
         let unlimited = Cli::try_parse_from([
             "provenant",
@@ -1557,7 +1619,7 @@ mod tests {
             "samples",
         ])
         .expect("0 should parse");
-        assert_eq!(unlimited.max_in_memory, 0);
+        assert_eq!(unlimited.max_in_memory, MemoryMode::CollectFirst);
     }
 
     #[test]

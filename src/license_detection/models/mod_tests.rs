@@ -761,8 +761,8 @@ mod tests {
         match_result.coordinates =
             MatchCoordinates::query_region(PositionSpan::from_positions(vec![0, 5, 9]));
         let mut unknowns_by_pos = HashMap::new();
-        unknowns_by_pos.insert(Some(0), 2);
-        unknowns_by_pos.insert(Some(5), 3);
+        unknowns_by_pos.insert(Some(0usize), 2);
+        unknowns_by_pos.insert(Some(5usize), 3);
         let query = crate::license_detection::query::Query {
             text: String::new(),
             tokens: vec![],
@@ -789,8 +789,8 @@ mod tests {
         match_result.coordinates =
             MatchCoordinates::query_region(PositionSpan::from_positions(vec![0, 5, 10]));
         let mut unknowns_by_pos = HashMap::new();
-        unknowns_by_pos.insert(Some(0), 2);
-        unknowns_by_pos.insert(Some(5), 3);
+        unknowns_by_pos.insert(Some(0usize), 2);
+        unknowns_by_pos.insert(Some(5usize), 3);
         let query = crate::license_detection::query::Query {
             text: String::new(),
             tokens: vec![],
@@ -817,7 +817,7 @@ mod tests {
         match_result.coordinates =
             MatchCoordinates::query_region(PositionSpan::from_positions(vec![0, 5, 10]));
         let mut unknowns_by_pos = HashMap::new();
-        unknowns_by_pos.insert(Some(10), 100);
+        unknowns_by_pos.insert(Some(10usize), 100);
         let query = crate::license_detection::query::Query {
             text: String::new(),
             tokens: vec![],

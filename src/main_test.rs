@@ -1,4 +1,5 @@
 use super::*;
+use crate::cli::ProcessMode;
 use crate::models::{LineNumber, MatchScore};
 use clap::Parser;
 use serde_json::json;
@@ -17,13 +18,10 @@ use crate::scan_result_shaping::json_input::{
 use crate::scanner::collect_paths;
 
 #[test]
-fn resolve_process_mode_supports_reference_compat_values() {
-    assert_eq!(
-        resolve_process_mode(-1),
-        ProcessMode::SequentialWithoutTimeouts
-    );
-    assert_eq!(resolve_process_mode(0), ProcessMode::SequentialWithTimeouts);
-    assert_eq!(resolve_process_mode(4), ProcessMode::Parallel(4));
+fn process_mode_to_i32_supports_reference_compat_values() {
+    assert_eq!(ProcessMode::SequentialWithoutTimeouts.to_i32(), -1);
+    assert_eq!(ProcessMode::SequentialWithTimeouts.to_i32(), 0);
+    assert_eq!(ProcessMode::Parallel(4).to_i32(), 4);
     assert_eq!(
         effective_timeout_seconds(ProcessMode::SequentialWithoutTimeouts, 30.0),
         0.0

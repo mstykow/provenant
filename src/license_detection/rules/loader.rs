@@ -55,16 +55,12 @@ trait ParseNumber {
 impl ParseNumber for yaml_serde::Number {
     fn as_u8(&self) -> Option<u8> {
         self.as_i64()
-            .and_then(|n| {
-                if u8::try_from(n).is_ok() {
-                    Some(n as u8)
-                } else {
-                    None
-                }
-            })
+            .and_then(|n| u8::try_from(n).ok())
             .or_else(|| {
                 self.as_f64().and_then(|f| {
                     if f >= 0.0 && f <= f64::from(u8::MAX) {
+                        // truncation toward zero is intentional (e.g. 90.5 → 90)
+                        #[allow(clippy::cast_sign_loss)]
                         Some(f as u8)
                     } else {
                         None

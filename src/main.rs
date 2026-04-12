@@ -14,7 +14,7 @@ use crate::cache::{
     build_collection_exclude_patterns, incremental_manifest_path, load_incremental_manifest,
     manifest_entry_matches_path, metadata_fingerprint, write_incremental_manifest,
 };
-use crate::cli::Cli;
+use crate::cli::{Cli, ProcessMode};
 use crate::license_detection::LicenseDetectionEngine;
 use crate::models::{FileInfo, FileType, Sha256Digest};
 use crate::output::{OutputWriteConfig, write_output_file};
@@ -197,7 +197,7 @@ fn run() -> Result<()> {
         } else {
             (cli.copyright, cli.email, cli.url, cli.generated)
         };
-        let process_mode = resolve_process_mode(cli.processes);
+        let process_mode = cli.processes;
 
         let text_options = TextDetectionOptions {
             collect_info: cli.info,
@@ -790,23 +790,6 @@ fn compile_regex_patterns(option_name: &str, patterns: &[String]) -> Result<Vec<
             })
         })
         .collect()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ProcessMode {
-    Parallel(usize),
-    SequentialWithTimeouts,
-    SequentialWithoutTimeouts,
-}
-
-fn resolve_process_mode(processes: i32) -> ProcessMode {
-    if processes > 0 {
-        ProcessMode::Parallel(processes as usize)
-    } else if processes == 0 {
-        ProcessMode::SequentialWithTimeouts
-    } else {
-        ProcessMode::SequentialWithoutTimeouts
-    }
 }
 
 fn effective_timeout_seconds(process_mode: ProcessMode, timeout_seconds: f64) -> f64 {

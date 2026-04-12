@@ -752,7 +752,7 @@ mod tests {
         index.tids_by_rid.push(tids(&[0, 1]));
         index.pattern_id_to_rid.push(vec![0]);
 
-        let tokens: Vec<TokenId> = (0..1000).map(|i| tid((i % 2) as u16)).collect();
+        let tokens: Vec<TokenId> = (0u16..1000).map(|i| tid(i % 2)).collect();
         let line_by_pos: Vec<usize> = (0..1000).map(|i| i / 80 + 1).collect();
 
         let query = crate::license_detection::query::Query {

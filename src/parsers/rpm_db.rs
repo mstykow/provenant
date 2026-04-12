@@ -71,7 +71,7 @@ struct RpmQueryPackage {
     source_rpm: Option<String>,
     requires: Vec<String>,
     file_names: Vec<Option<String>>,
-    dir_indexes: Vec<i32>,
+    dir_indexes: Vec<u32>,
     base_names: Vec<Option<String>>,
     dir_names: Vec<String>,
 }
@@ -209,7 +209,7 @@ fn native_package_to_query_package(package: InstalledRpmPackage) -> RpmQueryPack
         distribution: normalize_optional_string(Some(package.distribution)),
         arch: normalize_optional_string(Some(package.arch)),
         platform: normalize_optional_string(Some(package.platform)),
-        size: (package.size > 0).then_some(package.size as u64),
+        size: (package.size > 0).then_some(u64::from(package.size)),
         license: normalize_optional_string(Some(package.license)),
         source_rpm: normalize_optional_string(Some(package.source_rpm)),
         requires: package.requires,
@@ -220,7 +220,7 @@ fn native_package_to_query_package(package: InstalledRpmPackage) -> RpmQueryPack
     }
 }
 
-fn build_evr_version(epoch: i32, version: &str, release: &str) -> Option<String> {
+fn build_evr_version(epoch: u32, version: &str, release: &str) -> Option<String> {
     if version.is_empty() {
         return None;
     }
@@ -243,7 +243,7 @@ fn build_evr_version(epoch: i32, version: &str, release: &str) -> Option<String>
 
 fn build_file_references(
     base_names: &[Option<String>],
-    dir_indexes: &[i32],
+    dir_indexes: &[u32],
     dir_names: &[String],
 ) -> Vec<FileReference> {
     if base_names.is_empty() || dir_names.is_empty() {
@@ -573,9 +573,9 @@ fn normalize_optional_string(value: Option<String>) -> Option<String> {
     })
 }
 
-fn parse_epoch(value: Option<String>) -> i32 {
+fn parse_epoch(value: Option<String>) -> u32 {
     normalize_optional_string(value)
-        .and_then(|value| value.parse::<i32>().ok())
+        .and_then(|value| value.parse::<u32>().ok())
         .unwrap_or(0)
 }
 
@@ -717,7 +717,7 @@ mod tests {
                 Some("".to_string()),
                 Some("ignored".to_string()),
             ],
-            &[0, 0, -1],
+            &[0, 0, u32::MAX],
             &["/usr/bin/".to_string()],
         );
 
