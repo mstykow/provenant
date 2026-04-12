@@ -65,7 +65,7 @@ This is the main reason the workflow guide matters: the right command depends on
 
 ## Choose an Output Format First
 
-Every run needs at least one output flag.
+Every run needs at least one output flag, and you can request more than one in the same run.
 
 For most users, the best default is still pretty JSON:
 

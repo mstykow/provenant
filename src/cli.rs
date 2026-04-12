@@ -65,6 +65,7 @@ fn parse_license_policy_arg(value: &str) -> Result<String, String> {
     group(
         ArgGroup::new("output")
             .required(true)
+            .multiple(true)
             .args([
                 "output_json",
                 "output_json_pp",
@@ -350,7 +351,22 @@ pub struct Cli {
     pub max_url: usize,
 
     /// Show attribution notices for embedded license detection data
-    #[arg(long)]
+    #[arg(
+        long,
+        conflicts_with_all = [
+            "output_json",
+            "output_json_pp",
+            "output_json_lines",
+            "output_yaml",
+            "output_debian",
+            "output_html",
+            "output_spdx_tv",
+            "output_spdx_rdf",
+            "output_cyclonedx",
+            "output_cyclonedx_xml",
+            "custom_output"
+        ]
+    )]
     pub show_attribution: bool,
 }
 
@@ -712,6 +728,35 @@ mod tests {
         assert_eq!(parsed.output_json_pp.as_deref(), Some("scan.json"));
         assert_eq!(parsed.output_targets().len(), 1);
         assert_eq!(parsed.output_targets()[0].format, OutputFormat::JsonPretty);
+    }
+
+    #[test]
+    fn test_allows_multiple_output_options_in_one_run() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--json",
+            "scan.json",
+            "--html",
+            "report.html",
+            "samples",
+        ])
+        .expect("cli parse should allow multiple outputs");
+
+        assert_eq!(parsed.output_targets().len(), 2);
+        assert_eq!(parsed.output_targets()[0].format, OutputFormat::Json);
+        assert_eq!(parsed.output_targets()[1].format, OutputFormat::Html);
+    }
+
+    #[test]
+    fn test_show_attribution_conflicts_with_output_flags() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--show-attribution",
+            "--json",
+            "scan.json",
+            "samples",
+        ]);
+        assert!(parsed.is_err());
     }
 
     #[test]
