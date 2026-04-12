@@ -5,7 +5,9 @@ mod tests {
     use tempfile::TempDir;
 
     use crate::models::{DatasourceId, PackageType};
-    use crate::parsers::{ClojureDepsEdnParser, ClojureProjectCljParser, PackageParser};
+    use crate::parsers::{
+        ClojureDepsEdnParser, ClojureProjectCljParser, PackageParser, capture_parser_diagnostics,
+    };
 
     fn create_temp_file(file_name: &str, content: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -180,6 +182,139 @@ mod tests {
             Some(DatasourceId::ClojureProjectClj)
         );
         assert!(project_package.name.is_none());
+    }
+
+    #[test]
+    fn test_project_clj_without_defproject_falls_back_without_scan_errors() {
+        let content = r#"
+(ns leiningen.project)
+
+(defn project [project & args]
+  (if (seq args)
+    (get-in project (mapv keyword args))
+    project))
+        "#;
+
+        let (_temp_dir, path) = create_temp_file("project.clj", content);
+        let result = capture_parser_diagnostics(
+            || ClojureProjectCljParser::extract_packages(&path),
+            "ClojureProjectCljParser",
+            &path,
+        );
+
+        assert!(result.scan_errors.is_empty());
+        assert_eq!(result.packages.len(), 1);
+        assert_eq!(result.packages[0].package_type, Some(PackageType::Maven));
+        assert_eq!(
+            result.packages[0].datasource_id,
+            Some(DatasourceId::ClojureProjectClj)
+        );
+        assert!(result.packages[0].name.is_none());
+    }
+
+    #[test]
+    fn test_non_manifest_project_clj_with_reader_syntax_skips_without_scan_errors() {
+        let content = r#"
+(ns leiningen.core.project)
+
+(def defaults
+  {:uberjar-merge-with {#"\\.properties$" [slurp str spit]}})
+        "#;
+
+        let (_temp_dir, path) = create_temp_file("project.clj", content);
+        let result = capture_parser_diagnostics(
+            || ClojureProjectCljParser::extract_packages(&path),
+            "ClojureProjectCljParser",
+            &path,
+        );
+
+        assert!(result.scan_errors.is_empty());
+        assert_eq!(result.packages.len(), 1);
+        assert!(result.packages[0].name.is_none());
+    }
+
+    #[test]
+    fn test_project_clj_template_falls_back_without_scan_errors() {
+        let content = r#"
+(defproject {{raw-name}} "0.1.0-SNAPSHOT"
+  :description "FIXME: write description"
+  :url "https://example.com/FIXME"
+  :license {:name "EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0"
+            :url "https://www.eclipse.org/legal/epl-2.0/"}
+  :dependencies [[org.clojure/clojure "1.12.2"]])
+        "#;
+
+        let (_temp_dir, path) = create_temp_file("project.clj", content);
+        let result = capture_parser_diagnostics(
+            || ClojureProjectCljParser::extract_packages(&path),
+            "ClojureProjectCljParser",
+            &path,
+        );
+
+        assert!(result.scan_errors.is_empty());
+        assert_eq!(result.packages.len(), 1);
+        assert_eq!(result.packages[0].package_type, Some(PackageType::Maven));
+        assert_eq!(
+            result.packages[0].datasource_id,
+            Some(DatasourceId::ClojureProjectClj)
+        );
+        assert!(result.packages[0].name.is_none());
+        assert!(result.packages[0].dependencies.is_empty());
+    }
+
+    #[test]
+    fn test_project_clj_accepts_regex_literals_in_ignored_fields() {
+        let content = r#"
+(defproject nomnomnom "0.5.0-SNAPSHOT"
+  :dependencies [[org.clojure/clojure "1.8.0"]
+                 [janino "2.5.15"]
+                 [org.platypope/method-fn "0.1.0"]
+                 [porcupine "0.0.4"]]
+  :uberjar-exclusions [#"DUMMY"]
+  :uberjar-merge-with {#"\.properties$" [slurp str spit]}
+  :test-selectors {:default (fn [m] (not (:integration m)))
+                   :integration :integration})
+        "#;
+
+        let (_temp_dir, path) = create_temp_file("project.clj", content);
+        let result = capture_parser_diagnostics(
+            || ClojureProjectCljParser::extract_packages(&path),
+            "ClojureProjectCljParser",
+            &path,
+        );
+
+        assert!(result.scan_errors.is_empty());
+        assert_eq!(result.packages.len(), 1);
+
+        let package_data = &result.packages[0];
+        assert_eq!(package_data.name.as_deref(), Some("nomnomnom"));
+        assert_eq!(package_data.version.as_deref(), Some("0.5.0-SNAPSHOT"));
+        assert_eq!(package_data.dependencies.len(), 4);
+    }
+
+    #[test]
+    fn test_project_clj_accepts_set_literals_in_ignored_fields() {
+        let content = r#"
+(defproject set-friendly "1.2.3"
+  :dependencies [[org.clojure/clojure "1.12.0"]]
+  :prep-tasks #{"compile" "test"}
+  :profiles {:dev {:resource-paths #{"dev-resources" "test-resources"}}})
+        "#;
+
+        let (_temp_dir, path) = create_temp_file("project.clj", content);
+        let result = capture_parser_diagnostics(
+            || ClojureProjectCljParser::extract_packages(&path),
+            "ClojureProjectCljParser",
+            &path,
+        );
+
+        assert!(result.scan_errors.is_empty());
+        assert_eq!(result.packages.len(), 1);
+
+        let package_data = &result.packages[0];
+        assert_eq!(package_data.name.as_deref(), Some("set-friendly"));
+        assert_eq!(package_data.version.as_deref(), Some("1.2.3"));
+        assert_eq!(package_data.dependencies.len(), 1);
     }
 
     #[test]
