@@ -170,6 +170,8 @@ mod maven_scan_test;
 mod maven_test;
 mod meson;
 #[cfg(test)]
+mod meson_scan_test;
+#[cfg(test)]
 mod meson_test;
 pub mod metadata;
 mod microsoft_update_manifest;
