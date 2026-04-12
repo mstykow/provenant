@@ -7,8 +7,8 @@ use strum::EnumIter;
 use super::{
     AssemblerConfig, AssemblyMode, DirectoryMergeOutput, bazel_merge, bazel_prune,
     cargo_resource_assign, composer_resource_assign, conda_rootfs_merge, file_ref_resolve,
-    hackage_merge, npm_resource_assign, nuget_cpm_resolve, python_requirements_assign,
-    ruby_resource_assign, swift_merge, topology,
+    hackage_merge, nix_flake_compat_merge, npm_resource_assign, nuget_cpm_resolve,
+    python_requirements_assign, ruby_resource_assign, swift_merge, topology,
 };
 
 #[derive(Clone, Copy)]
@@ -32,6 +32,7 @@ pub(super) enum PostAssemblyPassKind {
     CargoResourceAssign,
     ComposerResourceAssign,
     RubyResourceAssign,
+    NixFlakeCompatMerge,
     BazelPrune,
 }
 
@@ -59,6 +60,7 @@ pub(super) static POST_ASSEMBLY_PASSES: &[PostAssemblyPassKind] = &[
     PostAssemblyPassKind::CargoResourceAssign,
     PostAssemblyPassKind::ComposerResourceAssign,
     PostAssemblyPassKind::RubyResourceAssign,
+    PostAssemblyPassKind::NixFlakeCompatMerge,
     PostAssemblyPassKind::BazelPrune,
 ];
 
@@ -221,6 +223,13 @@ impl PostAssemblyPassKind {
             Self::CargoResourceAssign => inputs.has_package_type(PackageType::Cargo),
             Self::ComposerResourceAssign => inputs.has_package_type(PackageType::Composer),
             Self::RubyResourceAssign => inputs.has_package_type(PackageType::Gem),
+            Self::NixFlakeCompatMerge => {
+                inputs.has_any_file_datasource(&[DatasourceId::NixDefaultNix])
+                    && inputs.has_any_file_datasource(&[
+                        DatasourceId::NixFlakeNix,
+                        DatasourceId::NixFlakeLock,
+                    ])
+            }
             Self::BazelPrune => inputs.has_package_type(PackageType::Bazel),
         }
     }
@@ -268,6 +277,9 @@ impl PostAssemblyPassKind {
             }
             Self::RubyResourceAssign => {
                 ruby_resource_assign::assign_ruby_package_resources(files, packages)
+            }
+            Self::NixFlakeCompatMerge => {
+                nix_flake_compat_merge::attach_flake_compat_default_files(files, packages)
             }
             Self::BazelPrune => {
                 bazel_prune::prune_unused_bazel_packages(files, packages, dependencies)
