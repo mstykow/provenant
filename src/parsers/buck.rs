@@ -175,6 +175,23 @@ fn extract_metadata_dict(dict: &[(ast::AstExpr, ast::AstExpr)]) -> PackageData {
     build_package_from_metadata(fields)
 }
 
+fn get_metadata_string(fields: &HashMap<String, MetadataValue>, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| match fields.get(*key) {
+        Some(MetadataValue::String(value)) => Some(value.clone()),
+        _ => None,
+    })
+}
+
+fn get_metadata_list(
+    fields: &HashMap<String, MetadataValue>,
+    keys: &[&str],
+) -> Option<Vec<String>> {
+    keys.iter().find_map(|key| match fields.get(*key) {
+        Some(MetadataValue::List(values)) => Some(values.clone()),
+        _ => None,
+    })
+}
+
 /// Metadata value types
 enum MetadataValue {
     String(String),
@@ -253,25 +270,31 @@ fn build_package_from_metadata(fields: HashMap<String, MetadataValue>) -> Packag
     let mut license_references = Vec::new();
 
     // Extract name
-    if let Some(MetadataValue::String(s)) = fields.get("name") {
-        pkg.name = Some(s.clone());
+    if let Some(name) = get_metadata_string(&fields, &["name"]) {
+        pkg.name = Some(name);
     }
 
     // Extract version
-    if let Some(MetadataValue::String(s)) = fields.get("version") {
-        pkg.version = Some(s.clone());
+    if let Some(version) = get_metadata_string(&fields, &["version"]) {
+        pkg.version = Some(version);
     }
 
-    // Extract package type (upstream_type or package_type)
-    if let Some(MetadataValue::String(s)) = fields.get("upstream_type") {
-        pkg.package_type = s.parse::<PackageType>().ok();
-    } else if let Some(MetadataValue::String(s)) = fields.get("package_type") {
-        pkg.package_type = s.parse::<PackageType>().ok();
+    // Extract namespace from explicit metadata when present.
+    if let Some(namespace) = get_metadata_string(&fields, &["namespace"]) {
+        pkg.namespace = Some(namespace);
+    }
+
+    // Extract package type from canonical or legacy ecosystem fields.
+    // Intentionally ignore `upstream_type`: it does not describe the purl package type.
+    if let Some(ecosystem) = get_metadata_string(&fields, &["ecosystem", "type", "package_type"])
+        && let Ok(package_type) = ecosystem.parse::<PackageType>()
+    {
+        pkg.package_type = Some(package_type);
     }
 
     // Extract licenses (licenses or license_expression)
-    if let Some(MetadataValue::List(licenses)) = fields.get("licenses") {
-        let (license_statements, references) = split_buck_license_values(licenses);
+    if let Some(licenses) = get_metadata_list(&fields, &["licenses"]) {
+        let (license_statements, references) = split_buck_license_values(&licenses);
         license_references = references;
         let extracted_license_statement = if !license_statements.is_empty() {
             Some(license_statements.join(", "))
@@ -281,61 +304,88 @@ fn build_package_from_metadata(fields: HashMap<String, MetadataValue>) -> Packag
             None
         };
         pkg.extracted_license_statement = extracted_license_statement;
-    } else if let Some(MetadataValue::String(s)) = fields.get("license_expression") {
-        pkg.extracted_license_statement = Some(s.clone());
+    } else if let Some(license_expression) = get_metadata_string(&fields, &["license_expression"]) {
+        pkg.extracted_license_statement = Some(license_expression);
     }
 
-    // Extract homepage (upstream_address or homepage_url)
-    if let Some(MetadataValue::String(s)) = fields.get("upstream_address") {
-        pkg.homepage_url = Some(s.clone());
-    } else if let Some(MetadataValue::String(s)) = fields.get("homepage_url") {
-        pkg.homepage_url = Some(s.clone());
+    if let Some(copyright) = get_metadata_list(&fields, &["copyrights"]) {
+        if !copyright.is_empty() {
+            pkg.copyright = Some(copyright.join("\n"));
+        }
+    } else if let Some(copyright) = get_metadata_string(&fields, &["copyright"]) {
+        pkg.copyright = Some(copyright);
+    }
+
+    // Extract homepage (upstream_address, upstream_url, or homepage_url)
+    if let Some(homepage_url) = get_metadata_string(
+        &fields,
+        &["upstream_address", "upstream_url", "homepage_url"],
+    ) {
+        pkg.homepage_url = Some(homepage_url);
     }
 
     // Extract download_url
-    if let Some(MetadataValue::String(s)) = fields.get("download_url") {
-        pkg.download_url = Some(s.clone());
+    if let Some(download_url) = get_metadata_string(&fields, &["download_url"]) {
+        pkg.download_url = Some(download_url);
     }
 
     // Extract vcs_url
-    if let Some(MetadataValue::String(s)) = fields.get("vcs_url") {
-        pkg.vcs_url = Some(s.clone());
+    if let Some(vcs_url) = get_metadata_string(&fields, &["vcs_url"]) {
+        pkg.vcs_url = Some(vcs_url);
     }
 
     // Extract sha1 (download_archive_sha1)
-    if let Some(MetadataValue::String(s)) = fields.get("download_archive_sha1") {
-        pkg.sha1 = Sha1Digest::from_hex(s).ok();
+    if let Some(sha1) = get_metadata_string(&fields, &["download_archive_sha1"]) {
+        pkg.sha1 = Sha1Digest::from_hex(&sha1).ok();
     }
 
     // Extract maintainers
-    if let Some(MetadataValue::List(maintainers)) = fields.get("maintainers") {
-        pkg.parties = maintainers
-            .iter()
-            .map(|name| Party {
-                r#type: Some("organization".to_string()),
-                name: Some(name.clone()),
-                role: Some("maintainer".to_string()),
-                email: None,
-                url: None,
-                organization: None,
-                organization_url: None,
-                timezone: None,
-            })
-            .collect();
+    if let Some(maintainers) = get_metadata_list(&fields, &["maintainers"]) {
+        pkg.parties.extend(maintainers.iter().map(|name| Party {
+            r#type: Some("organization".to_string()),
+            name: Some(name.clone()),
+            role: Some("maintainer".to_string()),
+            email: None,
+            url: None,
+            organization: None,
+            organization_url: None,
+            timezone: None,
+        }));
+    }
+
+    if let Some(vendor) = get_metadata_string(&fields, &["vendor", "publisher"]) {
+        pkg.parties.push(Party {
+            r#type: None,
+            name: Some(vendor),
+            role: Some("publisher".to_string()),
+            email: None,
+            url: None,
+            organization: None,
+            organization_url: None,
+            timezone: None,
+        });
     }
 
     // Extract extra_data fields
     let mut extra_data = HashMap::new();
-    if let Some(MetadataValue::String(s)) = fields.get("vcs_commit_hash") {
+    if let Some(vcs_commit_hash) = get_metadata_string(&fields, &["vcs_commit_hash"]) {
         extra_data.insert(
             "vcs_commit_hash".to_string(),
-            serde_json::Value::String(s.clone()),
+            serde_json::Value::String(vcs_commit_hash),
         );
     }
-    if let Some(MetadataValue::String(s)) = fields.get("upstream_hash") {
+    if let Some(upstream_hash) =
+        get_metadata_string(&fields, &["upstream_hash", "upstream_commit_hash"])
+    {
         extra_data.insert(
             "upstream_hash".to_string(),
-            serde_json::Value::String(s.clone()),
+            serde_json::Value::String(upstream_hash),
+        );
+    }
+    if let Some(upstream_branch) = get_metadata_string(&fields, &["upstream_branch"]) {
+        extra_data.insert(
+            "upstream_branch".to_string(),
+            serde_json::Value::String(upstream_branch),
         );
     }
     insert_license_reference_extra_data(&mut extra_data, &license_references);
@@ -344,11 +394,15 @@ fn build_package_from_metadata(fields: HashMap<String, MetadataValue>) -> Packag
     }
 
     // Parse package_url if present and update package fields
-    if let Some(MetadataValue::String(purl_str)) = fields.get("package_url")
+    if let Some(purl_str) = get_metadata_string(&fields, &["package_url"])
         && let Ok(purl) = purl_str.parse::<PackageUrl>()
     {
+        pkg.purl = Some(purl.to_string());
+
         // Override package fields with purl data
-        pkg.package_type = purl.ty().parse::<PackageType>().ok();
+        if let Ok(package_type) = purl.ty().parse::<PackageType>() {
+            pkg.package_type = Some(package_type);
+        }
         if let Some(ns) = purl.namespace() {
             pkg.namespace = Some(ns.to_string());
         }

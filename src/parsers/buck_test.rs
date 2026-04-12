@@ -155,7 +155,7 @@ fn test_parse_metadata_bzl_basic() {
     let path = PathBuf::from("testdata/buck/metadata/METADATA.bzl");
     let pkg = BuckMetadataBzlParser::extract_first_package(&path);
 
-    assert_eq!(pkg.package_type, Some(PackageType::Github));
+    assert_eq!(pkg.package_type, Some(PackageType::Buck));
     assert_eq!(pkg.name, Some("example".to_string()));
     assert_eq!(pkg.version, Some("0.0.1".to_string()));
     assert_eq!(
@@ -364,6 +364,10 @@ fn test_metadata_bzl_with_package_url() {
     );
     assert_eq!(pkg.name, Some("animation".to_string()));
     assert_eq!(pkg.version, Some("0.0.1".to_string()));
+    assert_eq!(
+        pkg.purl,
+        Some("pkg:maven/androidx.compose.animation/animation@0.0.1".to_string())
+    );
 
     // Other fields should still be extracted
     assert_eq!(
@@ -379,4 +383,158 @@ fn test_metadata_bzl_with_package_url() {
     );
     assert_eq!(pkg.parties.len(), 1);
     assert_eq!(pkg.parties[0].name, Some("oss_foundation".to_string()));
+}
+
+#[test]
+fn test_metadata_bzl_supports_requested_canonical_fields() {
+    let content = r#"
+METADATA = {
+    "name": "artifact",
+    "version": "1.2.3",
+    "ecosystem": "maven",
+    "namespace": "com.example",
+    "licenses": ["Apache-2.0"],
+    "copyrights": [
+        "Copyright (c) 2024 Example Corp",
+        "Copyright (c) 2025 Contributors",
+    ],
+    "upstream_url": "https://github.com/example/artifact",
+    "download_url": "https://repo.example.com/artifact-1.2.3.jar",
+    "upstream_commit_hash": "cafebabe",
+    "upstream_branch": "main",
+    "vendor": "Example Corp",
+}
+"#;
+    let temp_dir = tempfile::tempdir().unwrap();
+    let metadata_path = temp_dir.path().join("METADATA.bzl");
+    std::fs::write(&metadata_path, content).unwrap();
+
+    let pkg = BuckMetadataBzlParser::extract_first_package(&metadata_path);
+
+    assert_eq!(pkg.package_type, Some(PackageType::Maven));
+    assert_eq!(pkg.namespace, Some("com.example".to_string()));
+    assert_eq!(pkg.name, Some("artifact".to_string()));
+    assert_eq!(pkg.version, Some("1.2.3".to_string()));
+    assert_eq!(
+        pkg.homepage_url,
+        Some("https://github.com/example/artifact".to_string())
+    );
+    assert_eq!(
+        pkg.download_url,
+        Some("https://repo.example.com/artifact-1.2.3.jar".to_string())
+    );
+    assert_eq!(
+        pkg.copyright,
+        Some("Copyright (c) 2024 Example Corp\nCopyright (c) 2025 Contributors".to_string())
+    );
+    assert_eq!(
+        pkg.extracted_license_statement,
+        Some("Apache-2.0".to_string())
+    );
+    assert_eq!(pkg.parties.len(), 1);
+    assert_eq!(pkg.parties[0].role, Some("publisher".to_string()));
+    assert_eq!(pkg.parties[0].name, Some("Example Corp".to_string()));
+    assert_eq!(pkg.parties[0].r#type, None);
+
+    let extra = pkg.extra_data.as_ref().expect("extra_data should exist");
+    assert_eq!(
+        extra.get("upstream_hash"),
+        Some(&serde_json::Value::String("cafebabe".to_string()))
+    );
+    assert_eq!(
+        extra.get("upstream_branch"),
+        Some(&serde_json::Value::String("main".to_string()))
+    );
+}
+
+#[test]
+fn test_metadata_bzl_type_and_publisher_aliases_are_supported() {
+    let content = r#"
+METADATA = {
+    "name": "example",
+    "type": "cargo",
+    "publisher": "Rust Foundation",
+}
+"#;
+    let temp_dir = tempfile::tempdir().unwrap();
+    let metadata_path = temp_dir.path().join("METADATA.bzl");
+    std::fs::write(&metadata_path, content).unwrap();
+
+    let pkg = BuckMetadataBzlParser::extract_first_package(&metadata_path);
+
+    assert_eq!(pkg.package_type, Some(PackageType::Cargo));
+    assert_eq!(pkg.parties.len(), 1);
+    assert_eq!(pkg.parties[0].role, Some("publisher".to_string()));
+    assert_eq!(pkg.parties[0].name, Some("Rust Foundation".to_string()));
+}
+
+#[test]
+fn test_metadata_bzl_supports_copyright_singular_alias() {
+    let content = r#"
+METADATA = {
+    "name": "example",
+    "copyright": "Copyright (c) 2025 Example Org",
+}
+"#;
+    let temp_dir = tempfile::tempdir().unwrap();
+    let metadata_path = temp_dir.path().join("METADATA.bzl");
+    std::fs::write(&metadata_path, content).unwrap();
+
+    let pkg = BuckMetadataBzlParser::extract_first_package(&metadata_path);
+
+    assert_eq!(
+        pkg.copyright,
+        Some("Copyright (c) 2025 Example Org".to_string())
+    );
+}
+
+#[test]
+fn test_metadata_bzl_ignores_plural_copyrights_when_not_list() {
+    let content = r#"
+METADATA = {
+    "name": "example",
+    "copyrights": "Copyright (c) 2025 Example Org",
+}
+"#;
+    let temp_dir = tempfile::tempdir().unwrap();
+    let metadata_path = temp_dir.path().join("METADATA.bzl");
+    std::fs::write(&metadata_path, content).unwrap();
+
+    let pkg = BuckMetadataBzlParser::extract_first_package(&metadata_path);
+
+    assert_eq!(pkg.copyright, None);
+}
+
+#[test]
+fn test_metadata_bzl_ignores_singular_copyright_when_not_string() {
+    let content = r#"
+METADATA = {
+    "name": "example",
+    "copyright": ["Copyright (c) 2025 Example Org"],
+}
+"#;
+    let temp_dir = tempfile::tempdir().unwrap();
+    let metadata_path = temp_dir.path().join("METADATA.bzl");
+    std::fs::write(&metadata_path, content).unwrap();
+
+    let pkg = BuckMetadataBzlParser::extract_first_package(&metadata_path);
+
+    assert_eq!(pkg.copyright, None);
+}
+
+#[test]
+fn test_metadata_bzl_ignores_upstream_type_for_package_type() {
+    let content = r#"
+METADATA = {
+    "name": "example",
+    "upstream_type": "github",
+}
+"#;
+    let temp_dir = tempfile::tempdir().unwrap();
+    let metadata_path = temp_dir.path().join("METADATA.bzl");
+    std::fs::write(&metadata_path, content).unwrap();
+
+    let pkg = BuckMetadataBzlParser::extract_first_package(&metadata_path);
+
+    assert_eq!(pkg.package_type, Some(PackageType::Buck));
 }
