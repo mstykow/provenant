@@ -88,7 +88,7 @@ mod tests {
             .expect("annotation dependency missing");
         assert_eq!(annotation.scope.as_deref(), Some("compile"));
         assert_eq!(annotation.is_runtime, Some(true));
-        assert_eq!(annotation.is_optional, Some(false));
+        assert_eq!(annotation.is_optional, None);
         let annotation_extra = annotation
             .extra_data
             .as_ref()
@@ -130,6 +130,45 @@ mod tests {
             .expect("error_prone dependency missing");
         assert_eq!(error_prone.scope.as_deref(), Some("runtime"));
         assert_eq!(error_prone.is_runtime, Some(true));
+        assert_eq!(error_prone.is_optional, None);
+    }
+
+    #[test]
+    fn test_variant_usage_beats_test_like_variant_name() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("usage-wins.module");
+        let content = r#"{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.example",
+    "module": "usage-wins",
+    "version": "1.0.0"
+  },
+  "variants": [
+    {
+      "name": "testFixturesRuntimeElements",
+      "attributes": {
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "org.sample",
+          "module": "dep",
+          "version": { "requires": "1.0.0" }
+        }
+      ]
+    }
+  ]
+}"#;
+        fs::write(&file_path, content).unwrap();
+
+        let package_data = GradleModuleParser::extract_first_package(&file_path);
+        let dependency = &package_data.dependencies[0];
+
+        assert_eq!(dependency.scope.as_deref(), Some("runtime"));
+        assert_eq!(dependency.is_runtime, Some(true));
+        assert_eq!(dependency.is_optional, None);
+        assert_eq!(dependency.is_direct, Some(true));
     }
 
     #[test]

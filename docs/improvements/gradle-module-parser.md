@@ -11,7 +11,7 @@ Python ScanCode currently has multiple open attempts at parsing Gradle `.module`
 - Maven package identity from `component.group`, `component.module`, and `component.version`
 - artifact size and checksums from published variant `files`
 - deduplicated dependencies across non-documentation variants
-- scope inference from `org.gradle.usage` and variant names
+- scope inference from authoritative Gradle variant attributes such as `org.gradle.usage`
 - per-package file references for published artifacts
 - producer metadata such as `formatVersion` and `createdBy.gradle.version`
 - preserved variant metadata for `dependencyConstraints` and `available-at`
@@ -23,6 +23,8 @@ The Python reference does not currently provide merged Gradle `.module` support,
 ## Rust behavior
 
 Rust parses published Gradle module metadata directly and preserves artifact, dependency, constraint, and variant information that build-script parsing alone cannot recover reliably.
+
+It now treats variant names as descriptive only, matching Gradle's own semantics: dependency scope comes from authoritative variant attributes such as `org.gradle.usage` and verification category metadata, while optionality is left unset unless the metadata explicitly proves it.
 
 The scanner now also resolves non-documentation artifact `file_references` from `.module` metadata
 back onto scanned sibling files. In practice, that means a scanned `.jar` or `.aar` sitting next
