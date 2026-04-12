@@ -318,7 +318,7 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
     let target_dir = if let Some(target_path) = &args.target_path {
         realpath(target_path)?
     } else {
-        run_dir.join("target")
+        run_dir.join(&slug)
     };
     let target_source_label = if args.target_path.is_some() {
         "Target path"
