@@ -200,9 +200,9 @@ jobs:
       matrix:
         include:
           - shard: contracts
-            shared_key: rust-scan-integration-tests-release-parser-scan-contracts
+            shared_key: rust-scan-integration-tests-release-contracts
           - shard: integration
-            shared_key: rust-scan-integration-tests-release-integration-suites
+            shared_key: rust-scan-integration-tests-release-integration
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
