@@ -164,10 +164,18 @@ fn parse_lockfile_v2_plus(
         }
 
         // Extract package name from path like "node_modules/@types/node" or "node_modules/express"
-        let package_name = extract_package_name_from_path(key);
-        if package_name.is_empty() {
+        let install_name = extract_package_name_from_path(key);
+        if install_name.is_empty() {
             continue;
         }
+
+        let package_name = value
+            .get(FIELD_NAME)
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| install_name.clone());
 
         let version = value
             .get(FIELD_VERSION)
@@ -198,7 +206,7 @@ fn parse_lockfile_v2_plus(
             .get(FIELD_LINK)
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        let is_direct = root_deps.contains(&package_name) && is_direct_dependency_path(key);
+        let is_direct = root_deps.contains(&install_name) && is_direct_dependency_path(key);
 
         let dependency = match version {
             Some(version) => build_npm_dependency(
