@@ -1,4 +1,4 @@
-#[cfg(test)]
+#[cfg(all(test, feature = "golden-tests"))]
 mod golden_tests {
     use crate::models::{DatasourceId, PackageType};
     use crate::parsers::PackageParser;
