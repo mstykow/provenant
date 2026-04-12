@@ -2,10 +2,10 @@ use anyhow::{Result, anyhow};
 
 use super::entry::IndexEntry;
 use super::tags::{
-    RPM_INT32_TYPE, RPM_STRING_ARRAY_TYPE, RPM_STRING_TYPE, RPMTAG_ARCH, RPMTAG_BASENAMES,
-    RPMTAG_DIRINDEXES, RPMTAG_DIRNAMES, RPMTAG_DISTRIBUTION, RPMTAG_EPOCH, RPMTAG_FILENAMES,
-    RPMTAG_LICENSE, RPMTAG_NAME, RPMTAG_PLATFORM, RPMTAG_PROVIDENAME, RPMTAG_RELEASE,
-    RPMTAG_REQUIRENAME, RPMTAG_SIZE, RPMTAG_SOURCERPM, RPMTAG_VENDOR, RPMTAG_VERSION,
+    RPMTAG_ARCH, RPMTAG_BASENAMES, RPMTAG_DIRINDEXES, RPMTAG_DIRNAMES, RPMTAG_DISTRIBUTION,
+    RPMTAG_EPOCH, RPMTAG_FILENAMES, RPMTAG_LICENSE, RPMTAG_NAME, RPMTAG_PLATFORM,
+    RPMTAG_PROVIDENAME, RPMTAG_RELEASE, RPMTAG_REQUIRENAME, RPMTAG_SIZE, RPMTAG_SOURCERPM,
+    RPMTAG_VENDOR, RPMTAG_VERSION, TagType,
 };
 
 #[derive(Debug, Default, Clone)]
@@ -34,71 +34,71 @@ pub(crate) fn parse_installed_rpm_package(entries: Vec<IndexEntry>) -> Result<In
     for entry in entries {
         match entry.info.tag {
             RPMTAG_DIRINDEXES => {
-                ensure_kind(&entry, RPM_INT32_TYPE, "dir indexes")?;
+                ensure_kind(&entry, TagType::Int32, "dir indexes")?;
                 package.dir_indexes = entry.read_u32_array()?;
             }
             RPMTAG_DIRNAMES => {
-                ensure_kind(&entry, RPM_STRING_ARRAY_TYPE, "dir names")?;
+                ensure_kind(&entry, TagType::StringArray, "dir names")?;
                 package.dir_names = entry.read_string_array()?;
             }
             RPMTAG_BASENAMES => {
-                ensure_kind(&entry, RPM_STRING_ARRAY_TYPE, "base names")?;
+                ensure_kind(&entry, TagType::StringArray, "base names")?;
                 package.base_names = entry.read_string_array()?;
             }
             RPMTAG_FILENAMES => {
-                ensure_kind(&entry, RPM_STRING_ARRAY_TYPE, "file names")?;
+                ensure_kind(&entry, TagType::StringArray, "file names")?;
                 package.file_names = entry.read_string_array()?;
             }
             RPMTAG_NAME => {
-                ensure_kind(&entry, RPM_STRING_TYPE, "name")?;
+                ensure_kind(&entry, TagType::String, "name")?;
                 package.name = entry.read_string()?;
             }
             RPMTAG_EPOCH => {
-                ensure_kind(&entry, RPM_INT32_TYPE, "epoch")?;
+                ensure_kind(&entry, TagType::Int32, "epoch")?;
                 package.epoch = entry.read_u32()?;
             }
             RPMTAG_VERSION => {
-                ensure_kind(&entry, RPM_STRING_TYPE, "version")?;
+                ensure_kind(&entry, TagType::String, "version")?;
                 package.version = entry.read_string()?;
             }
             RPMTAG_RELEASE => {
-                ensure_kind(&entry, RPM_STRING_TYPE, "release")?;
+                ensure_kind(&entry, TagType::String, "release")?;
                 package.release = entry.read_string()?;
             }
             RPMTAG_ARCH => {
-                ensure_kind(&entry, RPM_STRING_TYPE, "arch")?;
+                ensure_kind(&entry, TagType::String, "arch")?;
                 package.arch = entry.read_string()?;
             }
             RPMTAG_SOURCERPM => {
-                ensure_kind(&entry, RPM_STRING_TYPE, "source rpm")?;
+                ensure_kind(&entry, TagType::String, "source rpm")?;
                 package.source_rpm = normalize_none(entry.read_string()?);
             }
             RPMTAG_LICENSE => {
-                ensure_kind(&entry, RPM_STRING_TYPE, "license")?;
+                ensure_kind(&entry, TagType::String, "license")?;
                 package.license = normalize_none(entry.read_string()?);
             }
             RPMTAG_VENDOR => {
-                ensure_kind(&entry, RPM_STRING_TYPE, "vendor")?;
+                ensure_kind(&entry, TagType::String, "vendor")?;
                 package.vendor = normalize_none(entry.read_string()?);
             }
             RPMTAG_DISTRIBUTION => {
-                ensure_kind(&entry, RPM_STRING_TYPE, "distribution")?;
+                ensure_kind(&entry, TagType::String, "distribution")?;
                 package.distribution = normalize_none(entry.read_string()?);
             }
             RPMTAG_PLATFORM => {
-                ensure_kind(&entry, RPM_STRING_TYPE, "platform")?;
+                ensure_kind(&entry, TagType::String, "platform")?;
                 package.platform = normalize_none(entry.read_string()?);
             }
             RPMTAG_SIZE => {
-                ensure_kind(&entry, RPM_INT32_TYPE, "size")?;
+                ensure_kind(&entry, TagType::Int32, "size")?;
                 package.size = entry.read_u32()?;
             }
             RPMTAG_PROVIDENAME => {
-                ensure_kind(&entry, RPM_STRING_ARRAY_TYPE, "provide names")?;
+                ensure_kind(&entry, TagType::StringArray, "provide names")?;
                 package.provides = entry.read_string_array()?;
             }
             RPMTAG_REQUIRENAME => {
-                ensure_kind(&entry, RPM_STRING_ARRAY_TYPE, "require names")?;
+                ensure_kind(&entry, TagType::StringArray, "require names")?;
                 package.requires = entry.read_string_array()?;
             }
             _ => {}
@@ -108,10 +108,10 @@ pub(crate) fn parse_installed_rpm_package(entries: Vec<IndexEntry>) -> Result<In
     Ok(package)
 }
 
-fn ensure_kind(entry: &IndexEntry, expected: u32, label: &str) -> Result<()> {
+fn ensure_kind(entry: &IndexEntry, expected: TagType, label: &str) -> Result<()> {
     if entry.info.kind != expected {
         return Err(anyhow!(
-            "invalid RPM tag type for {}: expected={}, actual={}",
+            "invalid RPM tag type for {}: expected={:?}, actual={:?}",
             label,
             expected,
             entry.info.kind

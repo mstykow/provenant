@@ -22,9 +22,57 @@ pub(crate) const RPMTAG_PLATFORM: u32 = 1132;
 pub(crate) const RPMTAG_SIZE: u32 = 1009;
 pub(crate) const RPMTAG_FILENAMES: u32 = 5000;
 
-pub(crate) const RPM_MIN_TYPE: u32 = 0;
-pub(crate) const RPM_MAX_TYPE: u32 = 9;
-pub(crate) const RPM_INT32_TYPE: u32 = 4;
-pub(crate) const RPM_STRING_TYPE: u32 = 6;
-pub(crate) const RPM_STRING_ARRAY_TYPE: u32 = 8;
-pub(crate) const RPM_I18NSTRING_TYPE: u32 = 9;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TagType {
+    Null,
+    Char,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    String,
+    Bin,
+    StringArray,
+    I18nString,
+}
+
+impl TagType {
+    pub(crate) fn from_raw(code: u32) -> anyhow::Result<Self> {
+        match code {
+            0 => Ok(Self::Null),
+            1 => Ok(Self::Char),
+            2 => Ok(Self::Int8),
+            3 => Ok(Self::Int16),
+            4 => Ok(Self::Int32),
+            5 => Ok(Self::Int64),
+            6 => Ok(Self::String),
+            7 => Ok(Self::Bin),
+            8 => Ok(Self::StringArray),
+            9 => Ok(Self::I18nString),
+            _ => Err(anyhow::anyhow!("invalid RPM tag type: {code}")),
+        }
+    }
+
+    pub(crate) fn element_size(&self) -> Option<u32> {
+        match self {
+            Self::Null | Self::Char | Self::Int8 | Self::Bin => Some(1),
+            Self::Int16 => Some(2),
+            Self::Int32 => Some(4),
+            Self::Int64 => Some(8),
+            Self::String | Self::StringArray | Self::I18nString => None,
+        }
+    }
+
+    pub(crate) fn alignment(&self) -> u32 {
+        match self {
+            Self::Int16 => 2,
+            Self::Int32 => 4,
+            Self::Int64 => 8,
+            _ => 1,
+        }
+    }
+
+    pub(crate) fn is_variable_length(&self) -> bool {
+        self.element_size().is_none()
+    }
+}
