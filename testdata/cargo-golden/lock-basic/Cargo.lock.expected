@@ -1,10 +1,40 @@
 [
   {
     "type": "cargo",
+    "namespace": null,
     "name": "test-project",
     "version": "0.1.0",
+    "qualifiers": null,
+    "subpath": null,
+    "primary_language": null,
+    "description": null,
+    "release_date": null,
     "parties": [],
+    "keywords": [],
+    "homepage_url": null,
+    "download_url": null,
+    "size": null,
+    "sha1": null,
+    "md5": null,
     "sha256": null,
+    "sha512": null,
+    "bug_tracking_url": null,
+    "code_view_url": null,
+    "vcs_url": null,
+    "copyright": null,
+    "holder": null,
+    "declared_license_expression": null,
+    "declared_license_expression_spdx": null,
+    "license_detections": [],
+    "other_license_expression": null,
+    "other_license_expression_spdx": null,
+    "other_license_detections": [],
+    "extracted_license_statement": null,
+    "notice_text": null,
+    "source_packages": [],
+    "file_references": [],
+    "is_private": false,
+    "is_virtual": false,
     "extra_data": {
       "checksum": "abc123def456"
     },
@@ -12,13 +42,20 @@
       {
         "purl": "pkg:cargo/serde@1.0.228",
         "extracted_requirement": "1.0.228",
-        "scope": "dependencies",
-        "is_runtime": true,
-        "is_optional": false,
+        "scope": null,
+        "is_runtime": null,
+        "is_optional": null,
         "is_pinned": true,
-        "is_direct": true
+        "is_direct": true,
+        "resolved_package": null,
+        "extra_data": {
+          "checksum": "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        }
       }
     ],
+    "repository_homepage_url": null,
+    "repository_download_url": null,
     "api_data_url": "https://crates.io/api/v1/crates/test-project/0.1.0",
     "datasource_id": "cargo_lock",
     "purl": "pkg:cargo/test-project@0.1.0"
