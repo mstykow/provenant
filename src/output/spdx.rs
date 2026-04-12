@@ -272,6 +272,12 @@ pub(crate) fn write_spdx_rdf_xml(
 }
 
 fn primary_package_name(output: &Output, config: &OutputWriteConfig) -> String {
+    if output.packages.len() == 1
+        && let Some(name) = output.packages.first().and_then(|p| p.name.clone())
+    {
+        return sanitize_spdx_package_name(&name);
+    }
+
     if let Some(scanned_path) = &config.scanned_path {
         let path = PathBuf::from(scanned_path);
         if let Some(name) = path.file_name().and_then(|n| n.to_str())

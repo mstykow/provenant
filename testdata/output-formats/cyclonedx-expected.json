@@ -47,10 +47,6 @@
           "url": "https://registry.npmjs.org/npm/-/npm-2.13.5.tgz"
         },
         {
-          "type": "distribution",
-          "url": "https://registry.npmjs.org/npm/-/npm-2.13.5.tgz"
-        },
-        {
           "type": "website",
           "url": "https://docs.npmjs.com/"
         },
