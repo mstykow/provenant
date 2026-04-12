@@ -614,6 +614,7 @@ static COPYRIGHTS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^\(c\) if\b",
         r"(?i)^\(c\) for\b",
         r"(?i)^\(c\)\s+(?:convert|multiply)\b",
+        r"(?i)^\(c\) contributor,\s*path$",
         r"(?i)^the\s+Embedded\s+Configurable\s+Operating\s+System\b",
         r"(?i)\bpkg\.(author|homepage)\b",
         r"(?i)\bdate\.year\b",
@@ -1992,6 +1993,9 @@ static HOLDERS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^\(scale\s+\d+\)$",
         r"(?i)^scale\s+\d+$",
         r"(?i)^i,\s*div\s+while$",
+        r"(?i)^isinstanceof$",
+        r"(?i)^contributor,\s*path$",
+        r"(?x)\b[A-Za-z_][A-Za-z0-9_]*\([^)]*\).*[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*\(",
         r"^(?:[\u{0080}-\u{00FF}]+\s*){6,}$",
     ];
     patterns.iter().filter_map(|p| Regex::new(p).ok()).collect()
@@ -2113,6 +2117,7 @@ pub fn refine_copyright(s: &str) -> Option<String> {
     c = strip_trailing_isc_after_inc(&c);
     c = strip_trailing_caps_after_company_suffix(&c);
     c = strip_trailing_javadoc_tags(&c);
+    c = strip_trailing_batch_comment_marker(&c);
     c = strip_prefixes(&c, &HashSet::from(["by", "c"]));
     c = c.trim().to_string();
     c = c.trim_matches('+').to_string();
@@ -3163,6 +3168,7 @@ fn refine_holder_impl(s: &str, in_copyright_context: bool) -> Option<String> {
     h = strip_trailing_isc_after_inc(&h);
     h = strip_trailing_caps_after_company_suffix(&h);
     h = strip_trailing_javadoc_tags(&h);
+    h = strip_trailing_batch_comment_marker(&h);
     h = strip_leading_portions_comma(&h);
     h = strip_trailing_paren_identifier(&h);
     h = strip_trailing_company_name_placeholder(&h);
@@ -3484,6 +3490,18 @@ fn strip_trailing_javadoc_tags(s: &str) -> String {
         Regex::new(r"(?i)\s+@(?:generated|version|since|param|return|see)\b.*$").unwrap()
     });
     JAVADOC_TAGS_RE.replace(s, "").trim().to_string()
+}
+
+fn strip_trailing_batch_comment_marker(s: &str) -> String {
+    static BATCH_COMMENT_TAIL_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)^(?P<prefix>.+?)\.?\s+@?rem\b.*$").unwrap());
+    let trimmed = s.trim();
+    let Some(cap) = BATCH_COMMENT_TAIL_RE.captures(trimmed) else {
+        return s.to_string();
+    };
+    cap.name("prefix")
+        .map(|m| m.as_str().trim_end_matches(&[' ', '.'][..]).to_string())
+        .unwrap_or_else(|| s.to_string())
 }
 
 fn strip_trailing_paren_years(s: &str) -> String {
