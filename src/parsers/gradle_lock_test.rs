@@ -14,7 +14,7 @@ fn test_parse_simple_gradle_lockfile() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
     writeln!(
         file,
-        "com.example:lib1:1.0.0=abc123\ncom.example:lib2:2.0.0=def456"
+        "com.example:lib1:1.0.0=compileClasspath\ncom.example:lib2:2.0.0=runtimeClasspath"
     )
     .expect("Failed to write to temp file");
 
@@ -61,7 +61,7 @@ fn test_parse_gradle_lockfile_with_comments() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
     writeln!(
         file,
-        "# This is a comment\ncom.example:lib1:1.0.0=abc123\n# Another comment\ncom.example:lib2:2.0.0=def456"
+        "# This is a comment\ncom.example:lib1:1.0.0=compileClasspath\n# Another comment\ncom.example:lib2:2.0.0=runtimeClasspath"
     )
     .expect("Failed to write to temp file");
 
@@ -76,7 +76,7 @@ fn test_parse_gradle_lockfile_with_empty_lines() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
     writeln!(
         file,
-        "com.example:lib1:1.0.0=abc123\n\ncom.example:lib2:2.0.0=def456\n\n"
+        "com.example:lib1:1.0.0=compileClasspath\n\ncom.example:lib2:2.0.0=runtimeClasspath\n\n"
     )
     .expect("Failed to write to temp file");
 
@@ -91,7 +91,7 @@ fn test_parse_gradle_lockfile_complex_group_name() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
     writeln!(
         file,
-        "org.springframework.boot:spring-boot-starter-web:2.7.0=hash1"
+        "org.springframework.boot:spring-boot-starter-web:2.7.0=compileClasspath,runtimeClasspath"
     )
     .expect("Failed to write to temp file");
 
@@ -129,7 +129,7 @@ fn test_parse_gradle_lockfile_empty_file() {
 #[test]
 fn test_parse_gradle_lockfile_datasource_id() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
-    writeln!(file, "com.example:lib:1.0.0=hash").expect("Failed to write to temp file");
+    writeln!(file, "com.example:lib:1.0.0=compileClasspath").expect("Failed to write to temp file");
 
     let path = file.path();
     let package_data = GradleLockfileParser::extract_first_package(path);
@@ -143,7 +143,7 @@ fn test_parse_gradle_lockfile_datasource_id() {
 #[test]
 fn test_parse_gradle_lockfile_dependency_flags() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
-    writeln!(file, "com.example:lib:1.0.0=hash").expect("Failed to write to temp file");
+    writeln!(file, "com.example:lib:1.0.0=compileClasspath").expect("Failed to write to temp file");
 
     let path = file.path();
     let package_data = GradleLockfileParser::extract_first_package(path);
@@ -152,8 +152,8 @@ fn test_parse_gradle_lockfile_dependency_flags() {
     let dep = &package_data.dependencies[0];
 
     assert_eq!(dep.is_pinned, Some(true));
-    assert_eq!(dep.is_optional, Some(false));
-    assert_eq!(dep.is_runtime, Some(true));
+    assert_eq!(dep.is_optional, None);
+    assert_eq!(dep.is_runtime, None);
     assert_eq!(
         dep.resolved_package.as_ref().unwrap().package_type,
         PackageType::Maven
@@ -163,7 +163,8 @@ fn test_parse_gradle_lockfile_dependency_flags() {
 #[test]
 fn test_parse_gradle_lockfile_generates_purl() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
-    writeln!(file, "com.google.guava:guava:30.1-jre=abc123").expect("Failed to write to temp file");
+    writeln!(file, "com.google.guava:guava:30.1-jre=runtimeClasspath")
+        .expect("Failed to write to temp file");
 
     let path = file.path();
     let package_data = GradleLockfileParser::extract_first_package(path);
@@ -181,8 +182,11 @@ fn test_parse_gradle_lockfile_generates_purl() {
 #[test]
 fn test_parse_gradle_lockfile_extra_data() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
-    writeln!(file, "org.junit.jupiter:junit-jupiter-api:5.8.0=hash123")
-        .expect("Failed to write to temp file");
+    writeln!(
+        file,
+        "org.junit.jupiter:junit-jupiter-api:5.8.0=testRuntimeClasspath,compileClasspath"
+    )
+    .expect("Failed to write to temp file");
 
     let path = file.path();
     let package_data = GradleLockfileParser::extract_first_package(path);
@@ -205,16 +209,21 @@ fn test_parse_gradle_lockfile_extra_data() {
         Some("junit-jupiter-api")
     );
 
-    assert!(extra.get("hash").is_some());
-    assert_eq!(extra.get("hash").and_then(|v| v.as_str()), Some("hash123"));
+    assert_eq!(
+        extra.get("configurations"),
+        Some(&serde_json::json!([
+            "testRuntimeClasspath",
+            "compileClasspath"
+        ]))
+    );
 }
 
 #[test]
-fn test_parse_gradle_lockfile_multiple_deps_with_different_hashes() {
+fn test_parse_gradle_lockfile_multiple_deps_with_different_configurations() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
     writeln!(
         file,
-        "com.example:lib1:1.0.0=abc123\ncom.example:lib2:2.0.0=def456\ncom.test:lib3:3.0.0=ghi789"
+        "com.example:lib1:1.0.0=compileClasspath\ncom.example:lib2:2.0.0=runtimeClasspath\ncom.test:lib3:3.0.0=testRuntimeClasspath"
     )
     .expect("Failed to write to temp file");
 
@@ -223,12 +232,19 @@ fn test_parse_gradle_lockfile_multiple_deps_with_different_hashes() {
 
     assert_eq!(package_data.dependencies.len(), 3);
 
-    for (i, expected_hash) in ["abc123", "def456", "ghi789"].iter().enumerate() {
+    for (i, expected_configuration) in [
+        "compileClasspath",
+        "runtimeClasspath",
+        "testRuntimeClasspath",
+    ]
+    .iter()
+    .enumerate()
+    {
         let dep = &package_data.dependencies[i];
         let extra = dep.extra_data.as_ref().unwrap();
         assert_eq!(
-            extra.get("hash").and_then(|v| v.as_str()),
-            Some(*expected_hash)
+            extra.get("configurations"),
+            Some(&serde_json::json!([expected_configuration]))
         );
     }
 }
@@ -238,7 +254,7 @@ fn test_parse_gradle_lockfile_malformed_lines_skipped() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
     writeln!(
         file,
-        "com.example:lib1:1.0.0=abc123\ninvalid-line-without-colons\ncom.example:lib2:2.0.0=def456"
+        "com.example:lib1:1.0.0=compileClasspath\ninvalid-line-without-colons\ncom.example:lib2:2.0.0=runtimeClasspath"
     )
     .expect("Failed to write to temp file");
 
@@ -270,7 +286,7 @@ fn test_parse_gradle_lockfile_versions_with_special_chars() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
     writeln!(
         file,
-        "com.example:lib1:1.0.0-SNAPSHOT=abc123\ncom.example:lib2:2.0.0-rc.1=def456"
+        "com.example:lib1:1.0.0-SNAPSHOT=compileClasspath\ncom.example:lib2:2.0.0-rc.1=runtimeClasspath"
     )
     .expect("Failed to write to temp file");
 
@@ -300,13 +316,13 @@ fn test_parse_gradle_lockfile_versions_with_special_chars() {
 fn test_parse_gradle_lockfile_real_world_example() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
     let content = r#"# Gradle lockfile for example project
-org.springframework.boot:spring-boot-starter-web:2.7.0=2e4f5b3c8d9a1f2e3a4b5c6d7e8f9a0b
-com.google.guava:guava:30.1-jre=1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p
-junit:junit:4.13.2=5a6b7c8d9e0f1g2h3i4j5k6l7m8n9o0p
-org.mockito:mockito-core:3.12.4=9z8y7x6w5v4u3t2s1r0q9p8o7n6m5l4k3
+org.springframework.boot:spring-boot-starter-web:2.7.0=compileClasspath,runtimeClasspath
+com.google.guava:guava:30.1-jre=runtimeClasspath
+junit:junit:4.13.2=testRuntimeClasspath
+org.mockito:mockito-core:3.12.4=testCompileClasspath,testRuntimeClasspath
 
 # Development dependencies
-org.hamcrest:hamcrest-core:1.3=3x2w1v0u9t8s7r6q5p4o3n2m1l0k9j8i7"#;
+org.hamcrest:hamcrest-core:1.3=testRuntimeClasspath"#;
     writeln!(file, "{}", content).expect("Failed to write to temp file");
 
     let path = file.path();
@@ -380,7 +396,7 @@ fn test_is_match_rejects_similar_names() {
 #[test]
 fn test_package_data_default_values() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
-    writeln!(file, "com.example:lib:1.0.0=hash").expect("Failed to write to temp file");
+    writeln!(file, "com.example:lib:1.0.0=compileClasspath").expect("Failed to write to temp file");
 
     let path = file.path();
     let package_data = GradleLockfileParser::extract_first_package(path);
@@ -400,9 +416,9 @@ fn test_package_data_default_values() {
 }
 
 #[test]
-fn test_parse_gradle_lockfile_with_no_hash() {
+fn test_parse_gradle_lockfile_with_single_configuration() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
-    writeln!(file, "com.example:lib:1.0.0=").expect("Failed to write to temp file");
+    writeln!(file, "com.example:lib:1.0.0=runtimeClasspath").expect("Failed to write to temp file");
 
     let path = file.path();
     let package_data = GradleLockfileParser::extract_first_package(path);
@@ -424,7 +440,7 @@ fn test_parse_gradle_lockfile_whitespace_handling() {
     let mut file = NamedTempFile::new().expect("Failed to create temp file");
     writeln!(
         file,
-        "  com.example:lib1:1.0.0=abc123  \n\t\ncom.example:lib2:2.0.0=def456\t"
+        "  com.example:lib1:1.0.0=compileClasspath  \n\t\ncom.example:lib2:2.0.0=runtimeClasspath\t"
     )
     .expect("Failed to write to temp file");
 
