@@ -4,7 +4,7 @@
     "namespace": null,
     "name": null,
     "version": null,
-    "qualifiers": {},
+    "qualifiers": null,
     "subpath": null,
     "primary_language": "Python",
     "description": null,
@@ -36,24 +36,24 @@
     "is_private": false,
     "is_virtual": false,
     "extra_data": {
-      "python_version": "^3.8",
-      "lock_version": "2.0"
+      "lock_version": "2.0",
+      "python_version": "^3.8"
     },
     "dependencies": [
       {
         "purl": "pkg:pypi/attrs@21.4.0",
         "extracted_requirement": null,
         "scope": null,
-        "is_runtime": true,
-        "is_optional": false,
+        "is_runtime": null,
+        "is_optional": null,
         "is_pinned": true,
         "is_direct": false,
         "resolved_package": {
           "type": "pypi",
-          "namespace": null,
+          "namespace": "",
           "name": "attrs",
           "version": "21.4.0",
-          "qualifiers": {},
+          "qualifiers": null,
           "subpath": null,
           "primary_language": "Python",
           "description": null,
@@ -84,381 +84,381 @@
           "file_references": [],
           "is_private": false,
           "is_virtual": true,
-          "extra_data": {},
+          "extra_data": null,
           "dependencies": [
             {
               "purl": "pkg:pypi/cloudpickle",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/coverage%5btoml%5d",
               "extracted_requirement": ">=5.0.2",
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/furo",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/hypothesis",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/mypy",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/pre-commit",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/pympler",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/pytest",
               "extracted_requirement": ">=4.3.0",
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/pytest-mypy-plugins",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/six",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/sphinx",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/sphinx-notfound-page",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/zope.interface",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/furo",
               "extracted_requirement": null,
               "scope": "docs",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/sphinx",
               "extracted_requirement": null,
               "scope": "docs",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/sphinx-notfound-page",
               "extracted_requirement": null,
               "scope": "docs",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/zope.interface",
               "extracted_requirement": null,
               "scope": "docs",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/cloudpickle",
               "extracted_requirement": null,
               "scope": "tests",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/coverage%5btoml%5d",
               "extracted_requirement": ">=5.0.2",
               "scope": "tests",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/hypothesis",
               "extracted_requirement": null,
               "scope": "tests",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/mypy",
               "extracted_requirement": null,
               "scope": "tests",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/pympler",
               "extracted_requirement": null,
               "scope": "tests",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/pytest",
               "extracted_requirement": ">=4.3.0",
               "scope": "tests",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/pytest-mypy-plugins",
               "extracted_requirement": null,
               "scope": "tests",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/six",
               "extracted_requirement": null,
               "scope": "tests",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/zope.interface",
               "extracted_requirement": null,
               "scope": "tests",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/cloudpickle",
               "extracted_requirement": null,
               "scope": "tests-no-zope",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/coverage%5btoml%5d",
               "extracted_requirement": ">=5.0.2",
               "scope": "tests-no-zope",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/hypothesis",
               "extracted_requirement": null,
               "scope": "tests-no-zope",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/mypy",
               "extracted_requirement": null,
               "scope": "tests-no-zope",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/pympler",
               "extracted_requirement": null,
               "scope": "tests-no-zope",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/pytest",
               "extracted_requirement": ">=4.3.0",
               "scope": "tests-no-zope",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/pytest-mypy-plugins",
               "extracted_requirement": null,
               "scope": "tests-no-zope",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/six",
               "extracted_requirement": null,
               "scope": "tests-no-zope",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             }
           ],
           "repository_homepage_url": "https://pypi.org/project/attrs",
@@ -467,22 +467,24 @@
           "datasource_id": "pypi_poetry_lock",
           "purl": "pkg:pypi/attrs@21.4.0"
         },
-        "extra_data": {}
+        "extra_data": {
+          "poetry_optional": false
+        }
       },
       {
         "purl": "pkg:pypi/packaging@21.0",
         "extracted_requirement": null,
         "scope": null,
-        "is_runtime": true,
-        "is_optional": false,
+        "is_runtime": null,
+        "is_optional": null,
         "is_pinned": true,
         "is_direct": false,
         "resolved_package": {
           "type": "pypi",
-          "namespace": null,
+          "namespace": "",
           "name": "packaging",
           "version": "21.0",
-          "qualifiers": {},
+          "qualifiers": null,
           "subpath": null,
           "primary_language": "Python",
           "description": null,
@@ -513,7 +515,7 @@
           "file_references": [],
           "is_private": false,
           "is_virtual": true,
-          "extra_data": {},
+          "extra_data": null,
           "dependencies": [
             {
               "purl": "pkg:pypi/pyparsing",
@@ -523,8 +525,8 @@
               "is_optional": false,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             }
           ],
           "repository_homepage_url": "https://pypi.org/project/packaging",
@@ -533,22 +535,24 @@
           "datasource_id": "pypi_poetry_lock",
           "purl": "pkg:pypi/packaging@21.0"
         },
-        "extra_data": {}
+        "extra_data": {
+          "poetry_optional": false
+        }
       },
       {
         "purl": "pkg:pypi/pyparsing@3.1.2",
         "extracted_requirement": null,
         "scope": null,
-        "is_runtime": true,
-        "is_optional": false,
+        "is_runtime": null,
+        "is_optional": null,
         "is_pinned": true,
         "is_direct": false,
         "resolved_package": {
           "type": "pypi",
-          "namespace": null,
+          "namespace": "",
           "name": "pyparsing",
           "version": "3.1.2",
-          "qualifiers": {},
+          "qualifiers": null,
           "subpath": null,
           "primary_language": "Python",
           "description": null,
@@ -579,29 +583,29 @@
           "file_references": [],
           "is_private": false,
           "is_virtual": true,
-          "extra_data": {},
+          "extra_data": null,
           "dependencies": [
             {
               "purl": "pkg:pypi/jinja2",
               "extracted_requirement": null,
               "scope": "diagrams",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/railroad-diagrams",
               "extracted_requirement": null,
               "scope": "diagrams",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             }
           ],
           "repository_homepage_url": "https://pypi.org/project/pyparsing",
@@ -610,22 +614,24 @@
           "datasource_id": "pypi_poetry_lock",
           "purl": "pkg:pypi/pyparsing@3.1.2"
         },
-        "extra_data": {}
+        "extra_data": {
+          "poetry_optional": false
+        }
       },
       {
         "purl": "pkg:pypi/semantic-version@2.10.0",
         "extracted_requirement": null,
         "scope": null,
-        "is_runtime": true,
-        "is_optional": false,
+        "is_runtime": null,
+        "is_optional": null,
         "is_pinned": true,
         "is_direct": false,
         "resolved_package": {
           "type": "pypi",
-          "namespace": null,
+          "namespace": "",
           "name": "semantic-version",
           "version": "2.10.0",
-          "qualifiers": {},
+          "qualifiers": null,
           "subpath": null,
           "primary_language": "Python",
           "description": null,
@@ -656,139 +662,139 @@
           "file_references": [],
           "is_private": false,
           "is_virtual": true,
-          "extra_data": {},
+          "extra_data": null,
           "dependencies": [
             {
               "purl": "pkg:pypi/django",
               "extracted_requirement": ">=1.11",
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/check-manifest",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/colorama",
               "extracted_requirement": "<=0.4.1",
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/coverage",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/flake8",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/nose2",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/readme-renderer",
               "extracted_requirement": "<25.0",
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/tox",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/wheel",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/zest.releaser%5brecommended%5d",
               "extracted_requirement": null,
               "scope": "dev",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/sphinx",
               "extracted_requirement": null,
               "scope": "doc",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             },
             {
               "purl": "pkg:pypi/sphinx-rtd-theme",
               "extracted_requirement": null,
               "scope": "doc",
-              "is_runtime": false,
-              "is_optional": false,
+              "is_runtime": null,
+              "is_optional": true,
               "is_pinned": false,
               "is_direct": true,
-              "resolved_package": {},
-              "extra_data": {}
+              "resolved_package": null,
+              "extra_data": null
             }
           ],
           "repository_homepage_url": "https://pypi.org/project/semantic-version",
@@ -797,22 +803,24 @@
           "datasource_id": "pypi_poetry_lock",
           "purl": "pkg:pypi/semantic-version@2.10.0"
         },
-        "extra_data": {}
+        "extra_data": {
+          "poetry_optional": false
+        }
       },
       {
         "purl": "pkg:pypi/semver@2.13.0",
         "extracted_requirement": null,
         "scope": null,
-        "is_runtime": true,
-        "is_optional": false,
+        "is_runtime": null,
+        "is_optional": null,
         "is_pinned": true,
         "is_direct": false,
         "resolved_package": {
           "type": "pypi",
-          "namespace": null,
+          "namespace": "",
           "name": "semver",
           "version": "2.13.0",
-          "qualifiers": {},
+          "qualifiers": null,
           "subpath": null,
           "primary_language": "Python",
           "description": null,
@@ -843,7 +851,7 @@
           "file_references": [],
           "is_private": false,
           "is_virtual": true,
-          "extra_data": {},
+          "extra_data": null,
           "dependencies": [],
           "repository_homepage_url": "https://pypi.org/project/semver",
           "repository_download_url": "https://pypi.org/packages/source/s/semver/semver-2.13.0.tar.gz",
@@ -851,7 +859,9 @@
           "datasource_id": "pypi_poetry_lock",
           "purl": "pkg:pypi/semver@2.13.0"
         },
-        "extra_data": {}
+        "extra_data": {
+          "poetry_optional": false
+        }
       }
     ],
     "repository_homepage_url": null,

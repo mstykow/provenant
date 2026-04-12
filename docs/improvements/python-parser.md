@@ -70,6 +70,12 @@ Rust now extracts dependency information from RFC822-style Python metadata files
 
 That closes the wheel versus source-package gap for common Python metadata layouts. Extra scopes, simple markers, and pinned requirements are preserved structurally instead of being dropped.
 
+### 7b. More honest `poetry.lock` package inventory semantics
+
+Rust now treats top-level `poetry.lock` package entries as resolved package inventory rather than pretending the lockfile alone proves root-level runtime classification.
+
+The parser still preserves pinned resolved packages and raw optionality signals, but it no longer turns `[[package]].optional` into a synthetic `is_runtime=false` claim. Optional feature edges from `[package.extras]` stay marked optional without forcing a runtime/non-runtime guess that the lockfile does not guarantee.
+
 ### 8. Direct source distribution archive support
 
 Rust now parses Python source distribution archives directly instead of requiring an unpacked `PKG-INFO` file to already exist on disk.
