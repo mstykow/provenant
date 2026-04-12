@@ -190,8 +190,8 @@ jobs:
       - name: Build and run Intel macOS CLI smoke check
         run: cargo run --quiet --locked --bin provenant -- --show-attribution > /dev/null
 
-  rust-scan-integration-tests:
-    name: Scan and Integration Tests (${{ matrix.shard }})
+  rust-contract-integration-tests:
+    name: Contract and Integration Tests (${{ matrix.shard }})
     runs-on: ubuntu-latest
     if: |
       !(github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/'))
@@ -199,10 +199,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - shard: parser-scan-contracts
-            shared_key: rust-scan-integration-tests-release-parser-scan-contracts
-          - shard: integration-suites
-            shared_key: rust-scan-integration-tests-release-integration-suites
+          - shard: contracts
+            shared_key: rust-scan-integration-tests-release-contracts
+          - shard: system-integration
+            shared_key: rust-scan-integration-tests-release-system-integration
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
@@ -221,23 +221,23 @@ jobs:
           shared-key: ${{ matrix.shared_key }}
 
       - name: Run parser-local scanner/assembly contract tests
-        if: matrix.shard == 'parser-scan-contracts'
+        if: matrix.shard == 'contracts'
         run: "cargo test --lib --release --verbose _scan_test::"
 
       - name: Run scanner integration suite
-        if: matrix.shard == 'integration-suites'
+        if: matrix.shard == 'system-integration'
         run: cargo test --test scanner_integration --release --verbose
 
       - name: Run scanner copyright/credits integration suite
-        if: matrix.shard == 'integration-suites'
+        if: matrix.shard == 'system-integration'
         run: cargo test --test scanner_copyright_credits --release --verbose
 
       - name: Run progress CLI integration suite
-        if: matrix.shard == 'integration-suites'
+        if: matrix.shard == 'contracts'
         run: cargo test --test progress_cli_integration --release --verbose
 
       - name: Run output contract fixture suite
-        if: matrix.shard == 'integration-suites'
+        if: matrix.shard == 'contracts'
         run: cargo test --test output_format_golden --release --verbose
 
   golden-tests:
