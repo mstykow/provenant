@@ -15,16 +15,16 @@ jobs:
     if: |
       !(github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/'))
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           submodules: false
           lfs: false
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@e50d5f73bf55f3548d8a3436842c3fd85d02a670 # v16
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
 
       - name: Set up Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@21c6a9e2e8ea727c467decabb9c1aab5fd0e4e78 # v9
+        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
 
       - name: Check flake evaluation
         run: nix flake check --no-build

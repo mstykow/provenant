@@ -43,6 +43,7 @@ push = true
 pre-release-commit-message = "chore: release"
 pre-release-replacements = [
     { file = "CITATION.cff", search = '^version: ".*"$', replace = 'version: "{{version}}"' },
+    { file = "flake.nix", search = '''version = ".*";''', replace = '''version = "{{version}}";''' },
 ]
 pre-release-hook = ["cargo", "generate-lockfile"]
 # Tag message template
