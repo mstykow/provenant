@@ -90,6 +90,22 @@ mod golden_tests {
     }
 
     #[test]
+    fn test_golden_poetry_pyproject_dependency_groups() {
+        let test_file =
+            PathBuf::from("testdata/python/golden/poetry_pyproject_groups/pyproject.toml");
+        let expected_file = PathBuf::from(
+            "testdata/python/golden/poetry_pyproject_groups/pyproject.toml-expected.json",
+        );
+
+        let package_data = PythonParser::extract_first_package(&test_file);
+
+        match compare_package_data_parser_only(&package_data, &expected_file) {
+            Ok(_) => (),
+            Err(e) => panic!("Golden test failed: {}", e),
+        }
+    }
+
+    #[test]
     fn test_golden_pypi_json() {
         let test_file = PathBuf::from("testdata/python/pypi.json");
         let expected_file = PathBuf::from("testdata/python/golden/pypi.json-expected.json");
