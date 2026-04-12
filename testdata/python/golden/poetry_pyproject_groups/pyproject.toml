@@ -1,0 +1,21 @@
+[project]
+name = "poetry-groups-demo"
+version = "1.0.0"
+description = "Golden fixture for Poetry dependency groups"
+dependencies = ["requests>=2.32"]
+
+[tool.poetry]
+requires-poetry = ">=2.0"
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = ">=3.0"
+
+[tool.poetry.group.test.dependencies]
+pytest = ">=8.0"
+pytest-xdist = { version = ">=3.1", extras = ["psutil"] }
+
+[tool.poetry.group.github-actions]
+optional = true
+
+[tool.poetry.group.github-actions.dependencies]
+pytest-github-actions-annotate-failures = "^0.1.7"
