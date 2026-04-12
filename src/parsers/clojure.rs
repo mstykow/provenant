@@ -64,17 +64,32 @@ impl PackageParser for ClojureProjectCljParser {
             }
         };
 
-        match parse_forms(&content)
-            .and_then(|forms| {
-                forms.into_iter().find(|form| {
-                    matches!(
-                        form,
-                        Form::List(items) if matches!(items.first(), Some(Form::Symbol(symbol)) if symbol == "defproject")
-                    )
-                }).ok_or_else(|| "project.clj did not contain a defproject form".to_string())
-            })
-            .and_then(|form| parse_project_clj_form(&form))
-        {
+        if looks_like_template_project_clj(&content) {
+            return vec![default_package_data(Some(DatasourceId::ClojureProjectClj))];
+        }
+
+        if !content.contains("(defproject") {
+            return vec![default_package_data(Some(DatasourceId::ClojureProjectClj))];
+        }
+
+        let forms = match parse_forms(&content) {
+            Ok(forms) => forms,
+            Err(error) => {
+                warn!("Failed to parse project.clj at {:?}: {}", path, error);
+                return vec![default_package_data(Some(DatasourceId::ClojureProjectClj))];
+            }
+        };
+
+        let Some(form) = forms.into_iter().find(|form| {
+            matches!(
+                form,
+                Form::List(items) if matches!(items.first(), Some(Form::Symbol(symbol)) if symbol == "defproject")
+            )
+        }) else {
+            return vec![default_package_data(Some(DatasourceId::ClojureProjectClj))];
+        };
+
+        match parse_project_clj_form(&form) {
             Ok(package) => vec![package],
             Err(error) => {
                 warn!("Failed to parse project.clj at {:?}: {}", path, error);
@@ -161,6 +176,16 @@ impl Reader {
                 self.index += 2;
                 let _ = self.parse_form()?;
                 self.parse_form()
+            }
+            Some('#') if self.peek_n(1) == Some('"') => {
+                // Tolerate regex literals in ignored fields without implementing reader semantics.
+                self.index += 1;
+                self.parse_string().map(Form::String)
+            }
+            Some('#') if self.peek_n(1) == Some('{') => {
+                // Tolerate set literals in ignored fields by treating them as plain collections.
+                self.index += 1;
+                self.parse_collection('{', '}').map(Form::Vector)
             }
             Some(_) => self.parse_atom(),
             None => Err("unexpected end of input".to_string()),
@@ -659,6 +684,15 @@ fn is_exact_version(version: &str) -> bool {
 
 fn strip_exact_prefix(version: &str) -> &str {
     version.trim_start_matches('=')
+}
+
+fn looks_like_template_project_clj(content: &str) -> bool {
+    let Some(defproject_index) = content.find("(defproject") else {
+        return false;
+    };
+
+    let manifest_window = &content[defproject_index..content.len().min(defproject_index + 256)];
+    manifest_window.contains("{{") && manifest_window.contains("}}")
 }
 
 fn default_package_data(datasource_id: Option<DatasourceId>) -> PackageData {
