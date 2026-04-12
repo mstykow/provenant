@@ -24,11 +24,11 @@
       "extracted_requirement": "1.0.195",
       "for_package_uid": "pkg:cargo/test-crate@0.1.0?uuid=fixed-uid-done-for-testing-5642512d1758",
       "is_direct": true,
-      "is_optional": false,
+      "is_optional": null,
       "is_pinned": true,
-      "is_runtime": true,
+      "is_runtime": null,
       "purl": "pkg:cargo/serde@1.0.195",
-      "scope": "dependencies"
+      "scope": null
     },
     {
       "datafile_path": "Cargo.toml",
@@ -58,11 +58,11 @@
       "extracted_requirement": "1.35.1",
       "for_package_uid": "pkg:cargo/test-crate@0.1.0?uuid=fixed-uid-done-for-testing-5642512d1758",
       "is_direct": true,
-      "is_optional": false,
+      "is_optional": null,
       "is_pinned": true,
-      "is_runtime": true,
+      "is_runtime": null,
       "purl": "pkg:cargo/tokio@1.35.1",
-      "scope": "dependencies"
+      "scope": null
     }
   ],
   "files_with_packages": [
