@@ -842,6 +842,50 @@ mod tests {
     }
 
     #[test]
+    fn test_npm_lock_v3_uses_canonical_name_field_for_aliased_package_entries() {
+        let content = r#"{
+            "name": "test",
+            "version": "1.0.0",
+            "lockfileVersion": 3,
+            "packages": {
+                "": {
+                    "name": "test",
+                    "version": "1.0.0",
+                    "dependencies": {
+                        "wrap-ansi-cjs": "7.0.0"
+                    }
+                },
+                "node_modules/wrap-ansi-cjs": {
+                    "name": "wrap-ansi",
+                    "version": "7.0.0",
+                    "resolved": "https://registry.npmjs.org/wrap-ansi/-/wrap-ansi-7.0.0.tgz"
+                }
+            }
+        }"#;
+
+        let (_temp, path) = create_temp_lock_file(content);
+        let package_data = NpmLockParser::extract_first_package(&path);
+
+        assert_eq!(package_data.dependencies.len(), 1);
+        let dep = &package_data.dependencies[0];
+        assert_eq!(dep.purl, Some("pkg:npm/wrap-ansi@7.0.0".to_string()));
+        assert_eq!(dep.extracted_requirement, Some("7.0.0".to_string()));
+        assert_eq!(dep.is_pinned, Some(true));
+        assert_eq!(dep.is_direct, Some(true));
+
+        let resolved = dep
+            .resolved_package
+            .as_ref()
+            .expect("expected resolved package");
+        assert_eq!(resolved.name, "wrap-ansi");
+        assert_eq!(resolved.version, "7.0.0");
+        assert_eq!(
+            resolved.download_url,
+            Some("https://registry.npmjs.org/wrap-ansi/-/wrap-ansi-7.0.0.tgz".to_string())
+        );
+    }
+
+    #[test]
     fn test_npm_lock_v2_nested_duplicate_marks_only_root_entry_direct() {
         let lock_path = PathBuf::from("testdata/npm/lock-v2-nested-dups/package-lock.json");
         let package_data = NpmLockParser::extract_first_package(&lock_path);
