@@ -1,57 +1,43 @@
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::io::Cursor;
-use std::mem;
 
 use anyhow::{Context, Result, anyhow};
 
 use super::tags::{
-    HEADER_I18NTABLE, RPM_I18NSTRING_TYPE, RPM_MAX_TYPE, RPM_MIN_TYPE, RPM_STRING_ARRAY_TYPE,
-    RPM_STRING_TYPE, RPMTAG_HEADERI18NTABLE, RPMTAG_HEADERIMAGE, RPMTAG_HEADERIMMUTABLE,
-    RPMTAG_HEADERSIGNATURES,
+    HEADER_I18NTABLE, RPMTAG_HEADERI18NTABLE, RPMTAG_HEADERIMAGE, RPMTAG_HEADERIMMUTABLE,
+    RPMTAG_HEADERSIGNATURES, TagType,
 };
 
-const REGION_TAG_COUNT: u32 = mem::size_of::<EntryInfo>() as u32;
-const REGION_TAG_TYPE: u32 = 7;
+const ENTRY_INFO_DISK_SIZE: u32 = 16;
+const REGION_TAG_COUNT: u32 = ENTRY_INFO_DISK_SIZE;
 const HEADER_MAX_BYTES: usize = 256 * 1024 * 1024;
 
-const TYPE_SIZES: [Option<u32>; 16] = [
-    Some(1),
-    Some(1),
-    Some(1),
-    Some(2),
-    Some(4),
-    Some(8),
-    None,
-    Some(1),
-    None,
-    None,
-    Some(0),
-    Some(0),
-    Some(0),
-    Some(0),
-    Some(0),
-    Some(0),
-];
-const TYPE_ALIGN: [u32; 16] = [1, 1, 1, 2, 4, 8, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0];
+#[derive(Clone, Debug)]
+struct RawEntryInfo {
+    tag: u32,
+    kind: u32,
+    offset: i32,
+    count: u32,
+}
+
+impl RawEntryInfo {
+    fn to_native(&self) -> Result<EntryInfo> {
+        Ok(EntryInfo {
+            tag: u32::from_be(self.tag),
+            kind: TagType::from_raw(u32::from_be(self.kind))?,
+            offset: i32::from_be(self.offset),
+            count: u32::from_be(self.count),
+        })
+    }
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct EntryInfo {
     pub(crate) tag: u32,
-    pub(crate) kind: u32,
+    pub(crate) kind: TagType,
     pub(crate) offset: i32,
     pub(crate) count: u32,
-}
-
-impl EntryInfo {
-    fn swap_be(&self) -> EntryInfo {
-        EntryInfo {
-            tag: u32::from_be(self.tag),
-            kind: u32::from_be(self.kind),
-            offset: i32::from_be(self.offset),
-            count: u32::from_be(self.count),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -114,7 +100,7 @@ impl PartialEq for IndexEntry {
 impl Eq for IndexEntry {}
 
 pub(crate) struct HeaderBlob {
-    entry_infos: Vec<EntryInfo>,
+    entry_infos: Vec<RawEntryInfo>,
     index_length: u32,
     data_length: u32,
     data_start: u32,
@@ -129,8 +115,7 @@ impl HeaderBlob {
         let mut cursor = Cursor::new(data);
         let index_length = read_be_u32(&mut cursor)?;
         let data_length = read_be_u32(&mut cursor)?;
-        let entry_info_size = mem::size_of::<EntryInfo>() as u32;
-        let data_start = 8 + index_length * entry_info_size;
+        let data_start = 8 + index_length * ENTRY_INFO_DISK_SIZE;
         let total_length = data_start + data_length;
         let data_end = data_start + data_length;
         if index_length < 1 {
@@ -170,7 +155,7 @@ impl HeaderBlob {
             .entry_infos
             .first()
             .context("missing RPM header entry")?
-            .swap_be();
+            .to_native()?;
 
         let (mut entries, computed_length) = if first.tag >= RPMTAG_HEADERI18NTABLE {
             swab_region(
@@ -209,7 +194,7 @@ impl HeaderBlob {
                     .collect();
                 computed_length = dribble_length;
             }
-            computed_length += mem::size_of::<EntryInfo>() as u32;
+            computed_length += ENTRY_INFO_DISK_SIZE;
             (entries, computed_length)
         };
 
@@ -229,7 +214,7 @@ impl HeaderBlob {
             .entry_infos
             .first()
             .context("missing RPM header region entry")?
-            .swap_be();
+            .to_native()?;
         let region_tag = if [
             RPMTAG_HEADERIMAGE,
             RPMTAG_HEADERSIGNATURES,
@@ -245,13 +230,13 @@ impl HeaderBlob {
         if entry.tag != region_tag {
             return Ok(());
         }
-        if !(entry.kind == REGION_TAG_TYPE && entry.count == REGION_TAG_COUNT) {
+        if !(entry.kind == TagType::Bin && entry.count == REGION_TAG_COUNT) {
             return Err(anyhow!("invalid RPM region tag header"));
         }
         if entry.offset < 0
             || is_out_of_range(
                 self.data_length,
-                u32::try_from(entry.offset + REGION_TAG_COUNT as i32)?,
+                u32::try_from(entry.offset + ENTRY_INFO_DISK_SIZE as i32)?,
             )
         {
             return Err(anyhow!("invalid RPM region tag offset"));
@@ -259,22 +244,22 @@ impl HeaderBlob {
 
         let region_end = self.data_start + positive_offset(entry.offset)?;
         let trailer = parse_entry_info_le(
-            data.get(region_end as usize..(region_end + REGION_TAG_COUNT) as usize)
+            data.get(region_end as usize..(region_end + ENTRY_INFO_DISK_SIZE) as usize)
                 .context("invalid RPM region trailer slice")?,
         )?;
 
-        self.region_data_length = region_end + REGION_TAG_COUNT - self.data_start;
+        self.region_data_length = region_end + ENTRY_INFO_DISK_SIZE - self.data_start;
         if region_tag == RPMTAG_HEADERSIGNATURES && entry.tag == RPMTAG_HEADERIMAGE {
             entry.tag = RPMTAG_HEADERSIGNATURES;
         }
         if !(entry.tag == region_tag
-            && entry.kind == REGION_TAG_TYPE
+            && entry.kind == TagType::Bin
             && entry.count == REGION_TAG_COUNT)
         {
             return Err(anyhow!("invalid RPM region trailer header"));
         }
 
-        let mut trailer = trailer.swap_be();
+        let mut trailer = trailer.to_native()?;
         trailer.offset = -trailer.offset;
         self.region_index_length = positive_offset(trailer.offset)? / REGION_TAG_COUNT;
         if trailer.offset % REGION_TAG_COUNT as i32 != 0
@@ -291,7 +276,8 @@ impl HeaderBlob {
         let mut end: u32 = 0;
         let entry_offset = usize::from(self.region_tag != 0);
         for entry in &self.entry_infos[entry_offset..] {
-            let info = entry.swap_be();
+            let info = entry.to_native()?;
+            let kind = info.kind;
             let offset_u32 = positive_offset(info.offset)
                 .map_err(|_| anyhow!("RPM header entry offset out of range"))?;
             if end > offset_u32 {
@@ -300,10 +286,7 @@ impl HeaderBlob {
             if is_reserved_tag(info.tag) {
                 return Err(anyhow!("invalid RPM header tag {}", info.tag));
             }
-            if is_invalid_type(info.kind) {
-                return Err(anyhow!("invalid RPM header type {}", info.kind));
-            }
-            if is_misaligned(info.kind, info.offset) {
+            if is_misaligned(kind, info.offset) {
                 return Err(anyhow!(
                     "misaligned RPM header entry offset {}",
                     info.offset
@@ -315,7 +298,7 @@ impl HeaderBlob {
 
             let length = compute_data_length(
                 data,
-                info.kind,
+                kind,
                 info.count,
                 self.data_start + offset_u32,
                 self.data_end,
@@ -336,34 +319,34 @@ impl HeaderBlob {
 
 fn swab_region(
     data: &[u8],
-    entry_infos: Vec<EntryInfo>,
+    entry_infos: Vec<RawEntryInfo>,
     mut running_length: u32,
     data_start: u32,
     data_end: u32,
 ) -> Result<(Vec<IndexEntry>, u32)> {
     let mut entries = Vec::new();
     for (index, entry_info) in entry_infos.iter().enumerate() {
-        let info = entry_info.swap_be();
+        let info = entry_info.to_native()?;
+        let kind = info.kind;
         let start = data_start + positive_offset(info.offset)?;
         if start >= data_end {
             return Err(anyhow!("RPM entry data offset is outside payload"));
         }
 
-        let length =
-            if index < entry_infos.len() - 1 && TYPE_SIZES.get(info.kind as usize) == Some(&None) {
-                let next_offset = entry_infos[index + 1].swap_be().offset;
-                positive_offset(next_offset - info.offset)? as usize
-            } else {
-                compute_data_length(data, info.kind, info.count, start, data_end)
-                    .ok_or_else(|| anyhow!("RPM entry data length is invalid"))?
-            };
+        let length = if index < entry_infos.len() - 1 && kind.is_variable_length() {
+            let next_offset = entry_infos[index + 1].to_native()?.offset;
+            positive_offset(next_offset - info.offset)? as usize
+        } else {
+            compute_data_length(data, kind, info.count, start, data_end)
+                .ok_or_else(|| anyhow!("RPM entry data length is invalid"))?
+        };
 
         let end = start as usize + length;
         entries.push(IndexEntry {
             info: info.clone(),
             data: data[start as usize..end].to_vec(),
         });
-        running_length += length as u32 + alignment_padding(info.kind, running_length);
+        running_length += length as u32 + alignment_padding(kind, running_length);
     }
 
     Ok((entries, running_length))
@@ -371,27 +354,19 @@ fn swab_region(
 
 fn compute_data_length(
     data: &[u8],
-    kind: u32,
+    kind: TagType,
     count: u32,
     start: u32,
     data_end: u32,
 ) -> Option<usize> {
     match kind {
-        RPM_STRING_TYPE if count != 1 => None,
-        RPM_STRING_TYPE => string_tag_length(data, 1, start, data_end),
-        RPM_STRING_ARRAY_TYPE | RPM_I18NSTRING_TYPE => {
+        TagType::String if count != 1 => None,
+        TagType::String => string_tag_length(data, 1, start, data_end),
+        TagType::StringArray | TagType::I18nString => {
             string_tag_length(data, count, start, data_end)
         }
         _ => {
-            if TYPE_SIZES.get(kind as usize) == Some(&None) {
-                return None;
-            }
-            let size = TYPE_SIZES
-                .get((kind & 0xf) as usize)
-                .copied()
-                .flatten()
-                .unwrap_or(0)
-                * count;
+            let size = kind.element_size().unwrap_or(0) * count;
             if start + size > data_end {
                 None
             } else {
@@ -419,14 +394,13 @@ fn string_tag_length(data: &[u8], count: u32, start: u32, data_end: u32) -> Opti
     Some(length)
 }
 
-fn alignment_padding(kind: u32, current_length: u32) -> u32 {
-    match TYPE_SIZES.get(kind as usize).and_then(|opt| *opt) {
-        Some(size) if size > 1 => {
-            let diff = size - (current_length % size);
-            if diff == size { 0 } else { diff }
-        }
-        _ => 0,
+fn alignment_padding(kind: TagType, current_length: u32) -> u32 {
+    let align = kind.alignment();
+    if align <= 1 {
+        return 0;
     }
+    let diff = align - (current_length % align);
+    if diff == align { 0 } else { diff }
 }
 
 fn is_out_of_range(length: u32, offset: u32) -> bool {
@@ -441,13 +415,9 @@ fn is_reserved_tag(tag: u32) -> bool {
     tag < HEADER_I18NTABLE
 }
 
-fn is_invalid_type(kind: u32) -> bool {
-    !(RPM_MIN_TYPE..=RPM_MAX_TYPE).contains(&kind)
-}
-
-fn is_misaligned(kind: u32, offset: i32) -> bool {
-    let align = TYPE_ALIGN.get(kind as usize).copied().unwrap_or(0);
-    offset & (align as i32 - 1) != 0
+fn is_misaligned(kind: TagType, offset: i32) -> bool {
+    let align = kind.alignment() as i32;
+    offset & (align - 1) != 0
 }
 
 fn read_be_u32(cursor: &mut Cursor<&[u8]>) -> Result<u32> {
@@ -456,15 +426,15 @@ fn read_be_u32(cursor: &mut Cursor<&[u8]>) -> Result<u32> {
     Ok(u32::from_be_bytes(bytes))
 }
 
-fn read_entry_info_le(cursor: &mut Cursor<&[u8]>) -> Result<EntryInfo> {
-    let mut bytes = [0_u8; mem::size_of::<EntryInfo>()];
+fn read_entry_info_le(cursor: &mut Cursor<&[u8]>) -> Result<RawEntryInfo> {
+    let mut bytes = [0_u8; ENTRY_INFO_DISK_SIZE as usize];
     std::io::Read::read_exact(cursor, &mut bytes)?;
     parse_entry_info_le(&bytes)
 }
 
-fn parse_entry_info_le(data: &[u8]) -> Result<EntryInfo> {
+fn parse_entry_info_le(data: &[u8]) -> Result<RawEntryInfo> {
     let mut offset = 0;
-    Ok(EntryInfo {
+    Ok(RawEntryInfo {
         tag: read_u32_le(data, &mut offset)?,
         kind: read_u32_le(data, &mut offset)?,
         offset: read_i32_le(data, &mut offset)?,
