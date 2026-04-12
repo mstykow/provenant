@@ -2297,6 +2297,12 @@ fn parse_manifest_mf(path: &Path) -> PackageData {
                 "pkg:maven/{}/{}@{}",
                 group_id, artifact_id, version
             ));
+        } else if package_data.name.is_none() && package_data.version.is_none() {
+            // A bare MANIFEST.MF without Maven coordinates or implementation
+            // identity is only evidence of a generic JAR manifest, not a Maven
+            // package. Keep the Java manifest datasource so assembly can still
+            // merge richer sibling metadata when present.
+            package_data.package_type = Some(PackageType::Jar);
         }
     }
 

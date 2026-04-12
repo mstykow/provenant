@@ -477,6 +477,22 @@ mod tests {
     }
 
     #[test]
+    fn test_minimal_manifest_mf_stays_generic_jar() {
+        let content = "Manifest-Version: 1.0\nStart-Class: ${foo.main}\n";
+        let (_temp_dir, manifest_path) = create_temp_maven_file(content, "MANIFEST.MF");
+        let package_data = MavenParser::extract_first_package(&manifest_path);
+
+        assert_eq!(package_data.package_type, Some(PackageType::Jar));
+        assert_eq!(
+            package_data.datasource_id,
+            Some(DatasourceId::JavaJarManifest)
+        );
+        assert_eq!(package_data.name, None);
+        assert_eq!(package_data.version, None);
+        assert_eq!(package_data.purl, None);
+    }
+
+    #[test]
     fn test_pom_properties_purl_generation() {
         let pom_props_path = PathBuf::from("testdata/maven/test4/pom.properties");
         let package_data = MavenParser::extract_first_package(&pom_props_path);
