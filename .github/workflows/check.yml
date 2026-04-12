@@ -237,7 +237,7 @@ jobs:
         run: cargo test --test progress_cli_integration --release --verbose
 
       - name: Run output contract fixture suite
-        if: matrix.shard == 'integration'
+        if: matrix.shard == 'contracts'
         run: cargo test --test output_format_golden --release --verbose
 
   golden-tests:
