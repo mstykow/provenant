@@ -90,4 +90,21 @@ mod golden_tests {
             Err(e) => panic!("Golden test failed for jrecordbind: {}", e),
         }
     }
+
+    #[test]
+    fn test_golden_felix_archetype_template() {
+        let test_file = PathBuf::from("testdata/maven-golden/felix-archetype-template/pom.xml");
+        let expected_file =
+            PathBuf::from("testdata/maven-golden/felix-archetype-template/pom.xml.expected");
+
+        assert_fixture_exists(&test_file);
+        assert_fixture_exists(&expected_file);
+
+        let package_data = MavenParser::extract_first_package(&test_file);
+
+        match compare_package_data_parser_only(&package_data, &expected_file) {
+            Ok(_) => (),
+            Err(e) => panic!("Golden test failed for felix-archetype-template: {}", e),
+        }
+    }
 }

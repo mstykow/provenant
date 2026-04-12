@@ -1,0 +1,27 @@
+[
+  {
+    "type": "maven",
+    "namespace": "${groupId}",
+    "name": "${artifactId}",
+    "version": "${version}",
+    "primary_language": "Java",
+    "description": "${artifactId}",
+    "source_packages": [
+      "pkg:maven/%24%7BgroupId%7D/%24%7BartifactId%7D@%24%7Bversion%7D?classifier=sources"
+    ],
+    "dependencies": [
+      {
+        "purl": "pkg:maven/org.apache.felix/org.apache.felix.ipojo.annotations@1.6.0",
+        "extracted_requirement": "1.6.0",
+        "is_optional": false,
+        "is_pinned": true,
+        "is_direct": true
+      }
+    ],
+    "repository_homepage_url": "https://repo1.maven.org/maven2/${groupId}/${artifactId}/${version}/",
+    "repository_download_url": "https://repo1.maven.org/maven2/${groupId}/${artifactId}/${version}/${artifactId}-${version}.jar",
+    "api_data_url": "https://repo1.maven.org/maven2/${groupId}/${artifactId}/${version}/${artifactId}-${version}.pom",
+    "datasource_id": "maven_pom",
+    "purl": "pkg:maven/%24%7BgroupId%7D/%24%7BartifactId%7D@%24%7Bversion%7D"
+  }
+]
