@@ -193,6 +193,9 @@ mod tests {
             "/tmp/requirements_lock_3_11.txt"
         )));
         assert!(RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/reqs.txt"
+        )));
+        assert!(RequirementsTxtParser::is_match(&PathBuf::from(
             "/tmp/requirements.in"
         )));
         assert!(RequirementsTxtParser::is_match(&PathBuf::from(
@@ -211,6 +214,9 @@ mod tests {
             "/tmp/readthedocs-requirements.txt"
         )));
         assert!(RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/mkdocs-reqs.txt"
+        )));
+        assert!(RequirementsTxtParser::is_match(&PathBuf::from(
             "/tmp/demo.egg-info/requires.txt"
         )));
         assert!(RequirementsTxtParser::is_match(&PathBuf::from(
@@ -218,6 +224,12 @@ mod tests {
         )));
         assert!(RequirementsTxtParser::is_match(&PathBuf::from(
             "/tmp/crates/uv-requirements-txt/test-data/requirements-txt/basic.txt"
+        )));
+        assert!(!RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/reqs.in"
+        )));
+        assert!(!RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/prereqs.txt"
         )));
         assert!(!RequirementsTxtParser::is_match(&PathBuf::from(
             "/tmp/key-requirements-expected.txt"
@@ -232,12 +244,16 @@ mod tests {
         let poetry_requirements = unique_temp_path("poetry_requirements.txt");
         fs::write(&poetry_requirements, "requests>=2\n").expect("Failed to write poetry file");
 
+        let mkdocs_requirements = unique_temp_path("mkdocs-reqs.txt");
+        fs::write(&mkdocs_requirements, "mkdocs>=1\n").expect("Failed to write reqs file");
+
         let egg_info_dir = unique_temp_path("demo.egg-info");
         fs::create_dir_all(&egg_info_dir).expect("Failed to create egg-info dir");
         let requires_txt = egg_info_dir.join("requires.txt");
         fs::write(&requires_txt, "pytest>=8\n").expect("Failed to write requires.txt");
 
         let poetry_package = RequirementsTxtParser::extract_first_package(&poetry_requirements);
+        let mkdocs_package = RequirementsTxtParser::extract_first_package(&mkdocs_requirements);
         let egg_info_package = RequirementsTxtParser::extract_first_package(&requires_txt);
 
         assert!(
@@ -247,6 +263,12 @@ mod tests {
                 .any(|dependency| dependency.purl.as_deref() == Some("pkg:pypi/requests"))
         );
         assert!(
+            mkdocs_package
+                .dependencies
+                .iter()
+                .any(|dependency| dependency.purl.as_deref() == Some("pkg:pypi/mkdocs"))
+        );
+        assert!(
             egg_info_package
                 .dependencies
                 .iter()
@@ -254,6 +276,7 @@ mod tests {
         );
 
         fs::remove_file(&poetry_requirements).expect("Failed to remove poetry file");
+        fs::remove_file(&mkdocs_requirements).expect("Failed to remove reqs file");
         fs::remove_file(&requires_txt).expect("Failed to remove requires.txt");
         fs::remove_dir_all(
             poetry_requirements

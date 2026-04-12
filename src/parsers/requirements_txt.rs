@@ -64,14 +64,25 @@ fn is_requirements_txt_filename(name: &str) -> bool {
         return true;
     }
 
-    let Some(stem) = name
-        .strip_suffix(".txt")
-        .or_else(|| name.strip_suffix(".in"))
-    else {
+    let (stem, extension) = if let Some(stem) = name.strip_suffix(".txt") {
+        (stem, "txt")
+    } else if let Some(stem) = name.strip_suffix(".in") {
+        (stem, "in")
+    } else {
         return false;
     };
 
-    stem == "requirements" || stem.starts_with("requirements") || stem.ends_with("requirements")
+    // Keep parity with ScanCode's documented *reqs.txt support while avoiding
+    // extending that broader alias to .in files or unrelated stems such as
+    // `prereqs.txt` that only happen to end with the same letters.
+    stem == "requirements"
+        || stem.starts_with("requirements")
+        || stem.ends_with("requirements")
+        || (extension == "txt" && is_reqs_alias_stem(stem))
+}
+
+fn is_reqs_alias_stem(stem: &str) -> bool {
+    stem == "reqs" || stem.ends_with("-reqs") || stem.ends_with("_reqs") || stem.ends_with(".reqs")
 }
 
 fn is_requirements_like_extension(name: &str) -> bool {
@@ -721,6 +732,10 @@ crate::register_parser!(
     &[
         "**/requirements*.txt",
         "**/*requirements.txt",
+        "**/reqs.txt",
+        "**/*-reqs.txt",
+        "**/*_reqs.txt",
+        "**/*.reqs.txt",
         "**/requirements*.in",
         "**/*requirements.in",
         "**/requires.txt",
