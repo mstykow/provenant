@@ -117,8 +117,8 @@ Additional ecosystems can be added by:
 ## Running Tests
 
 ```bash
-cargo test --lib assembly_golden
-cargo test --lib assembly_golden -- --nocapture
+cargo test --features golden-tests --lib assembly_golden
+cargo test --features golden-tests --lib assembly_golden -- --nocapture
 ```
 
 ## Adding New Test Cases
