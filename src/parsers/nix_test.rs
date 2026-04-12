@@ -20,6 +20,25 @@ mod tests {
         (temp_dir, manifest_path)
     }
 
+    fn create_manifest_tree(
+        dir_name: &str,
+        files: &[(&str, &str)],
+    ) -> (TempDir, std::path::PathBuf) {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let manifest_dir = temp_dir.path().join(dir_name);
+        fs::create_dir_all(&manifest_dir).expect("Failed to create manifest dir");
+
+        for (relative_path, content) in files {
+            let file_path = manifest_dir.join(relative_path);
+            if let Some(parent) = file_path.parent() {
+                fs::create_dir_all(parent).expect("Failed to create parent dir");
+            }
+            fs::write(&file_path, content).expect("Failed to write manifest tree file");
+        }
+
+        (temp_dir, manifest_dir.join("default.nix"))
+    }
+
     #[test]
     fn test_nix_parsers_match_expected_file_names() {
         assert!(NixFlakeParser::is_match(std::path::Path::new("flake.nix")));
@@ -255,6 +274,49 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_flake_metadata_with_let_bound_literals() {
+        let (_temp_dir, path) = create_named_manifest(
+            "bound-flake",
+            "flake.nix",
+            r#"let
+  descriptionText = "Bound demo flake";
+  nixpkgsUrl = "github:NixOS/nixpkgs/nixos-24.11";
+  utilsUrl = "github:numtide/flake-utils";
+in {
+  description = descriptionText;
+  inputs = {
+    nixpkgs.url = nixpkgsUrl;
+    flake-utils = {
+      url = utilsUrl;
+      flake = false;
+    };
+  };
+  outputs = { self, nixpkgs, flake-utils }: { };
+}
+"#,
+        );
+
+        let package = NixFlakeParser::extract_first_package(&path);
+
+        assert_eq!(package.description.as_deref(), Some("Bound demo flake"));
+        assert_eq!(package.dependencies.len(), 2);
+        assert!(package.dependencies.iter().any(|dep| {
+            dep.purl.as_deref() == Some("pkg:nix/nixpkgs")
+                && dep.extracted_requirement.as_deref() == Some("github:NixOS/nixpkgs/nixos-24.11")
+        }));
+        assert!(package.dependencies.iter().any(|dep| {
+            dep.purl.as_deref() == Some("pkg:nix/flake-utils")
+                && dep.extracted_requirement.as_deref() == Some("github:numtide/flake-utils")
+                && dep
+                    .extra_data
+                    .as_ref()
+                    .and_then(|data| data.get("flake"))
+                    .and_then(|value| value.as_bool())
+                    == Some(false)
+        }));
+    }
+
+    #[test]
     fn test_extract_default_nix_derivation_metadata_and_dependencies() {
         let (_temp_dir, path) = create_named_manifest(
             "demo-derivation",
@@ -418,6 +480,255 @@ stdenv.mkDerivation rec {
                 .iter()
                 .any(|dep| dep.purl.as_deref() == Some("pkg:nix/asciidoctor"))
         );
+    }
+
+    #[test]
+    fn test_extract_default_nix_with_let_bound_aliases_and_inherit() {
+        let (_temp_dir, path) = create_named_manifest(
+            "bound-default",
+            "default.nix",
+            r#"let
+  pname = "bound-demo";
+  version = "2.0.0";
+  commonInputs = [ zlib openssl ];
+  metadata = {
+    homepage = "https://example.com/bound-demo";
+  };
+in stdenv.mkDerivation {
+  inherit pname version;
+  name = "${pname}-${version}";
+  buildInputs = commonInputs;
+  homepage = metadata.homepage;
+}
+"#,
+        );
+
+        let package = NixDefaultParser::extract_first_package(&path);
+
+        assert_eq!(package.name.as_deref(), Some("bound-demo"));
+        assert_eq!(package.version.as_deref(), Some("2.0.0"));
+        assert_eq!(
+            package.homepage_url.as_deref(),
+            Some("https://example.com/bound-demo")
+        );
+        assert!(
+            package
+                .dependencies
+                .iter()
+                .any(|dep| dep.purl.as_deref() == Some("pkg:nix/zlib"))
+        );
+        assert!(
+            package
+                .dependencies
+                .iter()
+                .any(|dep| dep.purl.as_deref() == Some("pkg:nix/openssl"))
+        );
+    }
+
+    #[test]
+    fn test_extract_default_nix_from_local_import_wrapper() {
+        let (_temp_dir, path) = create_manifest_tree(
+            "import-wrapper",
+            &[
+                (
+                    "default.nix",
+                    r#"import ./package.nix { }
+"#,
+                ),
+                (
+                    "package.nix",
+                    r#"{ }:
+stdenv.mkDerivation {
+  pname = "imported-demo";
+  version = "1.4.0";
+  buildInputs = [ zlib ];
+}
+"#,
+                ),
+            ],
+        );
+
+        let package = NixDefaultParser::extract_first_package(&path);
+
+        assert_eq!(package.name.as_deref(), Some("imported-demo"));
+        assert_eq!(package.version.as_deref(), Some("1.4.0"));
+        assert!(
+            package
+                .dependencies
+                .iter()
+                .any(|dep| dep.purl.as_deref() == Some("pkg:nix/zlib"))
+        );
+    }
+
+    #[test]
+    fn test_extract_default_nix_from_call_package_wrapper_and_selected_default() {
+        let (_temp_dir, path) = create_manifest_tree(
+            "call-package-wrapper",
+            &[
+                (
+                    "default.nix",
+                    r#"(callPackage ./release.nix { }).defaultNix
+"#,
+                ),
+                (
+                    "release.nix",
+                    r#"{
+  defaultNix = stdenv.mkDerivation {
+    pname = "selected-demo";
+    version = "3.1.0";
+    nativeBuildInputs = [ pkg-config ];
+  };
+}
+"#,
+                ),
+            ],
+        );
+
+        let package = NixDefaultParser::extract_first_package(&path);
+
+        assert_eq!(package.name.as_deref(), Some("selected-demo"));
+        assert_eq!(package.version.as_deref(), Some("3.1.0"));
+        assert!(package.dependencies.iter().any(|dep| {
+            dep.purl.as_deref() == Some("pkg:nix/pkg-config")
+                && dep.scope.as_deref() == Some("nativeBuildInputs")
+        }));
+    }
+
+    #[test]
+    fn test_extract_default_nix_from_local_flake_compat_wrapper() {
+        let (_temp_dir, path) = create_manifest_tree(
+            "flake-compat-wrapper",
+            &[
+                (
+                    "default.nix",
+                    r#"let
+  flake = import ./flake-compat.nix { src = ./.; };
+in flake.defaultNix // {
+  __functor = defaultNix: inputs: defaultNix.overrideInputs inputs;
+}
+"#,
+                ),
+                (
+                    "flake-compat.nix",
+                    r#"{ src }:
+{
+  defaultNix = src;
+}
+"#,
+                ),
+            ],
+        );
+
+        let package = NixDefaultParser::extract_first_package(&path);
+
+        assert_eq!(package.name.as_deref(), Some("flake-compat-wrapper"));
+        assert_eq!(
+            package.purl.as_deref(),
+            Some("pkg:nix/flake-compat-wrapper")
+        );
+    }
+
+    #[test]
+    fn test_extract_default_nix_from_local_flake_compat_selected_default() {
+        let (_temp_dir, path) = create_manifest_tree(
+            "outer-wrapper",
+            &[
+                (
+                    "default.nix",
+                    r#"(import ./flake-compat.nix { src = ./inner; }).defaultNix.default
+"#,
+                ),
+                (
+                    "flake-compat.nix",
+                    r#"{ src }:
+{
+  defaultNix = src;
+}
+"#,
+                ),
+                (
+                    "inner/placeholder.nix",
+                    "# marker file for local source root\n",
+                ),
+            ],
+        );
+
+        let package = NixDefaultParser::extract_first_package(&path);
+
+        assert_eq!(package.name.as_deref(), Some("inner"));
+        assert_eq!(package.purl.as_deref(), Some("pkg:nix/inner"));
+    }
+
+    #[test]
+    fn test_extract_default_nix_from_real_world_dream2nix_root_wrapper_shape() {
+        let (_temp_dir, path) = create_manifest_tree(
+            "dream2nix",
+            &[
+                (
+                    "default.nix",
+                    r#"# This file provides backward compatibility to nix < 2.4 clients
+let
+  flake =
+    import
+    ./dev-flake/flake-compat.nix
+    {src = ./.;};
+in
+  flake.defaultNix
+  // {
+    __functor = defaultNix: inputs: defaultNix.overrideInputs inputs;
+  }
+"#,
+                ),
+                (
+                    "dev-flake/flake-compat.nix",
+                    r#"{ src }:
+{
+  defaultNix = src;
+}
+"#,
+                ),
+            ],
+        );
+
+        let package = NixDefaultParser::extract_first_package(&path);
+
+        assert_eq!(package.name.as_deref(), Some("dream2nix"));
+        assert_eq!(package.purl.as_deref(), Some("pkg:nix/dream2nix"));
+    }
+
+    #[test]
+    fn test_extract_default_nix_from_real_world_dream2nix_dev_flake_shape() {
+        let (temp_dir, _path) = create_manifest_tree(
+            "dream2nix",
+            &[
+                (
+                    "dev-flake/default.nix",
+                    r#"# This file provides backward compatibility to nix < 2.4 clients
+let
+  flake =
+    import
+    ./flake-compat.nix
+    {src = ./.;};
+in
+  flake.defaultNix
+"#,
+                ),
+                (
+                    "dev-flake/flake-compat.nix",
+                    r#"{ src }:
+{
+  defaultNix = src;
+}
+"#,
+                ),
+            ],
+        );
+        let path = temp_dir.path().join("dream2nix/dev-flake/default.nix");
+
+        let package = NixDefaultParser::extract_first_package(&path);
+
+        assert_eq!(package.name.as_deref(), Some("dev-flake"));
+        assert_eq!(package.purl.as_deref(), Some("pkg:nix/dev-flake"));
     }
 
     #[test]

@@ -66,10 +66,7 @@ impl PackageParser for NixFlakeParser {
 
         match parse_flake_nix(path, &content) {
             Ok(package) => vec![package],
-            Err(error) => {
-                warn!("Failed to parse flake.nix at {:?}: {}", path, error);
-                vec![default_flake_package_data()]
-            }
+            Err(_) => vec![default_flake_package_data()],
         }
     }
 }
@@ -94,10 +91,7 @@ impl PackageParser for NixDefaultParser {
 
         match parse_default_nix(path, &content) {
             Ok(package) => vec![package],
-            Err(error) => {
-                warn!("Failed to parse default.nix at {:?}: {}", path, error);
-                vec![default_default_nix_package_data()]
-            }
+            Err(_) => vec![default_default_nix_package_data()],
         }
     }
 }
@@ -109,7 +103,19 @@ enum Expr {
     String(String),
     Symbol(String),
     Application(Vec<Expr>),
+    Let {
+        bindings: Vec<(Vec<String>, Expr)>,
+        body: Box<Expr>,
+    },
+    Select {
+        target: Box<Expr>,
+        path: Vec<String>,
+    },
 }
+
+type NixAttrEntries = [(Vec<String>, Expr)];
+type NixAttrEntriesRef<'a> = &'a NixAttrEntries;
+type NixScopeStack<'a> = Vec<NixAttrEntriesRef<'a>>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Token {
@@ -448,6 +454,13 @@ impl Parser {
             return self.parse_expr();
         }
 
+        if self.looks_like_prefixed_lambda_binder_set()? {
+            self.index += 1;
+            self.skip_lambda_binder_set()?;
+            self.expect(&Token::Colon)?;
+            return self.parse_expr();
+        }
+
         let first = self.parse_term()?;
         if self.consume(&Token::Colon) {
             return self.parse_expr();
@@ -458,11 +471,28 @@ impl Parser {
             terms.push(self.parse_term()?);
         }
 
-        if terms.len() == 1 {
-            Ok(terms.pop().expect("single term"))
+        let expr = if terms.len() == 1 {
+            terms.pop().expect("single term")
         } else {
-            Ok(Expr::Application(terms))
+            Expr::Application(terms)
+        };
+
+        self.parse_postfix(expr)
+    }
+
+    fn parse_postfix(&mut self, mut expr: Expr) -> Result<Expr, String> {
+        while self.consume(&Token::Dot) {
+            let mut path = vec![self.take_attr_key()?];
+            while self.consume(&Token::Dot) {
+                path.push(self.take_attr_key()?);
+            }
+            expr = Expr::Select {
+                target: Box::new(expr),
+                path,
+            };
         }
+
+        Ok(expr)
     }
 
     fn parse_term(&mut self) -> Result<Expr, String> {
@@ -498,6 +528,7 @@ impl Parser {
 
     fn parse_let_in_expr(&mut self) -> Result<Expr, String> {
         self.take_exact_ident("let")?;
+        let mut bindings = Vec::new();
 
         while !matches!(self.peek(), Some(Token::Ident(keyword)) if keyword == "in") {
             if self.peek().is_none() {
@@ -505,18 +536,22 @@ impl Parser {
             }
 
             if matches!(self.peek(), Some(Token::Ident(keyword)) if keyword == "inherit") {
-                self.skip_until_semicolon()?;
+                bindings.extend(self.parse_inherit_entries()?);
                 continue;
             }
 
-            let _key = self.parse_attr_path()?;
+            let key = self.parse_attr_path()?;
             self.expect(&Token::Equals)?;
-            let _value = self.parse_expr()?;
+            let value = self.parse_expr()?;
             self.expect(&Token::Semicolon)?;
+            bindings.push((key, value));
         }
 
         self.take_exact_ident("in")?;
-        self.parse_expr()
+        Ok(Expr::Let {
+            bindings,
+            body: Box::new(self.parse_expr()?),
+        })
     }
 
     fn parse_attrset(&mut self) -> Result<Expr, String> {
@@ -533,7 +568,7 @@ impl Parser {
             }
 
             if matches!(self.peek(), Some(Token::Ident(keyword)) if keyword == "inherit") {
-                self.skip_until_semicolon()?;
+                entries.extend(self.parse_inherit_entries()?);
                 continue;
             }
 
@@ -551,6 +586,37 @@ impl Parser {
             path.push(self.take_attr_key()?);
         }
         Ok(path)
+    }
+
+    fn parse_inherit_entries(&mut self) -> Result<Vec<(Vec<String>, Expr)>, String> {
+        self.take_exact_ident("inherit")?;
+
+        let inherit_from = if self.consume(&Token::LParen) {
+            let expr = self.parse_expr()?;
+            self.expect(&Token::RParen)?;
+            Some(expr)
+        } else {
+            None
+        };
+
+        let mut entries = Vec::new();
+        while !self.consume(&Token::Semicolon) {
+            if self.peek().is_none() {
+                return Err("unterminated inherit statement".to_string());
+            }
+
+            let name = self.take_attr_key()?;
+            let value = match &inherit_from {
+                Some(source) => Expr::Select {
+                    target: Box::new(source.clone()),
+                    path: vec![name.clone()],
+                },
+                None => Expr::Symbol(name.clone()),
+            };
+            entries.push((vec![name], value));
+        }
+
+        Ok(entries)
     }
 
     fn parse_list(&mut self) -> Result<Expr, String> {
@@ -601,16 +667,6 @@ impl Parser {
         }
     }
 
-    fn skip_until_semicolon(&mut self) -> Result<(), String> {
-        while !self.consume(&Token::Semicolon) {
-            if self.peek().is_none() {
-                return Err("unterminated statement".to_string());
-            }
-            self.index += 1;
-        }
-        Ok(())
-    }
-
     fn can_start_term(&self) -> bool {
         matches!(
             self.peek(),
@@ -627,8 +683,25 @@ impl Parser {
             return Ok(false);
         }
 
+        self.looks_like_lambda_binder_set_from(self.index)
+    }
+
+    fn looks_like_prefixed_lambda_binder_set(&self) -> Result<bool, String> {
+        match (self.peek(), self.peek_n(1)) {
+            (Some(Token::Ident(prefix)), Some(Token::LBrace)) if prefix.ends_with('@') => {
+                self.looks_like_lambda_binder_set_from(self.index + 1)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn looks_like_lambda_binder_set_from(&self, start_index: usize) -> Result<bool, String> {
+        if self.tokens.get(start_index) != Some(&Token::LBrace) {
+            return Ok(false);
+        }
+
         let mut depth = 0usize;
-        let mut index = self.index;
+        let mut index = start_index;
 
         while let Some(token) = self.tokens.get(index) {
             match token {
@@ -701,56 +774,29 @@ impl Parser {
 
 fn parse_flake_nix(path: &Path, content: &str) -> Result<PackageData, String> {
     let expr = parse_nix_expr(content)?;
-    let root = attrset_entries(&expr)
+    let scopes = Vec::new();
+    let (root, scopes) = root_attrset_with_scopes(&expr, &scopes)
         .ok_or_else(|| "flake.nix root was not an attribute set".to_string())?;
 
     let mut package = default_flake_package_data();
     package.name = fallback_name(path);
-    package.description = find_string_attr(root, &["description"]);
+    package.description = find_string_attr_with_scopes(root, &["description"], &scopes);
     package.purl = package
         .name
         .as_deref()
         .and_then(|name| build_nix_purl(name, None));
-    package.dependencies = build_flake_dependencies(root);
+    package.dependencies = build_flake_dependencies(root, &scopes);
 
     Ok(package)
 }
 
 fn parse_default_nix(path: &Path, content: &str) -> Result<PackageData, String> {
-    let expr = parse_nix_expr(content)?;
-    let derivation = find_mk_derivation_attrset(&expr)
-        .ok_or_else(|| "default.nix did not contain a supported mkDerivation call".to_string())?;
-
-    let mut package = default_default_nix_package_data();
-    package.name = find_string_attr(derivation, &["pname"]).or_else(|| {
-        find_string_attr(derivation, &["name"]).map(|name| split_derivation_name(&name).0)
-    });
-    package.version = find_string_attr(derivation, &["version"]).or_else(|| {
-        find_string_attr(derivation, &["name"]).and_then(|name| split_derivation_name(&name).1)
-    });
-    package.description = find_string_attr(derivation, &["meta", "description"])
-        .or_else(|| find_string_attr(derivation, &["description"]));
-    package.homepage_url = find_string_attr(derivation, &["meta", "homepage"])
-        .or_else(|| find_string_attr(derivation, &["homepage"]));
-    package.extracted_license_statement = find_attr(derivation, &["meta", "license"])
-        .and_then(expr_to_scalar_string)
-        .or_else(|| find_attr(derivation, &["license"]).and_then(expr_to_scalar_string));
-    package.dependencies = [
-        build_list_dependencies(derivation, "nativeBuildInputs", false),
-        build_list_dependencies(derivation, "buildInputs", true),
-        build_list_dependencies(derivation, "propagatedBuildInputs", true),
-        build_list_dependencies(derivation, "checkInputs", false),
-    ]
-    .concat();
-    if package.name.is_none() {
-        package.name = fallback_name(path);
+    match parse_nix_expr(content) {
+        Ok(expr) => extract_default_nix_package(path, &expr, &Vec::new(), 0)
+            .or_else(|_| extract_flake_compat_default_package_from_content(path, content)),
+        Err(parse_error) => extract_flake_compat_default_package_from_content(path, content)
+            .map_err(|_| parse_error),
     }
-    package.purl = package
-        .name
-        .as_deref()
-        .and_then(|name| build_nix_purl(name, package.version.as_deref()));
-
-    Ok(package)
 }
 
 fn parse_flake_lock(path: &Path, json: &JsonValue) -> Result<PackageData, String> {
@@ -890,7 +936,10 @@ fn normalize_extra_key(key: &str) -> String {
     }
 }
 
-fn build_flake_dependencies(root: &[(Vec<String>, Expr)]) -> Vec<Dependency> {
+fn build_flake_dependencies(
+    root: &[(Vec<String>, Expr)],
+    scopes: &[&[(Vec<String>, Expr)]],
+) -> Vec<Dependency> {
     let mut inputs: HashMap<String, FlakeInputInfo> = HashMap::new();
 
     for (path, expr) in root {
@@ -900,12 +949,12 @@ fn build_flake_dependencies(root: &[(Vec<String>, Expr)]) -> Vec<Dependency> {
 
         if path.len() == 1 {
             if let Some(entries) = attrset_entries(expr) {
-                collect_input_entries(entries, &mut inputs, None);
+                collect_input_entries(entries, scopes, &mut inputs, None);
             }
             continue;
         }
 
-        collect_input_path(&path[1..], expr, &mut inputs);
+        collect_input_path(&path[1..], expr, scopes, &mut inputs);
     }
 
     let mut dependencies = inputs
@@ -953,6 +1002,7 @@ fn build_flake_dependencies(root: &[(Vec<String>, Expr)]) -> Vec<Dependency> {
 
 fn collect_input_entries(
     entries: &[(Vec<String>, Expr)],
+    scopes: &[&[(Vec<String>, Expr)]],
     inputs: &mut HashMap<String, FlakeInputInfo>,
     current_input: Option<&str>,
 ) {
@@ -962,24 +1012,36 @@ fn collect_input_entries(
                 inputs.entry(input_name.to_string()).or_default(),
                 path,
                 expr,
+                scopes,
             );
             continue;
         }
 
-        collect_input_path(path, expr, inputs);
+        collect_input_path(path, expr, scopes, inputs);
     }
 }
 
-fn collect_input_path(path: &[String], expr: &Expr, inputs: &mut HashMap<String, FlakeInputInfo>) {
+fn collect_input_path(
+    path: &[String],
+    expr: &Expr,
+    scopes: &[&[(Vec<String>, Expr)]],
+    inputs: &mut HashMap<String, FlakeInputInfo>,
+) {
     let Some(input_name) = path.first() else {
         return;
     };
 
     if path.len() == 1 {
         match expr {
-            Expr::AttrSet(entries) => collect_input_entries(entries, inputs, Some(input_name)),
+            Expr::AttrSet(entries) => {
+                collect_input_entries(entries, scopes, inputs, Some(input_name))
+            }
             Expr::String(value) => {
                 inputs.entry(input_name.clone()).or_default().requirement = Some(value.clone())
+            }
+            Expr::Symbol(value) => {
+                inputs.entry(input_name.clone()).or_default().requirement =
+                    expr_as_string_with_scopes(&Expr::Symbol(value.clone()), scopes)
             }
             _ => {}
         }
@@ -990,24 +1052,30 @@ fn collect_input_path(path: &[String], expr: &Expr, inputs: &mut HashMap<String,
         inputs.entry(input_name.clone()).or_default(),
         &path[1..],
         expr,
+        scopes,
     );
 }
 
-fn apply_input_field(info: &mut FlakeInputInfo, path: &[String], expr: &Expr) {
+fn apply_input_field(
+    info: &mut FlakeInputInfo,
+    path: &[String],
+    expr: &Expr,
+    scopes: &[&[(Vec<String>, Expr)]],
+) {
     if path == ["url"] {
-        info.requirement = expr_as_string(expr);
+        info.requirement = expr_as_string_with_scopes(expr, scopes);
         return;
     }
 
     if path == ["flake"] {
-        info.flake = expr_as_bool(expr);
+        info.flake = expr_as_bool_with_scopes(expr, scopes);
         return;
     }
 
     if path.len() == 3
         && path[0] == "inputs"
         && path[2] == "follows"
-        && let Some(value) = expr_as_string(expr)
+        && let Some(value) = expr_as_string_with_scopes(expr, scopes)
     {
         info.follows.push(value);
     }
@@ -1017,17 +1085,18 @@ fn build_list_dependencies(
     entries: &[(Vec<String>, Expr)],
     field_name: &str,
     runtime: bool,
+    scopes: &[&[(Vec<String>, Expr)]],
 ) -> Vec<Dependency> {
     let Some(expr) = find_attr(entries, &[field_name]) else {
         return Vec::new();
     };
-    let Some(items) = list_items(expr) else {
+    let Some(items) = list_items_with_scopes(expr, scopes) else {
         return Vec::new();
     };
 
     items
         .iter()
-        .flat_map(expr_to_dependency_symbols)
+        .flat_map(|expr| expr_to_dependency_symbols_with_scopes(expr, scopes))
         .filter_map(|symbol| {
             let name = symbol.rsplit('.').next()?.to_string();
             Some(Dependency {
@@ -1045,10 +1114,25 @@ fn build_list_dependencies(
         .collect()
 }
 
-fn expr_to_dependency_symbols(expr: &Expr) -> Vec<String> {
+fn expr_to_dependency_symbols_with_scopes(
+    expr: &Expr,
+    scopes: &[&[(Vec<String>, Expr)]],
+) -> Vec<String> {
     match expr {
-        Expr::Symbol(symbol) => vec![symbol.clone()],
-        Expr::Application(parts) => parts.iter().filter_map(expr_as_symbol).collect(),
+        Expr::Symbol(symbol) => resolve_symbol(symbol, scopes, 0)
+            .map(|resolved| expr_to_dependency_symbols_with_scopes(resolved, scopes))
+            .unwrap_or_else(|| vec![symbol.clone()]),
+        Expr::Application(parts) => parts
+            .iter()
+            .filter_map(|expr| expr_as_symbol_with_scopes(expr, scopes))
+            .collect(),
+        Expr::Let { bindings, body } => {
+            let scopes = extend_scopes(scopes, bindings);
+            expr_to_dependency_symbols_with_scopes(body, &scopes)
+        }
+        Expr::Select { .. } => expr_as_symbol_with_scopes(expr, scopes)
+            .into_iter()
+            .collect(),
         _ => Vec::new(),
     }
 }
@@ -1080,17 +1164,20 @@ fn attrset_entries(expr: &Expr) -> Option<&[(Vec<String>, Expr)]> {
     }
 }
 
-fn list_items(expr: &Expr) -> Option<&[Expr]> {
+fn list_items_with_scopes<'a>(
+    expr: &'a Expr,
+    scopes: &[&'a [(Vec<String>, Expr)]],
+) -> Option<&'a [Expr]> {
     match expr {
         Expr::List(items) => Some(items),
-        _ => None,
-    }
-}
-
-fn expr_as_string(expr: &Expr) -> Option<String> {
-    match expr {
-        Expr::String(value) => Some(value.clone()),
-        Expr::Symbol(value) => Some(value.clone()),
+        Expr::Let { bindings, body } => {
+            let scopes = extend_scopes(scopes, bindings);
+            list_items_with_scopes(body, &scopes)
+        }
+        Expr::Symbol(symbol) => resolve_symbol(symbol, scopes, 0)
+            .and_then(|resolved| list_items_with_scopes(resolved, scopes)),
+        Expr::Select { target, path } => resolve_select(target, path, scopes, 0)
+            .and_then(|resolved| list_items_with_scopes(resolved, scopes)),
         _ => None,
     }
 }
@@ -1102,6 +1189,21 @@ fn expr_as_symbol(expr: &Expr) -> Option<String> {
     }
 }
 
+fn expr_as_symbol_with_scopes(expr: &Expr, scopes: &[&[(Vec<String>, Expr)]]) -> Option<String> {
+    match expr {
+        Expr::Symbol(value) => resolve_symbol(value, scopes, 0)
+            .and_then(|resolved| expr_as_symbol_with_scopes(resolved, scopes))
+            .or_else(|| Some(value.clone())),
+        Expr::Select { target, path } => resolve_select(target, path, scopes, 0)
+            .and_then(|resolved| expr_as_symbol_with_scopes(resolved, scopes)),
+        Expr::Let { bindings, body } => {
+            let scopes = extend_scopes(scopes, bindings);
+            expr_as_symbol_with_scopes(body, &scopes)
+        }
+        _ => expr_as_symbol(expr),
+    }
+}
+
 fn expr_as_bool(expr: &Expr) -> Option<bool> {
     match expr {
         Expr::Symbol(value) if value == "true" => Some(true),
@@ -1110,11 +1212,49 @@ fn expr_as_bool(expr: &Expr) -> Option<bool> {
     }
 }
 
-fn expr_to_scalar_string(expr: &Expr) -> Option<String> {
+fn expr_as_bool_with_scopes(expr: &Expr, scopes: &[&[(Vec<String>, Expr)]]) -> Option<bool> {
     match expr {
-        Expr::String(value) | Expr::Symbol(value) => Some(value.clone()),
-        Expr::Application(parts) => parts.last().and_then(expr_to_scalar_string),
+        Expr::Let { bindings, body } => {
+            let scopes = extend_scopes(scopes, bindings);
+            expr_as_bool_with_scopes(body, &scopes)
+        }
+        Expr::Symbol(value) => resolve_symbol(value, scopes, 0)
+            .and_then(|resolved| expr_as_bool_with_scopes(resolved, scopes))
+            .or_else(|| expr_as_bool(expr)),
+        Expr::Select { target, path } => resolve_select(target, path, scopes, 0)
+            .and_then(|resolved| expr_as_bool_with_scopes(resolved, scopes)),
+        _ => expr_as_bool(expr),
+    }
+}
+
+fn expr_as_string_with_scopes(expr: &Expr, scopes: &[&[(Vec<String>, Expr)]]) -> Option<String> {
+    match expr {
+        Expr::String(value) => Some(interpolate_string(value, scopes)),
+        Expr::Symbol(value) => resolve_symbol(value, scopes, 0)
+            .and_then(|resolved| expr_as_string_with_scopes(resolved, scopes))
+            .or_else(|| Some(value.clone())),
+        Expr::Application(parts) => parts
+            .last()
+            .and_then(|expr| expr_as_string_with_scopes(expr, scopes)),
+        Expr::Let { bindings, body } => {
+            let scopes = extend_scopes(scopes, bindings);
+            expr_as_string_with_scopes(body, &scopes)
+        }
+        Expr::Select { target, path } => resolve_select(target, path, scopes, 0)
+            .and_then(|resolved| expr_as_string_with_scopes(resolved, scopes)),
         _ => None,
+    }
+}
+
+fn expr_to_scalar_string_with_scopes(
+    expr: &Expr,
+    scopes: &[&[(Vec<String>, Expr)]],
+) -> Option<String> {
+    match expr {
+        Expr::Application(parts) => parts
+            .last()
+            .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes)),
+        _ => expr_as_string_with_scopes(expr, scopes),
     }
 }
 
@@ -1139,8 +1279,12 @@ fn find_attr<'a>(entries: &'a [(Vec<String>, Expr)], path: &[&str]) -> Option<&'
     None
 }
 
-fn find_string_attr(entries: &[(Vec<String>, Expr)], path: &[&str]) -> Option<String> {
-    find_attr(entries, path).and_then(expr_to_scalar_string)
+fn find_string_attr_with_scopes(
+    entries: &[(Vec<String>, Expr)],
+    path: &[&str],
+    scopes: &[&[(Vec<String>, Expr)]],
+) -> Option<String> {
+    find_attr(entries, path).and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes))
 }
 
 fn find_mk_derivation_attrset(expr: &Expr) -> Option<&[(Vec<String>, Expr)]> {
@@ -1156,6 +1300,503 @@ fn find_mk_derivation_attrset(expr: &Expr) -> Option<&[(Vec<String>, Expr)]> {
             None
         }
         _ => None,
+    }
+}
+
+fn extend_scopes<'a>(
+    scopes: &[NixAttrEntriesRef<'a>],
+    bindings: NixAttrEntriesRef<'a>,
+) -> NixScopeStack<'a> {
+    let mut extended = scopes.to_vec();
+    extended.push(bindings);
+    extended
+}
+
+fn root_attrset_with_scopes<'a>(
+    expr: &'a Expr,
+    scopes: &[NixAttrEntriesRef<'a>],
+) -> Option<(NixAttrEntriesRef<'a>, NixScopeStack<'a>)> {
+    match expr {
+        Expr::AttrSet(entries) => Some((entries, scopes.to_vec())),
+        Expr::Let { bindings, body } => {
+            let scopes = extend_scopes(scopes, bindings);
+            root_attrset_with_scopes(body, &scopes)
+        }
+        _ => None,
+    }
+}
+
+fn lookup_binding<'a>(scopes: &[NixAttrEntriesRef<'a>], name: &str) -> Option<&'a Expr> {
+    scopes
+        .iter()
+        .rev()
+        .find_map(|bindings| find_attr(bindings, &[name]))
+}
+
+fn resolve_symbol<'a>(
+    symbol: &str,
+    scopes: &[NixAttrEntriesRef<'a>],
+    depth: usize,
+) -> Option<&'a Expr> {
+    if depth > 8 {
+        return None;
+    }
+
+    let mut parts = symbol.split('.');
+    let head = parts.next()?;
+    let mut expr = lookup_binding(scopes, head)?;
+    let rest = parts.collect::<Vec<_>>();
+    if rest.is_empty() {
+        return Some(expr);
+    }
+
+    for segment in rest {
+        expr = resolve_select(expr, &[segment.to_string()], scopes, depth + 1)?;
+    }
+
+    Some(expr)
+}
+
+fn resolve_select<'a>(
+    target: &'a Expr,
+    path: &[String],
+    scopes: &[NixAttrEntriesRef<'a>],
+    depth: usize,
+) -> Option<&'a Expr> {
+    if depth > 8 {
+        return None;
+    }
+
+    match target {
+        Expr::AttrSet(entries) => find_attr(
+            entries,
+            &path.iter().map(String::as_str).collect::<Vec<_>>(),
+        ),
+        Expr::Let { bindings, body } => {
+            let scopes = extend_scopes(scopes, bindings);
+            resolve_select(body, path, &scopes, depth + 1)
+        }
+        Expr::Symbol(symbol) => resolve_symbol(symbol, scopes, depth + 1)
+            .and_then(|resolved| resolve_select(resolved, path, scopes, depth + 1)),
+        Expr::Select {
+            target: inner_target,
+            path: inner_path,
+        } => resolve_select(inner_target, inner_path, scopes, depth + 1)
+            .and_then(|resolved| resolve_select(resolved, path, scopes, depth + 1)),
+        _ => None,
+    }
+}
+
+fn interpolate_string(value: &str, scopes: &[&[(Vec<String>, Expr)]]) -> String {
+    let mut result = String::new();
+    let mut index = 0usize;
+
+    while let Some(relative_start) = value[index..].find("${") {
+        let start = index + relative_start;
+        result.push_str(&value[index..start]);
+
+        let placeholder_start = start + 2;
+        let Some(relative_end) = value[placeholder_start..].find('}') else {
+            result.push_str(&value[start..]);
+            return result;
+        };
+        let end = placeholder_start + relative_end;
+        let placeholder = value[placeholder_start..end].trim();
+        if !placeholder.is_empty()
+            && placeholder
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
+            && let Some(resolved) = resolve_symbol(placeholder, scopes, 0)
+            && let Some(replacement) = expr_as_string_with_scopes(resolved, scopes)
+        {
+            result.push_str(&replacement);
+        } else {
+            result.push_str(&value[start..=end]);
+        }
+
+        index = end + 1;
+    }
+
+    result.push_str(&value[index..]);
+    result
+}
+
+fn extract_default_nix_package(
+    path: &Path,
+    expr: &Expr,
+    scopes: &[&[(Vec<String>, Expr)]],
+    depth: usize,
+) -> Result<PackageData, String> {
+    if depth > 2 {
+        return Err("default.nix exceeded supported local import depth".to_string());
+    }
+
+    match expr {
+        Expr::Let { bindings, body } => {
+            let scopes = extend_scopes(scopes, bindings);
+            extract_default_nix_package(path, body, &scopes, depth)
+        }
+        Expr::Application(parts) => {
+            if let Some(derivation) = find_mk_derivation_attrset(expr) {
+                return build_default_package_from_attrset(path, derivation, scopes);
+            }
+
+            if let Some((imported_expr, imported_path)) =
+                try_follow_local_nix_application(path, parts, scopes)
+            {
+                return extract_default_nix_package(
+                    &imported_path,
+                    &imported_expr,
+                    &Vec::new(),
+                    depth + 1,
+                );
+            }
+
+            if let Some(package) = parts
+                .first()
+                .and_then(|part| extract_flake_compat_package_from_expr(path, part, scopes, depth))
+            {
+                return Ok(package);
+            }
+
+            Err("default.nix did not contain a supported mkDerivation call".to_string())
+        }
+        Expr::Select {
+            target,
+            path: select_path,
+        } => {
+            if let Some(package) =
+                extract_flake_compat_package_from_select(path, target, select_path, scopes, depth)
+            {
+                return Ok(package);
+            }
+
+            if let Some((imported_expr, imported_path)) =
+                try_follow_selected_local_import(path, target, select_path, scopes)
+            {
+                return extract_default_nix_package(
+                    &imported_path,
+                    &imported_expr,
+                    &Vec::new(),
+                    depth + 1,
+                );
+            }
+
+            if let Some(resolved) = resolve_select(target, select_path, scopes, 0) {
+                return extract_default_nix_package(path, resolved, scopes, depth);
+            }
+
+            Err("default.nix did not contain a supported mkDerivation call".to_string())
+        }
+        Expr::Symbol(_) => extract_flake_compat_package_from_expr(path, expr, scopes, depth)
+            .ok_or_else(|| "default.nix did not contain a supported mkDerivation call".to_string()),
+        _ => Err("default.nix did not contain a supported mkDerivation call".to_string()),
+    }
+}
+
+fn build_default_package_from_attrset(
+    path: &Path,
+    derivation: &[(Vec<String>, Expr)],
+    scopes: &[&[(Vec<String>, Expr)]],
+) -> Result<PackageData, String> {
+    let mut package = default_default_nix_package_data();
+    package.name = find_string_attr_with_scopes(derivation, &["pname"], scopes).or_else(|| {
+        find_string_attr_with_scopes(derivation, &["name"], scopes)
+            .map(|name| split_derivation_name(&name).0)
+    });
+    package.version =
+        find_string_attr_with_scopes(derivation, &["version"], scopes).or_else(|| {
+            find_string_attr_with_scopes(derivation, &["name"], scopes)
+                .and_then(|name| split_derivation_name(&name).1)
+        });
+    package.description =
+        find_string_attr_with_scopes(derivation, &["meta", "description"], scopes)
+            .or_else(|| find_string_attr_with_scopes(derivation, &["description"], scopes));
+    package.homepage_url = find_string_attr_with_scopes(derivation, &["meta", "homepage"], scopes)
+        .or_else(|| find_string_attr_with_scopes(derivation, &["homepage"], scopes));
+    package.extracted_license_statement = find_attr(derivation, &["meta", "license"])
+        .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes))
+        .or_else(|| {
+            find_attr(derivation, &["license"])
+                .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes))
+        });
+    package.dependencies = [
+        build_list_dependencies(derivation, "nativeBuildInputs", false, scopes),
+        build_list_dependencies(derivation, "buildInputs", true, scopes),
+        build_list_dependencies(derivation, "propagatedBuildInputs", true, scopes),
+        build_list_dependencies(derivation, "checkInputs", false, scopes),
+    ]
+    .concat();
+    if package.name.is_none() {
+        package.name = fallback_name(path);
+    }
+    package.purl = package
+        .name
+        .as_deref()
+        .and_then(|name| build_nix_purl(name, package.version.as_deref()));
+
+    Ok(package)
+}
+
+fn try_follow_local_nix_application(
+    path: &Path,
+    parts: &[Expr],
+    scopes: &[&[(Vec<String>, Expr)]],
+) -> Option<(Expr, std::path::PathBuf)> {
+    let head = parts.first().and_then(expr_as_symbol)?;
+    let is_supported_wrapper = head == "import" || head.ends_with("callPackage");
+    if !is_supported_wrapper {
+        return None;
+    }
+
+    let local_path = parts
+        .get(1)
+        .and_then(|expr| expr_as_symbol_with_scopes(expr, scopes))?;
+    if !is_local_nix_path(&local_path) {
+        return None;
+    }
+
+    let resolved_path = resolve_local_nix_path(path, &local_path)?;
+    let content = fs::read_to_string(&resolved_path).ok()?;
+    let expr = parse_nix_expr(&content).ok()?;
+    Some((expr, resolved_path))
+}
+
+fn try_follow_selected_local_import(
+    path: &Path,
+    target: &Expr,
+    select_path: &[String],
+    scopes: &[&[(Vec<String>, Expr)]],
+) -> Option<(Expr, std::path::PathBuf)> {
+    let Expr::Application(parts) = target else {
+        return None;
+    };
+
+    let (imported_expr, imported_path) = try_follow_local_nix_application(path, parts, scopes)?;
+    let selected = attrset_entries(&imported_expr).and_then(|entries| {
+        find_attr(
+            entries,
+            &select_path.iter().map(String::as_str).collect::<Vec<_>>(),
+        )
+    })?;
+    Some((selected.clone(), imported_path))
+}
+
+fn extract_flake_compat_package_from_expr(
+    path: &Path,
+    expr: &Expr,
+    scopes: &[&[(Vec<String>, Expr)]],
+    depth: usize,
+) -> Option<PackageData> {
+    if depth > 2 {
+        return None;
+    }
+
+    match expr {
+        Expr::Select {
+            target,
+            path: select_path,
+        } => extract_flake_compat_package_from_select(path, target, select_path, scopes, depth),
+        Expr::Let { bindings, body } => {
+            let scopes = extend_scopes(scopes, bindings);
+            extract_flake_compat_package_from_expr(path, body, &scopes, depth)
+        }
+        Expr::Symbol(symbol) => {
+            if let Some((head, rest)) = symbol.split_once('.') {
+                let select_path = rest.split('.').map(ToOwned::to_owned).collect::<Vec<_>>();
+                resolve_symbol(head, scopes, 0)
+                    .and_then(|resolved| {
+                        extract_flake_compat_package_from_select(
+                            path,
+                            resolved,
+                            &select_path,
+                            scopes,
+                            depth,
+                        )
+                    })
+                    .or_else(|| {
+                        let target = Expr::Symbol(head.to_string());
+                        extract_flake_compat_package_from_select(
+                            path,
+                            &target,
+                            &select_path,
+                            scopes,
+                            depth,
+                        )
+                    })
+                    .or_else(|| {
+                        resolve_symbol(symbol, scopes, 0).and_then(|resolved| {
+                            extract_flake_compat_package_from_expr(path, resolved, scopes, depth)
+                        })
+                    })
+            } else {
+                resolve_symbol(symbol, scopes, 0).and_then(|resolved| {
+                    extract_flake_compat_package_from_expr(path, resolved, scopes, depth)
+                })
+            }
+        }
+        _ => None,
+    }
+}
+
+fn extract_flake_compat_package_from_select(
+    path: &Path,
+    target: &Expr,
+    select_path: &[String],
+    scopes: &[&[(Vec<String>, Expr)]],
+    depth: usize,
+) -> Option<PackageData> {
+    if depth > 2 || select_path.first().map(String::as_str) != Some("defaultNix") {
+        return None;
+    }
+
+    let source_root = resolve_flake_compat_source_root(path, target, scopes, 0)?;
+    let mut package = default_default_nix_package_data();
+    package.name = source_root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(ToOwned::to_owned)
+        .or_else(|| fallback_name(path));
+    package.purl = package
+        .name
+        .as_deref()
+        .and_then(|name| build_nix_purl(name, None));
+    mark_flake_compat_wrapper(&mut package);
+    Some(package)
+}
+
+fn resolve_flake_compat_source_root(
+    path: &Path,
+    target: &Expr,
+    scopes: &[&[(Vec<String>, Expr)]],
+    depth: usize,
+) -> Option<std::path::PathBuf> {
+    if depth > 8 {
+        return None;
+    }
+
+    match target {
+        Expr::Application(parts) => source_root_from_flake_compat_application(path, parts, scopes),
+        Expr::Symbol(symbol) => resolve_symbol(symbol, scopes, depth + 1).and_then(|resolved| {
+            resolve_flake_compat_source_root(path, resolved, scopes, depth + 1)
+        }),
+        Expr::Let { bindings, body } => {
+            let scopes = extend_scopes(scopes, bindings);
+            resolve_flake_compat_source_root(path, body, &scopes, depth + 1)
+        }
+        Expr::Select {
+            target: inner_target,
+            path: inner_path,
+        } => resolve_select(inner_target, inner_path, scopes, depth + 1).and_then(|resolved| {
+            resolve_flake_compat_source_root(path, resolved, scopes, depth + 1)
+        }),
+        _ => None,
+    }
+}
+
+fn source_root_from_flake_compat_application(
+    path: &Path,
+    parts: &[Expr],
+    scopes: &[&[(Vec<String>, Expr)]],
+) -> Option<std::path::PathBuf> {
+    let head = parts.first().and_then(expr_as_symbol)?;
+    if head != "import" {
+        return None;
+    }
+
+    let import_path = parts
+        .get(1)
+        .and_then(|expr| expr_as_symbol_with_scopes(expr, scopes))?;
+    if !is_local_nix_path(&import_path) {
+        return None;
+    }
+
+    let args = parts.iter().find_map(attrset_entries)?;
+    let src_value =
+        find_attr(args, &["src"]).and_then(|expr| expr_as_symbol_with_scopes(expr, scopes))?;
+    if !is_local_path(&src_value) {
+        return None;
+    }
+
+    resolve_local_path(path, &src_value)
+}
+
+fn is_local_path(value: &str) -> bool {
+    value.starts_with("./") || value.starts_with("../")
+}
+
+fn is_local_nix_path(value: &str) -> bool {
+    is_local_path(value) && value.ends_with(".nix")
+}
+
+fn resolve_local_path(path: &Path, value: &str) -> Option<std::path::PathBuf> {
+    let base = path.parent()?;
+    let resolved = base.join(value);
+    resolved.exists().then_some(resolved)
+}
+
+fn resolve_local_nix_path(path: &Path, value: &str) -> Option<std::path::PathBuf> {
+    resolve_local_path(path, value).filter(|resolved| resolved.is_file())
+}
+
+fn extract_flake_compat_default_package_from_content(
+    path: &Path,
+    content: &str,
+) -> Result<PackageData, String> {
+    if !content.contains("defaultNix") || !content.contains("flake-compat.nix") {
+        return Err("default.nix did not contain a supported mkDerivation call".to_string());
+    }
+
+    let src_value = extract_local_flake_compat_src_value(content).unwrap_or("./.".to_string());
+    let mut package = default_default_nix_package_data();
+    package.name = normalize_local_source_root(path, &src_value)
+        .and_then(|source_root| {
+            source_root
+                .file_name()
+                .and_then(|name| name.to_str())
+                .filter(|name| *name != ".")
+                .map(ToOwned::to_owned)
+        })
+        .or_else(|| fallback_name(path));
+    if package.name.is_none() {
+        return Err("default.nix did not contain a supported mkDerivation call".to_string());
+    }
+    package.purl = package
+        .name
+        .as_deref()
+        .and_then(|name| build_nix_purl(name, None));
+    mark_flake_compat_wrapper(&mut package);
+    Ok(package)
+}
+
+fn mark_flake_compat_wrapper(package: &mut PackageData) {
+    let mut extra_data = package.extra_data.clone().unwrap_or_default();
+    extra_data.insert(
+        "nix_wrapper_kind".to_string(),
+        JsonValue::String("flake_compat".to_string()),
+    );
+    package.extra_data = Some(extra_data);
+}
+
+fn extract_local_flake_compat_src_value(content: &str) -> Option<String> {
+    let src_index = content.find("src")?;
+    let after_src = &content[src_index + 3..];
+    let equals_index = after_src.find('=')?;
+    let remainder = after_src[equals_index + 1..].trim_start();
+    let end_index = remainder.find([';', '}', '\n']).unwrap_or(remainder.len());
+    let candidate = remainder[..end_index].trim();
+    if is_local_path(candidate) {
+        Some(candidate.to_string())
+    } else {
+        None
+    }
+}
+
+fn normalize_local_source_root(path: &Path, value: &str) -> Option<std::path::PathBuf> {
+    match value {
+        "." | "./." => path.parent().map(|parent| parent.to_path_buf()),
+        _ if value.ends_with("/.") => resolve_local_path(path, value.trim_end_matches("/.")),
+        _ => resolve_local_path(path, value),
     }
 }
 

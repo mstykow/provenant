@@ -457,7 +457,8 @@ fn extract_information_from_content(
     text_options: &TextDetectionOptions,
 ) -> Result<(Option<bool>, Sha256Digest, bool), Error> {
     let started = Instant::now();
-    let buffer = fs::read(path)?;
+    let filesystem_path = absolute_filesystem_path(path);
+    let buffer = fs::read(&filesystem_path)?;
     let license_enabled = license_engine.is_some();
 
     if is_timeout_exceeded(started, text_options.timeout_seconds) {
@@ -471,7 +472,7 @@ fn extract_information_from_content(
     let is_generated = text_options
         .detect_generated
         .then(|| !generated_code_hints_from_bytes(&buffer).is_empty());
-    let classification = classify_file_info(path, &buffer);
+    let classification = classify_file_info(&filesystem_path, &buffer);
 
     if text_options.collect_info {
         file_info_builder
@@ -493,7 +494,7 @@ fn extract_information_from_content(
             .size_count(Some(0));
     }
 
-    if should_skip_text_detection(path, &buffer) {
+    if should_skip_text_detection(&filesystem_path, &buffer) {
         return Ok((is_generated, sha256, classification.is_source));
     }
 
@@ -501,11 +502,11 @@ fn extract_information_from_content(
     // Python ScanCode runs all enabled plugins on every file, so we do the same.
     if text_options.detect_packages {
         let started = Instant::now();
-        let parse_result = try_parse_file(path)
+        let parse_result = try_parse_file(&filesystem_path)
             .or_else(|| {
                 text_options
                     .detect_application_packages
-                    .then(|| try_parse_windows_executable_bytes(path, &buffer))
+                    .then(|| try_parse_windows_executable_bytes(&filesystem_path, &buffer))
                     .flatten()
             })
             .or_else(|| {
@@ -555,7 +556,7 @@ fn extract_information_from_content(
     }
 
     let (text_content, text_kind, text_scan_error) =
-        extract_text_for_detection_with_diagnostics(path, &buffer);
+        extract_text_for_detection_with_diagnostics(&filesystem_path, &buffer);
     if let Some(text_scan_error) = text_scan_error {
         scan_errors.push(text_scan_error);
     }
@@ -617,7 +618,7 @@ fn extract_information_from_content(
         extract_license_information(
             file_info_builder,
             scan_errors,
-            path,
+            &filesystem_path,
             text_content_for_license_detection.clone(),
             license_engine,
             license_options,
@@ -628,7 +629,7 @@ fn extract_information_from_content(
         extract_license_information(
             file_info_builder,
             scan_errors,
-            path,
+            &filesystem_path,
             text_content_for_license_detection,
             license_engine,
             license_options,
@@ -637,6 +638,16 @@ fn extract_information_from_content(
     }
 
     Ok((is_generated, sha256, classification.is_source))
+}
+
+fn absolute_filesystem_path(path: &Path) -> std::path::PathBuf {
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+
+    std::env::current_dir()
+        .map(|cwd| cwd.join(path))
+        .unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn is_timeout_exceeded(started: Instant, timeout_seconds: f64) -> bool {
