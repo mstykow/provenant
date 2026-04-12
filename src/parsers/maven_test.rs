@@ -148,7 +148,7 @@ mod tests {
     }
 
     #[test]
-    fn test_skip_template_placeholder_pom_coordinates() {
+    fn test_template_placeholder_pom_coordinates_are_preserved() {
         let content = r#"
 <project>
     <groupId>${groupId}</groupId>
@@ -163,11 +163,55 @@ mod tests {
 
         assert_eq!(package_data.package_type, Some(PackageType::Maven));
         assert_eq!(package_data.datasource_id, Some(DatasourceId::MavenPom));
-        assert_eq!(package_data.namespace, None);
-        assert_eq!(package_data.name, None);
-        assert_eq!(package_data.version, None);
-        assert_eq!(package_data.purl, None);
+        assert_eq!(package_data.namespace.as_deref(), Some("${groupId}"));
+        assert_eq!(package_data.name.as_deref(), Some("${artifactId}"));
+        assert_eq!(package_data.version.as_deref(), Some("${version}"));
+        assert_eq!(
+            package_data.purl.as_deref(),
+            Some("pkg:maven/%24%7BgroupId%7D/%24%7BartifactId%7D@%24%7Bversion%7D")
+        );
         assert!(package_data.dependencies.is_empty());
+    }
+
+    #[test]
+    fn test_try_parse_file_template_placeholder_pom_coordinates_are_not_scan_errors() {
+        let content = r#"
+<project>
+    <groupId>${groupId}</groupId>
+    <artifactId>${artifactId}</artifactId>
+    <version>${version}</version>
+</project>
+        "#;
+
+        let (_temp_dir, pom_path) = create_temp_pom_xml(content);
+        let result = try_parse_file(&pom_path).expect("pom.xml should still be recognized");
+
+        assert!(result.scan_errors.is_empty(), "{:?}", result.scan_errors);
+        assert_eq!(result.packages.len(), 1);
+        assert_eq!(
+            result.packages[0].purl.as_deref(),
+            Some("pkg:maven/%24%7BgroupId%7D/%24%7BartifactId%7D@%24%7Bversion%7D")
+        );
+    }
+
+    #[test]
+    fn test_purl_encodes_at_delimited_version_placeholder() {
+        let content = r#"
+<project>
+    <groupId>org.example</groupId>
+    <artifactId>demo</artifactId>
+    <version>@project.version@</version>
+</project>
+        "#;
+
+        let (_temp_dir, pom_path) = create_temp_pom_xml(content);
+        let package_data = MavenParser::extract_first_package(&pom_path);
+
+        assert_eq!(package_data.version.as_deref(), Some("@project.version@"));
+        assert_eq!(
+            package_data.purl.as_deref(),
+            Some("pkg:maven/org.example/demo@%40project.version%40")
+        );
     }
 
     #[test]

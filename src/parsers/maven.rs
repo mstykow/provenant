@@ -347,21 +347,28 @@ fn build_maven_purl(
     classifier: Option<&str>,
     packaging: Option<&str>,
 ) -> String {
-    let mut purl = format!("pkg:maven/{group_id}/{artifact_id}");
+    let mut purl = format!(
+        "pkg:maven/{}/{}",
+        percent_encode_purl_component(group_id),
+        percent_encode_purl_component(artifact_id)
+    );
 
     if let Some(version) = version.filter(|value| !value.trim().is_empty()) {
         purl.push('@');
-        purl.push_str(version);
+        purl.push_str(&percent_encode_purl_component(version));
     }
 
     let qualifiers = build_maven_qualifiers(classifier, packaging);
     if let Some(qualifiers) = qualifiers {
         let mut query_parts = Vec::new();
         if let Some(classifier) = qualifiers.get("classifier") {
-            query_parts.push(format!("classifier={classifier}"));
+            query_parts.push(format!(
+                "classifier={}",
+                percent_encode_purl_component(classifier)
+            ));
         }
         if let Some(type_) = qualifiers.get("type") {
-            query_parts.push(format!("type={type_}"));
+            query_parts.push(format!("type={}", percent_encode_purl_component(type_)));
         }
 
         if !query_parts.is_empty() {
@@ -371,6 +378,21 @@ fn build_maven_purl(
     }
 
     purl
+}
+
+fn percent_encode_purl_component(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                encoded.push(byte as char);
+            }
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+
+    encoded
 }
 
 fn build_maven_download_url(
@@ -406,26 +428,6 @@ fn build_maven_download_url(
 
 fn build_maven_source_package(namespace: &str, name: &str, version: &str) -> String {
     build_maven_purl(namespace, name, Some(version), Some("sources"), None)
-}
-
-fn has_unresolved_template_coordinates(
-    namespace: Option<&str>,
-    name: Option<&str>,
-    version: Option<&str>,
-) -> bool {
-    const TEMPLATE_PLACEHOLDERS: &[&str] = &[
-        "${groupId}",
-        "${artifactId}",
-        "${version}",
-        "${package}",
-        "${packageName}",
-    ];
-
-    [namespace, name, version]
-        .into_iter()
-        .flatten()
-        .map(str::trim)
-        .any(|value| TEMPLATE_PLACEHOLDERS.contains(&value))
 }
 
 fn build_license_statement(licenses: &[MavenLicenseEntry]) -> Option<String> {
@@ -1572,15 +1574,6 @@ impl PackageParser for MavenParser {
                     }
                 }
             }
-        }
-
-        if has_unresolved_template_coordinates(
-            package_data.namespace.as_deref(),
-            package_data.name.as_deref(),
-            package_data.version.as_deref(),
-        ) {
-            warn!("Skipping Maven template coordinates in {:?}", path);
-            return vec![default_package_data(DatasourceId::MavenPom)];
         }
 
         // Construct PURL from parsed data
