@@ -158,14 +158,12 @@ pub(crate) fn package(uid: &str, path: &str) -> Package {
 #[cfg(feature = "golden-tests")]
 pub(crate) fn test_license_engine() -> Arc<LicenseDetectionEngine> {
     static ENGINE: OnceLock<Arc<LicenseDetectionEngine>> = OnceLock::new();
-    ENGINE
-        .get_or_init(|| {
-            Arc::new(
-                LicenseDetectionEngine::from_embedded()
-                    .expect("embedded license engine should initialize"),
-            )
-        })
-        .clone()
+    Arc::clone(ENGINE.get_or_init(|| {
+        Arc::new(
+            LicenseDetectionEngine::from_embedded()
+                .expect("embedded license engine should initialize"),
+        )
+    }))
 }
 
 #[cfg(feature = "golden-tests")]

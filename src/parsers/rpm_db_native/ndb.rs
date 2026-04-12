@@ -123,7 +123,7 @@ impl BlobReader for NdbDatabase {
                 continue;
             }
 
-            let offset = (slot.block_offset * BLOB_BLOCK_SIZE) as u64;
+            let offset = u64::from(slot.block_offset * BLOB_BLOCK_SIZE);
             self.reader.seek(SeekFrom::Start(offset))?;
 
             let blob_header = NdbBlobHeader::read(&mut self.reader)?;

@@ -1318,7 +1318,7 @@ fn extract_license_information(
             license_options.unknown_licenses,
             from_binary_strings,
             &path.to_string_lossy(),
-            license_options.min_score as f32,
+            f32::from(license_options.min_score),
         )
     };
 
@@ -1446,7 +1446,7 @@ fn convert_match_to_model(
         matcher: Some(m.matcher.to_string()),
         score: m.score,
         matched_length: Some(m.matched_length),
-        match_coverage: Some(((m.coverage() as f64) * 100.0).round() / 100.0),
+        match_coverage: Some((f64::from(m.coverage()) * 100.0).round() / 100.0),
         rule_relevance: Some(m.rule_relevance),
         rule_identifier: Some(m.rule_identifier.clone()),
         rule_url,

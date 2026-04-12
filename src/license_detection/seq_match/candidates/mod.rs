@@ -59,8 +59,8 @@ impl PartialOrd for OrderingKey {
 
 impl Ord for OrderingKey {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        ((self.numerator as u128) * (other.denominator as u128))
-            .cmp(&((other.numerator as u128) * (self.denominator as u128)))
+        (u128::from(self.numerator) * u128::from(other.denominator))
+            .cmp(&(u128::from(other.numerator) * u128::from(self.denominator)))
     }
 }
 
@@ -94,7 +94,7 @@ impl CandidateMetrics {
         let union = self.union_len() as u64;
         let threshold_tenths = (HIGH_RESEMBLANCE_THRESHOLD * 10.0).round() as u64;
 
-        (matched as u128) * 10 >= (union as u128) * (threshold_tenths as u128)
+        u128::from(matched) * 10 >= u128::from(union) * u128::from(threshold_tenths)
     }
 
     pub(super) fn containment_f32(&self) -> f32 {
@@ -293,12 +293,12 @@ fn compare_candidate_rank(
 }
 
 fn quantize_ratio_tenths(numerator: u64, denominator: u64) -> u32 {
-    quantize_ratio_tenths_wide(numerator as u128, denominator as u128)
+    quantize_ratio_tenths_wide(u128::from(numerator), u128::from(denominator))
 }
 
 fn quantize_squared_ratio_tenths(numerator: u64, denominator: u64) -> u32 {
-    let numerator = numerator as u128;
-    let denominator = denominator as u128;
+    let numerator = u128::from(numerator);
+    let denominator = u128::from(denominator);
 
     quantize_ratio_tenths_wide(numerator * numerator, denominator * denominator)
 }
@@ -327,9 +327,9 @@ fn passes_minimum_containment(rule: &Rule, metrics: CandidateMetrics) -> bool {
     rule.minimum_coverage.is_none_or(|min_cont| {
         let matched = metrics.matched_length as u64;
         let rule_len = metrics.rule_len as u64;
-        let min_cont = min_cont as u64;
+        let min_cont = u64::from(min_cont);
 
-        (matched as u128) * 100 >= (rule_len as u128) * (min_cont as u128)
+        u128::from(matched) * 100 >= u128::from(rule_len) * u128::from(min_cont)
     })
 }
 

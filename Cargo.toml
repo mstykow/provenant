@@ -152,6 +152,9 @@ zstd = { workspace = true }
 
 [lints.clippy]
 cargo = { level = "warn", priority = -1 }
+cast_lossless = "warn"
+checked_conversions = "warn"
+cloned_instead_of_copied = "warn"
 clone_on_ref_ptr = "warn"
 filetype_is_file = "warn"
 
