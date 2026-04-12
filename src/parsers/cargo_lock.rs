@@ -223,9 +223,9 @@ fn extract_all_dependencies(
                                 } else {
                                     Some(resolved_version.to_string())
                                 },
-                                scope: Some("dependencies".to_string()),
-                                is_runtime: Some(true),
-                                is_optional: Some(false),
+                                scope: None,
+                                is_runtime: None,
+                                is_optional: None,
                                 is_pinned: Some(true),
                                 is_direct: Some(is_root_package),
                                 resolved_package: None,

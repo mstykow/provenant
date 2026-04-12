@@ -72,8 +72,9 @@ mod tests {
 
         if let Some(dep) = serde_dep {
             assert_eq!(dep.is_pinned, Some(true));
-            assert_eq!(dep.is_runtime, Some(true));
-            assert_eq!(dep.scope, Some("dependencies".to_string()));
+            assert_eq!(dep.is_runtime, None);
+            assert_eq!(dep.scope, None);
+            assert_eq!(dep.is_optional, None);
         }
     }
 
@@ -107,52 +108,55 @@ mod tests {
     }
 
     #[test]
-    fn test_cargo_lock_runtime_dependencies_only() {
-        // Cargo.lock only contains resolved runtime dependencies by design.
-        // Dev dependencies and build dependencies are NOT included in the lockfile.
-        //
-        // This is intentional Cargo behavior, not a parser limitation:
-        // - Dev dependencies are only used during `cargo test` and `cargo bench`
-        // - Build dependencies are only used during build scripts
-        // - Neither affect the final binary or library
-        //
-        // Therefore, all dependencies in Cargo.lock have scope="dependencies"
-        // and is_runtime=true. This test documents and verifies this behavior.
+    fn test_cargo_lock_dependency_kind_is_unknown_without_manifest_sections() {
+        let content = r#"
+[[package]]
+name = "demo"
+version = "0.1.0"
+dependencies = ["cc 1.2.60", "serde 1.0.228", "tempfile 3.27.0"]
 
-        let lock_path = PathBuf::from("testdata/cargo/Cargo-lock-deps.lock");
+[[package]]
+name = "cc"
+version = "1.2.60"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "serde"
+version = "1.0.228"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "tempfile"
+version = "3.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+"#;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let lock_path = temp_dir.path().join("Cargo.lock");
+        std::fs::write(&lock_path, content).unwrap();
+
         let package_data = CargoLockParser::extract_first_package(&lock_path);
-
         let deps = package_data.dependencies;
-        assert!(!deps.is_empty());
-
-        // Verify all dependencies are runtime dependencies
-        for dep in &deps {
-            assert_eq!(
-                dep.scope,
-                Some("dependencies".to_string()),
-                "All Cargo.lock dependencies should have scope='dependencies'"
-            );
-            assert_eq!(
-                dep.is_runtime,
-                Some(true),
-                "All Cargo.lock dependencies should be runtime dependencies"
-            );
-        }
-
-        // Verify no dev or build dependencies exist
-        let non_runtime_deps: Vec<_> = deps
-            .iter()
-            .filter(|d| {
-                d.scope
-                    .as_ref()
-                    .is_some_and(|s| s.contains("dev") || s.contains("build"))
-            })
-            .collect();
 
         assert!(
-            non_runtime_deps.is_empty(),
-            "Cargo.lock should not contain dev or build dependencies"
+            deps.iter()
+                .any(|dep| dep.purl.as_deref() == Some("pkg:cargo/cc@1.2.60"))
         );
+        assert!(
+            deps.iter()
+                .any(|dep| dep.purl.as_deref() == Some("pkg:cargo/serde@1.0.228"))
+        );
+        assert!(
+            deps.iter()
+                .any(|dep| dep.purl.as_deref() == Some("pkg:cargo/tempfile@3.27.0"))
+        );
+
+        for dep in &deps {
+            assert_eq!(dep.scope, None);
+            assert_eq!(dep.is_runtime, None);
+            assert_eq!(dep.is_optional, None);
+            assert_eq!(dep.is_pinned, Some(true));
+        }
     }
 
     #[test]
@@ -386,5 +390,41 @@ checksum = "serde-checksum"
             .expect("serde dependency should exist");
 
         assert_eq!(serde_dep.is_direct, Some(true));
+    }
+
+    #[test]
+    fn test_extract_dependencies_only_emits_resolved_edges_not_unreferenced_packages() {
+        let content = r#"
+[[package]]
+name = "my-app"
+version = "0.4.0"
+dependencies = ["serde 1.0.228"]
+
+[[package]]
+name = "serde"
+version = "1.0.228"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
+
+[[package]]
+name = "workspace-tool"
+version = "0.1.0"
+"#;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let lock_path = temp_dir.path().join("Cargo.lock");
+        std::fs::write(&lock_path, content).unwrap();
+
+        let package_data = CargoLockParser::extract_first_package(&lock_path);
+
+        let dependency_purls: Vec<_> = package_data
+            .dependencies
+            .iter()
+            .filter_map(|dep| dep.purl.as_deref())
+            .collect();
+
+        assert!(dependency_purls.contains(&"pkg:cargo/serde@1.0.228"));
+        assert!(!dependency_purls.contains(&"pkg:cargo/my-app@0.4.0"));
+        assert!(!dependency_purls.contains(&"pkg:cargo/workspace-tool@0.1.0"));
     }
 }
