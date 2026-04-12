@@ -392,6 +392,32 @@ version = "1.0.0"
     }
 
     #[test]
+    fn test_python_standalone_reqs_filename_scan_hoists_dependencies() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        fs::write(
+            temp_dir.path().join("mkdocs-reqs.txt"),
+            "mkdocs-material~=8.2\nmkdocs~=1.3\n",
+        )
+        .expect("write mkdocs-reqs.txt");
+
+        let (_files, result) = scan_and_assemble(temp_dir.path());
+
+        assert!(result.packages.is_empty());
+        assert_dependency_present(
+            &result.dependencies,
+            "pkg:pypi/mkdocs-material",
+            "mkdocs-reqs.txt",
+        );
+        assert_dependency_present(&result.dependencies, "pkg:pypi/mkdocs", "mkdocs-reqs.txt");
+        assert!(
+            result
+                .dependencies
+                .iter()
+                .all(|dependency| dependency.for_package_uid.is_none())
+        );
+    }
+
+    #[test]
     fn test_python_pyproject_scan_preserves_dependency_requirement_shapes() {
         let temp_dir = tempfile::TempDir::new().expect("create temp dir");
         fs::write(
