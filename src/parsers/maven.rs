@@ -113,6 +113,14 @@ impl PropertyResolver {
         }
 
         if self.resolving_set.contains(key) {
+            if self
+                .resolving_stack
+                .last()
+                .is_some_and(|current| current == key)
+            {
+                return None;
+            }
+
             self.warn_once(
                 "cycle",
                 key,
@@ -127,7 +135,6 @@ impl PropertyResolver {
         let raw_val = if let Some(value) = self.raw.get(key).or_else(|| self.builtins.get(key)) {
             value.clone()
         } else {
-            self.warn_once("missing", key, format!("Maven property missing key {key}"));
             return None;
         };
 
@@ -654,25 +661,34 @@ fn is_maven_version_pinned(version_str: &str) -> bool {
     true
 }
 
-fn build_builtin_properties(
-    namespace: &Option<String>,
-    name: &Option<String>,
-    version: &Option<String>,
-    parent_group_id: &Option<String>,
-    parent_version: &Option<String>,
-    project_name: &Option<String>,
-    project_packaging: &Option<String>,
-) -> HashMap<String, String> {
+struct MavenBuiltinPropertyInputs<'a> {
+    namespace: &'a Option<String>,
+    name: &'a Option<String>,
+    version: &'a Option<String>,
+    parent_group_id: &'a Option<String>,
+    parent_artifact_id: &'a Option<String>,
+    parent_version: &'a Option<String>,
+    project_name: &'a Option<String>,
+    project_packaging: &'a Option<String>,
+}
+
+fn build_builtin_properties(inputs: MavenBuiltinPropertyInputs<'_>) -> HashMap<String, String> {
     let mut builtins = HashMap::new();
-    let effective_group_id = namespace.clone().or_else(|| parent_group_id.clone());
-    let effective_version = version.clone().or_else(|| parent_version.clone());
+    let effective_group_id = inputs
+        .namespace
+        .clone()
+        .or_else(|| inputs.parent_group_id.clone());
+    let effective_version = inputs
+        .version
+        .clone()
+        .or_else(|| inputs.parent_version.clone());
 
     if let Some(group_id) = effective_group_id.clone() {
         builtins.insert("project.groupId".to_string(), group_id.clone());
         builtins.insert("pom.groupId".to_string(), group_id);
     }
 
-    if let Some(artifact_id) = name.clone() {
+    if let Some(artifact_id) = inputs.name.clone() {
         builtins.insert("project.artifactId".to_string(), artifact_id.clone());
         builtins.insert("pom.artifactId".to_string(), artifact_id);
     }
@@ -682,19 +698,27 @@ fn build_builtin_properties(
         builtins.insert("pom.version".to_string(), ver);
     }
 
-    if let Some(group_id) = parent_group_id.clone() {
+    if let Some(group_id) = inputs.parent_group_id.clone() {
         builtins.insert("project.parent.groupId".to_string(), group_id);
     }
 
-    if let Some(ver) = parent_version.clone() {
-        builtins.insert("project.parent.version".to_string(), ver);
+    if let Some(artifact_id) = inputs.parent_artifact_id.clone() {
+        builtins.insert("project.parent.artifactId".to_string(), artifact_id.clone());
+        builtins.insert("pom.parent.artifactId".to_string(), artifact_id.clone());
+        builtins.insert("parent.artifactId".to_string(), artifact_id);
     }
 
-    if let Some(packaging) = project_packaging.clone() {
+    if let Some(ver) = inputs.parent_version.clone() {
+        builtins.insert("project.parent.version".to_string(), ver.clone());
+        builtins.insert("pom.parent.version".to_string(), ver.clone());
+        builtins.insert("parent.version".to_string(), ver);
+    }
+
+    if let Some(packaging) = inputs.project_packaging.clone() {
         builtins.insert("project.packaging".to_string(), packaging);
     }
 
-    if let Some(name) = project_name.clone() {
+    if let Some(name) = inputs.project_name.clone() {
         builtins.insert("project.name".to_string(), name);
     }
 
@@ -908,6 +932,10 @@ impl PackageParser for MavenParser {
                 Ok(Event::Text(e)) => {
                     let text = e.decode().unwrap_or_default().to_string();
                     let current_path = current_element.last().map(|v| v.as_slice());
+                    let current_parent = current_element
+                        .len()
+                        .checked_sub(2)
+                        .map(|index| current_element[index].as_slice());
 
                     if in_properties
                         && current_element.len() >= 2
@@ -924,13 +952,27 @@ impl PackageParser for MavenParser {
                     } else if in_dep_mgmt_dependency {
                         if let Some(dep_mgmt) = current_dep_mgmt_dependency.as_mut() {
                             match current_path {
-                                Some(b"groupId") => dep_mgmt.group_id = Some(text),
-                                Some(b"artifactId") => dep_mgmt.artifact_id = Some(text),
-                                Some(b"version") => dep_mgmt.version = Some(text),
-                                Some(b"scope") => dep_mgmt.scope = Some(text),
-                                Some(b"type") => dep_mgmt.type_ = Some(text),
-                                Some(b"classifier") => dep_mgmt.classifier = Some(text),
-                                Some(b"optional") => dep_mgmt.optional = Some(text),
+                                Some(b"groupId") if current_parent == Some(b"dependency") => {
+                                    dep_mgmt.group_id = Some(text)
+                                }
+                                Some(b"artifactId") if current_parent == Some(b"dependency") => {
+                                    dep_mgmt.artifact_id = Some(text)
+                                }
+                                Some(b"version") if current_parent == Some(b"dependency") => {
+                                    dep_mgmt.version = Some(text)
+                                }
+                                Some(b"scope") if current_parent == Some(b"dependency") => {
+                                    dep_mgmt.scope = Some(text)
+                                }
+                                Some(b"type") if current_parent == Some(b"dependency") => {
+                                    dep_mgmt.type_ = Some(text)
+                                }
+                                Some(b"classifier") if current_parent == Some(b"dependency") => {
+                                    dep_mgmt.classifier = Some(text)
+                                }
+                                Some(b"optional") if current_parent == Some(b"dependency") => {
+                                    dep_mgmt.optional = Some(text)
+                                }
                                 _ => {}
                             }
                         }
@@ -954,45 +996,63 @@ impl PackageParser for MavenParser {
                     } else if let Some(dep) = &mut current_dependency {
                         match current_path {
                             Some(b"groupId") => {
-                                if let Some(coords) = current_dependency_data.as_mut() {
+                                if current_parent == Some(b"dependency")
+                                    && let Some(coords) = current_dependency_data.as_mut()
+                                {
                                     coords.group_id = Some(text);
                                 }
                             }
                             Some(b"artifactId") => {
-                                if let Some(coords) = current_dependency_data.as_mut() {
+                                if current_parent == Some(b"dependency")
+                                    && let Some(coords) = current_dependency_data.as_mut()
+                                {
                                     coords.artifact_id = Some(text);
                                 }
                             }
                             Some(b"version") => {
-                                if let Some(coords) = current_dependency_data.as_mut() {
+                                if current_parent == Some(b"dependency")
+                                    && let Some(coords) = current_dependency_data.as_mut()
+                                {
                                     coords.version = Some(text);
                                 }
                             }
                             Some(b"scope") => {
-                                dep.scope = Some(text.clone());
-                                dep.is_optional = Some(text == "test" || text == "provided");
-                                dep.is_runtime = Some(text != "test" && text != "provided");
-                                if let Some(coords) = current_dependency_data.as_mut() {
+                                if current_parent == Some(b"dependency") {
+                                    dep.scope = Some(text.clone());
+                                    dep.is_optional = Some(text == "test" || text == "provided");
+                                    dep.is_runtime = Some(text != "test" && text != "provided");
+                                }
+                                if current_parent == Some(b"dependency")
+                                    && let Some(coords) = current_dependency_data.as_mut()
+                                {
                                     coords.scope = Some(text);
                                 }
                             }
                             Some(b"optional") => {
-                                if let Some(coords) = current_dependency_data.as_mut() {
+                                if current_parent == Some(b"dependency")
+                                    && let Some(coords) = current_dependency_data.as_mut()
+                                {
                                     coords.optional = Some(text);
                                 }
                             }
                             Some(b"type") => {
-                                if let Some(coords) = current_dependency_data.as_mut() {
+                                if current_parent == Some(b"dependency")
+                                    && let Some(coords) = current_dependency_data.as_mut()
+                                {
                                     coords.type_ = Some(text);
                                 }
                             }
                             Some(b"classifier") => {
-                                if let Some(coords) = current_dependency_data.as_mut() {
+                                if current_parent == Some(b"dependency")
+                                    && let Some(coords) = current_dependency_data.as_mut()
+                                {
                                     coords.classifier = Some(text);
                                 }
                             }
                             Some(b"systemPath") => {
-                                if let Some(coords) = current_dependency_data.as_mut() {
+                                if current_parent == Some(b"dependency")
+                                    && let Some(coords) = current_dependency_data.as_mut()
+                                {
                                     coords.system_path = Some(text);
                                 }
                             }
@@ -1366,15 +1426,16 @@ impl PackageParser for MavenParser {
             buf.clear();
         }
 
-        let builtins = build_builtin_properties(
-            &package_data.namespace,
-            &package_data.name,
-            &package_data.version,
-            &parent_group_id,
-            &parent_version,
-            &project_name,
-            &project_packaging,
-        );
+        let builtins = build_builtin_properties(MavenBuiltinPropertyInputs {
+            namespace: &package_data.namespace,
+            name: &package_data.name,
+            version: &package_data.version,
+            parent_group_id: &parent_group_id,
+            parent_artifact_id: &parent_artifact_id,
+            parent_version: &parent_version,
+            project_name: &project_name,
+            project_packaging: &project_packaging,
+        });
         let mut resolver = PropertyResolver::new(properties, builtins);
 
         resolve_option(&mut resolver, &mut package_data.namespace);
@@ -1884,6 +1945,8 @@ impl PackageParser for MavenParser {
     fn is_match(path: &Path) -> bool {
         if let Some(filename) = path.file_name().and_then(|name| name.to_str()) {
             filename == "pom.xml"
+                || filename.ends_with(".pom.xml")
+                || filename.ends_with("-pom.xml")
                 || filename == "pom.properties"
                 || filename == "MANIFEST.MF"
                 || filename.ends_with(".pom")

@@ -2,29 +2,37 @@
 mod tests {
     use crate::models::DatasourceId;
     use crate::models::PackageType;
-    use crate::parsers::{MavenParser, PackageParser};
+    use crate::parsers::{MavenParser, PackageParser, try_parse_file};
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
 
-    // Helper function to create a temporary pom.xml file with the given content
-    // Returns a TempDir (which must be kept alive) and the path to pom.xml
-    fn create_temp_pom_xml(content: &str) -> (TempDir, PathBuf) {
+    fn create_temp_maven_file(content: &str, file_name: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let pom_path = temp_dir.path().join("pom.xml");
+        let pom_path = temp_dir.path().join(file_name);
 
         fs::write(&pom_path, content).expect("Failed to write pom.xml");
 
         (temp_dir, pom_path)
     }
 
+    // Helper function to create a temporary pom.xml file with the given content
+    // Returns a TempDir (which must be kept alive) and the path to pom.xml
+    fn create_temp_pom_xml(content: &str) -> (TempDir, PathBuf) {
+        create_temp_maven_file(content, "pom.xml")
+    }
+
     #[test]
     fn test_is_match() {
         let valid_path = PathBuf::from("/some/path/pom.xml");
+        let valid_suffix_path = PathBuf::from("/some/path/canonical-pom.xml");
+        let valid_dot_suffix_path = PathBuf::from("/some/path/plugin-level-dep.pom.xml");
         let repo_pom_path = PathBuf::from("/some/path/aopalliance-1.0.pom");
         let invalid_path = PathBuf::from("/some/path/not_pom.xml");
 
         assert!(MavenParser::is_match(&valid_path));
+        assert!(MavenParser::is_match(&valid_suffix_path));
+        assert!(MavenParser::is_match(&valid_dot_suffix_path));
         assert!(MavenParser::is_match(&repo_pom_path));
         assert!(!MavenParser::is_match(&invalid_path));
     }
@@ -694,6 +702,23 @@ mod tests {
     }
 
     #[test]
+    fn test_dependency_management_with_exclusions_preserves_main_coordinates() {
+        let pom_path = PathBuf::from("testdata/maven/dependency-management-exclusions-test.xml");
+        let package_data = MavenParser::extract_first_package(&pom_path);
+
+        let dep = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.scope.as_deref() == Some("dependencymanagement"))
+            .expect("dependency management entry should be present");
+
+        assert_eq!(
+            dep.purl.as_deref(),
+            Some("pkg:maven/com.google.guava/guava@33.5.0-jre")
+        );
+    }
+
+    #[test]
     fn test_extract_parent_pom() {
         let pom_path = PathBuf::from("testdata/maven/parent-pom-test.xml");
         let package_data = MavenParser::extract_first_package(&pom_path);
@@ -817,6 +842,61 @@ mod tests {
     }
 
     #[test]
+    fn test_try_parse_file_missing_key_is_not_a_scan_error() {
+        let content = r#"
+<project>
+  <groupId>com.test</groupId>
+  <artifactId>missing</artifactId>
+  <version>${does.not.exist}</version>
+</project>
+        "#;
+
+        let (_temp_dir, pom_path) = create_temp_maven_file(content, "missing-version-pom.xml");
+        let result = try_parse_file(&pom_path).expect("suffix pom.xml should be recognized");
+
+        assert!(result.scan_errors.is_empty(), "{:?}", result.scan_errors);
+        assert_eq!(result.packages.len(), 1);
+        assert_eq!(result.packages[0].name.as_deref(), Some("missing"));
+        assert_eq!(
+            result.packages[0].version.as_deref(),
+            Some("${does.not.exist}")
+        );
+    }
+
+    #[test]
+    fn test_missing_dependency_version_keeps_versionless_dependency_purl() {
+        let pom_path = PathBuf::from("testdata/maven/missing-dependency-version-pom.xml");
+        let package_data = MavenParser::extract_first_package(&pom_path);
+
+        assert_eq!(package_data.dependencies.len(), 1);
+        let dependency = &package_data.dependencies[0];
+        assert_eq!(
+            dependency.purl.as_deref(),
+            Some("pkg:maven/groupId/artifactId")
+        );
+        assert_eq!(dependency.extracted_requirement, None);
+    }
+
+    #[test]
+    fn test_extract_from_suffix_pom_xml_filename() {
+        let content = r#"
+<project>
+  <groupId>org.example</groupId>
+  <artifactId>parent</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+</project>
+        "#;
+
+        let (_temp_dir, pom_path) = create_temp_maven_file(content, "parent-pom.xml");
+        let package_data = MavenParser::extract_first_package(&pom_path);
+
+        assert_eq!(package_data.namespace.as_deref(), Some("org.example"));
+        assert_eq!(package_data.name.as_deref(), Some("parent"));
+        assert_eq!(package_data.version.as_deref(), Some("0.0.1-SNAPSHOT"));
+        assert_eq!(package_data.datasource_id, Some(DatasourceId::MavenPom));
+    }
+
+    #[test]
     fn test_self_cycle() {
         let content = r#"
 <project>
@@ -833,6 +913,27 @@ mod tests {
         let package_data = MavenParser::extract_first_package(&pom_path);
 
         assert_eq!(package_data.version, Some("${a}".to_string()));
+    }
+
+    #[test]
+    fn test_try_parse_file_direct_self_cycle_is_not_a_scan_error() {
+        let content = r#"
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.apache</groupId>
+  <artifactId>child</artifactId>
+  <version>${project.version}</version>
+</project>
+        "#;
+
+        let (_temp_dir, pom_path) = create_temp_pom_xml(content);
+        let result = try_parse_file(&pom_path).expect("pom.xml should still be recognized");
+
+        assert!(result.scan_errors.is_empty(), "{:?}", result.scan_errors);
+        assert_eq!(
+            result.packages[0].version.as_deref(),
+            Some("${project.version}")
+        );
     }
 
     #[test]
