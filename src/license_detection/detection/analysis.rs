@@ -54,7 +54,8 @@ pub(super) fn has_unknown_matches(matches: &[LicenseMatch]) -> bool {
 /// and has_extra_words() at detection.py:1139
 pub(super) fn has_extra_words(matches: &[LicenseMatch]) -> bool {
     matches.iter().any(|m| {
-        let score_coverage_relevance = m.coverage() as f64 * m.rule_relevance as f64 / 100.0;
+        let score_coverage_relevance =
+            f64::from(m.coverage()) * f64::from(m.rule_relevance) / 100.0;
         score_coverage_relevance - m.score.value() > 0.01
     })
 }

@@ -311,7 +311,7 @@ pub(crate) fn seq_match_with_candidates(
                     let match_coverage = LicenseMatch::round_metric(rule_coverage * 100.0);
 
                     let score = MatchScore::from_percentage(
-                        match_coverage as f64 * candidate.rule.relevance as f64 / 100.0,
+                        f64::from(match_coverage) * f64::from(candidate.rule.relevance) / 100.0,
                     );
 
                     let license_match = LicenseMatch {

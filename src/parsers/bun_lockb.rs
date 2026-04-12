@@ -297,7 +297,7 @@ fn build_package_data_from_lockb(
     let extra_data = package_data.extra_data.get_or_insert_with(HashMap::new);
     extra_data.insert(
         "lockfileVersion".to_string(),
-        JsonValue::from(format_version as i64),
+        JsonValue::from(i64::from(format_version)),
     );
     extra_data.insert(
         "meta_hash".to_string(),

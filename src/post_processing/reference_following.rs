@@ -1192,7 +1192,7 @@ fn internal_match_to_public(
     detection_match: crate::license_detection::models::LicenseMatch,
 ) -> Match {
     let score = detection_match.score;
-    let match_coverage = ((detection_match.coverage() as f64) * 100.0).round() / 100.0;
+    let match_coverage = (f64::from(detection_match.coverage()) * 100.0).round() / 100.0;
 
     Match {
         license_expression: detection_match.license_expression,
