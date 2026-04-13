@@ -122,8 +122,10 @@ packageurl = "0.6.0"
 pdf_oxide = "0.3.23"
 pep508_rs = "0.9.2"
 quick-xml = "0.39.2"
+rancor = "0.1.1"
 rayon = { workspace = true }
 regex = { workspace = true }
+rkyv = { version = "0.8.15", features = ["smallvec-1"] }
 rmp-serde = { workspace = true }
 rpm = { version = "0.20.0", default-features = false, features = ["gzip-compression", "xz-compression", "zstd-compression", "bzip2-compression"] }
 ruff_python_ast = { version = "0.15.8", package = "rustpython-ruff_python_ast" }
