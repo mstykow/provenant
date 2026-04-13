@@ -12970,6 +12970,10 @@ fn fix_truncated_contributors_authors(tree: &[ParseNode], authors: &mut Vec<Auth
             continue;
         }
 
+        if author.author.contains(',') {
+            continue;
+        }
+
         author.author = restore_trailing_contributors_suffix(
             &author.author,
             trailing_contributors

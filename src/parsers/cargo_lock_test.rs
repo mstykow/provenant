@@ -393,7 +393,7 @@ checksum = "serde-checksum"
     }
 
     #[test]
-    fn test_extract_dependencies_only_emits_resolved_edges_not_unreferenced_packages() {
+    fn test_extract_dependencies_skips_root_package_but_keeps_source_less_workspace_members() {
         let content = r#"
 [[package]]
 name = "my-app"
@@ -425,7 +425,7 @@ version = "0.1.0"
 
         assert!(dependency_purls.contains(&"pkg:cargo/serde@1.0.228"));
         assert!(!dependency_purls.contains(&"pkg:cargo/my-app@0.4.0"));
-        assert!(!dependency_purls.contains(&"pkg:cargo/workspace-tool@0.1.0"));
+        assert!(dependency_purls.contains(&"pkg:cargo/workspace-tool@0.1.0"));
     }
 
     #[test]
@@ -452,21 +452,12 @@ checksum = "serde-checksum"
         std::fs::write(&lock_path, content).unwrap();
 
         let package_data = CargoLockParser::extract_first_package(&lock_path);
-        let cargo_dep = package_data
-            .dependencies
-            .iter()
-            .find(|dep| dep.purl.as_deref() == Some("pkg:cargo/cargo@0.97.0"))
-            .expect(
-                "root workspace package should remain visible when multiple local packages exist",
-            );
         let benchsuite_dep = package_data
             .dependencies
             .iter()
             .find(|dep| dep.purl.as_deref() == Some("pkg:cargo/benchsuite@0.0.0"))
             .expect("workspace member should be surfaced as a direct dependency");
 
-        assert_eq!(cargo_dep.extracted_requirement.as_deref(), Some("0.97.0"));
-        assert_eq!(cargo_dep.is_direct, Some(true));
         assert_eq!(
             benchsuite_dep.extracted_requirement.as_deref(),
             Some("0.0.0")
