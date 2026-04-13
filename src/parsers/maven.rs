@@ -26,9 +26,8 @@ use crate::parser_warn as warn;
 use crate::parsers::utils::read_file_to_string;
 use quick_xml::Reader;
 use quick_xml::events::Event;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::fs::File;
-use std::io::BufReader;
 use std::path::Path;
 
 use super::PackageParser;
@@ -253,6 +252,38 @@ impl PropertyResolver {
             warn!("{message}");
         }
     }
+}
+
+fn sanitize_template_directives(content: &str) -> Cow<'_, str> {
+    if !content.contains("<%") {
+        return Cow::Borrowed(content);
+    }
+
+    let mut sanitized = String::with_capacity(content.len());
+    let mut remaining = content;
+
+    while let Some(start) = remaining.find("<%") {
+        let (before, after_start) = remaining.split_at(start);
+        sanitized.push_str(before);
+
+        let Some(end) = after_start.find("%>") else {
+            return Cow::Borrowed(content);
+        };
+
+        let directive = &after_start[..end + 2];
+        for ch in directive.chars() {
+            if matches!(ch, '\n' | '\r') {
+                sanitized.push(ch);
+            } else {
+                sanitized.push(' ');
+            }
+        }
+
+        remaining = &after_start[end + 2..];
+    }
+
+    sanitized.push_str(remaining);
+    Cow::Owned(sanitized)
 }
 
 fn resolve_option(resolver: &mut PropertyResolver, value: &mut Option<String>) {
@@ -745,15 +776,16 @@ impl PackageParser for MavenParser {
             }
         }
 
-        let file = match File::open(path) {
-            Ok(f) => f,
+        let content = match read_file_to_string(path).map_err(|e| e.to_string()) {
+            Ok(content) => content,
             Err(e) => {
                 warn!("Failed to open pom.xml at {:?}: {}", path, e);
                 return vec![default_package_data(DatasourceId::MavenPom)];
             }
         };
 
-        let mut reader = Reader::from_reader(BufReader::new(file));
+        let sanitized_content = sanitize_template_directives(&content);
+        let mut reader = Reader::from_str(sanitized_content.as_ref());
         reader.config_mut().trim_text(true);
 
         let mut buf = Vec::new();

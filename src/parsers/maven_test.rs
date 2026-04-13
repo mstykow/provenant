@@ -195,6 +195,63 @@ mod tests {
     }
 
     #[test]
+    fn test_try_parse_file_erb_templated_pom_keeps_dependencies_without_scan_errors() {
+        let content = r#"
+<project>
+    <groupId>org.gradle</groupId>
+    <artifactId>${projectName}</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <% if (repository ) { %>
+    <repositories>
+        <repository>
+          <id>local-repo</id>
+          <url>${repository.getUri()}</url>
+        </repository>
+      </repositories>
+    <% } %>
+    <dependencies>
+        <dependency>
+            <groupId>commons-lang</groupId>
+            <artifactId>commons-lang</artifactId>
+            <version>2.5</version>
+        </dependency>
+    <% if (dependencies) { dependencies.each { dep -> %>
+        <dependency>
+            <groupId>${dep.groupId}</groupId>
+            <artifactId>${dep.artifactId}</artifactId>
+            <version>${dep.version}</version>
+        </dependency> <% } %>  <% } %>
+    </dependencies>
+</project>
+        "#;
+
+        let (_temp_dir, pom_path) = create_temp_pom_xml(content);
+        let result = try_parse_file(&pom_path).expect("pom.xml should still be recognized");
+
+        assert!(result.scan_errors.is_empty(), "{:?}", result.scan_errors);
+        assert_eq!(result.packages.len(), 1);
+        let package_data = &result.packages[0];
+        assert_eq!(package_data.namespace.as_deref(), Some("org.gradle"));
+        assert_eq!(package_data.name.as_deref(), Some("${projectName}"));
+
+        let dependency_purls: Vec<&str> = package_data
+            .dependencies
+            .iter()
+            .filter_map(|dependency| dependency.purl.as_deref())
+            .collect();
+        assert!(
+            dependency_purls.contains(&"pkg:maven/commons-lang/commons-lang@2.5"),
+            "expected static dependency to survive template sanitization: {dependency_purls:?}"
+        );
+        assert!(
+            dependency_purls.contains(
+                &"pkg:maven/%24%7Bdep.groupId%7D/%24%7Bdep.artifactId%7D@%24%7Bdep.version%7D"
+            ),
+            "expected templated dependency to survive template sanitization: {dependency_purls:?}"
+        );
+    }
+
+    #[test]
     fn test_purl_encodes_at_delimited_version_placeholder() {
         let content = r#"
 <project>
