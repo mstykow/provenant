@@ -160,7 +160,8 @@ impl ScanProgress {
         self.scan_bar.set_length(total_files as u64);
         self.scan_bar.set_position(0);
 
-        if self.mode == ProgressMode::Default && !self.stderr_is_tty {
+        if matches!(self.mode, ProgressMode::Default | ProgressMode::Verbose) && !self.stderr_is_tty
+        {
             self.message(&format!(
                 "Scanning {total_files} {}...",
                 pluralize_files(total_files)
@@ -203,7 +204,9 @@ impl ScanProgress {
                 }
             }
             ProgressMode::Verbose => {
-                self.message(&path.to_string_lossy());
+                if self.stderr_is_tty || !errors.is_empty() || !warnings.is_empty() {
+                    self.message(&path.to_string_lossy());
+                }
                 for err in &errors {
                     for line in err.lines() {
                         self.error(&format!("  {line}"));
@@ -251,7 +254,9 @@ impl ScanProgress {
             self.scan_bar.finish_with_message("Scan complete!");
         } else {
             self.scan_bar.finish_and_clear();
-            if self.mode == ProgressMode::Default {
+            if matches!(self.mode, ProgressMode::Default)
+                || (self.mode == ProgressMode::Verbose && !self.stderr_is_tty)
+            {
                 self.message("Scan complete.");
             }
         }
