@@ -48,8 +48,7 @@ pre-commit:
       exclude:
         - src/parsers/*_test.rs
         - src/parsers/*_golden_test.rs
-      run: cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin generate-supported-formats
-      stage_fixed: true
+      run: cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin generate-supported-formats && git add docs/SUPPORTED_FORMATS.md
 
     markdown-lint:
       glob: "**/*.md"

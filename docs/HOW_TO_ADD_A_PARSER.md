@@ -182,6 +182,11 @@ points in this repo:
 - `src/parsers/about.rs` for file-reference handling
 - `src/parsers/npm.rs` or `src/parsers/python.rs` for more complex multi-surface ecosystems
 
+When an ecosystem has both a manifest and a lockfile (or multiple related file formats), put all
+`PackageParser` impls in a single `src/parsers/<ecosystem>.rs` file with separate
+`register_parser!` invocations for each. This keeps related parsing logic co-located. For example,
+`src/parsers/julia.rs` contains both `JuliaProjectTomlParser` and `JuliaManifestTomlParser`.
+
 ## 3. Register the parser in `src/parsers/mod.rs`
 
 You need both module wiring and scanner registration.
@@ -255,8 +260,15 @@ cargo run --manifest-path xtask/Cargo.toml --bin update-parser-golden -- --list
 ```
 
 Then generate the exact expected files you need. See [`../xtask/README.md`](../xtask/README.md)
-and [`TESTING_STRATEGY.md`](TESTING_STRATEGY.md) for the current command patterns and golden-test
-feature-gating.
+for the command syntax and [`TESTING_STRATEGY.md`](TESTING_STRATEGY.md) for the current command
+patterns and golden-test feature-gating.
+
+The golden tool writes JSON to `.expected` files and then runs prettier on them. If the fixture
+filename does not end in `.json`, prettier cannot infer the parser and will fail. Work around
+this by running `npx prettier --write --parser json <files>` explicitly.
+
+CI checks that golden `.expected` files exist and match parser output, so they must be committed
+alongside the test fixtures.
 
 Scanner-owned detector surfaces that do **not** implement `PackageParser` still need fixture-backed
 contract coverage. For those cases, add dedicated detector goldens near the owning detector module
@@ -294,6 +306,13 @@ guidance, then run the smallest unit, golden, scan, or assembly target that prov
 
 Every new file format needs a `DatasourceId`, and every new datasource must be accounted for in
 assembly.
+
+### Add `PackageType` variant
+
+Add a new `PackageType` variant to `src/models/package_type.rs` and its `as_str()` match arm.
+
+Use one variant per ecosystem, not per file format. For example, both `JuliaProjectToml` and
+`JuliaManifestToml` datasource IDs share `PackageType::Julia`.
 
 ### Add datasource variants
 
@@ -363,6 +382,10 @@ If the Rust parser intentionally improves on the Python behavior, document the i
 `docs/improvements/<ecosystem>-parser.md`. Keep that doc focused on the behavior difference, not as
 an implementation diary.
 
+Add a row for the new ecosystem to
+[`docs/implementation-plans/package-detection/PARSER_VERIFICATION_SCORECARD.md`](implementation-plans/package-detection/PARSER_VERIFICATION_SCORECARD.md)
+so verification progress can be tracked alongside existing parsers.
+
 ## Common failure modes in this repo
 
 - The parser compiles but never runs because it was not added to `register_package_handlers!`.
@@ -373,20 +396,29 @@ an implementation diary.
   `*_scan_test.rs`.
 - The parser emits `file_references`, but no resolver ownership was added in assembly.
 - `register_parser!` was skipped, so generated supported-formats docs never pick up the parser.
+- `docs/SUPPORTED_FORMATS.md` is stale after adding a parser. The `generate-supported-formats`
+  pre-commit hook will reject the commit if regeneration produces changes. If the commit bypasses
+  hooks, the file will not be updated. Verify with
+  `cargo run --manifest-path xtask/Cargo.toml --bin generate-supported-formats -- --check`.
+- Golden `.expected` files were not generated or committed, so the CI golden-test job fails.
 
 ## Done definition
 
 Before considering a new parser complete, make sure all of these are true:
 
 - implementation exists in `src/parsers/<ecosystem>.rs`
+- `PackageType` variant exists in `src/models/package_type.rs`
 - `datasource_id` is correct on every production path
 - parser is exported and registered in `src/parsers/mod.rs`
 - `register_parser!` metadata is present
 - parser unit tests exist
 - parser goldens exist unless an explicitly scoped follow-up is already planned
+- golden `.expected` files are committed alongside test fixtures
 - parser-adjacent scan tests exist when downstream package or file-link behavior matters
 - every new datasource is classified in `src/assembly/assemblers.rs`
 - file-reference ownership is wired when the parser emits `PackageData.file_references`
+- `docs/SUPPORTED_FORMATS.md` is regenerated and staged (pre-commit hook checks this)
+- scorecard row added to `docs/implementation-plans/package-detection/PARSER_VERIFICATION_SCORECARD.md`
 - behavior has been validated against the Python reference or authoritative spec
 
 For intentionally scanner-gated detector surfaces such as compiled-binary package extraction,
