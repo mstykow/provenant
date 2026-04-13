@@ -1156,18 +1156,35 @@ fn extract_email_url_information(
     if text_options.detect_urls {
         let config = DetectionConfig {
             max_emails: text_options.max_emails,
-            max_urls: text_options.max_urls,
-            unique: true,
+            max_urls: if from_binary_strings {
+                0
+            } else {
+                text_options.max_urls
+            },
+            unique: !from_binary_strings,
         };
-        let urls = finder::find_urls(text_content, &config)
+        let mut urls = finder::find_urls(text_content, &config)
             .into_iter()
-            .filter(|d| !from_binary_strings || is_binary_string_url_candidate(&d.url))
-            .map(|d| OutputURL {
-                url: d.url,
-                start_line: d.start_line,
-                end_line: d.end_line,
+            .filter_map(|d| {
+                let url = if from_binary_strings {
+                    normalize_binary_string_url(&d.url)?
+                } else {
+                    d.url
+                };
+                Some(OutputURL {
+                    url,
+                    start_line: d.start_line,
+                    end_line: d.end_line,
+                })
             })
             .collect::<Vec<_>>();
+        if from_binary_strings {
+            let mut seen = HashSet::new();
+            urls.retain(|url| seen.insert(url.url.clone()));
+            if text_options.max_urls > 0 && urls.len() > text_options.max_urls {
+                urls.truncate(text_options.max_urls);
+            }
+        }
         file_info_builder.urls(urls);
     }
 }
@@ -1194,6 +1211,68 @@ fn is_binary_string_url_candidate(url: &str) -> bool {
     };
 
     has_strong_binary_host_shape(host) && has_meaningful_binary_url_context(&parsed)
+}
+
+fn normalize_binary_string_url(url: &str) -> Option<String> {
+    let mut parsed = url::Url::parse(url).ok()?;
+
+    if let Some(host) = parsed.host_str() {
+        let normalized_host = normalize_binary_url_host(host);
+        if normalized_host != host {
+            parsed.set_host(Some(&normalized_host)).ok()?;
+        }
+    }
+
+    let normalized_path = normalize_binary_url_path(parsed.path());
+    if normalized_path != parsed.path() {
+        parsed.set_path(&normalized_path);
+    }
+
+    let normalized = parsed.to_string();
+    is_binary_string_url_candidate(&normalized).then_some(normalized)
+}
+
+fn normalize_binary_url_host(host: &str) -> String {
+    let mut labels = host.split('.').map(ToOwned::to_owned).collect::<Vec<_>>();
+    if let Some(last_label) = labels.last_mut() {
+        *last_label = trim_binary_tld_tail(last_label);
+    }
+    labels.join(".")
+}
+
+fn trim_binary_tld_tail(label: &str) -> String {
+    const KNOWN_TLDS: &[&str] = &["com", "org", "net", "edu", "gov", "mil", "io", "dev"];
+    for tld in KNOWN_TLDS {
+        let Some(suffix) = label.get(tld.len()..) else {
+            continue;
+        };
+        if label.len() > tld.len()
+            && label[..tld.len()].eq_ignore_ascii_case(tld)
+            && suffix.starts_with(|ch: char| ch.is_ascii_digit())
+            && suffix.len() <= 3
+            && suffix
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '!' | '$'))
+        {
+            return (*tld).to_string();
+        }
+    }
+    label.to_string()
+}
+
+fn normalize_binary_url_path(path: &str) -> String {
+    let mut chars = path.chars().rev();
+    let Some(last) = chars.next() else {
+        return path.to_string();
+    };
+    let Some(prev) = chars.next() else {
+        return path.to_string();
+    };
+    if matches!(last, '_' | '!' | '$') && prev.is_ascii_digit() {
+        path[..path.len() - last.len_utf8()].to_string()
+    } else {
+        path.to_string()
+    }
 }
 
 fn is_binary_string_author_candidate(author: &str) -> bool {
@@ -1637,7 +1716,7 @@ mod tests {
         extract_email_url_information, extract_named_author_from_binary_line,
         is_binary_string_author_candidate, is_binary_string_copyright_candidate,
         is_binary_string_email_candidate, is_binary_string_url_candidate,
-        is_go_non_production_source, process_file,
+        is_go_non_production_source, normalize_binary_string_url, process_file,
     };
     use crate::license_detection::LicenseDetection as InternalLicenseDetection;
     use crate::license_detection::index::LicenseIndex;
@@ -2146,6 +2225,93 @@ mod tests {
     #[test]
     fn test_binary_string_url_candidate_keeps_short_project_path() {
         assert!(is_binary_string_url_candidate("http://tukaani.org/xz/"));
+    }
+
+    #[test]
+    fn test_normalize_binary_string_url_trims_certificate_host_tail_noise() {
+        assert_eq!(
+            normalize_binary_string_url("http://ocsp.digicert.com0/"),
+            Some("http://ocsp.digicert.com/".to_string())
+        );
+        assert_eq!(
+            normalize_binary_string_url("http://www.digicert.com1!0/"),
+            Some("http://www.digicert.com/".to_string())
+        );
+    }
+
+    #[test]
+    fn test_normalize_binary_string_url_trims_trailing_path_noise() {
+        assert_eq!(
+            normalize_binary_string_url(
+                "http://cacerts.digicert.com/DigiCertTrustedG4TimeStampingRSA4096SHA2562025CA1.crt0_"
+            ),
+            Some(
+                "http://cacerts.digicert.com/DigiCertTrustedG4TimeStampingRSA4096SHA2562025CA1.crt0".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn test_normalize_binary_string_url_preserves_clean_certificate_urls() {
+        assert_eq!(
+            normalize_binary_string_url("http://ocsp.digicert.com/"),
+            Some("http://ocsp.digicert.com/".to_string())
+        );
+        assert_eq!(
+            normalize_binary_string_url(
+                "http://cacerts.digicert.com/DigiCertTrustedG4TimeStampingRSA4096SHA2562025CA1.crt0"
+            ),
+            Some(
+                "http://cacerts.digicert.com/DigiCertTrustedG4TimeStampingRSA4096SHA2562025CA1.crt0".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn test_normalize_binary_string_url_does_not_trim_long_host_suffixes() {
+        assert_eq!(
+            normalize_binary_string_url("http://example.com0evil/"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_normalize_binary_string_url_does_not_trim_legitimate_path_suffix() {
+        assert_eq!(
+            normalize_binary_string_url("http://example.com/path_/"),
+            Some("http://example.com/path_/".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_email_url_information_caps_after_binary_normalization() {
+        let mut builder = FileInfoBuilder::default();
+        let text = [
+            "http://ocsp.digicert.com0/",
+            "http://ocsp.digicert.com0a/",
+            "http://www.digicert.com1!0/",
+        ]
+        .join("\n");
+        let options = TextDetectionOptions {
+            detect_urls: true,
+            max_urls: 2,
+            ..TextDetectionOptions::default()
+        };
+
+        extract_email_url_information(&mut builder, &text, &options, true);
+        let file_info = builder
+            .name("binary.txt".to_string())
+            .base_name("binary".to_string())
+            .extension(".txt".to_string())
+            .path("binary.txt".to_string())
+            .file_type(FileType::File)
+            .size(0)
+            .build()
+            .expect("file info");
+
+        assert_eq!(file_info.urls.len(), 2);
+        assert_eq!(file_info.urls[0].url, "http://ocsp.digicert.com/");
+        assert_eq!(file_info.urls[1].url, "http://www.digicert.com/");
     }
 
     #[test]
