@@ -178,6 +178,12 @@ fn extract_all_dependencies(
     let package_versions = build_package_versions(packages);
     let package_provenance = build_package_provenance(packages);
     let root_package_key = root_package.and_then(package_key_from_table);
+    let source_less_package_count = packages
+        .iter()
+        .filter_map(|package| package.as_table())
+        .filter(|package| package.get("source").is_none())
+        .filter(|package| package_key_from_table(package).is_some())
+        .count();
 
     for package in packages {
         if let Some(pkg_table) = package.as_table() {
@@ -246,6 +252,52 @@ fn extract_all_dependencies(
                         }
                     }
                 }
+            }
+        }
+    }
+
+    for package in packages.iter().filter_map(|package| package.as_table()) {
+        let Some((name, version)) = package_key_from_table(package) else {
+            continue;
+        };
+
+        let is_root_package = package_key_from_table(package)
+            .zip(root_package_key)
+            .is_some_and(|(package_key, root_key)| package_key == root_key);
+        if package.get("source").is_some() {
+            continue;
+        }
+
+        if is_root_package && source_less_package_count <= 1 {
+            continue;
+        }
+
+        let Some(mut purl) = PackageUrl::new("cargo", name).ok() else {
+            continue;
+        };
+        if purl.with_version(version).is_err() {
+            continue;
+        }
+
+        let dependency = Dependency {
+            purl: Some(purl.to_string()),
+            extracted_requirement: Some(version.to_string()),
+            scope: None,
+            is_runtime: None,
+            is_optional: None,
+            is_pinned: Some(true),
+            is_direct: Some(true),
+            resolved_package: None,
+            extra_data: build_dependency_extra_data(name, version, None, &package_provenance),
+        };
+
+        let key = CargoDependencyKey::from_dependency(&dependency);
+        match all_dependencies.entry(key) {
+            Entry::Vacant(entry) => {
+                entry.insert(dependency);
+            }
+            Entry::Occupied(mut entry) => {
+                entry.get_mut().is_direct = Some(true);
             }
         }
     }
