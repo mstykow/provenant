@@ -43,7 +43,9 @@ const FIELD_REPOSITORY: &str = "repository";
 const FIELD_HOMEPAGE: &str = "homepage";
 const FIELD_DEPENDENCIES: &str = "dependencies";
 const FIELD_DEV_DEPENDENCIES: &str = "dev-dependencies";
+const FIELD_DEV_DEPENDENCIES_LEGACY: &str = "dev_dependencies";
 const FIELD_BUILD_DEPENDENCIES: &str = "build-dependencies";
+const FIELD_BUILD_DEPENDENCIES_LEGACY: &str = "build_dependencies";
 const FIELD_DESCRIPTION: &str = "description";
 const FIELD_KEYWORDS: &str = "keywords";
 const FIELD_CATEGORIES: &str = "categories";
@@ -64,10 +66,7 @@ impl PackageParser for CargoParser {
     fn extract_packages(path: &Path) -> Vec<PackageData> {
         let toml_content = match read_cargo_toml(path) {
             Ok(content) => content,
-            Err(e) => {
-                warn!("Failed to read or parse Cargo.toml at {:?}: {}", path, e);
-                return vec![default_package_data()];
-            }
+            Err(_) => return Vec::new(),
         };
 
         let package = toml_content.get(FIELD_PACKAGE).and_then(|v| v.as_table());
@@ -103,9 +102,15 @@ impl PackageParser for CargoParser {
 
         let extracted_license_statement = raw_license.clone();
 
-        let dependencies = extract_dependencies(&toml_content, FIELD_DEPENDENCIES);
-        let dev_dependencies = extract_dependencies(&toml_content, FIELD_DEV_DEPENDENCIES);
-        let build_dependencies = extract_dependencies(&toml_content, FIELD_BUILD_DEPENDENCIES);
+        let dependencies = extract_dependencies_for_scopes(&toml_content, &[FIELD_DEPENDENCIES]);
+        let dev_dependencies = extract_dependencies_for_scopes(
+            &toml_content,
+            &[FIELD_DEV_DEPENDENCIES, FIELD_DEV_DEPENDENCIES_LEGACY],
+        );
+        let build_dependencies = extract_dependencies_for_scopes(
+            &toml_content,
+            &[FIELD_BUILD_DEPENDENCIES, FIELD_BUILD_DEPENDENCIES_LEGACY],
+        );
 
         let purl = create_package_url(&name, &version);
 
@@ -417,6 +422,13 @@ fn extract_dependencies(toml_content: &Value, scope: &str) -> Vec<Dependency> {
     dependencies
 }
 
+fn extract_dependencies_for_scopes(toml_content: &Value, scopes: &[&str]) -> Vec<Dependency> {
+    scopes
+        .iter()
+        .flat_map(|scope| extract_dependencies(toml_content, scope))
+        .collect()
+}
+
 /// Extracts keywords and categories, merging them into a single keywords array
 fn extract_keywords_and_categories(toml_content: &Value) -> Vec<String> {
     let mut keywords = Vec::new();
@@ -625,14 +637,6 @@ fn extract_extra_data(
         None
     } else {
         Some(extra_data)
-    }
-}
-
-fn default_package_data() -> PackageData {
-    PackageData {
-        package_type: Some(CargoParser::PACKAGE_TYPE),
-        datasource_id: Some(DatasourceId::CargoToml),
-        ..Default::default()
     }
 }
 

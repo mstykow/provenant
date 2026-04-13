@@ -179,6 +179,38 @@ tokio = { version = "1.0", features = ["full"] }
     }
 
     #[test]
+    fn test_extract_legacy_underscore_dependency_sections() {
+        let content = r#"
+[package]
+name = "test-package"
+version = "0.1.0"
+license = "MIT"
+
+[dev_dependencies]
+my-package = "99999.0.0"
+
+[build_dependencies]
+my-package = "99999.0.0"
+"#;
+
+        let (_temp_file, cargo_path) = create_temp_cargo_toml(content);
+        let package_data = CargoParser::extract_first_package(&cargo_path);
+
+        let dependency_purls: Vec<_> = package_data
+            .dependencies
+            .iter()
+            .filter_map(|dep| dep.purl.as_deref())
+            .collect();
+
+        assert_eq!(dependency_purls.len(), 2);
+        assert!(
+            dependency_purls
+                .iter()
+                .all(|purl| *purl == "pkg:cargo/my-package")
+        );
+    }
+
+    #[test]
     fn test_extract_short_composite_declared_license_preserves_mit_zero_and_or() {
         let content = r#"
 [package]
@@ -276,6 +308,23 @@ mockito = "0.31.0"
         assert_eq!(package_data.name, None);
         assert_eq!(package_data.version, None);
         assert!(package_data.dependencies.is_empty());
+    }
+
+    #[test]
+    fn test_invalid_cargo_toml_returns_no_packages() {
+        let content = r#"
+[package]
+name = "manifest-invalid-test-fixture"
+version = "0.1.0"
+
+[invalid-section]
+key = invalid-value
+        "#;
+
+        let (_temp_file, cargo_path) = create_temp_cargo_toml(content);
+        let packages = CargoParser::extract_packages(&cargo_path);
+
+        assert!(packages.is_empty());
     }
 
     #[test]
