@@ -178,13 +178,6 @@ fn extract_all_dependencies(
     let package_versions = build_package_versions(packages);
     let package_provenance = build_package_provenance(packages);
     let root_package_key = root_package.and_then(package_key_from_table);
-    let source_less_package_count = packages
-        .iter()
-        .filter_map(|package| package.as_table())
-        .filter(|package| package.get("source").is_none())
-        .filter(|package| package_key_from_table(package).is_some())
-        .count();
-
     for package in packages {
         if let Some(pkg_table) = package.as_table() {
             let is_root_package = package_key_from_table(pkg_table)
@@ -268,7 +261,7 @@ fn extract_all_dependencies(
             continue;
         }
 
-        if is_root_package && source_less_package_count <= 1 {
+        if is_root_package {
             continue;
         }
 
