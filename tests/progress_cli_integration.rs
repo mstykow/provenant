@@ -215,7 +215,7 @@ fn default_mode_emits_hierarchical_timing_summary() {
 }
 
 #[test]
-fn verbose_mode_emits_file_by_file_paths() {
+fn verbose_mode_suppresses_success_paths_on_non_tty_stderr() {
     let (temp, scan_dir) = create_scan_fixture();
     let output_file = temp.path().join("out.json");
 
@@ -232,7 +232,15 @@ fn verbose_mode_emits_file_by_file_paths() {
 
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("a.txt"));
+    assert!(
+        stderr.contains("Scanning 1 file..."),
+        "stderr was: {stderr}"
+    );
+    assert!(stderr.contains("Scan complete."), "stderr was: {stderr}");
+    assert!(
+        !stderr.contains("a.txt"),
+        "non-TTY verbose output should suppress successful per-file paths: {stderr}"
+    );
 }
 
 #[test]
