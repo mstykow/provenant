@@ -31,7 +31,7 @@ Enhanced progress reporting during scans: multi-phase progress bars, ETA, throug
 - **Multi-phase progress bars**: File discovery, scanning, assembly, output writing
 - **ETA calculation**: Estimated time to completion (built-in to indicatif)
 - **Throughput metrics**: Files/second, bytes/second in scan summary
-- **Verbosity control**: `--quiet` (suppress all), `--verbose` (file-by-file details)
+- **Verbosity control**: `--quiet` (suppress all), `--verbose` (TTY-focused file-by-file details with bounded non-TTY output)
 - **Scan summary**: Statistics displayed at end of scan (counts, timings, speed)
 - **Error display**: Real-time error reporting alongside progress bars
 - **Logging integration**: Log messages printed above progress bars (not corrupting them)
@@ -174,14 +174,14 @@ The progress/reporting path is now implemented around a centralized manager:
 
 ### Implemented Behavior Matrix
 
-| Capability                 | Status | Notes                                                                                                                        |
-| -------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| Quiet/default/verbose UX   | ✅     | Quiet suppresses stderr output, default shows progress + summary, verbose prints per-file paths and detailed per-file errors |
-| Multi-phase progress       | ✅     | Discovery/SPDX/assembly/output phase indicators + scan progress bar                                                          |
-| Throughput + summary stats | ✅     | Files/sec, bytes/sec, initial/final counts with sizes, package assembly counts, phase timings                                |
-| Real-time error display    | ✅     | Inline stderr reporting during scan, plus end-of-scan error section                                                          |
-| Logging integration        | ✅     | Startup/global warnings use the logger bridge, while file-scoped parser/runtime failures flow through `scan_errors`          |
-| Non-TTY degradation        | ✅     | No progress redraw artifacts when stderr is redirected                                                                       |
+| Capability                 | Status | Notes                                                                                                                                                                          |
+| -------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Quiet/default/verbose UX   | ✅     | Quiet suppresses stderr output, default shows progress + summary, verbose prints per-file paths on TTY and keeps bounded non-TTY output with detailed per-file warnings/errors |
+| Multi-phase progress       | ✅     | Discovery/SPDX/assembly/output phase indicators + scan progress bar                                                                                                            |
+| Throughput + summary stats | ✅     | Files/sec, bytes/sec, initial/final counts with sizes, package assembly counts, phase timings                                                                                  |
+| Real-time error display    | ✅     | Inline stderr reporting during scan, plus end-of-scan error section                                                                                                            |
+| Logging integration        | ✅     | Startup/global warnings use the logger bridge, while file-scoped parser/runtime failures flow through `scan_errors`                                                            |
+| Non-TTY degradation        | ✅     | No progress redraw artifacts when stderr is redirected                                                                                                                         |
 
 ### Dependencies
 
@@ -501,7 +501,7 @@ Python only shows the error count in the final summary.
 ## Success Criteria
 
 - [x] `--quiet` suppresses stderr progress/reporting output
-- [x] `--verbose` shows file-by-file stderr paths and detailed per-file error context
+- [x] `--verbose` shows file-by-file stderr paths on TTY and bounded non-TTY progress with detailed per-file warning/error context
 - [x] Default mode renders scan progress with ETA in terminal-attended runs
 - [x] Progress rendering does not corrupt structured output files
 - [x] Scan summary includes counts, sizes, speed, errors, and timings

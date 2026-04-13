@@ -590,11 +590,11 @@ Centralized `ScanProgress` struct manages mode-aware progress output via `indica
 
 1. **Discovery phase**: Spinner/message while counting files, recording initial file/dir/size counts.
 2. **SPDX load phase**: Startup message and timing capture around license DB load.
-3. **Scan phase**: Main progress bar (default mode, TTY only) with ETA, elapsed time, and `{per_sec}` throughput; verbose mode emits file-by-file paths.
+3. **Scan phase**: Main progress bar (default mode, TTY only) with ETA, elapsed time, and `{per_sec}` throughput; verbose mode keeps file-by-file paths on TTY and degrades to bounded scan lifecycle messages plus per-file warning/error context when stderr is not a TTY.
 4. **Assembly and output phases**: Phase messages/spinners with timing capture.
 5. **Scan summary**: Files/sec, bytes/sec, error count, initial/final counts (including sizes), package assembly counts, and per-phase timings.
 
-Verbosity behavior is implemented in `src/progress.rs` and wired through `src/main.rs`: quiet suppresses stderr output, default shows progress/summary, verbose shows per-file stderr output with detailed per-file errors.
+Verbosity behavior is implemented in `src/progress.rs` and wired through `src/main.rs`: quiet suppresses stderr output, default shows progress/summary, and verbose stays detailed without flooding redirected logs by limiting successful per-file path output to TTY runs while still surfacing per-file warnings/errors in non-TTY environments.
 
 Logging integration uses `indicatif-log-bridge` for startup and global warnings, while parser and other file-scoped scan failures are attached to `FileInfo.scan_errors` in `src/scanner/process.rs`. That keeps serialized output, CI logs, and the quiet/default/verbose progress modes aligned: default mode shows concise failing paths, verbose mode shows the underlying per-file error details.
 
