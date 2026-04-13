@@ -1972,6 +1972,51 @@ mod tests {
     }
 
     #[test]
+    fn test_assemble_cargo_workspace_keeps_root_package_when_root_is_real_member() {
+        let mut root = create_test_file_info(
+            "workspace/Cargo.toml",
+            DatasourceId::CargoToml,
+            Some("pkg:cargo/workspace-root@1.0.0"),
+            Some("workspace-root"),
+            Some("1.0.0"),
+            vec![create_test_dependency("pkg:cargo/serde", Some("1.0"), None)],
+        );
+        root.package_data[0].package_type = Some(PackageType::Cargo);
+        root.package_data[0].extra_data = Some(HashMap::from([(
+            "workspace".to_string(),
+            json!({ "members": ["crates/app"] }),
+        )]));
+
+        let mut member_manifest = create_test_file_info(
+            "workspace/crates/app/Cargo.toml",
+            DatasourceId::CargoToml,
+            Some("pkg:cargo/app@0.1.0"),
+            Some("app"),
+            Some("0.1.0"),
+            vec![],
+        );
+        member_manifest.package_data[0].package_type = Some(PackageType::Cargo);
+
+        let mut files = vec![root, member_manifest];
+
+        let result = assemble(&mut files);
+
+        assert_eq!(result.packages.len(), 2);
+        assert!(
+            result
+                .packages
+                .iter()
+                .any(|package| package.purl.as_deref() == Some("pkg:cargo/workspace-root@1.0.0"))
+        );
+        assert!(
+            result
+                .packages
+                .iter()
+                .any(|package| package.purl.as_deref() == Some("pkg:cargo/app@0.1.0"))
+        );
+    }
+
+    #[test]
     fn test_assemble_python_pyproject_with_uv_lock() {
         let mut files = vec![
             create_test_file_info(
