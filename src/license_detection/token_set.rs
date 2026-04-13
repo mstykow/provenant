@@ -2,6 +2,8 @@ use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::ops::Deref;
 
+use rkyv::Archive;
+
 use crate::license_detection::index::dictionary::{TokenDictionary, TokenId, TokenKind};
 
 /// A set of token IDs stored as a sorted SmallVec.
@@ -9,7 +11,7 @@ use crate::license_detection::index::dictionary::{TokenDictionary, TokenId, Toke
 /// Invariant: elements are always sorted and deduplicated.
 /// Construct via `TokenSet::from_token_ids()`, `TokenSet::from_u16_iter()`,
 /// or `.collect()` from an iterator of u16.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TokenSet(SmallVec<[u16; 64]>);
 
 impl TokenSet {

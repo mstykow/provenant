@@ -5,9 +5,25 @@
 
 use std::collections::HashMap;
 
+use rkyv::Archive;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[rkyv(derive(Hash, Eq, PartialEq, PartialOrd, Ord))]
 pub struct TokenId(u16);
 
 impl TokenId {
@@ -69,13 +85,37 @@ impl PartialOrd<TokenId> for u16 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub enum TokenKind {
     Legalese,
     Regular,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub struct KnownToken {
     pub id: TokenId,
     pub kind: TokenKind,
@@ -83,14 +123,28 @@ pub struct KnownToken {
     pub is_short_or_digit: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub enum QueryToken {
     Known(KnownToken),
     Unknown,
     Stopword,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub struct TokenMetadata {
     pub kind: TokenKind,
     pub is_digit_only: bool,
@@ -108,7 +162,7 @@ pub struct TokenMetadata {
 ///
 /// Based on the Python ScanCode Toolkit implementation at:
 /// reference/scancode-toolkit/src/licensedcode/index.py
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TokenDictionary {
     /// Mapping from token string to token ID
     tokens_to_ids: HashMap<String, TokenId>,

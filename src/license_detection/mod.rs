@@ -4,6 +4,7 @@ pub mod aho_match;
 pub mod automaton;
 pub(crate) mod detection;
 pub mod embedded;
+mod license_cache;
 mod position_set;
 mod token_multiset;
 mod token_set;
@@ -34,13 +35,18 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::Result;
 
 use crate::license_detection::embedded::index::{
     load_embedded_artifact_metadata_from_bytes, load_embedded_license_index_from_bytes,
 };
+use crate::license_detection::index::CachedLicenseIndex;
 use crate::license_detection::index::build_index_from_loaded;
+use crate::license_detection::license_cache::{
+    LicenseCacheConfig, cache_file_size, load_cached_index, save_cached_index,
+};
 use crate::license_detection::query::Query;
 use crate::license_detection::rules::{
     load_loaded_licenses_from_directory, load_loaded_rules_from_directory,
@@ -463,13 +469,41 @@ impl LicenseDetectionEngine {
     /// # Returns
     /// A Result containing the engine or an error
     pub fn from_embedded() -> Result<Self> {
+        let cache_config = LicenseCacheConfig::from_default_dir();
+
+        if let Some(cached) = load_cached_index(&cache_config)? {
+            let start = Instant::now();
+            let index = index::LicenseIndex::from(cached);
+            eprintln!(
+                "License index loaded from rkyv cache in {:.2}s",
+                start.elapsed().as_secs_f64()
+            );
+            return Self::from_index(index, Self::embedded_spdx_license_list_version().ok());
+        }
+
+        let start = Instant::now();
         let artifact_bytes = include_bytes!("../../resources/license_detection/license_index.zst");
         let loaded = load_embedded_license_index_from_bytes(artifact_bytes)
             .map_err(|e| anyhow::anyhow!("Failed to load embedded license index: {}", e))?;
-        Self::from_index(
-            loaded.index,
-            Some(loaded.metadata.spdx_license_list_version),
-        )
+        eprintln!(
+            "License index built from embedded artifact in {:.2}s",
+            start.elapsed().as_secs_f64()
+        );
+
+        let index = loaded.index;
+        let spdx_version = Some(loaded.metadata.spdx_license_list_version);
+
+        let cached = CachedLicenseIndex::from(index.clone());
+        if let Err(e) = save_cached_index(&cache_config, &cached) {
+            eprintln!("Warning: failed to save license index cache: {}", e);
+        } else if let Some(size) = cache_file_size(&cache_config) {
+            eprintln!(
+                "License index cache saved ({:.1} MB)",
+                size as f64 / 1_048_576.0
+            );
+        }
+
+        Self::from_index(index, spdx_version)
     }
 
     /// Create a new license detection engine from a directory of license rules.

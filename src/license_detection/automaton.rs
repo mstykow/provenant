@@ -109,6 +109,11 @@ impl Automaton {
     pub fn heap_bytes(&self) -> usize {
         self.inner.heap_bytes()
     }
+
+    /// Serialize the automaton to a byte vector.
+    pub fn serialize_bytes(&self) -> Vec<u8> {
+        self.inner.serialize()
+    }
 }
 
 impl Default for Automaton {

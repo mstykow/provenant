@@ -14,13 +14,94 @@ pub use builder::{
 use crate::license_detection::automaton::Automaton;
 use crate::license_detection::index::dictionary::{TokenDictionary, TokenId};
 use crate::license_detection::{TokenMultiset, TokenSet};
+use rkyv::Archive;
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct IndexedRuleMetadata {
     pub license_expression_spdx: Option<String>,
     pub skip_for_required_phrase_generation: bool,
     pub replaced_by: Vec<String>,
+}
+
+/// Rkyv-compatible cache representation of LicenseIndex.
+///
+/// Automaton fields and complex model types are stored as serialized byte
+/// vectors since they have custom serde logic that isn't compatible with
+/// rkyv's derive macros.
+#[derive(Debug, Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct CachedLicenseIndex {
+    pub dictionary: TokenDictionary,
+    pub len_legalese: usize,
+    pub rid_by_hash: HashMap<[u8; 20], usize>,
+    pub rules_by_rid_bytes: Vec<u8>,
+    pub tids_by_rid: Vec<Vec<TokenId>>,
+    pub rules_automaton_bytes: Vec<u8>,
+    pub unknown_automaton_bytes: Vec<u8>,
+    pub sets_by_rid: HashMap<usize, TokenSet>,
+    pub rule_metadata_by_identifier: HashMap<String, IndexedRuleMetadata>,
+    pub msets_by_rid: HashMap<usize, TokenMultiset>,
+    pub high_sets_by_rid: HashMap<usize, TokenSet>,
+    pub high_postings_by_rid: HashMap<usize, HashMap<TokenId, Vec<usize>>>,
+    pub false_positive_rids: HashSet<usize>,
+    pub approx_matchable_rids: HashSet<usize>,
+    pub licenses_by_key_bytes: Vec<u8>,
+    pub pattern_id_to_rid: Vec<Vec<usize>>,
+    pub rid_by_spdx_key: HashMap<String, usize>,
+    pub unknown_spdx_rid: Option<usize>,
+    pub rids_by_high_tid: HashMap<TokenId, HashSet<usize>>,
+}
+
+impl From<LicenseIndex> for CachedLicenseIndex {
+    fn from(index: LicenseIndex) -> Self {
+        Self {
+            dictionary: index.dictionary,
+            len_legalese: index.len_legalese,
+            rid_by_hash: index.rid_by_hash,
+            rules_by_rid_bytes: rmp_serde::to_vec(&index.rules_by_rid).unwrap(),
+            tids_by_rid: index.tids_by_rid,
+            rules_automaton_bytes: index.rules_automaton.serialize_bytes(),
+            unknown_automaton_bytes: index.unknown_automaton.serialize_bytes(),
+            sets_by_rid: index.sets_by_rid,
+            rule_metadata_by_identifier: index.rule_metadata_by_identifier,
+            msets_by_rid: index.msets_by_rid,
+            high_sets_by_rid: index.high_sets_by_rid,
+            high_postings_by_rid: index.high_postings_by_rid,
+            false_positive_rids: index.false_positive_rids,
+            approx_matchable_rids: index.approx_matchable_rids,
+            licenses_by_key_bytes: rmp_serde::to_vec(&index.licenses_by_key).unwrap(),
+            pattern_id_to_rid: index.pattern_id_to_rid,
+            rid_by_spdx_key: index.rid_by_spdx_key,
+            unknown_spdx_rid: index.unknown_spdx_rid,
+            rids_by_high_tid: index.rids_by_high_tid,
+        }
+    }
+}
+
+impl From<CachedLicenseIndex> for LicenseIndex {
+    fn from(cached: CachedLicenseIndex) -> Self {
+        Self {
+            dictionary: cached.dictionary,
+            len_legalese: cached.len_legalese,
+            rid_by_hash: cached.rid_by_hash,
+            rules_by_rid: rmp_serde::from_slice(&cached.rules_by_rid_bytes).unwrap(),
+            tids_by_rid: cached.tids_by_rid,
+            rules_automaton: Automaton::deserialize_unchecked(&cached.rules_automaton_bytes),
+            unknown_automaton: Automaton::deserialize_unchecked(&cached.unknown_automaton_bytes),
+            sets_by_rid: cached.sets_by_rid,
+            rule_metadata_by_identifier: cached.rule_metadata_by_identifier,
+            msets_by_rid: cached.msets_by_rid,
+            high_sets_by_rid: cached.high_sets_by_rid,
+            high_postings_by_rid: cached.high_postings_by_rid,
+            false_positive_rids: cached.false_positive_rids,
+            approx_matchable_rids: cached.approx_matchable_rids,
+            licenses_by_key: rmp_serde::from_slice(&cached.licenses_by_key_bytes).unwrap(),
+            pattern_id_to_rid: cached.pattern_id_to_rid,
+            rid_by_spdx_key: cached.rid_by_spdx_key,
+            unknown_spdx_rid: cached.unknown_spdx_rid,
+            rids_by_high_tid: cached.rids_by_high_tid,
+        }
+    }
 }
 
 /// License index containing all data structures for efficient license detection.

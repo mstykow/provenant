@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::ops::Deref;
 
+use rkyv::Archive;
+
 use crate::license_detection::index::dictionary::{TokenDictionary, TokenId, TokenKind};
 
 /// A multiset of token IDs stored as token -> occurrence count.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TokenMultiset(HashMap<TokenId, usize>);
 
 impl TokenMultiset {
