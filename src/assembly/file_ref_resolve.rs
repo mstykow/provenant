@@ -37,6 +37,14 @@ const DB_PATH_CONFIGS: &[DbPathConfig] = &[
         path_suffix: "var/lib/rpm/Packages",
     },
     DbPathConfig {
+        datasource_ids: &[DatasourceId::RpmInstalledDatabaseBdb],
+        path_suffix: "usr/lib/sysimage/rpm/Packages",
+    },
+    DbPathConfig {
+        datasource_ids: &[DatasourceId::RpmInstalledDatabaseNdb],
+        path_suffix: "var/lib/rpm/Packages.db",
+    },
+    DbPathConfig {
         datasource_ids: &[DatasourceId::RpmInstalledDatabaseNdb],
         path_suffix: "usr/lib/sysimage/rpm/Packages.db",
     },
