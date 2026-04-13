@@ -1,0 +1,135 @@
+[
+  {
+    "type": "julia",
+    "namespace": null,
+    "name": "MyPackage",
+    "version": "1.0.0",
+    "qualifiers": null,
+    "subpath": null,
+    "primary_language": "Julia",
+    "description": null,
+    "release_date": null,
+    "parties": [
+      {
+        "type": null,
+        "role": "author",
+        "name": "Jane Doe",
+        "email": null,
+        "url": null,
+        "organization": null,
+        "organization_url": null,
+        "timezone": null
+      },
+      {
+        "type": null,
+        "role": "author",
+        "name": "John Smith",
+        "email": null,
+        "url": null,
+        "organization": null,
+        "organization_url": null,
+        "timezone": null
+      }
+    ],
+    "keywords": [],
+    "homepage_url": "https://example.com",
+    "download_url": null,
+    "size": null,
+    "sha1": null,
+    "md5": null,
+    "sha256": null,
+    "sha512": null,
+    "bug_tracking_url": null,
+    "code_view_url": null,
+    "vcs_url": "https://github.com/example/MyPackage.jl",
+    "copyright": null,
+    "holder": null,
+    "declared_license_expression": "mit",
+    "declared_license_expression_spdx": "MIT",
+    "license_detections": [
+      {
+        "license_expression": "mit",
+        "license_expression_spdx": "MIT",
+        "matches": [
+          {
+            "license_expression": "mit",
+            "license_expression_spdx": "MIT",
+            "from_file": null,
+            "start_line": 1,
+            "end_line": 1,
+            "matcher": "parser-declared-license",
+            "score": 100.0,
+            "matched_length": 1,
+            "match_coverage": 100.0,
+            "rule_relevance": 100,
+            "rule_identifier": null,
+            "rule_url": null,
+            "matched_text": "MIT",
+            "matched_text_diagnostics": null,
+            "referenced_filenames": null
+          }
+        ],
+        "detection_log": [],
+        "identifier": null
+      }
+    ],
+    "other_license_expression": null,
+    "other_license_expression_spdx": null,
+    "other_license_detections": [],
+    "extracted_license_statement": "MIT",
+    "notice_text": null,
+    "source_packages": [],
+    "file_references": [],
+    "is_private": false,
+    "is_virtual": false,
+    "extra_data": {
+      "targets": {
+        "test": [
+          "Test"
+        ]
+      },
+      "compat": {
+        "HTTP": "^1.0",
+        "JSON": "1.0.0"
+      },
+      "uuid": "12345678-1234-1234-1234-123456789abc",
+      "deps": {
+        "HTTP": "cd3eb016-35fb-5094-929b-558a96fad6f3",
+        "JSON": "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+      }
+    },
+    "dependencies": [
+      {
+        "purl": "pkg:julia/HTTP",
+        "extracted_requirement": "^1.0",
+        "scope": "dependencies",
+        "is_runtime": true,
+        "is_optional": null,
+        "is_pinned": false,
+        "is_direct": true,
+        "resolved_package": null,
+        "extra_data": {
+          "uuid": "cd3eb016-35fb-5094-929b-558a96fad6f3"
+        }
+      },
+      {
+        "purl": "pkg:julia/JSON",
+        "extracted_requirement": "1.0.0",
+        "scope": "dependencies",
+        "is_runtime": true,
+        "is_optional": null,
+        "is_pinned": true,
+        "is_direct": true,
+        "resolved_package": null,
+        "extra_data": {
+          "uuid": "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+        }
+      }
+    ],
+    "repository_homepage_url": null,
+    "repository_download_url": null,
+    "api_data_url": null,
+    "datasource_id": "julia_project_toml",
+    "purl": "pkg:julia/MyPackage@1.0.0"
+  }
+]
