@@ -1,18 +1,20 @@
 use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
 use std::path::Path as StdPath;
 
 use object::endian::LittleEndian as LE;
 use object::pe;
 use object::read::FileKind;
-use object::read::pe::{ResourceDirectory, ResourceDirectoryTable};
 use packageurl::PackageUrl;
 
 use crate::models::{DatasourceId, PackageData, PackageType, Party};
 use crate::register_parser;
 
 use super::ParsePackagesResult;
-use super::license_normalization::normalize_spdx_declared_license;
+use super::license_normalization::{
+    detect_declared_license_from_text, normalize_spdx_declared_license,
+};
 
 register_parser!(
     "Windows PE executable with VERSIONINFO package metadata",
@@ -23,6 +25,20 @@ register_parser!(
 );
 
 const VS_FIXEDFILEINFO_SIGNATURE: u32 = 0xFEEF04BD;
+const MAX_SIBLING_LICENSE_BYTES: u64 = 256 * 1024;
+const WINDOWS_VERSION_FALLBACK_KEYS: &[&str] = &[
+    "ProductName",
+    "FileDescription",
+    "CompanyName",
+    "LegalCopyright",
+    "ProductVersion",
+    "FileVersion",
+    "OriginalFilename",
+    "InternalName",
+    "URL",
+    "WWW",
+    "License",
+];
 
 #[derive(Debug, Clone)]
 struct FixedVersionInfo {
@@ -34,6 +50,9 @@ struct ParsedVersionInfo {
     string_tables: Vec<HashMap<String, String>>,
     fixed: Option<FixedVersionInfo>,
 }
+
+type VersionStrings<'a> = &'a HashMap<String, String>;
+type PreferredVersionStringSources<'a> = (Option<VersionStrings<'a>>, Option<VersionStrings<'a>>);
 
 #[derive(Debug, Clone)]
 struct VersionBlock<'a> {
@@ -61,6 +80,7 @@ pub(crate) fn extract_windows_executable_metadata_text(bytes: &[u8]) -> Option<S
         Ok(FileKind::Pe64) => parse_pe_version_info::<pe::ImageNtHeaders64>(bytes),
         _ => return None,
     }?;
+    let fallback_strings = extract_utf16_version_string_fallback(bytes);
 
     let mut lines = Vec::new();
     for string_table in &parsed.string_tables {
@@ -89,6 +109,32 @@ pub(crate) fn extract_windows_executable_metadata_text(bytes: &[u8]) -> Option<S
         }
     }
 
+    if !fallback_strings.is_empty() {
+        for key in [
+            "ProductName",
+            "FileDescription",
+            "CompanyName",
+            "LegalCopyright",
+            "License",
+            "LegalTrademarks",
+            "LegalTrademarks1",
+            "LegalTrademarks2",
+            "LegalTrademarks3",
+            "Comments",
+            "URL",
+            "WWW",
+        ] {
+            if let Some(value) = fallback_strings.get(key).map(|value| value.trim())
+                && !value.is_empty()
+            {
+                let line = format!("{key}: {value}");
+                if !lines.contains(&line) {
+                    lines.push(line);
+                }
+            }
+        }
+    }
+
     if let Some(version) = parsed.fixed.and_then(|fixed| fixed.product_version) {
         let line = format!("ProductVersion: {version}");
         if !lines.contains(&line) {
@@ -100,6 +146,7 @@ pub(crate) fn extract_windows_executable_metadata_text(bytes: &[u8]) -> Option<S
 }
 
 fn parse_windows_executable_bytes(path: &Path, bytes: &[u8]) -> Vec<PackageData> {
+    let fallback_strings = extract_utf16_version_string_fallback(bytes);
     let parsed = match FileKind::parse(bytes) {
         Ok(FileKind::Pe32) => parse_pe_version_info::<pe::ImageNtHeaders32>(bytes),
         Ok(FileKind::Pe64) => parse_pe_version_info::<pe::ImageNtHeaders64>(bytes),
@@ -107,9 +154,20 @@ fn parse_windows_executable_bytes(path: &Path, bytes: &[u8]) -> Vec<PackageData>
     };
 
     match parsed {
-        Some(version_info) => build_windows_executable_package(path, version_info)
-            .into_iter()
-            .collect(),
+        Some(version_info) => build_windows_executable_package(
+            path,
+            version_info,
+            (!fallback_strings.is_empty()).then_some(&fallback_strings),
+        )
+        .into_iter()
+        .collect(),
+        None if !fallback_strings.is_empty() => build_windows_executable_package(
+            path,
+            ParsedVersionInfo::default(),
+            Some(&fallback_strings),
+        )
+        .into_iter()
+        .collect(),
         None => build_windows_executable_fallback(path)
             .into_iter()
             .collect(),
@@ -129,30 +187,20 @@ fn parse_pe_version_info<Pe: object::read::pe::ImageNtHeaders>(
         matches!(entry.name_or_id(), object::read::pe::ResourceNameOrId::Id(id) if id == pe::RT_VERSION)
     })?;
     let name_table = version_entry.data(resource_directory).ok()?.table()?;
-    let language_table = first_subtable(resource_directory, &name_table)?;
-    let data_entry = first_data_entry(resource_directory, &language_table)?;
-    let version_bytes = resource_data_bytes(&pe, bytes, data_entry)?;
-    parse_version_info_bytes(version_bytes)
-}
 
-fn first_subtable<'a>(
-    resource_directory: ResourceDirectory<'a>,
-    table: &ResourceDirectoryTable<'a>,
-) -> Option<ResourceDirectoryTable<'a>> {
-    table
+    let parsed_infos = name_table
         .entries
         .iter()
-        .find_map(|entry| entry.data(resource_directory).ok()?.table())
-}
+        .filter_map(|name_entry| name_entry.data(resource_directory).ok()?.table())
+        .flat_map(|language_table| {
+            language_table.entries.iter().filter_map(|language_entry| {
+                let data_entry = language_entry.data(resource_directory).ok()?.data()?;
+                let version_bytes = resource_data_bytes(&pe, bytes, data_entry)?;
+                parse_version_info_bytes(version_bytes)
+            })
+        });
 
-fn first_data_entry<'a>(
-    resource_directory: ResourceDirectory<'a>,
-    table: &ResourceDirectoryTable<'a>,
-) -> Option<&'a pe::ImageResourceDataEntry> {
-    table
-        .entries
-        .iter()
-        .find_map(|entry| entry.data(resource_directory).ok()?.data())
+    merge_parsed_version_infos(parsed_infos)
 }
 
 fn resource_data_bytes<'a, Pe: object::read::pe::ImageNtHeaders>(
@@ -256,6 +304,47 @@ fn parse_version_block(bytes: &[u8]) -> Option<VersionBlock<'_>> {
     })
 }
 
+fn merge_parsed_version_infos(
+    parsed_infos: impl IntoIterator<Item = ParsedVersionInfo>,
+) -> Option<ParsedVersionInfo> {
+    let mut merged = ParsedVersionInfo::default();
+    let mut saw_any = false;
+
+    for parsed in parsed_infos {
+        saw_any = true;
+        if merged.fixed.is_none() {
+            merged.fixed = parsed.fixed;
+        }
+        merged.string_tables.extend(parsed.string_tables);
+    }
+
+    saw_any.then_some(merged)
+}
+
+fn extract_utf16_version_string_fallback(bytes: &[u8]) -> HashMap<String, String> {
+    let units = bytes
+        .chunks_exact(2)
+        .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+        .collect::<Vec<_>>();
+    let text = String::from_utf16_lossy(&units);
+
+    WINDOWS_VERSION_FALLBACK_KEYS
+        .iter()
+        .filter_map(|key| {
+            find_utf16_version_value(&text, key).map(|value| ((*key).to_string(), value))
+        })
+        .collect()
+}
+
+fn find_utf16_version_value(text: &str, key: &str) -> Option<String> {
+    let needle = format!("{key}\0");
+    let start = text.find(&needle)? + needle.len();
+    let rest = text.get(start..)?.trim_start_matches('\0');
+    let value_end = rest.find('\0')?;
+    let value = rest[..value_end].trim();
+    (!value.is_empty()).then(|| value.to_string())
+}
+
 fn iter_version_blocks(mut bytes: &[u8]) -> impl Iterator<Item = Option<VersionBlock<'_>>> + '_ {
     std::iter::from_fn(move || {
         if bytes.is_empty() {
@@ -349,16 +438,20 @@ fn align_to_4(offset: usize) -> usize {
 fn build_windows_executable_package(
     path: &Path,
     version_info: ParsedVersionInfo,
+    fallback_strings: Option<&HashMap<String, String>>,
 ) -> Option<PackageData> {
-    let strings = preferred_windows_version_strings(&version_info);
+    let (strings, fallback) =
+        preferred_windows_version_strings_with_fallback(path, &version_info, fallback_strings);
 
-    let name = preferred_string(
+    let name = preferred_string_with_fallback(
         strings,
+        fallback,
         &["ProductName", "OriginalFilename", "InternalName"],
     )
     .map(trim_windows_executable_name);
-    let version = preferred_string(
+    let version = preferred_string_with_fallback(
         strings,
+        fallback,
         &[
             "Full Version",
             "ProductVersion",
@@ -382,13 +475,19 @@ fn build_windows_executable_package(
         datasource_id: Some(DatasourceId::WindowsExecutable),
         name: Some(name.clone()),
         version: version.clone(),
-        description: combined_string(strings, &["FileDescription", "Comments"]),
-        homepage_url: preferred_string(strings, &["URL", "WWW"]),
+        description: combined_string_with_fallback(
+            strings,
+            fallback,
+            &["FileDescription", "Comments"],
+        ),
+        homepage_url: preferred_string_with_fallback(strings, fallback, &["URL", "WWW"]),
         purl: create_winexe_purl(&name, version.as_deref()),
         ..Default::default()
     };
 
-    if let Some(company_name) = preferred_string(strings, &["CompanyName", "Company"]) {
+    if let Some(company_name) =
+        preferred_string_with_fallback(strings, fallback, &["CompanyName", "Company"])
+    {
         package.parties.push(Party {
             r#type: Some("organization".to_string()),
             role: Some("author".to_string()),
@@ -401,20 +500,22 @@ fn build_windows_executable_package(
         });
     }
 
-    let license_statement = windows_license_statement(strings);
-    let normalizable_license = windows_normalizable_license_text(strings);
+    let license_statement = windows_license_statement_with_fallback(strings, fallback);
+    let normalizable_license = windows_normalizable_license_text_with_fallback(strings, fallback);
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         normalize_spdx_declared_license(normalizable_license.as_deref());
     package.extracted_license_statement = license_statement;
     package.declared_license_expression = declared_license_expression;
     package.declared_license_expression_spdx = declared_license_expression_spdx;
     package.license_detections = license_detections;
-    package.copyright = preferred_string(strings, &["LegalCopyright"]);
+    package.copyright = preferred_string_with_fallback(strings, fallback, &["LegalCopyright"]);
     package.holder = package
         .copyright
         .as_deref()
         .map(extract_windows_holder)
         .filter(|value| !value.is_empty());
+
+    merge_sibling_license_text(path, &mut package);
 
     Some(package)
 }
@@ -438,19 +539,121 @@ fn fallback_windows_executable_name(path: &Path) -> Option<String> {
         .filter(|name| !name.is_empty())
 }
 
-fn preferred_windows_version_strings(
-    version_info: &ParsedVersionInfo,
-) -> Option<&HashMap<String, String>> {
-    version_info.string_tables.first().or_else(|| {
-        version_info
-            .string_tables
-            .iter()
-            .max_by_key(|values| values.len())
+fn preferred_windows_version_strings<'a>(
+    path: &Path,
+    version_info: &'a ParsedVersionInfo,
+) -> Option<VersionStrings<'a>> {
+    let normalized_filename =
+        fallback_windows_executable_name(path).map(|name| normalize_windows_name_for_match(&name));
+
+    version_info.string_tables.iter().max_by_key(|strings| {
+        score_windows_version_strings(strings, normalized_filename.as_deref())
     })
 }
 
-fn preferred_string(strings: Option<&HashMap<String, String>>, keys: &[&str]) -> Option<String> {
-    let strings = strings?;
+fn preferred_windows_version_strings_with_fallback<'a>(
+    path: &Path,
+    version_info: &'a ParsedVersionInfo,
+    fallback_strings: Option<VersionStrings<'a>>,
+) -> PreferredVersionStringSources<'a> {
+    let primary = preferred_windows_version_strings(path, version_info);
+    let normalized_filename =
+        fallback_windows_executable_name(path).map(|name| normalize_windows_name_for_match(&name));
+
+    let primary_score = primary
+        .map(|strings| score_windows_version_strings(strings, normalized_filename.as_deref()))
+        .unwrap_or(0);
+    let fallback_score = fallback_strings
+        .map(|strings| score_windows_version_strings(strings, normalized_filename.as_deref()))
+        .unwrap_or(0);
+
+    if fallback_score > primary_score {
+        (fallback_strings, primary)
+    } else {
+        (
+            primary.or(fallback_strings),
+            fallback_strings.filter(|_| primary.is_some()),
+        )
+    }
+}
+
+fn score_windows_version_strings(
+    strings: &HashMap<String, String>,
+    normalized_filename: Option<&str>,
+) -> usize {
+    let candidate = preferred_string_from_table(
+        strings,
+        &["ProductName", "OriginalFilename", "InternalName"],
+    );
+    let product_name = preferred_string_from_table(strings, &["ProductName"]);
+    let original_filename = preferred_string_from_table(strings, &["OriginalFilename"]);
+    let internal_name = preferred_string_from_table(strings, &["InternalName"]);
+
+    let mut score = 0;
+    if product_name.is_some() {
+        score += 40;
+    }
+    if original_filename.is_some() {
+        score += 20;
+    }
+    if internal_name.is_some() {
+        score += 10;
+    }
+    if preferred_string_from_table(strings, &["FileDescription"]).is_some() {
+        score += 5;
+    }
+    if preferred_string_from_table(strings, &["CompanyName", "Company"]).is_some() {
+        score += 5;
+    }
+    if preferred_string_from_table(
+        strings,
+        &[
+            "Full Version",
+            "ProductVersion",
+            "FileVersion",
+            "Assembly Version",
+        ],
+    )
+    .is_some()
+    {
+        score += 5;
+    }
+
+    if let Some(candidate) = candidate.as_deref() {
+        score += score_windows_name_match(candidate, normalized_filename);
+    }
+
+    score
+}
+
+fn score_windows_name_match(candidate: &str, normalized_filename: Option<&str>) -> usize {
+    let Some(normalized_filename) = normalized_filename else {
+        return 0;
+    };
+    let normalized_candidate = normalize_windows_name_for_match(candidate);
+    if normalized_candidate.is_empty() {
+        return 0;
+    }
+
+    if normalized_filename == normalized_candidate {
+        200
+    } else if normalized_filename.starts_with(&normalized_candidate)
+        || normalized_filename.contains(&normalized_candidate)
+    {
+        120
+    } else {
+        0
+    }
+}
+
+fn normalize_windows_name_for_match(name: &str) -> String {
+    name.chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .map(|ch| ch.to_ascii_lowercase())
+        .collect()
+}
+
+fn preferred_string_from_table(strings: &HashMap<String, String>, keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| {
         strings
             .get(*key)
@@ -460,23 +663,42 @@ fn preferred_string(strings: Option<&HashMap<String, String>>, keys: &[&str]) ->
     })
 }
 
-fn combined_string(strings: Option<&HashMap<String, String>>, keys: &[&str]) -> Option<String> {
-    let strings = strings?;
+fn preferred_string(strings: Option<&HashMap<String, String>>, keys: &[&str]) -> Option<String> {
+    preferred_string_from_table(strings?, keys)
+}
+
+fn preferred_string_with_fallback(
+    strings: Option<&HashMap<String, String>>,
+    fallback: Option<&HashMap<String, String>>,
+    keys: &[&str],
+) -> Option<String> {
+    preferred_string(strings, keys).or_else(|| preferred_string(fallback, keys))
+}
+
+fn combined_string_with_fallback(
+    strings: Option<&HashMap<String, String>>,
+    fallback: Option<&HashMap<String, String>>,
+    keys: &[&str],
+) -> Option<String> {
     let mut parts = Vec::new();
-    for key in keys {
-        if let Some(value) = strings.get(*key).map(|value| value.trim())
-            && !value.is_empty()
-            && !parts.iter().any(|existing| existing == value)
-        {
-            parts.push(value.to_string());
+    for table in [strings, fallback].into_iter().flatten() {
+        for key in keys {
+            if let Some(value) = table.get(*key).map(|value| value.trim())
+                && !value.is_empty()
+                && !parts.iter().any(|existing| existing == value)
+            {
+                parts.push(value.to_string());
+            }
         }
     }
 
     (!parts.is_empty()).then(|| parts.join("\n"))
 }
 
-fn windows_license_statement(strings: Option<&HashMap<String, String>>) -> Option<String> {
-    let strings = strings?;
+fn windows_license_statement_with_fallback(
+    strings: Option<&HashMap<String, String>>,
+    fallback: Option<&HashMap<String, String>>,
+) -> Option<String> {
     let keys = [
         "License",
         "LegalCopyright",
@@ -487,12 +709,16 @@ fn windows_license_statement(strings: Option<&HashMap<String, String>>) -> Optio
     ];
     let mut parts = Vec::new();
 
-    for key in keys {
-        if let Some(value) = strings.get(key).map(|value| value.trim())
-            && !value.is_empty()
-            && !parts.iter().any(|existing| existing == value)
-        {
-            parts.push(format!("{key}: {value}"));
+    for table in [strings, fallback].into_iter().flatten() {
+        for key in keys {
+            if let Some(value) = table.get(key).map(|value| value.trim())
+                && !value.is_empty()
+                && !parts
+                    .iter()
+                    .any(|existing| existing == &format!("{key}: {value}"))
+            {
+                parts.push(format!("{key}: {value}"));
+            }
         }
     }
 
@@ -501,6 +727,61 @@ fn windows_license_statement(strings: Option<&HashMap<String, String>>) -> Optio
 
 fn windows_normalizable_license_text(strings: Option<&HashMap<String, String>>) -> Option<String> {
     preferred_string(strings, &["License", "LegalTrademarks", "LegalTrademarks1"])
+}
+
+fn windows_normalizable_license_text_with_fallback(
+    strings: Option<&HashMap<String, String>>,
+    fallback: Option<&HashMap<String, String>>,
+) -> Option<String> {
+    windows_normalizable_license_text(strings)
+        .or_else(|| windows_normalizable_license_text(fallback))
+}
+
+fn merge_sibling_license_text(path: &Path, package: &mut PackageData) {
+    if package.declared_license_expression_spdx.is_some() {
+        return;
+    }
+
+    let Some((license_path, license_text)) = read_sibling_license_text(path) else {
+        return;
+    };
+
+    let (declared_license_expression, declared_license_expression_spdx, license_detections) =
+        detect_declared_license_from_text(&license_text, &license_path);
+
+    if declared_license_expression_spdx.is_some() {
+        package.declared_license_expression = declared_license_expression;
+        package.declared_license_expression_spdx = declared_license_expression_spdx;
+        package.license_detections = license_detections;
+    }
+}
+
+fn read_sibling_license_text(path: &Path) -> Option<(String, String)> {
+    let parent = path.parent()?;
+    for name in [
+        "LICENSE",
+        "LICENSE.txt",
+        "LICENSE.md",
+        "COPYING",
+        "COPYING.txt",
+        "COPYING.md",
+    ] {
+        let sibling = parent.join(name);
+        let Ok(metadata) = sibling.metadata() else {
+            continue;
+        };
+        if !metadata.is_file() || metadata.len() > MAX_SIBLING_LICENSE_BYTES {
+            continue;
+        }
+        let Ok(content) = fs::read_to_string(&sibling) else {
+            continue;
+        };
+        let trimmed = content.trim();
+        if !trimmed.is_empty() {
+            return Some((name.to_string(), trimmed.to_string()));
+        }
+    }
+    None
 }
 
 fn trim_windows_executable_name(name: String) -> String {
@@ -523,6 +804,16 @@ fn trim_windows_executable_name(name: String) -> String {
 
 fn extract_windows_holder(copyright: &str) -> String {
     let trimmed = copyright.trim().trim_start_matches('©').trim();
+    let trimmed = trimmed
+        .strip_prefix("Copyright")
+        .or_else(|| trimmed.strip_prefix("copyright"))
+        .unwrap_or(trimmed)
+        .trim_start();
+    let trimmed = trimmed
+        .strip_prefix("(c)")
+        .or_else(|| trimmed.strip_prefix("(C)"))
+        .unwrap_or(trimmed)
+        .trim_start();
     let start = trimmed
         .char_indices()
         .find(|(_, ch)| ch.is_alphabetic())
@@ -545,12 +836,17 @@ fn create_winexe_purl(name: &str, version: Option<&str>) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::path::Path;
+
     use object::pe;
     use object::read::FileKind;
 
     use super::{
-        decode_utf16_bytes, extract_windows_executable_metadata_text, parse_fixed_version_info,
-        parse_version_info_bytes, read_u32_le,
+        FixedVersionInfo, ParsedVersionInfo, build_windows_executable_package, decode_utf16_bytes,
+        extract_utf16_version_string_fallback, extract_windows_executable_metadata_text,
+        merge_parsed_version_infos, parse_fixed_version_info, parse_version_info_bytes,
+        preferred_windows_version_strings_with_fallback, read_u32_le,
     };
 
     fn is_supported_pe_format(bytes: &[u8]) -> bool {
@@ -618,5 +914,208 @@ mod tests {
             text.contains("License: This program is free software"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn prefers_version_table_matching_executable_name() {
+        let mut bootstrapper_strings = HashMap::new();
+        bootstrapper_strings.insert("InternalName".to_string(), "burn".to_string());
+        bootstrapper_strings.insert("ProductVersion".to_string(), "3.10.1.0".to_string());
+
+        let mut app_strings = HashMap::new();
+        app_strings.insert("ProductName".to_string(), "GlazeWM".to_string());
+        app_strings.insert("ProductVersion".to_string(), "3.10.1".to_string());
+        app_strings.insert("FileDescription".to_string(), "GlazeWM".to_string());
+        app_strings.insert(
+            "CompanyName".to_string(),
+            "Glzr Software Pte. Ltd.".to_string(),
+        );
+
+        let package = build_windows_executable_package(
+            Path::new("glazewm-v3.10.1.exe"),
+            ParsedVersionInfo {
+                string_tables: vec![bootstrapper_strings, app_strings],
+                fixed: Some(FixedVersionInfo {
+                    product_version: Some("3.10.1.0".to_string()),
+                }),
+            },
+            None,
+        )
+        .expect("package");
+
+        assert_eq!(package.name.as_deref(), Some("GlazeWM"));
+        assert_eq!(package.version.as_deref(), Some("3.10.1"));
+        assert_eq!(package.purl.as_deref(), Some("pkg:winexe/GlazeWM@3.10.1"));
+    }
+
+    #[test]
+    fn merges_multiple_version_resources_before_selection() {
+        let mut bootstrapper_strings = HashMap::new();
+        bootstrapper_strings.insert("InternalName".to_string(), "burn".to_string());
+
+        let mut app_strings = HashMap::new();
+        app_strings.insert("ProductName".to_string(), "GlazeWM".to_string());
+
+        let merged = merge_parsed_version_infos([
+            ParsedVersionInfo {
+                string_tables: vec![bootstrapper_strings],
+                fixed: Some(FixedVersionInfo {
+                    product_version: Some("3.10.1.0".to_string()),
+                }),
+            },
+            ParsedVersionInfo {
+                string_tables: vec![app_strings],
+                fixed: None,
+            },
+        ])
+        .expect("merged version info");
+
+        let package =
+            build_windows_executable_package(Path::new("glazewm-v3.10.1.exe"), merged, None)
+                .expect("package");
+
+        assert_eq!(package.name.as_deref(), Some("GlazeWM"));
+        assert_eq!(package.version.as_deref(), Some("3.10.1.0"));
+    }
+
+    #[test]
+    fn extracts_utf16_version_fallback_strings() {
+        let blob = concat!(
+            "ProductName\0\0GlazeWM\0",
+            "ProductVersion\03.10.1\0",
+            "CompanyName\0\0Glzr Software Pte. Ltd.\0"
+        );
+        let bytes = blob
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>();
+
+        let strings = extract_utf16_version_string_fallback(&bytes);
+
+        assert_eq!(
+            strings.get("ProductName").map(String::as_str),
+            Some("GlazeWM")
+        );
+        assert_eq!(
+            strings.get("ProductVersion").map(String::as_str),
+            Some("3.10.1")
+        );
+        assert_eq!(
+            strings.get("CompanyName").map(String::as_str),
+            Some("Glzr Software Pte. Ltd.")
+        );
+    }
+
+    #[test]
+    fn fallback_does_not_override_selected_parsed_table() {
+        let parsed = ParsedVersionInfo {
+            string_tables: vec![HashMap::from([
+                ("ProductName".to_string(), "LibIconv".to_string()),
+                (
+                    "LegalTrademarks".to_string(),
+                    "GNU®, LibIconv®, libiconv2®".to_string(),
+                ),
+            ])],
+            fixed: None,
+        };
+        let fallback_bytes = concat!(
+            "ProductName\0\0GlazeWM\0",
+            "CompanyName\0\0Glzr Software Pte. Ltd.\0"
+        )
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect::<Vec<_>>();
+        let fallback = extract_utf16_version_string_fallback(&fallback_bytes);
+
+        let (primary, secondary) = preferred_windows_version_strings_with_fallback(
+            Path::new("libiconv2.dll"),
+            &parsed,
+            Some(&fallback),
+        );
+
+        assert_eq!(
+            primary
+                .and_then(|s| s.get("ProductName"))
+                .map(String::as_str),
+            Some("LibIconv")
+        );
+        assert_eq!(
+            secondary
+                .and_then(|s| s.get("CompanyName"))
+                .map(String::as_str),
+            Some("Glzr Software Pte. Ltd.")
+        );
+    }
+
+    #[test]
+    fn fallback_can_win_without_mutating_parsed_tables() {
+        let parsed = ParsedVersionInfo {
+            string_tables: vec![HashMap::from([
+                ("InternalName".to_string(), "burn".to_string()),
+                ("ProductVersion".to_string(), "3.10.1.0".to_string()),
+            ])],
+            fixed: None,
+        };
+        let fallback_bytes = concat!(
+            "ProductName\0\0GlazeWM\0",
+            "ProductVersion\03.10.1\0",
+            "CompanyName\0\0Glzr Software Pte. Ltd.\0"
+        )
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect::<Vec<_>>();
+        let fallback = extract_utf16_version_string_fallback(&fallback_bytes);
+
+        let package = build_windows_executable_package(
+            Path::new("glazewm-v3.10.1.exe"),
+            parsed,
+            Some(&fallback),
+        )
+        .expect("package");
+
+        assert_eq!(package.name.as_deref(), Some("GlazeWM"));
+        assert_eq!(package.version.as_deref(), Some("3.10.1"));
+    }
+
+    #[test]
+    fn extracts_windows_holder_without_copyright_prefix() {
+        assert_eq!(
+            super::extract_windows_holder(
+                "Copyright (c) Glzr Software Pte. Ltd.. All rights reserved."
+            ),
+            "Glzr Software Pte. Ltd.. All rights reserved."
+        );
+    }
+
+    #[test]
+    fn reads_sibling_license_text_when_version_info_has_no_declared_license() {
+        let temp_dir = tempfile::TempDir::new().expect("temp dir");
+        let exe_path = temp_dir.path().join("glazewm.exe");
+        std::fs::write(&exe_path, b"MZ").expect("write exe placeholder");
+        std::fs::write(temp_dir.path().join("LICENSE.md"), "GPL-3.0-only\n")
+            .expect("write license text");
+
+        let package = build_windows_executable_package(
+            &exe_path,
+            ParsedVersionInfo {
+                string_tables: vec![HashMap::from([
+                    ("ProductName".to_string(), "GlazeWM".to_string()),
+                    (
+                        "CompanyName".to_string(),
+                        "Glzr Software Pte. Ltd.".to_string(),
+                    ),
+                ])],
+                fixed: None,
+            },
+            None,
+        )
+        .expect("package");
+
+        assert_eq!(
+            package.declared_license_expression_spdx.as_deref(),
+            Some("GPL-3.0-only")
+        );
+        assert!(!package.license_detections.is_empty());
+        assert_eq!(package.license_detections.len(), 1);
     }
 }

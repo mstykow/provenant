@@ -8,7 +8,9 @@ use crate::license_detection::expression::{
 };
 use crate::license_detection::index::LicenseIndex;
 use crate::models::{LicenseDetection, LineNumber, Match, MatchScore, PackageData};
-use crate::utils::spdx::{ExpressionRelation, combine_license_expressions_with_relation};
+use crate::utils::spdx::{
+    ExpressionRelation, combine_license_expressions, combine_license_expressions_with_relation,
+};
 
 pub(crate) const PARSER_DECLARED_MATCHER: &str = "parser-declared-license";
 
@@ -91,6 +93,53 @@ pub(crate) fn normalize_spdx_declared_license(
         normalized,
         DeclaredLicenseMatchMetadata::single_line(statement),
     )
+}
+
+pub(crate) fn detect_declared_license_from_text(
+    text: &str,
+    referenced_filename: &str,
+) -> (Option<String>, Option<String>, Vec<LicenseDetection>) {
+    let text = text.trim();
+    if text.is_empty() {
+        return empty_declared_license_data();
+    }
+
+    let Some(engine) = PARSER_LICENSE_ENGINE.as_ref() else {
+        return empty_declared_license_data();
+    };
+    let Ok(detections) = engine.detect_with_kind(text, false, false) else {
+        return empty_declared_license_data();
+    };
+    if detections.is_empty() {
+        return empty_declared_license_data();
+    }
+
+    let declared_license_expression = combine_license_expressions(
+        detections
+            .iter()
+            .filter_map(|detection| detection.license_expression.clone()),
+    );
+    let declared_license_expression_spdx = combine_license_expressions(
+        detections
+            .iter()
+            .filter_map(|detection| detection.license_expression_spdx.clone()),
+    );
+
+    match (
+        declared_license_expression,
+        declared_license_expression_spdx,
+    ) {
+        (Some(declared), Some(declared_spdx)) => {
+            let references = [referenced_filename];
+            build_declared_license_data_from_pair(
+                declared,
+                declared_spdx,
+                DeclaredLicenseMatchMetadata::single_line(text)
+                    .with_referenced_filenames(&references),
+            )
+        }
+        _ => empty_declared_license_data(),
+    }
 }
 
 pub(crate) fn normalize_spdx_expression(statement: &str) -> Option<NormalizedDeclaredLicense> {
