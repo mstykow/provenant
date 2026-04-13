@@ -186,12 +186,20 @@ pub(super) fn apply_cargo_workspace_domain(
     packages: &mut Vec<Package>,
     dependencies: &mut Vec<TopLevelDependency>,
 ) {
-    remove_root_package(
-        files,
-        workspace_root.root_cargo_toml_idx,
-        packages,
-        dependencies,
-    );
+    let keep_root_package = root_workspace_manifest_is_package(files, workspace_root);
+    let mut root_package_uid = None;
+    if !keep_root_package {
+        remove_root_package(
+            files,
+            workspace_root.root_cargo_toml_idx,
+            packages,
+            dependencies,
+        );
+    } else if let Some((pkg, deps)) = create_root_package(files, workspace_root) {
+        root_package_uid = Some(pkg.package_uid.clone());
+        packages.push(pkg);
+        dependencies.extend(deps);
+    }
     remove_member_packages(
         files,
         &workspace_root
@@ -209,21 +217,40 @@ pub(super) fn apply_cargo_workspace_domain(
         &workspace_root.workspace_data,
     );
 
-    let member_uids: Vec<PackageUid> = member_packages
+    let mut member_uids: Vec<PackageUid> = member_packages
         .iter()
         .map(|(pkg, _deps)| pkg.package_uid.clone())
         .collect();
+
+    if let Some(root_uid) = &root_package_uid {
+        member_uids.push(root_uid.clone());
+    }
 
     for (pkg, deps) in member_packages {
         packages.push(pkg);
         dependencies.extend(deps);
     }
 
-    if let Some(root_lock_idx) = workspace_root.root_cargo_lock_idx {
+    if !keep_root_package && let Some(root_lock_idx) = workspace_root.root_cargo_lock_idx {
         hoist_root_lock_dependencies(files, root_lock_idx, dependencies);
     }
 
-    assign_for_packages(files, workspace_root, &member_uids);
+    assign_for_packages(
+        files,
+        workspace_root,
+        &member_uids,
+        root_package_uid.as_ref(),
+    );
+}
+
+fn root_workspace_manifest_is_package(
+    files: &[FileInfo],
+    workspace_root: &CargoWorkspaceDomain,
+) -> bool {
+    files[workspace_root.root_cargo_toml_idx]
+        .package_data
+        .iter()
+        .any(|pkg| pkg.datasource_id == Some(DatasourceId::CargoToml) && pkg.purl.is_some())
 }
 
 fn discover_members(files: &[FileInfo], workspace_root: &CargoWorkspaceRootHint) -> Vec<usize> {
@@ -441,6 +468,77 @@ fn create_member_packages(
     results
 }
 
+fn create_root_package(
+    files: &[FileInfo],
+    workspace_root: &CargoWorkspaceDomain,
+) -> Option<(Package, Vec<TopLevelDependency>)> {
+    let file = &files[workspace_root.root_cargo_toml_idx];
+    let pkg_data = file
+        .package_data
+        .iter()
+        .find(|pkg| pkg.datasource_id == Some(DatasourceId::CargoToml) && pkg.purl.is_some())?;
+
+    let mut resolved_pkg_data = pkg_data.clone();
+    apply_workspace_inheritance(&mut resolved_pkg_data, &workspace_root.workspace_data);
+
+    let datafile_path = file.path.clone();
+    let datasource_id = DatasourceId::CargoToml;
+    let mut package = Package::from_package_data(&resolved_pkg_data, datafile_path.clone());
+
+    let matched_lock_package_data = workspace_root
+        .root_cargo_lock_idx
+        .and_then(|idx| lock_package_data_for_member(files, idx, &resolved_pkg_data));
+
+    let lock_dependencies_source = workspace_root.root_cargo_lock_idx.and_then(|idx| {
+        matched_lock_package_data.or_else(|| first_cargo_lock_package_data(files, idx))
+    });
+
+    if let Some(lock_pkg_data) = matched_lock_package_data {
+        package.update(
+            lock_pkg_data,
+            files[workspace_root.root_cargo_lock_idx.expect("lock index")]
+                .path
+                .clone(),
+        );
+    }
+
+    let for_package_uid = Some(package.package_uid.clone());
+    let mut deps: Vec<TopLevelDependency> = resolved_pkg_data
+        .dependencies
+        .iter()
+        .filter(|dep| dep.purl.is_some())
+        .map(|dep| {
+            TopLevelDependency::from_dependency(
+                dep,
+                datafile_path.clone(),
+                datasource_id,
+                for_package_uid.clone(),
+            )
+        })
+        .collect();
+
+    if let Some(lock_idx) = workspace_root.root_cargo_lock_idx
+        && let Some(lock_pkg_data) = lock_dependencies_source
+    {
+        deps.extend(
+            lock_pkg_data
+                .dependencies
+                .iter()
+                .filter(|dep| dep.purl.is_some())
+                .map(|dep| {
+                    TopLevelDependency::from_dependency(
+                        dep,
+                        files[lock_idx].path.clone(),
+                        DatasourceId::CargoLock,
+                        for_package_uid.clone(),
+                    )
+                }),
+        );
+    }
+
+    Some((package, deps))
+}
+
 fn lock_package_data_for_member<'a>(
     files: &'a [FileInfo],
     lock_idx: usize,
@@ -648,6 +746,7 @@ fn assign_for_packages(
     files: &mut [FileInfo],
     workspace_root: &CargoWorkspaceDomain,
     member_uids: &[PackageUid],
+    root_package_uid: Option<&PackageUid>,
 ) {
     let mut member_dirs: Vec<PathBuf> = Vec::new();
     member_dirs.extend(
@@ -682,6 +781,11 @@ fn assign_for_packages(
             && let Some(first_component) = rel.components().next()
             && first_component.as_os_str() == "target"
         {
+            continue;
+        }
+
+        if let Some(root_uid) = root_package_uid {
+            file.for_packages.push(root_uid.clone());
             continue;
         }
 
