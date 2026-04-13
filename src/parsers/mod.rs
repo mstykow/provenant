@@ -162,6 +162,9 @@ mod helm_test;
 mod hex_lock;
 #[cfg(test)]
 mod hex_lock_test;
+mod julia;
+#[cfg(test)]
+mod julia_test;
 mod license_normalization;
 mod maven;
 #[cfg(test)]
@@ -526,6 +529,7 @@ pub use self::hackage::{HackageCabalParser, HackageCabalProjectParser, HackageSt
 pub use self::haxe::HaxeParser;
 pub use self::helm::{HelmChartLockParser, HelmChartYamlParser};
 pub use self::hex_lock::HexLockParser;
+pub use self::julia::{JuliaManifestTomlParser, JuliaProjectTomlParser};
 pub use self::maven::MavenParser;
 pub use self::meson::MesonParser;
 pub use self::microsoft_update_manifest::MicrosoftUpdateManifestParser;
@@ -723,6 +727,8 @@ register_package_handlers! {
         HelmChartLockParser,
         HaxeParser,
         HexLockParser,
+        JuliaManifestTomlParser,
+        JuliaProjectTomlParser,
         MavenParser,
         MesonParser,
         MicrosoftUpdateManifestParser,

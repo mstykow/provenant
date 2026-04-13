@@ -329,6 +329,15 @@ pub static ASSEMBLERS: &[AssemblerConfig] = &[
         sibling_file_patterns: &["Cargo.toml", "Cargo.lock"],
         mode: AssemblyMode::SiblingMerge,
     },
+    // Julia ecosystem
+    AssemblerConfig {
+        datasource_ids: &[
+            DatasourceId::JuliaProjectToml,
+            DatasourceId::JuliaManifestToml,
+        ],
+        sibling_file_patterns: &["Project.toml", "Manifest.toml"],
+        mode: AssemblyMode::SiblingMerge,
+    },
     // CocoaPods ecosystem
     AssemblerConfig {
         datasource_ids: &[

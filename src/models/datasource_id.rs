@@ -197,6 +197,10 @@ pub enum DatasourceId {
     // ── Hex/Elixir ──
     HexMixLock,
 
+    // ── Julia ──
+    JuliaProjectToml,
+    JuliaManifestToml,
+
     // ── Java ──
     AntIvyXml,
     JavaEarApplicationXml,
@@ -482,6 +486,10 @@ impl DatasourceId {
 
             // Hex/Elixir
             Self::HexMixLock => "hex_mix_lock",
+
+            // Julia
+            Self::JuliaProjectToml => "julia_project_toml",
+            Self::JuliaManifestToml => "julia_manifest_toml",
 
             // Java
             Self::AntIvyXml => "ant_ivy_xml",
