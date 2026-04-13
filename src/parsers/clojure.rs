@@ -172,23 +172,51 @@ impl Reader {
                 let form = self.parse_form()?;
                 Ok(Form::Prefixed(Box::new(form)))
             }
-            Some('#') if self.peek_n(1) == Some('_') => {
-                self.index += 2;
+            Some('#') => self.parse_dispatch_form(),
+            Some(_) => self.parse_atom(),
+            None => Err("unexpected end of input".to_string()),
+        }
+    }
+
+    fn parse_dispatch_form(&mut self) -> Result<Form, String> {
+        self.expect('#')?;
+        match self.peek() {
+            Some('_') => {
+                self.index += 1;
                 let _ = self.parse_form()?;
                 self.parse_form()
             }
-            Some('#') if self.peek_n(1) == Some('"') => {
+            Some('=') => Err("unsupported reader eval dispatch".to_string()),
+            Some('"') => {
                 // Tolerate regex literals in ignored fields without implementing reader semantics.
-                self.index += 1;
                 self.parse_string().map(Form::String)
             }
-            Some('#') if self.peek_n(1) == Some('{') => {
+            Some('{') => {
                 // Tolerate set literals in ignored fields by treating them as plain collections.
-                self.index += 1;
                 self.parse_collection('{', '}').map(Form::Vector)
             }
-            Some(_) => self.parse_atom(),
-            None => Err("unexpected end of input".to_string()),
+            Some('(') => {
+                // Tolerate function literals in ignored fields without implementing reader semantics.
+                self.parse_collection('(', ')').map(Form::List)
+            }
+            Some('?') => {
+                // Tolerate reader conditionals by skipping the dispatch token and
+                // returning the selected readable form without evaluating features.
+                self.index += 1;
+                if self.peek() == Some('@') {
+                    self.index += 1;
+                }
+                let _ = self.parse_form()?;
+                self.parse_form()
+            }
+            Some(ch) if !is_delimiter(ch) => {
+                // Tolerate tagged literals in ignored fields by ignoring the tag and
+                // parsing the following readable form as plain data.
+                let _ = self.parse_atom()?;
+                self.parse_form()
+            }
+            Some(ch) => Err(format!("unsupported reader dispatch '#{ch}'")),
+            None => Err("unexpected end of input after '#'".to_string()),
         }
     }
 
@@ -305,10 +333,6 @@ impl Reader {
 
     fn peek(&self) -> Option<char> {
         self.chars.get(self.index).copied()
-    }
-
-    fn peek_n(&self, offset: usize) -> Option<char> {
-        self.chars.get(self.index + offset).copied()
     }
 }
 
