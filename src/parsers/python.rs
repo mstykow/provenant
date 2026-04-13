@@ -3127,14 +3127,19 @@ fn extract_from_setup_py(path: &Path) -> Option<PackageData> {
         package_data.version = extract_setup_value(&content, "version");
     }
 
-    fill_from_sibling_dunder_metadata(path, &content, &mut package_data);
-
-    if package_data.purl.is_none() {
-        package_data.purl = build_setup_py_purl(
-            package_data.name.as_deref(),
-            package_data.version.as_deref(),
-        );
+    if package_data
+        .version
+        .as_deref()
+        .is_some_and(|version| version.trim().is_empty())
+    {
+        package_data.version = None;
     }
+
+    fill_from_sibling_dunder_metadata(path, &content, &mut package_data);
+    package_data.purl = build_setup_py_purl(
+        package_data.name.as_deref(),
+        package_data.version.as_deref(),
+    );
 
     if should_emit_setup_py_package(&package_data) {
         Some(package_data)
@@ -3219,11 +3224,24 @@ fn collect_sibling_dunder_metadata(root: &Path, content: &str) -> DunderMetadata
     let author_re = Regex::new(r#"(?m)^\s*__author__\s*=\s*['\"]([^'\"]+)['\"]"#).ok();
     let license_re = Regex::new(r#"(?m)^\s*__license__\s*=\s*['\"]([^'\"]+)['\"]"#).ok();
     let mut metadata = DunderMetadata::default();
+    let mut candidate_paths = Vec::new();
 
     for module in imported_dunder_modules(&statements) {
         let Some(path) = resolve_imported_module_path(root, &module) else {
             continue;
         };
+
+        candidate_paths.push(path);
+    }
+
+    candidate_paths.extend(referenced_dunder_init_paths(root, content));
+
+    let mut seen_paths = HashSet::new();
+    for path in candidate_paths {
+        if !seen_paths.insert(path.clone()) {
+            continue;
+        }
+
         let Ok(module_content) = read_file_to_string(&path) else {
             continue;
         };
@@ -3258,6 +3276,34 @@ fn collect_sibling_dunder_metadata(root: &Path, content: &str) -> DunderMetadata
     }
 
     metadata
+}
+
+fn referenced_dunder_init_paths(root: &Path, content: &str) -> Vec<PathBuf> {
+    let open_re = match Regex::new(r#"open\(\s*['\"]([^'\"]+__init__\.py)['\"]"#) {
+        Ok(regex) => regex,
+        Err(_) => return Vec::new(),
+    };
+
+    open_re
+        .captures_iter(content)
+        .filter_map(|captures| captures.get(1).map(|m| m.as_str()))
+        .filter_map(|relative| {
+            let relative_path = PathBuf::from(relative);
+            if relative_path.is_absolute()
+                || relative_path.components().any(|component| {
+                    matches!(
+                        component,
+                        Component::ParentDir | Component::RootDir | Component::Prefix(_)
+                    )
+                })
+            {
+                return None;
+            }
+
+            let candidate = root.join(relative_path);
+            candidate.exists().then_some(candidate)
+        })
+        .collect()
 }
 
 fn imported_dunder_modules(statements: &[ast::Stmt]) -> Vec<String> {
@@ -3806,7 +3852,7 @@ fn build_setup_py_dependency_list(
     is_optional: bool,
 ) -> Vec<Dependency> {
     reqs.iter()
-        .filter_map(|req| build_setup_cfg_dependency(req, scope, is_optional))
+        .filter_map(|req| build_python_dependency(req, scope, is_optional, None))
         .collect()
 }
 

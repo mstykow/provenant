@@ -3184,6 +3184,76 @@ setup(name="examplepkg", version=__version__)
     }
 
     #[test]
+    fn test_setup_py_resolves_version_from_opened_init_and_preserves_pinned_dependencies() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let package_dir = temp_dir.path().join("examplepkg");
+        fs::create_dir_all(&package_dir).expect("Failed to create package dir");
+
+        let setup_path = temp_dir.path().join("setup.py");
+        fs::write(
+            &setup_path,
+            r#"
+import re
+from setuptools import setup
+
+version = ""
+with open("examplepkg/__init__.py", "r") as fd:
+    version = re.search(r'^__version__\s*=\s*[\'\"]([^\'\"]*)[\'\"]', fd.read(), re.MULTILINE).group(1)
+
+setup(
+    name="examplepkg",
+    version=version,
+    install_requires=[
+        "ducktape==0.14.0",
+        "requests>=2.32.4",
+        "psutil==5.7.2",
+        "pytest==8.3.3",
+        "mock==5.1.0",
+    ],
+)
+"#,
+        )
+        .expect("Failed to write setup.py");
+
+        fs::write(
+            package_dir.join("__init__.py"),
+            r#"__version__ = "4.4.0.dev0""#,
+        )
+        .expect("Failed to write __init__.py");
+
+        let package_data = PythonParser::extract_first_package(&setup_path);
+
+        assert_eq!(package_data.name, Some("examplepkg".to_string()));
+        assert_eq!(package_data.version, Some("4.4.0.dev0".to_string()));
+        assert_eq!(
+            package_data.purl.as_deref(),
+            Some("pkg:pypi/examplepkg@4.4.0.dev0")
+        );
+
+        let dependency_purls: Vec<&str> = package_data
+            .dependencies
+            .iter()
+            .filter_map(|dependency| dependency.purl.as_deref())
+            .collect();
+        assert!(dependency_purls.contains(&"pkg:pypi/ducktape@0.14.0"));
+        assert!(dependency_purls.contains(&"pkg:pypi/psutil@5.7.2"));
+        assert!(dependency_purls.contains(&"pkg:pypi/pytest@8.3.3"));
+        assert!(dependency_purls.contains(&"pkg:pypi/mock@5.1.0"));
+        assert!(dependency_purls.contains(&"pkg:pypi/requests"));
+
+        let requests_dependency = package_data
+            .dependencies
+            .iter()
+            .find(|dependency| dependency.purl.as_deref() == Some("pkg:pypi/requests"))
+            .expect("requests dependency should be present");
+        assert_eq!(
+            requests_dependency.extracted_requirement.as_deref(),
+            Some(">=2.32.4")
+        );
+        assert_eq!(requests_dependency.is_pinned, Some(false));
+    }
+
+    #[test]
     fn test_archive_security_constants_exist() {
         const MAX_ARCHIVE_SIZE: u64 = 100 * 1024 * 1024;
         const MAX_FILE_SIZE: u64 = 50 * 1024 * 1024;
