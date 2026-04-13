@@ -124,7 +124,7 @@ mod tests {
 
     use super::{
         LicenseScanOptions, MemoryMode, TextDetectionOptions, collect_paths, process_collected,
-        process_collected_with_memory_limit,
+        process_collected_with_memory_limit, scan_options_fingerprint,
     };
 
     #[test]
@@ -132,6 +132,29 @@ mod tests {
         let options = TextDetectionOptions::default();
         assert!(!options.detect_packages);
         assert!(options.detect_copyrights);
+    }
+
+    #[test]
+    fn test_scan_options_fingerprint_changes_with_license_score() {
+        let text_options = TextDetectionOptions::default();
+        let default_fingerprint = scan_options_fingerprint(
+            &text_options,
+            LicenseScanOptions {
+                min_score: 0,
+                ..LicenseScanOptions::default()
+            },
+            None,
+        );
+        let filtered_fingerprint = scan_options_fingerprint(
+            &text_options,
+            LicenseScanOptions {
+                min_score: 70,
+                ..LicenseScanOptions::default()
+            },
+            None,
+        );
+
+        assert_ne!(default_fingerprint, filtered_fingerprint);
     }
 
     fn scan_single_file(
