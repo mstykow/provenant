@@ -66,6 +66,8 @@ mod haxe_golden_test;
 mod helm_golden_test;
 #[path = "hex_lock_golden_test.rs"]
 mod hex_lock_golden_test;
+#[path = "julia_golden_test.rs"]
+mod julia_golden_test;
 #[path = "maven_golden_test.rs"]
 mod maven_golden_test;
 #[path = "meson_golden_test.rs"]
