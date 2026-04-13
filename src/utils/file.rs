@@ -1638,6 +1638,9 @@ fn is_non_actionable_pdf_failure(failures: &[String]) -> bool {
     !failures.is_empty()
         && failures.iter().all(|failure| {
             failure.contains("requires a password")
+                || failure.contains("Encrypt dictionary missing /O")
+                || failure.contains("Encrypt dictionary missing /U")
+                || failure.contains("security handler cannot be found")
                 || failure.contains("Invalid cross-reference table")
         })
 }
@@ -1978,6 +1981,10 @@ mod tests {
         assert!(is_non_actionable_pdf_failure(&[
             "from-bytes first-page: Invalid cross-reference table".to_string(),
             "open full-document: Invalid cross-reference table".to_string(),
+        ]));
+        assert!(is_non_actionable_pdf_failure(&[
+            "from-bytes first-page: Invalid PDF: Encrypt dictionary missing /O".to_string(),
+            "open full-document: Invalid PDF: security handler cannot be found".to_string(),
         ]));
         assert!(!is_non_actionable_pdf_failure(&[
             "from-bytes first-page: some other parser failure".to_string(),
