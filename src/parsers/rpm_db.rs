@@ -55,6 +55,15 @@ const PKG_MARKER: &str = "__PKG__";
 const REQUIRES_MARKER: &str = "__REQUIRES__";
 const FILES_MARKER: &str = "__FILES__";
 const END_MARKER: &str = "__END__";
+const RPM_BDB_PATH_SUFFIXES: &[&str] = &["var/lib/rpm/Packages", "usr/lib/sysimage/rpm/Packages"];
+const RPM_NDB_PATH_SUFFIXES: &[&str] = &[
+    "var/lib/rpm/Packages.db",
+    "usr/lib/sysimage/rpm/Packages.db",
+];
+const RPM_SQLITE_PATH_SUFFIXES: &[&str] = &[
+    "var/lib/rpm/rpmdb.sqlite",
+    "usr/lib/sysimage/rpm/rpmdb.sqlite",
+];
 
 #[derive(Debug)]
 struct RpmQueryPackage {
@@ -90,7 +99,7 @@ impl PackageParser for RpmBdbDatabaseParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn is_match(path: &Path) -> bool {
-        path.file_name().and_then(|name| name.to_str()) == Some("Packages")
+        path_matches_any_suffix(path, RPM_BDB_PATH_SUFFIXES)
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
@@ -111,7 +120,7 @@ impl PackageParser for RpmNdbDatabaseParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn is_match(path: &Path) -> bool {
-        path.file_name().and_then(|name| name.to_str()) == Some("Packages.db")
+        path_matches_any_suffix(path, RPM_NDB_PATH_SUFFIXES)
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
@@ -134,7 +143,7 @@ impl PackageParser for RpmSqliteDatabaseParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn is_match(path: &Path) -> bool {
-        path.file_name().and_then(|name| name.to_str()) == Some("rpmdb.sqlite")
+        path_matches_any_suffix(path, RPM_SQLITE_PATH_SUFFIXES)
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
@@ -188,6 +197,16 @@ fn parse_rpm_database(
                 })
         }
     }
+}
+
+fn path_matches_suffix(path: &Path, suffix: &str) -> bool {
+    path.to_string_lossy().replace('\\', "/").ends_with(suffix)
+}
+
+fn path_matches_any_suffix(path: &Path, suffixes: &[&str]) -> bool {
+    suffixes
+        .iter()
+        .any(|suffix| path_matches_suffix(path, suffix))
 }
 
 fn native_kind_for_datasource(datasource_id: DatasourceId) -> InstalledRpmDbKind {
@@ -607,9 +626,16 @@ mod tests {
         assert!(RpmBdbDatabaseParser::is_match(&PathBuf::from(
             "rootfs/var/lib/rpm/Packages"
         )));
+        assert!(RpmBdbDatabaseParser::is_match(&PathBuf::from(
+            "/usr/lib/sysimage/rpm/Packages"
+        )));
         assert!(!RpmBdbDatabaseParser::is_match(&PathBuf::from(
             "/var/lib/rpm/Packages.db"
         )));
+        assert!(!RpmBdbDatabaseParser::is_match(&PathBuf::from(
+            "lib/modules/datasource/deb/__fixtures__/Packages"
+        )));
+        assert!(!RpmBdbDatabaseParser::is_match(&PathBuf::from("Packages")));
         assert!(!RpmBdbDatabaseParser::is_match(&PathBuf::from(
             "testdata/rpm/var/lib/rpm/Packages.expected.json"
         )));
@@ -626,6 +652,9 @@ mod tests {
         assert!(!RpmNdbDatabaseParser::is_match(&PathBuf::from(
             "usr/lib/rpm/Packages"
         )));
+        assert!(RpmNdbDatabaseParser::is_match(&PathBuf::from(
+            "var/lib/rpm/Packages.db"
+        )));
         assert!(!RpmNdbDatabaseParser::is_match(&PathBuf::from(
             "testdata/rpm/usr/lib/sysimage/rpm/Packages.db.expected.json"
         )));
@@ -639,6 +668,9 @@ mod tests {
         )));
         assert!(RpmSqliteDatabaseParser::is_match(&PathBuf::from(
             "/rootfs/var/lib/rpm/rpmdb.sqlite"
+        )));
+        assert!(RpmSqliteDatabaseParser::is_match(&PathBuf::from(
+            "/rootfs/usr/lib/sysimage/rpm/rpmdb.sqlite"
         )));
         assert!(!RpmSqliteDatabaseParser::is_match(&PathBuf::from(
             "/var/lib/rpm/Packages"
@@ -904,8 +936,11 @@ crate::register_parser!(
     "RPM installed package database (requires `rpm` CLI at runtime)",
     &[
         "**/var/lib/rpm/Packages",
+        "**/usr/lib/sysimage/rpm/Packages",
         "**/var/lib/rpm/Packages.db",
-        "**/var/lib/rpm/rpmdb.sqlite"
+        "**/usr/lib/sysimage/rpm/Packages.db",
+        "**/var/lib/rpm/rpmdb.sqlite",
+        "**/usr/lib/sysimage/rpm/rpmdb.sqlite"
     ],
     "rpm",
     "",
@@ -915,7 +950,12 @@ crate::register_parser!(
 #[cfg(not(feature = "rpm-sqlite"))]
 crate::register_parser!(
     "RPM installed package database (requires `rpm` CLI at runtime)",
-    &["**/var/lib/rpm/Packages", "**/var/lib/rpm/Packages.db"],
+    &[
+        "**/var/lib/rpm/Packages",
+        "**/usr/lib/sysimage/rpm/Packages",
+        "**/var/lib/rpm/Packages.db",
+        "**/usr/lib/sysimage/rpm/Packages.db"
+    ],
     "rpm",
     "",
     Some("https://rpm.org/"),
