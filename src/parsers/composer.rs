@@ -321,9 +321,23 @@ fn extract_lock_package_list(
         if let Some(dependency) = build_lock_dependency(package, scope, is_runtime, is_optional) {
             dependencies.push(dependency);
         }
+
+        dependencies.extend(extract_lock_package_relationships(package));
     }
 
     dependencies
+}
+
+fn extract_lock_package_relationships(package: &Value) -> Vec<Dependency> {
+    [
+        extract_dependencies(package, FIELD_REQUIRE, "require", true, false),
+        extract_dependencies(package, FIELD_REQUIRE_DEV, "require-dev", false, true),
+        extract_dependencies(package, FIELD_PROVIDE, "provide", true, false),
+        extract_dependencies(package, FIELD_CONFLICT, "conflict", true, true),
+        extract_dependencies(package, FIELD_REPLACE, "replace", true, true),
+        extract_dependencies(package, FIELD_SUGGEST, "suggest", true, true),
+    ]
+    .concat()
 }
 
 fn build_lock_dependency(

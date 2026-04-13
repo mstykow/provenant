@@ -28,6 +28,19 @@ mod tests {
       "name": "acme/runtime",
       "version": "1.0.0",
       "type": "library",
+      "require": {
+        "php": "^8.2",
+        "acme/shared": "^3.0"
+      },
+      "require-dev": {
+        "acme/runtime-testkit": "^1.4"
+      },
+      "conflict": {
+        "acme/legacy-runtime": "<1.0"
+      },
+      "suggest": {
+        "ext-pcntl": "Improves worker support"
+      },
       "source": {
         "type": "git",
         "url": "https://github.com/acme/runtime.git",
@@ -524,6 +537,60 @@ mod tests {
                 .iter()
                 .any(|dep| dep.purl.as_deref() == Some("pkg:composer/vendor/dev-399@2.399.0"))
         );
+    }
+
+    #[test]
+    fn test_extract_lock_package_relationships() {
+        let content = sample_composer_lock();
+        let (_temp_dir, composer_path) = create_temp_file("composer.lock", &content);
+        let package_data = ComposerLockParser::extract_first_package(&composer_path);
+
+        assert_eq!(package_data.dependencies.len(), 7);
+
+        let runtime_dep = find_dependency(
+            &package_data.dependencies,
+            "pkg:composer/acme/runtime@1.0.0",
+        );
+        assert_eq!(runtime_dep.scope.as_deref(), Some("require"));
+        assert_eq!(runtime_dep.is_runtime, Some(true));
+        assert_eq!(runtime_dep.is_optional, Some(false));
+
+        let php_dep = find_dependency(&package_data.dependencies, "pkg:composer/php");
+        assert_eq!(php_dep.extracted_requirement.as_deref(), Some("^8.2"));
+        assert_eq!(php_dep.scope.as_deref(), Some("require"));
+
+        let shared_dep = find_dependency(&package_data.dependencies, "pkg:composer/acme/shared");
+        assert_eq!(shared_dep.extracted_requirement.as_deref(), Some("^3.0"));
+        assert_eq!(shared_dep.scope.as_deref(), Some("require"));
+
+        let runtime_testkit_dep = find_dependency(
+            &package_data.dependencies,
+            "pkg:composer/acme/runtime-testkit",
+        );
+        assert_eq!(runtime_testkit_dep.scope.as_deref(), Some("require-dev"));
+        assert_eq!(runtime_testkit_dep.is_runtime, Some(false));
+        assert_eq!(runtime_testkit_dep.is_optional, Some(true));
+
+        let conflict_dep = find_dependency(
+            &package_data.dependencies,
+            "pkg:composer/acme/legacy-runtime",
+        );
+        assert_eq!(conflict_dep.scope.as_deref(), Some("conflict"));
+        assert_eq!(conflict_dep.is_runtime, Some(true));
+        assert_eq!(conflict_dep.is_optional, Some(true));
+
+        let suggest_dep = find_dependency(&package_data.dependencies, "pkg:composer/ext-pcntl");
+        assert_eq!(suggest_dep.scope.as_deref(), Some("suggest"));
+        assert_eq!(
+            suggest_dep.extracted_requirement.as_deref(),
+            Some("Improves worker support")
+        );
+
+        let dev_package_dep =
+            find_dependency(&package_data.dependencies, "pkg:composer/acme/devpkg@2.0.0");
+        assert_eq!(dev_package_dep.scope.as_deref(), Some("require-dev"));
+        assert_eq!(dev_package_dep.is_runtime, Some(false));
+        assert_eq!(dev_package_dep.is_optional, Some(true));
     }
 
     #[test]
