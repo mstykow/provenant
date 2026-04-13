@@ -4731,3 +4731,16 @@ fn test_extract_authors_from_dense_name_email_list() {
         "authors: {authors:?}"
     );
 }
+
+#[test]
+fn test_extract_collective_author_with_contributors_before_email() {
+    let input = "authors = [\"Tokio Contributors <team@tokio.rs>\"]\n";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors
+            .iter()
+            .any(|a| a.author == "Tokio Contributors <team@tokio.rs>"),
+        "authors: {authors:?}"
+    );
+}

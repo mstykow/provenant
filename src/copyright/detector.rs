@@ -12951,18 +12951,31 @@ fn fix_truncated_contributors_authors(tree: &[ParseNode], authors: &mut Vec<Auth
 
     // Fix existing authors truncated before "contributors"
     for author in authors.iter_mut() {
-        if !author.author.ends_with("and its") && !author.author.ends_with("and her") {
-            continue;
-        }
         let author_line = author.end_line;
-        let has_trailing_contributors = all_leaves.iter().any(|t| {
+        let trailing_contributors = all_leaves.iter().find(|t| {
             t.tag == PosTag::Contributors
                 && t.start_line == author_line
                 && t.value.to_ascii_lowercase().starts_with("contributor")
         });
-        if has_trailing_contributors {
+        let Some(trailing_contributors) = trailing_contributors else {
+            continue;
+        };
+
+        if author.author.ends_with("and its") || author.author.ends_with("and her") {
             author.author.push_str(" contributors");
+            continue;
         }
+
+        if author.author.to_ascii_lowercase().contains("contributor") {
+            continue;
+        }
+
+        author.author = restore_trailing_contributors_suffix(
+            &author.author,
+            trailing_contributors
+                .value
+                .trim_matches(|c: char| c.is_ascii_punctuation() || c.is_whitespace()),
+        );
     }
 
     // Detect "developed/written by ... contributors" pattern directly from tokens.
@@ -13028,6 +13041,29 @@ fn fix_truncated_contributors_authors(tree: &[ParseNode], authors: &mut Vec<Auth
         }
         i += 1;
     }
+}
+
+fn restore_trailing_contributors_suffix(author: &str, suffix: &str) -> String {
+    if suffix.is_empty() {
+        return author.to_string();
+    }
+
+    if let Some(email_start) = author.rfind(" <") {
+        let name = author[..email_start].trim_end();
+        let email = &author[email_start..];
+        return format!("{name} {suffix}{email}");
+    }
+
+    if let Some(email_start) = author.rfind(" (")
+        && author.ends_with(')')
+        && author[email_start + 2..author.len() - 1].contains('@')
+    {
+        let name = author[..email_start].trim_end();
+        let email = &author[email_start..];
+        return format!("{name} {suffix}{email}");
+    }
+
+    format!("{author} {suffix}")
 }
 
 fn extract_holder_is_name(
