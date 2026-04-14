@@ -70,6 +70,10 @@ fn looks_like_prose_fragment_author(s: &str) -> bool {
         return false;
     }
 
+    if looks_like_structured_key_with_hex_value(trimmed) {
+        return true;
+    }
+
     if contains_dollar_prefixed_code_token(trimmed) {
         return true;
     }
@@ -115,6 +119,13 @@ fn looks_like_prose_fragment_author(s: &str) -> bool {
         .count();
 
     starts_lowercase || capitalized_word_count < 2
+}
+
+fn looks_like_structured_key_with_hex_value(s: &str) -> bool {
+    static STRUCTURED_KEY_HEX_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"^[A-Z][A-Za-z]+\s+[A-F0-9]{8,}$").expect("valid structured key hex regex")
+    });
+    STRUCTURED_KEY_HEX_RE.is_match(s.trim())
 }
 
 fn contains_dollar_prefixed_code_token(s: &str) -> bool {

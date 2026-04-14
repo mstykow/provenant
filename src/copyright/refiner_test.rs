@@ -1277,6 +1277,8 @@ fn test_refine_holder_strips_trailing_batch_comment_marker() {
 fn test_refine_holder_drops_compare_triage_code_fragments() {
     assert_eq!(refine_holder("isInstanceOf"), None);
     assert_eq!(refine_holder("contributor, path"), None);
+    assert_eq!(refine_holder("final cProvider"), None);
+    assert_eq!(refine_holder("c.isExactly(element)"), None);
     assert_eq!(
         refine_holder(
             "handle(argument) Stream result LambdaSafe .callbacks(GenericFactory.class, Collections.singleton(callbackInstance), argument)"
@@ -1314,6 +1316,7 @@ fn test_refine_copyright_strips_trailing_batch_comment_marker() {
 #[test]
 fn test_refine_copyright_drops_compare_triage_code_fragments() {
     assert!(is_junk_copyright("(c) contributor, path"));
+    assert!(is_junk_copyright("(c) final cProvider"));
 }
 
 // ── refine_author ────────────────────────────────────────────────
@@ -1452,6 +1455,14 @@ fn test_refine_author_drops_path_like_fragment() {
 fn test_refine_author_drops_dollar_prefixed_code_tokens() {
     assert_eq!(refine_author("Agatha Christie, $sort"), None);
     assert_eq!(refine_author("$limit 10"), None);
+}
+
+#[test]
+fn test_refine_author_drops_structured_key_with_hex_value() {
+    assert_eq!(
+        refine_author("TargetAttributes 33CC10EC2044A3C60003C045"),
+        None
+    );
 }
 
 #[test]

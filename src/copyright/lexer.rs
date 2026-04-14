@@ -58,6 +58,7 @@ pub fn get_tokens(numbered_lines: &[(usize, String)]) -> Vec<Token> {
         last_line.clone_from(line);
 
         for tok_str in SPLITTER.split(line) {
+            let quoted_structured_key = is_quoted_structured_key(tok_str);
             let mut tok = tok_str.to_string();
 
             if tok.ends_with("',") {
@@ -66,6 +67,7 @@ pub fn get_tokens(numbered_lines: &[(usize, String)]) -> Vec<Token> {
 
             tok = tok.trim_matches(&['\'', ' '][..]).to_string();
             tok = tok.trim_end_matches(':').to_string();
+            tok = tok.trim_end_matches('"').trim_end_matches('\'').to_string();
             tok = tok.trim().to_string();
 
             if tok.is_empty() || tok == ":" || tok == "." {
@@ -90,7 +92,11 @@ pub fn get_tokens(numbered_lines: &[(usize, String)]) -> Vec<Token> {
                 }
             }
 
-            let tag = COMPILED_PATTERNS.match_token(&tok);
+            let tag = if quoted_structured_key {
+                PosTag::Junk
+            } else {
+                COMPILED_PATTERNS.match_token(&tok)
+            };
 
             tokens.push(Token {
                 value: tok,
@@ -166,6 +172,16 @@ fn is_camel_case_identifier_candidate(value: &str) -> bool {
     }
 
     has_lower && has_inner_upper
+}
+
+fn is_quoted_structured_key(raw: &str) -> bool {
+    let trimmed = raw.trim();
+    if !(trimmed.starts_with('\'') || trimmed.starts_with('"')) {
+        return false;
+    }
+
+    let without_trailing_comma = trimmed.trim_end_matches(',').trim_end();
+    without_trailing_comma.ends_with(':')
 }
 
 #[cfg(test)]
