@@ -1249,14 +1249,19 @@ fn sampled_printable_window_ranges(len: usize) -> Vec<(usize, usize)> {
 }
 
 fn sample_has_promising_printable_strings(bytes: &[u8]) -> bool {
-    sampled_printable_window_ranges(bytes.len())
+    let mut structured_signal_seen = false;
+    let promising_license_windows = sampled_printable_window_ranges(bytes.len())
         .into_iter()
         .filter(|&(start, end)| {
             let window = &bytes[start..end];
-            has_license_or_notice_signal(window) || has_strong_structured_text_signal(window)
+            if has_strong_structured_text_signal(window) {
+                structured_signal_seen = true;
+            }
+            has_license_or_notice_signal(window)
         })
-        .count()
-        >= 2
+        .count();
+
+    structured_signal_seen || promising_license_windows >= 2
 }
 
 fn extract_sampled_printable_strings(bytes: &[u8]) -> String {
@@ -2019,6 +2024,19 @@ mod tests {
 
         assert!(text.is_empty());
         assert_eq!(kind, ExtractedTextKind::None);
+    }
+
+    #[test]
+    fn test_extract_text_for_detection_keeps_large_binary_with_single_contact_rich_window() {
+        let mut bytes = vec![0_u8; LARGE_OPAQUE_BINARY_SKIP_BYTES + 8];
+        let text = b"Andreas Schneider <asn@redhat.com> Rob Crittenden (rcritten@redhat.com) Mr. Sam <sam@email-scan.com> https://publicsuffix.org/ http://tukaani.org/xz/";
+        bytes[..text.len()].copy_from_slice(text);
+
+        let (text, kind) = extract_text_for_detection(Path::new("rootfs.bin"), &bytes);
+
+        assert_ne!(kind, ExtractedTextKind::None);
+        assert!(text.contains("asn@redhat.com"));
+        assert!(text.contains("https://publicsuffix.org/"));
     }
 
     #[test]
