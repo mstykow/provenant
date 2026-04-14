@@ -1465,13 +1465,13 @@ fn apply_package_reference_following_prefers_nearest_ancestor_license_file() {
         .expect("source file should exist");
     assert_eq!(
         source.license_expression.as_deref(),
-        Some("mit AND apache-2.0")
+        Some("apache-2.0 AND mit")
     );
     assert_eq!(source.license_detections.len(), 2);
     let combined = source
         .license_detections
         .iter()
-        .find(|detection| detection.license_expression_spdx == "MIT AND Apache-2.0")
+        .find(|detection| detection.license_expression_spdx == "Apache-2.0 AND MIT")
         .expect("combined followed detection should exist");
     assert_eq!(combined.detection_log, ["unknown-reference-to-local-file"]);
     assert!(
