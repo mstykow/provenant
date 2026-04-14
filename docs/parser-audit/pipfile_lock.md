@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/pipfile_lock.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -109,3 +109,11 @@ No `Command::new` or subprocess usage found.
 1. Add `fs::metadata().len()` check (100MB limit) before reading Pipfile.lock and Pipfile
 2. Add 100K iteration caps on dependency/package iteration
 3. Add lossy UTF-8 fallback with warning log
+
+## Remediation
+
+1. **P2 HIGH**: No file size check for Pipfile.lock — Replaced `fs::read_to_string` with `read_file_to_string`
+2. **P2 HIGH**: No file size check for Pipfile — Already covered by `read_toml_file` internally
+3. **P2 LOW**: No iteration caps — Added `MAX_ITERATION_COUNT` caps on deps/packages/sources
+4. **P2 LOW**: No string truncation — Added `truncate_field()` to all extracted string values
+5. **P4 LOW**: No lossy UTF-8 — Fixed by `read_file_to_string`

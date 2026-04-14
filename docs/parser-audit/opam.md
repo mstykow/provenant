@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/opam.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -103,3 +103,10 @@ None.
 2. Add 100K iteration cap in line processing loops
 3. Add lossy UTF-8 fallback on read failure
 4. Add 10MB field value truncation with warning
+
+## Remediation
+
+- **#1 P2 File Size**: Replaced `std::fs::read_to_string` with `read_file_to_string(path, None)` — enforces 100MB size check before reading and provides lossy UTF-8 fallback.
+- **#2 P2 Iteration**: Added `MAX_ITERATION_COUNT` counter caps to all 5 while loops (parse_opam_data, parse_multiline_string, parse_string_array, parse_dependency_array, parse_checksums).
+- **#3 P2 String Length**: Applied `truncate_field()` to all extracted string values.
+- **#4 P4 UTF-8**: Fixed automatically by `read_file_to_string` — lossy UTF-8 conversion replaces silent failure on non-UTF-8 content.

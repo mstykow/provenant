@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/conan.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -113,3 +113,11 @@ No `Command::new` or subprocess usage found.
 2. Add AST node count and recursion depth limits to `collect_self_method_calls` (like python.rs: `MAX_SETUP_PY_AST_DEPTH`=50, `MAX_SETUP_PY_AST_NODES`=10,000)
 3. Add 100K iteration caps on line/entry iteration
 4. Add lossy UTF-8 fallback with warning log
+
+## Remediation
+
+- Finding #1 (P2 File Size): Replaced all 3 `fs::read_to_string` calls with `read_file_to_string(path, None)`
+- Finding #2 (P2 Recursion): Added `MAX_AST_DEPTH = 50` and `MAX_AST_NODES = 10_000` to `collect_self_method_calls` with depth tracking and node count
+- Finding #3 (P2 Iteration Count): Added `MAX_ITERATION_COUNT` caps to class body statements, conanfile.txt lines, and conan.lock JSON entries
+- Finding #4 (P2 String Length): Applied `truncate_field()` to all extracted string values (name, version, description, author, homepage, url, license, topics, requires, purl, extracted_requirement)
+- Finding #5 (P4 UTF-8): Fixed automatically by switching to `read_file_to_string`

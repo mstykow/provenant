@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/npm_workspace.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -97,3 +97,11 @@ No `Command::new` or subprocess usage.
 3. Add 10 MB field value truncation with warning
 4. Add `fs::metadata()` pre-check for file existence
 5. Add lossy UTF-8 fallback for non-UTF-8 files
+
+## Remediation
+
+- #1 P2: File Size — Replaced `fs::read_to_string` with `read_file_to_string(path, None)` (100MB limit + file-exists check)
+- #2 P2: Iteration Count — Added `.take(MAX_ITERATION_COUNT)` on workspace patterns iteration
+- #3 P2: String Length — Applied `truncate_field()` to workspace pattern strings
+- #4 P4: File Exists — Fixed by `read_file_to_string`
+- #5 P4: UTF-8 Encoding — Fixed by `read_file_to_string` (lossy UTF-8 fallback)

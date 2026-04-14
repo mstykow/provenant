@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use packageurl::PackageUrl;
 use serde_json::Value as JsonValue;
 use yaml_serde::{Mapping, Value};
@@ -57,7 +57,7 @@ impl PackageParser for HelmChartLockParser {
 
 fn read_yaml_file(path: &Path) -> Result<Value, String> {
     let content =
-        fs::read_to_string(path).map_err(|error| format!("Failed to read file: {error}"))?;
+        read_file_to_string(path, None).map_err(|error| format!("Failed to read file: {error}"))?;
     yaml_serde::from_str(&content).map_err(|error| format!("Failed to parse YAML: {error}"))
 }
 
@@ -125,6 +125,7 @@ fn extract_chart_yaml_dependencies(yaml_content: &Value) -> Vec<Dependency> {
 
     entries
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(Value::as_mapping)
         .filter_map(parse_chart_yaml_dependency)
         .collect()
@@ -189,6 +190,7 @@ fn extract_chart_lock_dependencies(yaml_content: &Value) -> Vec<Dependency> {
 
     entries
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(Value::as_mapping)
         .filter_map(parse_chart_lock_dependency)
         .collect()
@@ -249,6 +251,7 @@ fn extract_maintainers(yaml_content: &Value) -> Vec<Party> {
 
     maintainers
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(Value::as_mapping)
         .filter_map(|mapping| {
             let name = mapping_get(mapping, "name").and_then(yaml_value_to_string)?;
@@ -281,17 +284,21 @@ fn extract_string_list_field(yaml_content: &Value, field: &str) -> Vec<String> {
 
 fn extract_string_values(value: &Value) -> Vec<String> {
     match value {
-        Value::String(value) => vec![value.clone()],
-        Value::Sequence(values) => values.iter().filter_map(yaml_value_to_string).collect(),
+        Value::String(value) => vec![truncate_field(value.clone())],
+        Value::Sequence(values) => values
+            .iter()
+            .take(MAX_ITERATION_COUNT)
+            .filter_map(yaml_value_to_string)
+            .collect(),
         _ => Vec::new(),
     }
 }
 
 fn yaml_value_to_string(value: &Value) -> Option<String> {
     match value {
-        Value::String(value) => Some(value.clone()),
-        Value::Number(value) => Some(value.to_string()),
-        Value::Bool(value) => Some(value.to_string()),
+        Value::String(value) => Some(truncate_field(value.clone())),
+        Value::Number(value) => Some(truncate_field(value.to_string())),
+        Value::Bool(value) => Some(truncate_field(value.to_string())),
         _ => None,
     }
 }

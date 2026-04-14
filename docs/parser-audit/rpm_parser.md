@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/rpm_parser.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -99,3 +99,13 @@ No `Command::new` or subprocess usage found.
 1. Add fs::metadata().len() check before opening RPM files with 100MB limit
 2. Add iteration count caps on dependency/relationship loops
 3. Add string length truncation on field values
+
+## Remediation
+
+All 5 findings addressed:
+
+1. **P2-FileSize**: Added `fs::metadata()` check with 100MB limit before opening RPM files.
+2. **P2-Iteration**: Added `MAX_ITERATION_COUNT` caps on dependency and relationship iteration.
+3. **P2-StringLength**: Added `truncate_field` on all string fields.
+4. **P4-Pre-check**: Addressed by the file size check.
+5. **P4-UTF8**: No change needed; the `rpm` crate returns validated `String` types.

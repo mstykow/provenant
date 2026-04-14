@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/rpm_db.rs`
 **Date**: 2026-04-14
-**Status**: NON-COMPLIANT
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -111,3 +111,12 @@ No `.unwrap()` calls in library code (excluding test module at line 614).
 3. Add iteration count caps on package/dependency/file loops
 4. Add String::from_utf8_lossy() for rpm query output
 5. Add string length truncation on field values
+
+## Remediation
+
+1. **P1 CRITICAL**: `Command::new("rpm")` subprocess execution — REMOVED entirely; native parsing only
+2. **P2 HIGH**: No file size check — Added `fs::metadata()` pre-check with `MAX_MANIFEST_SIZE=100MB`
+3. **P2 MEDIUM**: No iteration caps — Added `MAX_ITERATION_COUNT` caps on packages, requires, file_names, base_names, dir_names
+4. **P2 MEDIUM**: No string truncation — Added `truncate_field()` to all extracted string values
+5. **P4 LOW**: No `fs::metadata` pre-check — Covered by finding #2
+6. **P4 LOW**: `String::from_utf8` on rpm stdout — Moot since `Command::new` removed; native parsing uses lossy UTF-8

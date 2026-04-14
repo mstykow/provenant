@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/readme.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -93,3 +93,10 @@ No subprocess calls found.
 
 1. Add `fs::metadata().len()` check before reading, reject >100MB
 2. Add line iteration cap (100K) on README parsing
+
+## Remediation
+
+- Finding #1 (P2 File Size): Already covered by `read_file_to_string(path, None)` which enforces 100MB size limit
+- Finding #2 (P2 Iteration): Added `.take(MAX_ITERATION_COUNT)` cap on line iteration
+- Finding #3 (P2 String Length): Applied `truncate_field()` to all extracted string values (name, version, copyright, download_url, homepage_url, extracted_license_statement, fallback name)
+- Finding #4 (P4 UTF-8): Already covered by `read_file_to_string` (lossy UTF-8 fallback)

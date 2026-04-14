@@ -26,7 +26,7 @@ use packageurl::PackageUrl;
 use serde::Deserialize;
 
 use crate::models::{DatasourceId, PackageData, PackageType, Party};
-use crate::parsers::utils::read_file_to_string;
+use crate::parsers::utils::{read_file_to_string, truncate_field};
 use crate::utils::spdx::{ExpressionRelation, combine_license_expressions_with_relation};
 
 use super::PackageParser;
@@ -95,19 +95,24 @@ pub(crate) fn parse_freebsd_manifest(content: &str) -> PackageData {
         }
     };
 
-    let name = manifest.name.clone();
-    let version = manifest.version.clone();
-    let description = manifest.description;
-    let homepage_url = manifest.www;
-    let keywords = manifest.categories.unwrap_or_default();
+    let name = manifest.name.map(truncate_field);
+    let version = manifest.version.map(truncate_field);
+    let description = manifest.description.map(truncate_field);
+    let homepage_url = manifest.www.map(truncate_field);
+    let keywords = manifest
+        .categories
+        .unwrap_or_default()
+        .into_iter()
+        .map(truncate_field)
+        .collect();
 
     // Build qualifiers from arch and origin
     let mut qualifiers = HashMap::new();
     if let Some(ref arch) = manifest.arch {
-        qualifiers.insert("arch".to_string(), arch.clone());
+        qualifiers.insert("arch".to_string(), truncate_field(arch.clone()));
     }
     if let Some(ref origin) = manifest.origin {
-        qualifiers.insert("origin".to_string(), origin.clone());
+        qualifiers.insert("origin".to_string(), truncate_field(origin.clone()));
     }
 
     // Build parties from maintainer (just an email address)
@@ -117,7 +122,7 @@ pub(crate) fn parse_freebsd_manifest(content: &str) -> PackageData {
             r#type: Some("person".to_string()),
             role: Some("maintainer".to_string()),
             name: None,
-            email: Some(maintainer_email),
+            email: Some(truncate_field(maintainer_email)),
             url: None,
             organization: None,
             organization_url: None,
@@ -126,12 +131,15 @@ pub(crate) fn parse_freebsd_manifest(content: &str) -> PackageData {
     }
 
     // Build extracted_license_statement from licenses and licenselogic
-    let extracted_license_statement =
-        build_license_statement(&manifest.licenses, &manifest.licenselogic);
+    let licenses = manifest
+        .licenses
+        .map(|lics| lics.into_iter().map(truncate_field).collect());
+    let licenselogic = manifest.licenselogic.map(truncate_field);
+    let extracted_license_statement = build_license_statement(&licenses, &licenselogic);
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         build_freebsd_license_data(
-            manifest.licenses.as_deref(),
-            manifest.licenselogic.as_deref(),
+            licenses.as_deref(),
+            licenselogic.as_deref(),
             extracted_license_statement.as_deref(),
         );
 
@@ -139,16 +147,16 @@ pub(crate) fn parse_freebsd_manifest(content: &str) -> PackageData {
     let code_view_url = manifest
         .origin
         .as_ref()
-        .map(|origin| format!("https://svnweb.freebsd.org/ports/head/{}", origin));
+        .map(|origin| truncate_field(format!("https://svnweb.freebsd.org/ports/head/{}", origin)));
 
     // Build download_url from arch, name, and version
     let download_url = if let (Some(arch), Some(pkg_name), Some(pkg_version)) =
         (&manifest.arch, &name, &version)
     {
-        Some(format!(
+        Some(truncate_field(format!(
             "https://pkg.freebsd.org/{}/latest/All/{}-{}.txz",
             arch, pkg_name, pkg_version
-        ))
+        )))
     } else {
         None
     };
@@ -161,6 +169,7 @@ pub(crate) fn parse_freebsd_manifest(content: &str) -> PackageData {
             manifest.origin.as_deref(),
         )
     });
+    let purl = purl.map(truncate_field);
 
     PackageData {
         datasource_id: Some(DatasourceId::FreebsdCompactManifest),
@@ -179,7 +188,7 @@ pub(crate) fn parse_freebsd_manifest(content: &str) -> PackageData {
         declared_license_expression,
         declared_license_expression_spdx,
         license_detections,
-        extracted_license_statement,
+        extracted_license_statement: extracted_license_statement.map(truncate_field),
         code_view_url,
         download_url,
         purl,

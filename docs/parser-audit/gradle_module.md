@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/gradle_module.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -102,3 +102,11 @@ No `Command::new` or subprocess usage found.
 3. Add 10 MB string field truncation with warning
 4. Add `fs::metadata()` pre-check before `File::open`
 5. Consider adding explicit JSON nesting depth tracking beyond serde_json's defaults
+
+## Remediation
+
+- #1 P2: File Size — Replaced `File::open`+`serde_json::from_reader` with `read_file_to_string`+`serde_json::from_str`
+- #2 P2: Iteration Count — Added `.take(MAX_ITERATION_COUNT)` on variant/file/dependency processing
+- #3 P2: String Length — Applied `truncate_field()` to all JSON string field values
+- #4 P4: File Exists — Fixed by `read_file_to_string`
+- #5 P2: Recursion Depth — Acceptable; serde_json handles internally, parser has no recursive functions

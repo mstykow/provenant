@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/rpm_yumdb.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -97,3 +97,13 @@ No `Command::new` or subprocess usage found.
 1. Add fs::metadata().len() check before reading key files with 100MB limit
 2. Add iteration count cap on directory entry loop
 3. Add String::from_utf8_lossy() fallback for UTF-8 handling
+
+## Remediation
+
+All 5 findings addressed:
+
+1. **P2-FileSize**: Replaced `fs::read_to_string` with `read_file_to_string` which enforces a size limit.
+2. **P2-Iteration**: Added `MAX_ITERATION_COUNT` cap on directory entries.
+3. **P2-StringLength**: Added `truncate_field` on name, version, arch, key values, and purl.
+4. **P4-Pre-check**: Covered by `read_file_to_string`.
+5. **P4-UTF8**: Covered by `read_file_to_string`.

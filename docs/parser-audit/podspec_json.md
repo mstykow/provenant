@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/podspec_json.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -104,3 +104,12 @@ No `Command::new`, `std::process::Command`, or subprocess usage found.
 4. **[P2: DoS] Add iteration count caps** (100K) to authors/dependencies iteration loops with early-break and warning
 5. **[P2: DoS] Add size check** before cloning full JSON into `extra_data["podspec.json"]` at line 147
 6. **[P2: DoS] Add string field truncation** at 10MB with warning log
+
+## Remediation
+
+1. **P2 Medium**: No file size pre-check — Replaced `File::open`+`read_to_string` with `read_file_to_string`
+2. **P2 Medium**: No iteration caps — Added `MAX_ITERATION_COUNT` caps on authors/deps
+3. **P2 Low**: No extra_data size check — Added 10MB size check before cloning JSON to `extra_data`
+4. **P2 Low**: No string truncation — Added `truncate_field()` to all extracted string values
+5. **P4 Medium**: No lossy UTF-8 — Fixed by `read_file_to_string`
+6. **Additional Medium**: `.unwrap()` in PURL fallback — Replaced with safe `.or_else().ok()` and `.map()` pattern

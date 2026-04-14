@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/deno_lock.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -104,3 +104,13 @@ No `Command::new` or subprocess usage.
 3. Add 10 MB field value truncation with warning
 4. Add `fs::metadata()` pre-check for file existence
 5. Add lossy UTF-8 fallback for non-UTF-8 files
+
+## Remediation
+
+| #   | Finding             | Fix                                                                                                                                              |
+| --- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | P2: File Size       | Replaced `fs::read_to_string` with `read_file_to_string(path, None)` which enforces 100MB size limit                                             |
+| 2   | P2: Iteration Count | Added `.take(MAX_ITERATION_COUNT)` to 6 iteration sites (workspace_direct, jsr_map, npm_map, redirects, npm deps, JSR deps)                      |
+| 3   | P2: String Length   | Applied `truncate_field()` to all extracted string values (purl, extracted_requirement, namespace, name, version, download_url, redirect fields) |
+| 4   | P4: File Exists     | `read_file_to_string` uses `fs::metadata()` pre-check internally                                                                                 |
+| 5   | P4: UTF-8 Encoding  | `read_file_to_string` provides lossy UTF-8 fallback internally                                                                                   |

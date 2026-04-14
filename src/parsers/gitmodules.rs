@@ -23,7 +23,7 @@ use std::path::Path;
 use crate::parser_warn as warn;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
-use crate::parsers::utils::read_file_to_string;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 use super::PackageParser;
 
@@ -62,10 +62,11 @@ impl PackageParser for GitmodulesParser {
 
         let dependencies: Vec<Dependency> = submodules
             .into_iter()
+            .take(MAX_ITERATION_COUNT)
             .map(|sub| Dependency {
-                purl: sub.purl,
-                extracted_requirement: Some(format!("{} at {}", sub.path, sub.url)),
-                scope: Some("runtime".to_string()),
+                purl: sub.purl.map(truncate_field),
+                extracted_requirement: Some(truncate_field(format!("{} at {}", sub.path, sub.url))),
+                scope: Some(truncate_field("runtime".to_string())),
                 is_runtime: Some(true),
                 is_optional: Some(false),
                 is_direct: Some(true),
@@ -95,7 +96,7 @@ fn parse_gitmodules(content: &str) -> Vec<Submodule> {
     let mut current_section: Option<HashMap<String, String>> = None;
     let mut current_name: Option<String> = None;
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let line = line.trim();
 
         if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
@@ -112,14 +113,14 @@ fn parse_gitmodules(content: &str) -> Vec<Submodule> {
 
             let section_name = &line[1..line.len() - 1];
             if let Some(stripped) = section_name.strip_prefix("submodule ") {
-                current_name = Some(stripped.trim_matches('"').to_string());
+                current_name = Some(truncate_field(stripped.trim_matches('"').to_string()));
                 current_section = Some(HashMap::new());
             }
         } else if let Some(ref mut section) = current_section
             && let Some((key, value)) = line.split_once('=')
         {
-            let key = key.trim().to_string();
-            let value = value.trim().to_string();
+            let key = truncate_field(key.trim().to_string());
+            let value = truncate_field(value.trim().to_string());
             section.insert(key, value);
         }
     }
@@ -135,8 +136,8 @@ fn parse_gitmodules(content: &str) -> Vec<Submodule> {
 }
 
 fn build_submodule(_name: String, section: HashMap<String, String>) -> Option<Submodule> {
-    let path = section.get("path").cloned().unwrap_or_default();
-    let url = section.get("url").cloned().unwrap_or_default();
+    let path = truncate_field(section.get("path").cloned().unwrap_or_default());
+    let url = truncate_field(section.get("url").cloned().unwrap_or_default());
 
     if path.is_empty() && url.is_empty() {
         return None;
@@ -174,7 +175,7 @@ fn parse_github_url(url: &str) -> Option<String> {
         return None;
     };
 
-    Some(format!("pkg:github/{}/{}", namespace, name))
+    Some(truncate_field(format!("pkg:github/{}/{}", namespace, name)))
 }
 
 fn parse_gitlab_url(url: &str) -> Option<String> {
@@ -188,7 +189,7 @@ fn parse_gitlab_url(url: &str) -> Option<String> {
         return None;
     };
 
-    Some(format!("pkg:gitlab/{}/{}", namespace, name))
+    Some(truncate_field(format!("pkg:gitlab/{}/{}", namespace, name)))
 }
 
 fn parse_repo_path(path: &str) -> Option<(String, String)> {
@@ -199,8 +200,8 @@ fn parse_repo_path(path: &str) -> Option<(String, String)> {
         return None;
     }
 
-    let name = parts.last()?.to_string();
-    let namespace = parts[..parts.len() - 1].join("/");
+    let name = truncate_field(parts.last()?.to_string());
+    let namespace = truncate_field(parts[..parts.len() - 1].join("/"));
 
     if namespace.is_empty() || name.is_empty() {
         return None;

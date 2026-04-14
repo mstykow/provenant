@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/maven.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -112,3 +112,11 @@ No `Command::new` or subprocess usage found.
 3. Add 10 MB string field truncation with warning on parsed text content
 4. Add `fs::metadata()` pre-check before `File::open`
 5. Replace `unwrap_or_default()` on text decode with explicit UTF-8 validation + warning + lossy conversion
+
+## Remediation
+
+- #1 P2: File Size — Verified all 3 file-read sites already use `read_file_to_string` (100MB limit enforced)
+- #2 P2: Iteration Count — Added iteration counter on XML event loop (breaks at 100K with `warn!`); added `.take(MAX_ITERATION_COUNT)` on OSGi parsing loops
+- #3 P2: String Length — Applied `truncate_field()` to all extracted string values across pom.xml, pom.properties, and MANIFEST.MF parsers
+- #4 P4: File Exists — Covered by `read_file_to_string`
+- #5 P4: UTF-8 Encoding — Replaced `e.decode().unwrap_or_default()` with lossy UTF-8 conversion + `warn!` on decode error

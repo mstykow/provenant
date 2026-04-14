@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/julia.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -97,3 +97,11 @@ None.
 3. Add 100K iteration cap in dependency extraction loops
 4. Add lossy UTF-8 fallback on read failure
 5. Add 10MB field value truncation with warning
+
+## Remediation
+
+- #1 P2: File Size — Replaced `File::open`+`read_to_string` with `read_file_to_string(path, None)` (100MB limit)
+- #2 P2: Recursion Depth — Added `MAX_RECURSION_DEPTH=50` to `toml_to_json` recursion
+- #3 P2: Iteration Count — Added `.take(MAX_ITERATION_COUNT)` on author/dependency loops
+- #4 P2: String Length — Applied `truncate_field()` to all extracted string values
+- #5 P4: UTF-8 Encoding — Fixed by `read_file_to_string` (lossy UTF-8 fallback)

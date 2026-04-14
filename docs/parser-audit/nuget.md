@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/nuget.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -123,3 +123,11 @@ None.
 3. Add 100K iteration cap on primary parsing loops
 4. Add 10MB field value truncation with warning
 5. Add lossy UTF-8 fallback for file reads
+
+## Remediation
+
+1. **P2 HIGH**: No file size checks for 7 non-archive parsers — Added `fs::metadata()` checks with `MAX_MANIFEST_SIZE` or replaced with `read_file_to_string`
+2. **P2 MEDIUM**: No recursion depth limit on import resolution — Added `MAX_RECURSION_DEPTH=50` to `resolve_directory_packages_props` and `resolve_directory_build_props`
+3. **P2 MEDIUM**: No iteration caps on XML/JSON loops — Added `MAX_ITERATION_COUNT` caps on all primary parsing loops
+4. **P2 LOW**: No string truncation — Added `truncate_field()` to all extracted string values
+5. **P4 LOW**: No lossy UTF-8 for non-archive reads — Replaced `serde_json::from_reader` with `read_file_to_string`+`from_str` for JSON parsers; added `check_file_size` for XML parsers

@@ -5,7 +5,7 @@ use crate::parser_warn as warn;
 use serde_json::json;
 
 use crate::models::{DatasourceId, PackageData, PackageType};
-use crate::parsers::utils::read_file_to_string;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 use super::PackageParser;
 use super::license_normalization::normalize_spdx_declared_license;
@@ -64,17 +64,25 @@ pub(crate) fn parse_dockerfile(content: &str) -> PackageData {
         package_type: Some(PACKAGE_TYPE),
         primary_language: Some("Dockerfile".to_string()),
         datasource_id: Some(DatasourceId::Dockerfile),
-        name: oci_labels.get("org.opencontainers.image.title").cloned(),
+        name: oci_labels
+            .get("org.opencontainers.image.title")
+            .map(|v| truncate_field(v.clone())),
         description: oci_labels
             .get("org.opencontainers.image.description")
-            .cloned(),
-        homepage_url: oci_labels.get("org.opencontainers.image.url").cloned(),
-        vcs_url: oci_labels.get("org.opencontainers.image.source").cloned(),
-        version: oci_labels.get("org.opencontainers.image.version").cloned(),
+            .map(|v| truncate_field(v.clone())),
+        homepage_url: oci_labels
+            .get("org.opencontainers.image.url")
+            .map(|v| truncate_field(v.clone())),
+        vcs_url: oci_labels
+            .get("org.opencontainers.image.source")
+            .map(|v| truncate_field(v.clone())),
+        version: oci_labels
+            .get("org.opencontainers.image.version")
+            .map(|v| truncate_field(v.clone())),
         declared_license_expression,
         declared_license_expression_spdx,
         license_detections,
-        extracted_license_statement,
+        extracted_license_statement: extracted_license_statement.map(truncate_field),
         extra_data,
         ..Default::default()
     }
@@ -98,8 +106,14 @@ fn extract_oci_labels(content: &str) -> HashMap<String, String> {
 fn logical_lines(content: &str) -> Vec<String> {
     let mut lines = Vec::new();
     let mut current = String::new();
+    let mut iterations = 0usize;
 
     for raw_line in content.lines() {
+        iterations += 1;
+        if iterations > MAX_ITERATION_COUNT {
+            warn!("logical_lines: exceeded MAX_ITERATION_COUNT, truncating");
+            break;
+        }
         let line = raw_line.trim_end();
         let trimmed = line.trim();
 
@@ -160,13 +174,17 @@ fn parse_label_instruction(rest: &str, labels: &mut HashMap<String, String>) {
     }
 
     if tokens.first().is_some_and(|token| token.contains('=')) {
-        for token in tokens {
+        for (i, token) in tokens.into_iter().enumerate() {
+            if i >= MAX_ITERATION_COUNT {
+                warn!("parse_label_instruction: exceeded MAX_ITERATION_COUNT, truncating");
+                break;
+            }
             let Some((key, value)) = token.split_once('=') else {
                 continue;
             };
             let key = key.trim();
             if key.starts_with(OCI_LABEL_PREFIX) {
-                labels.insert(key.to_string(), value.trim().to_string());
+                labels.insert(key.to_string(), truncate_field(value.trim().to_string()));
             }
         }
         return;
@@ -175,7 +193,10 @@ fn parse_label_instruction(rest: &str, labels: &mut HashMap<String, String>) {
     if let Some((key, values)) = tokens.split_first()
         && key.starts_with(OCI_LABEL_PREFIX)
     {
-        labels.insert(key.to_string(), values.join(" ").trim().to_string());
+        labels.insert(
+            key.to_string(),
+            truncate_field(values.join(" ").trim().to_string()),
+        );
     }
 }
 
@@ -184,8 +205,14 @@ fn tokenize_label_arguments(input: &str) -> Vec<String> {
     let mut current = String::new();
     let mut chars = input.chars().peekable();
     let mut quote: Option<char> = None;
+    let mut iterations = 0usize;
 
     while let Some(ch) = chars.next() {
+        iterations += 1;
+        if iterations > MAX_ITERATION_COUNT {
+            warn!("tokenize_label_arguments: exceeded MAX_ITERATION_COUNT, truncating");
+            break;
+        }
         match quote {
             Some(current_quote) => {
                 if ch == '\\' {

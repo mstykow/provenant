@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/poetry_lock.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -107,3 +107,10 @@ No `Command::new` or subprocess usage found.
 1. Add `fs::metadata().len()` check (100MB limit) before reading poetry.lock
 2. Add 100K iteration caps on package/dependency iteration
 3. Add lossy UTF-8 fallback with warning log
+
+## Remediation
+
+- Finding #1 (P2 File Size): Already covered by `read_toml_file` → `read_file_to_string` which enforces 100MB size limit
+- Finding #2 (P2 Iteration): Added `.take(MAX_ITERATION_COUNT)` caps on packages and dependency iteration loops
+- Finding #3 (P2 String Length): Applied `truncate_field()` to all extracted string values (name, version, purl, extracted_requirement, scope, repository URLs, api_data_url, sha256, python_version, lock_version)
+- Finding #4 (P4 UTF-8): Already covered by `read_toml_file` → `read_file_to_string` (lossy UTF-8 fallback)

@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/requirements_txt.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -112,3 +112,11 @@ No `Command::new` or subprocess usage found.
 2. Add explicit recursion depth counter (max 50) to `parse_requirements_with_includes`
 3. Add 100K iteration cap on lines/dependencies with early break and warning
 4. Add lossy UTF-8 fallback with warning log
+
+## Remediation
+
+1. **P2 HIGH**: No file size check — Replaced `fs::read_to_string` with `read_file_to_string`
+2. **P2 MEDIUM**: No recursion depth limit — Added `MAX_RECURSION_DEPTH=50` to `parse_requirements_with_includes`
+3. **P2 LOW**: No iteration caps — Added `MAX_ITERATION_COUNT` caps on lines and dependencies
+4. **P2 LOW**: No string truncation — Added `truncate_field()` to all extracted string values
+5. **P4 LOW**: No lossy UTF-8 — Fixed by `read_file_to_string`

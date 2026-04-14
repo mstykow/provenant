@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/rpm_db_native/bdb.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -97,3 +97,10 @@ No `Command::new` or subprocess usage found.
 2. Add iteration cap on page loop (0..=last_page_number)
 3. Add depth limit on overflow page chain traversal
 4. Add size limit on accumulated overflow value data
+
+## Remediation
+
+- Finding #1 (P2 File Size): Added `fs::metadata()` pre-check before `File::open` with `MAX_MANIFEST_SIZE` (100MB) limit
+- Finding #2 (P2 Iteration Pages): Capped `last_page_number` to `MAX_ITERATION_COUNT` with warning on truncation
+- Finding #3 (P2 Iteration Overflow): Added depth counter with `MAX_ITERATION_COUNT` limit on overflow page chain traversal; added cumulative size check against `MAX_FIELD_LENGTH` (10MB)
+- Finding #4 (P2 Iteration Hash): Capped hash page entry count to `MAX_ITERATION_COUNT` with warning and break
