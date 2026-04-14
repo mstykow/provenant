@@ -5,6 +5,7 @@ use crate::parser_warn as warn;
 use packageurl::PackageUrl;
 
 use crate::models::{DatasourceId, PackageData, PackageType};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 use super::PackageParser;
 
@@ -28,9 +29,9 @@ fn parse_yumdb_dir_name(dir_name: &str) -> Option<(String, String, String)> {
     let name = parts.next()?;
 
     Some((
-        name.to_string(),
-        format!("{}-{}", version, release),
-        arch.to_string(),
+        truncate_field(name.to_string()),
+        truncate_field(format!("{}-{}", version, release)),
+        truncate_field(arch.to_string()),
     ))
 }
 
@@ -38,7 +39,7 @@ fn build_yumdb_purl(name: &str, version: &str, arch: &str) -> Option<String> {
     let mut purl = PackageUrl::new(PACKAGE_TYPE.as_str(), name).ok()?;
     purl.with_version(version).ok()?;
     purl.add_qualifier("arch", arch).ok()?;
-    Some(purl.to_string())
+    Some(truncate_field(purl.to_string()))
 }
 
 pub struct RpmYumdbParser;
@@ -80,7 +81,9 @@ impl PackageParser for RpmYumdbParser {
             }
         };
 
-        for entry in entries.flatten() {
+        let entries: Vec<_> = entries.flatten().take(MAX_ITERATION_COUNT).collect();
+
+        for entry in entries {
             let key_path = entry.path();
             if !key_path.is_file() {
                 continue;
@@ -90,13 +93,13 @@ impl PackageParser for RpmYumdbParser {
                 continue;
             };
 
-            match fs::read_to_string(&key_path) {
+            match read_file_to_string(&key_path, None) {
                 Ok(value) => {
                     let value = value.trim();
                     if !value.is_empty() {
                         extra_data.insert(
                             key.to_string(),
-                            serde_json::Value::String(value.to_string()),
+                            serde_json::Value::String(truncate_field(value.to_string())),
                         );
                     }
                 }
@@ -123,6 +126,7 @@ impl PackageParser for RpmYumdbParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use tempfile::tempdir;
 
     #[test]

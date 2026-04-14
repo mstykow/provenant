@@ -34,7 +34,9 @@ use packageurl::PackageUrl;
 use regex::Regex;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
-use crate::parsers::utils::{read_file_to_string, split_name_email};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, read_file_to_string, split_name_email, truncate_field,
+};
 
 use super::PackageParser;
 
@@ -82,9 +84,17 @@ fn parse_specfile(content: &str) -> PackageData {
 
     let lines: Vec<&str> = content.lines().collect();
     let mut i = 0;
+    let mut iterations: usize = 0;
 
-    // Parse preamble (everything before % sections)
     while i < lines.len() {
+        iterations += 1;
+        if iterations > MAX_ITERATION_COUNT {
+            warn!(
+                "RPM specfile preamble iteration limit ({}) exceeded",
+                MAX_ITERATION_COUNT
+            );
+            break;
+        }
         let line = lines[i].trim();
 
         // Stop at first section marker (%, but not %define/%global)
@@ -109,7 +119,10 @@ fn parse_specfile(content: &str) -> PackageData {
         {
             let parts: Vec<&str> = stripped.trim().splitn(2, char::is_whitespace).collect();
             if parts.len() == 2 {
-                macros.insert(parts[0].to_string(), parts[1].trim().to_string());
+                macros.insert(
+                    parts[0].to_string(),
+                    truncate_field(parts[1].trim().to_string()),
+                );
             }
             i += 1;
             continue;
@@ -122,8 +135,7 @@ fn parse_specfile(content: &str) -> PackageData {
 
             match tag.as_str() {
                 "buildrequires" => {
-                    // BuildRequires can be comma-separated
-                    for dep in value.split(',') {
+                    for dep in value.split(',').take(MAX_ITERATION_COUNT) {
                         let dep = dep.trim();
                         if !dep.is_empty() {
                             build_requires.push(dep.to_string());
@@ -142,7 +154,7 @@ fn parse_specfile(content: &str) -> PackageData {
                         Some("runtime".to_string())
                     };
 
-                    for dep in value.split(',') {
+                    for dep in value.split(',').take(MAX_ITERATION_COUNT) {
                         let dep = dep.trim();
                         if !dep.is_empty() {
                             requires.push((dep.to_string(), scope.clone()));
@@ -150,7 +162,7 @@ fn parse_specfile(content: &str) -> PackageData {
                     }
                 }
                 "provides" => {
-                    for prov in value.split(',') {
+                    for prov in value.split(',').take(MAX_ITERATION_COUNT) {
                         let prov = prov.trim();
                         if !prov.is_empty() {
                             provides.push(prov.to_string());
@@ -167,15 +179,31 @@ fn parse_specfile(content: &str) -> PackageData {
     }
 
     // Now parse %description section if present
+    let mut desc_iterations: usize = 0;
     while i < lines.len() {
+        desc_iterations += 1;
+        if desc_iterations > MAX_ITERATION_COUNT {
+            warn!(
+                "RPM specfile description search iteration limit ({}) exceeded",
+                MAX_ITERATION_COUNT
+            );
+            break;
+        }
         let line = lines[i].trim();
 
         if line.starts_with("%description") {
             i += 1;
             let mut desc_lines = Vec::new();
 
-            // Collect lines until next % section
             while i < lines.len() {
+                desc_iterations += 1;
+                if desc_iterations > MAX_ITERATION_COUNT {
+                    warn!(
+                        "RPM specfile description iteration limit ({}) exceeded",
+                        MAX_ITERATION_COUNT
+                    );
+                    break;
+                }
                 let desc_line = lines[i];
                 let trimmed = desc_line.trim();
 
@@ -226,7 +254,7 @@ fn parse_specfile(content: &str) -> PackageData {
     // Expand macros in all tag values
     let mut expanded_tags: HashMap<String, String> = HashMap::new();
     for (tag, value) in tags.iter() {
-        expanded_tags.insert(tag.clone(), expand_macros(value, &macros));
+        expanded_tags.insert(tag.clone(), truncate_field(expand_macros(value, &macros)));
     }
 
     // Get expanded values
@@ -243,7 +271,8 @@ fn parse_specfile(content: &str) -> PackageData {
     let download_url = expanded_tags
         .get("source")
         .or_else(|| expanded_tags.get("source0"))
-        .cloned();
+        .cloned()
+        .map(truncate_field);
 
     // Create parties
     let mut parties = Vec::new();
@@ -264,10 +293,10 @@ fn parse_specfile(content: &str) -> PackageData {
     // Create dependencies
     let mut dependencies = Vec::new();
 
-    for dep_str in build_requires {
-        let dep_str = expand_macros(&dep_str, &macros);
+    for dep_str in build_requires.into_iter().take(MAX_ITERATION_COUNT) {
+        let dep_str = truncate_field(expand_macros(&dep_str, &macros));
         let dep_name = extract_dep_name(&dep_str);
-        let purl = build_rpm_purl(&dep_name, None);
+        let purl = build_rpm_purl(&dep_name, None).map(truncate_field);
 
         dependencies.push(Dependency {
             purl,
@@ -282,10 +311,10 @@ fn parse_specfile(content: &str) -> PackageData {
         });
     }
 
-    for (dep_str, scope) in requires {
-        let dep_str = expand_macros(&dep_str, &macros);
+    for (dep_str, scope) in requires.into_iter().take(MAX_ITERATION_COUNT) {
+        let dep_str = truncate_field(expand_macros(&dep_str, &macros));
         let dep_name = extract_dep_name(&dep_str);
-        let purl = build_rpm_purl(&dep_name, None);
+        let purl = build_rpm_purl(&dep_name, None).map(truncate_field);
 
         dependencies.push(Dependency {
             purl,
@@ -303,7 +332,8 @@ fn parse_specfile(content: &str) -> PackageData {
     // Build PURL
     let purl = name
         .as_ref()
-        .and_then(|n| build_rpm_purl(n, version.as_deref()));
+        .and_then(|n| build_rpm_purl(n, version.as_deref()))
+        .map(truncate_field);
 
     // Build extra_data for non-standard fields
     let mut extra_data = HashMap::new();
@@ -319,7 +349,8 @@ fn parse_specfile(content: &str) -> PackageData {
     if !provides.is_empty() {
         let provides_json: Vec<serde_json::Value> = provides
             .into_iter()
-            .map(|prov| serde_json::Value::String(expand_macros(&prov, &macros)))
+            .take(MAX_ITERATION_COUNT)
+            .map(|prov| serde_json::Value::String(truncate_field(expand_macros(&prov, &macros))))
             .collect();
         extra_data.insert(
             "provides".to_string(),
@@ -334,7 +365,7 @@ fn parse_specfile(content: &str) -> PackageData {
     };
 
     // Use %description if available, otherwise use Summary
-    let description_text = description.or(summary);
+    let description_text = description.map(truncate_field).or(summary);
 
     PackageData {
         datasource_id: Some(DatasourceId::RpmSpecfile),
@@ -381,10 +412,9 @@ fn expand_macros(s: &str, macros: &HashMap<String, String>) -> String {
 
 /// Extracts the package name from a dependency string (removes version constraints)
 fn extract_dep_name(dep: &str) -> String {
-    // Split on operators: >=, <=, =, >, <
     let parts: Vec<&str> = dep.split(&['>', '<', '='][..]).map(|s| s.trim()).collect();
 
-    parts[0].to_string()
+    truncate_field(parts[0].to_string())
 }
 
 /// Builds a package URL for RPM packages

@@ -19,7 +19,7 @@
 //! - Direct dependency tracking (all requires are direct)
 //! - Error handling with `warn!()` logs on parse failures
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufReader, Read};
 use std::path::Path;
 
@@ -27,6 +27,7 @@ use crate::parser_warn as warn;
 use rpm::{IndexTag, Package, PackageMetadata, RPM_MAGIC};
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, MAX_MANIFEST_SIZE, truncate_field};
 
 use super::PackageParser;
 
@@ -160,7 +161,30 @@ impl PackageParser for RpmParser {
         if let Some(ext) = path.extension().and_then(|e| e.to_str())
             && matches!(ext, "rpm" | "srpm")
         {
+            if let Ok(metadata) = fs::metadata(path)
+                && metadata.len() > MAX_MANIFEST_SIZE
+            {
+                warn!(
+                    "RPM file {:?} is too large ({} bytes), skipping",
+                    path,
+                    metadata.len()
+                );
+                return false;
+            }
             return true;
+        }
+
+        match fs::metadata(path) {
+            Ok(metadata) if metadata.len() > MAX_MANIFEST_SIZE => {
+                warn!(
+                    "RPM file {:?} is too large ({} bytes), skipping",
+                    path,
+                    metadata.len()
+                );
+                return false;
+            }
+            Err(_) => return false,
+            _ => {}
         }
 
         let mut file = match File::open(path) {
@@ -172,6 +196,22 @@ impl PackageParser for RpmParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
+        match fs::metadata(path) {
+            Ok(metadata) if metadata.len() > MAX_MANIFEST_SIZE => {
+                warn!(
+                    "RPM file {:?} is too large ({} bytes), skipping",
+                    path,
+                    metadata.len()
+                );
+                return vec![default_package_data()];
+            }
+            Err(e) => {
+                warn!("Cannot stat RPM file {:?}: {}", path, e);
+                return vec![default_package_data()];
+            }
+            _ => {}
+        }
+
         let file = match File::open(path) {
             Ok(f) => f,
             Err(e) => {
@@ -218,32 +258,46 @@ pub(crate) fn infer_rpm_namespace_from_filename(path: &Path) -> Option<String> {
 fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
     let metadata = &pkg.metadata;
 
-    let name = metadata.get_name().ok().map(|s| s.to_string());
-    let version = build_evr_version(metadata);
-    let description = metadata.get_description().ok().map(|s| s.to_string());
-    let homepage_url = metadata.get_url().ok().map(|s| s.to_string());
-    let architecture = metadata.get_arch().ok().map(|s| s.to_string());
+    let name = metadata
+        .get_name()
+        .ok()
+        .map(|s| truncate_field(s.to_string()));
+    let version = build_evr_version(metadata).map(truncate_field);
+    let description = metadata
+        .get_description()
+        .ok()
+        .map(|s| truncate_field(s.to_string()));
+    let homepage_url = metadata
+        .get_url()
+        .ok()
+        .map(|s| truncate_field(s.to_string()));
+    let architecture = metadata
+        .get_arch()
+        .ok()
+        .map(|s| truncate_field(s.to_string()));
     let path_str = path.to_string_lossy();
     let is_source = metadata.is_source_package()
         || path_str.ends_with(".src.rpm")
         || path_str.ends_with(".srpm");
-    let distribution = rpm_header_string(metadata, IndexTag::RPMTAG_DISTRIBUTION);
-    let dist_url = rpm_header_string(metadata, IndexTag::RPMTAG_DISTURL);
-    let bug_tracking_url = rpm_header_string(metadata, IndexTag::RPMTAG_BUGURL);
+    let distribution =
+        rpm_header_string(metadata, IndexTag::RPMTAG_DISTRIBUTION).map(truncate_field);
+    let dist_url = rpm_header_string(metadata, IndexTag::RPMTAG_DISTURL).map(truncate_field);
+    let bug_tracking_url = rpm_header_string(metadata, IndexTag::RPMTAG_BUGURL).map(truncate_field);
     let source_urls =
         rpm_header_string_array(metadata, IndexTag::RPMTAG_SOURCE).unwrap_or_default();
     let source_rpm = metadata
         .get_source_rpm()
         .ok()
         .filter(|value| !value.is_empty())
-        .map(|value| value.to_string());
+        .map(|value| truncate_field(value.to_string()));
     let namespace = infer_rpm_namespace(
         distribution.as_deref(),
         metadata.get_vendor().ok(),
         metadata.get_release().ok(),
         dist_url.as_deref(),
     )
-    .or_else(|| infer_rpm_namespace_from_filename(path));
+    .or_else(|| infer_rpm_namespace_from_filename(path))
+    .map(truncate_field);
 
     let mut parties = Vec::new();
 
@@ -253,7 +307,7 @@ fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
         parties.push(Party {
             r#type: Some("organization".to_string()),
             role: Some("vendor".to_string()),
-            name: Some(vendor.to_string()),
+            name: Some(truncate_field(vendor.to_string())),
             email: None,
             url: None,
             organization: None,
@@ -282,8 +336,8 @@ fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
         parties.push(Party {
             r#type: Some("person".to_string()),
             role: Some("packager".to_string()),
-            name: name_opt,
-            email: email_opt,
+            name: name_opt.map(truncate_field),
+            email: email_opt.map(truncate_field),
             url: None,
             organization: None,
             organization_url: None,
@@ -291,7 +345,10 @@ fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
         });
     }
 
-    let extracted_license_statement = metadata.get_license().ok().map(|s| s.to_string());
+    let extracted_license_statement = metadata
+        .get_license()
+        .ok()
+        .map(|s| truncate_field(s.to_string()));
 
     let dependencies = extract_rpm_dependencies(pkg, namespace.as_deref());
 
@@ -301,7 +358,7 @@ fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
     if let Ok(group) = metadata.get_group()
         && !group.is_empty()
     {
-        keywords.push(group.to_string());
+        keywords.push(truncate_field(group.to_string()));
     }
 
     let mut extra_data = std::collections::HashMap::new();
@@ -366,7 +423,7 @@ fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
             ),
         );
     }
-    let vcs_url = infer_vcs_url(metadata, &source_urls);
+    let vcs_url = infer_vcs_url(metadata, &source_urls).map(truncate_field);
 
     PackageData {
         datasource_id: Some(DatasourceId::RpmArchive),
@@ -394,6 +451,7 @@ fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
                 architecture.as_deref(),
                 is_source,
             )
+            .map(truncate_field)
         }),
         ..Default::default()
     }
@@ -404,6 +462,13 @@ fn extract_rpm_dependencies(pkg: &Package, namespace: Option<&str>) -> Vec<Depen
 
     if let Ok(requires) = pkg.metadata.get_requires() {
         for rpm_dep in requires {
+            if dependencies.len() >= MAX_ITERATION_COUNT {
+                warn!(
+                    "RPM dependency iteration capped at {} items",
+                    MAX_ITERATION_COUNT
+                );
+                break;
+            }
             let purl = build_rpm_purl(
                 &rpm_dep.name,
                 if rpm_dep.version.is_empty() {
@@ -414,10 +479,11 @@ fn extract_rpm_dependencies(pkg: &Package, namespace: Option<&str>) -> Vec<Depen
                 namespace,
                 None,
                 false,
-            );
+            )
+            .map(truncate_field);
 
             let extracted_requirement = if !rpm_dep.version.is_empty() {
-                Some(format_rpm_requirement(&rpm_dep))
+                Some(truncate_field(format_rpm_requirement(&rpm_dep)))
             } else {
                 None
             };
@@ -450,11 +516,21 @@ fn extract_rpm_relationships(pkg: &Package, kind: RpmRelationshipKind) -> Option
         RpmRelationshipKind::Obsoletes => pkg.metadata.get_obsoletes().ok()?,
     };
 
+    let mut count = 0usize;
     let values: Vec<String> = relationships
         .into_iter()
+        .take(MAX_ITERATION_COUNT)
         .map(|dep| format_rpm_requirement(&dep))
         .filter(|value| !value.is_empty() && value != "(none)")
+        .inspect(|_| count += 1)
         .collect();
+
+    if count >= MAX_ITERATION_COUNT {
+        warn!(
+            "RPM relationship iteration capped at {} items",
+            MAX_ITERATION_COUNT
+        );
+    }
 
     (!values.is_empty()).then_some(values)
 }
