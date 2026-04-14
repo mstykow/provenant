@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -8,7 +7,9 @@ use serde_json::Value as JsonValue;
 use yaml_serde::{Mapping, Value as YamlValue};
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
-use crate::parsers::utils::split_name_email;
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, read_file_to_string, split_name_email, truncate_field,
+};
 
 use super::PackageParser;
 
@@ -29,7 +30,7 @@ impl PackageParser for HackageCabalParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(error) => {
                 warn!("Failed to read cabal file {:?}: {}", path, error);
@@ -49,7 +50,7 @@ impl PackageParser for HackageCabalProjectParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(error) => {
                 warn!("Failed to read cabal.project {:?}: {}", path, error);
@@ -69,7 +70,7 @@ impl PackageParser for HackageStackYamlParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(error) => {
                 warn!("Failed to read stack.yaml {:?}: {}", path, error);
@@ -124,15 +125,20 @@ fn default_package_data(datasource_id: DatasourceId) -> PackageData {
 fn parse_cabal_manifest(content: &str) -> PackageData {
     let parsed = parse_cabal_data(content);
     let keywords = merge_keywords(&parsed.category_keywords, &parsed.explicit_keywords);
-    let description = combine_summary_and_description(&parsed.synopsis, &parsed.description);
+    let description =
+        combine_summary_and_description(&parsed.synopsis, &parsed.description).map(truncate_field);
     let parties = build_parties(&parsed.authors, &parsed.maintainers);
-    let purl = build_hackage_purl(parsed.name.as_deref(), parsed.version.as_deref());
+    let purl =
+        build_hackage_purl(parsed.name.as_deref(), parsed.version.as_deref()).map(truncate_field);
     let repository_homepage_url = parsed
         .name
         .as_ref()
         .map(|name| match parsed.version.as_ref() {
-            Some(version) => format!("https://hackage.haskell.org/package/{}-{}", name, version),
-            None => format!("https://hackage.haskell.org/package/{}", name),
+            Some(version) => truncate_field(format!(
+                "https://hackage.haskell.org/package/{}-{}",
+                name, version
+            )),
+            None => truncate_field(format!("https://hackage.haskell.org/package/{}", name)),
         });
 
     PackageData {
@@ -189,8 +195,18 @@ fn parse_cabal_project(content: &str) -> PackageData {
     let mut source_repo_entries: Vec<HashMap<String, JsonValue>> = Vec::new();
     let mut current_source_repo: Option<HashMap<String, JsonValue>> = None;
     let mut index = 0;
+    let mut iteration_count = 0usize;
 
     while index < lines.len() {
+        iteration_count += 1;
+        if iteration_count > MAX_ITERATION_COUNT {
+            warn!(
+                "parse_cabal_project: exceeded MAX_ITERATION_COUNT ({}) at line {}, stopping",
+                MAX_ITERATION_COUNT, index
+            );
+            break;
+        }
+
         let cleaned = strip_cabal_comment(lines[index]);
         let trimmed = cleaned.trim();
         let indent = indentation(cleaned);
@@ -266,7 +282,7 @@ fn parse_cabal_project(content: &str) -> PackageData {
         source_repo_entries.push(entry);
     }
 
-    for entry in source_repo_entries {
+    for entry in source_repo_entries.into_iter().take(MAX_ITERATION_COUNT) {
         dependencies.push(build_source_repository_dependency(entry));
     }
 
@@ -304,7 +320,7 @@ fn parse_stack_yaml(yaml: &YamlValue) -> PackageData {
         dependencies.extend(parse_stack_extra_dep_entries(extra_deps));
     }
 
-    for (key, value) in mapping {
+    for (key, value) in mapping.iter().take(MAX_ITERATION_COUNT) {
         let Some(key) = key.as_str() else {
             continue;
         };
@@ -329,8 +345,17 @@ fn parse_cabal_data(content: &str) -> CabalData {
     let mut current_component: Option<ComponentContext> = None;
     let mut in_source_repository = false;
     let mut index = 0;
+    let mut iteration_count = 0usize;
 
     while index < lines.len() {
+        iteration_count += 1;
+        if iteration_count > MAX_ITERATION_COUNT {
+            warn!(
+                "parse_cabal_data: exceeded MAX_ITERATION_COUNT ({}) at line {}, stopping",
+                MAX_ITERATION_COUNT, index
+            );
+            break;
+        }
         let cleaned = strip_cabal_comment(lines[index]);
         let trimmed = cleaned.trim();
         let indent = indentation(cleaned);
@@ -353,15 +378,25 @@ fn parse_cabal_data(content: &str) -> CabalData {
         };
 
         match key.as_str() {
-            "name" if indent == 0 => data.name = clean_single_line(&value),
-            "version" if indent == 0 => data.version = clean_single_line(&value),
-            "synopsis" if indent == 0 => data.synopsis = clean_single_line(&value),
-            "description" if indent == 0 => {
-                data.description = normalize_cabal_multiline(&value);
+            "name" if indent == 0 => data.name = clean_single_line(&value).map(truncate_field),
+            "version" if indent == 0 => {
+                data.version = clean_single_line(&value).map(truncate_field)
             }
-            "license" if indent == 0 => data.license = clean_single_line(&value),
-            "homepage" if indent == 0 => data.homepage_url = clean_single_line(&value),
-            "bug-reports" if indent == 0 => data.bug_tracking_url = clean_single_line(&value),
+            "synopsis" if indent == 0 => {
+                data.synopsis = clean_single_line(&value).map(truncate_field)
+            }
+            "description" if indent == 0 => {
+                data.description = normalize_cabal_multiline(&value).map(truncate_field);
+            }
+            "license" if indent == 0 => {
+                data.license = clean_single_line(&value).map(truncate_field)
+            }
+            "homepage" if indent == 0 => {
+                data.homepage_url = clean_single_line(&value).map(truncate_field)
+            }
+            "bug-reports" if indent == 0 => {
+                data.bug_tracking_url = clean_single_line(&value).map(truncate_field)
+            }
             "author" if indent == 0 => data.authors.extend(split_comma_separated(&value)),
             "maintainer" if indent == 0 => {
                 data.maintainers.extend(split_comma_separated(&value));
@@ -373,7 +408,7 @@ fn parse_cabal_data(content: &str) -> CabalData {
                 data.explicit_keywords.extend(split_keywords(&value));
             }
             "location" if in_source_repository && data.vcs_url.is_none() => {
-                data.vcs_url = clean_single_line(&value);
+                data.vcs_url = clean_single_line(&value).map(truncate_field);
             }
             "build-depends" => {
                 data.dependencies
@@ -411,7 +446,7 @@ fn parse_path_like_entries(value: &str, scope: &str, optional: bool) -> Vec<Depe
 
             Dependency {
                 purl: None,
-                extracted_requirement: Some(entry),
+                extracted_requirement: Some(truncate_field(entry)),
                 scope: Some(scope.to_string()),
                 is_runtime: None,
                 is_optional: Some(optional),
@@ -430,7 +465,7 @@ fn parse_import_entries(value: &str) -> Vec<Dependency> {
         .filter(|entry| !entry.is_empty())
         .map(|entry| Dependency {
             purl: None,
-            extracted_requirement: Some(entry),
+            extracted_requirement: Some(truncate_field(entry)),
             scope: Some("import".to_string()),
             is_runtime: None,
             is_optional: Some(false),
@@ -460,6 +495,7 @@ fn parse_stack_package_entries(value: &YamlValue) -> Vec<Dependency> {
 
     sequence
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|entry| match entry {
             YamlValue::String(path) => {
                 let mut extra_data = HashMap::new();
@@ -467,7 +503,7 @@ fn parse_stack_package_entries(value: &YamlValue) -> Vec<Dependency> {
 
                 Some(Dependency {
                     purl: None,
-                    extracted_requirement: Some(path.clone()),
+                    extracted_requirement: Some(truncate_field(path.clone())),
                     scope: Some("packages".to_string()),
                     is_runtime: None,
                     is_optional: Some(false),
@@ -480,7 +516,8 @@ fn parse_stack_package_entries(value: &YamlValue) -> Vec<Dependency> {
             YamlValue::Mapping(map) => {
                 let extracted_requirement = mapping_string(map, "location")
                     .or_else(|| mapping_string(map, "git"))
-                    .or_else(|| mapping_string(map, "url"));
+                    .or_else(|| mapping_string(map, "url"))
+                    .map(truncate_field);
                 let extra_data = serde_json::to_value(entry)
                     .ok()
                     .and_then(|value| value.as_object().cloned())
@@ -510,6 +547,7 @@ fn parse_stack_extra_dep_entries(value: &YamlValue) -> Vec<Dependency> {
 
     sequence
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|entry| match entry {
             YamlValue::String(spec) => parse_stack_extra_dep_string(spec),
             YamlValue::Mapping(map) => Some(parse_stack_extra_dep_mapping(map, entry)),
@@ -534,7 +572,7 @@ fn parse_stack_extra_dep_string(spec: &str) -> Option<Dependency> {
         parse_hackage_spec_dependency(package_spec, Some("extra-deps"), None, None).unwrap_or(
             Dependency {
                 purl: None,
-                extracted_requirement: Some(package_spec.to_string()),
+                extracted_requirement: Some(truncate_field(package_spec.to_string())),
                 scope: Some("extra-deps".to_string()),
                 is_runtime: None,
                 is_optional: Some(false),
@@ -551,7 +589,7 @@ fn parse_stack_extra_dep_string(spec: &str) -> Option<Dependency> {
         dependency.extra_data = Some(extra_data);
         dependency.is_pinned = Some(true);
         if dependency.extracted_requirement.is_none() {
-            dependency.extracted_requirement = Some(package_spec.to_string());
+            dependency.extracted_requirement = Some(truncate_field(package_spec.to_string()));
         }
     }
 
@@ -562,11 +600,12 @@ fn parse_stack_extra_dep_string(spec: &str) -> Option<Dependency> {
 fn parse_stack_extra_dep_mapping(map: &Mapping, raw_value: &YamlValue) -> Dependency {
     let name = mapping_string(map, "name");
     let version = mapping_string(map, "version");
-    let purl = build_hackage_purl(name.as_deref(), version.as_deref());
+    let purl = build_hackage_purl(name.as_deref(), version.as_deref()).map(truncate_field);
     let extracted_requirement = version
         .clone()
         .or_else(|| mapping_string(map, "git"))
-        .or_else(|| mapping_string(map, "url"));
+        .or_else(|| mapping_string(map, "url"))
+        .map(truncate_field);
     let extra_data = serde_json::to_value(raw_value)
         .ok()
         .and_then(|value| value.as_object().cloned())
@@ -595,7 +634,8 @@ fn build_source_repository_dependency(extra_data: HashMap<String, JsonValue>) ->
                 .get("tag")
                 .and_then(JsonValue::as_str)
                 .map(str::to_string)
-        });
+        })
+        .map(truncate_field);
 
     Dependency {
         purl: None,
@@ -643,8 +683,8 @@ fn parse_hackage_spec_dependency(
         }
 
         return Some(Dependency {
-            purl: Some(format!("pkg:hackage/{}@{}", name, version)),
-            extracted_requirement: Some(version),
+            purl: Some(truncate_field(format!("pkg:hackage/{}@{}", name, version))),
+            extracted_requirement: Some(truncate_field(version)),
             scope: scope.map(str::to_string),
             is_runtime: component.map(component_is_runtime).or(is_runtime),
             is_optional: Some(false),
@@ -674,9 +714,12 @@ fn parse_hackage_spec_dependency(
             .map(|(_, version)| version.clone())
     });
     let purl = if let Some(version) = exact_version.as_deref() {
-        Some(format!("pkg:hackage/{}@{}", resolved_name, version))
+        Some(truncate_field(format!(
+            "pkg:hackage/{}@{}",
+            resolved_name, version
+        )))
     } else {
-        Some(format!("pkg:hackage/{}", resolved_name))
+        Some(truncate_field(format!("pkg:hackage/{}", resolved_name)))
     };
 
     let mut extra_data = HashMap::new();
@@ -694,9 +737,11 @@ fn parse_hackage_spec_dependency(
     }
 
     let extracted_requirement = if let Some((_, version)) = implicit_name_version {
-        Some(version)
+        Some(truncate_field(version))
     } else {
-        (!requirement.is_empty()).then_some(requirement.to_string())
+        (!requirement.is_empty())
+            .then_some(requirement.to_string())
+            .map(truncate_field)
     };
 
     Some(Dependency {
@@ -773,7 +818,7 @@ fn split_dependency_entries(value: &str) -> Vec<String> {
     let mut brace_depth = 0usize;
     let mut bracket_depth = 0usize;
 
-    for character in value.chars() {
+    for character in value.chars().take(MAX_ITERATION_COUNT) {
         match character {
             '(' => paren_depth += 1,
             ')' => paren_depth = paren_depth.saturating_sub(1),
@@ -806,6 +851,7 @@ fn split_dependency_entries(value: &str) -> Vec<String> {
 fn split_multiline_entries(value: &str) -> Vec<String> {
     value
         .lines()
+        .take(MAX_ITERATION_COUNT)
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .map(|line| line.strip_prefix("-").unwrap_or(line).trim().to_string())

@@ -1,9 +1,8 @@
 use std::collections::{HashMap, HashSet};
-use std::fs::File;
-use std::io::BufReader;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use packageurl::PackageUrl;
 use serde_json::{Map as JsonMap, Value};
 
@@ -61,11 +60,11 @@ impl PackageParser for GradleModuleParser {
             return false;
         }
 
-        let Ok(file) = File::open(path) else {
+        let Ok(content) = read_file_to_string(path, None) else {
             return false;
         };
 
-        let Ok(value) = serde_json::from_reader::<_, Value>(BufReader::new(file)) else {
+        let Ok(value) = serde_json::from_str(&content) else {
             return false;
         };
 
@@ -73,15 +72,15 @@ impl PackageParser for GradleModuleParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let file = match File::open(path) {
-            Ok(file) => file,
+        let content = match read_file_to_string(path, None) {
+            Ok(content) => content,
             Err(e) => {
-                warn!("Failed to open Gradle module file at {:?}: {}", path, e);
+                warn!("Failed to read Gradle module file at {:?}: {}", path, e);
                 return vec![default_package_data()];
             }
         };
 
-        let json: Value = match serde_json::from_reader(BufReader::new(file)) {
+        let json: Value = match serde_json::from_str(&content) {
             Ok(json) => json,
             Err(e) => {
                 warn!("Failed to parse Gradle module JSON at {:?}: {}", path, e);
@@ -121,15 +120,15 @@ fn parse_gradle_module(json: &Value) -> PackageData {
     let namespace = component
         .get("group")
         .and_then(Value::as_str)
-        .map(|value| value.to_string());
+        .map(|value| truncate_field(value.to_string()));
     let name = component
         .get("module")
         .and_then(Value::as_str)
-        .map(|value| value.to_string());
+        .map(|value| truncate_field(value.to_string()));
     let version = component
         .get("version")
         .and_then(Value::as_str)
-        .map(|value| value.to_string());
+        .map(|value| truncate_field(value.to_string()));
 
     let (dependencies, file_references, top_level_artifact, variant_metadata) =
         extract_variant_data(json.get(FIELD_VARIANTS).and_then(Value::as_array));
@@ -143,7 +142,7 @@ fn parse_gradle_module(json: &Value) -> PackageData {
     if let Some(format_version) = json.get(FIELD_FORMAT_VERSION).and_then(Value::as_str) {
         extra_data.insert(
             "format_version".to_string(),
-            Value::String(format_version.to_string()),
+            Value::String(truncate_field(format_version.to_string())),
         );
     }
 
@@ -156,11 +155,14 @@ fn parse_gradle_module(json: &Value) -> PackageData {
         if let Some(gradle_version) = gradle_object.get("version").and_then(Value::as_str) {
             extra_data.insert(
                 "gradle_version".to_string(),
-                Value::String(gradle_version.to_string()),
+                Value::String(truncate_field(gradle_version.to_string())),
             );
         }
         if let Some(build_id) = gradle_object.get("buildId").and_then(Value::as_str) {
-            extra_data.insert("build_id".to_string(), Value::String(build_id.to_string()));
+            extra_data.insert(
+                "build_id".to_string(),
+                Value::String(truncate_field(build_id.to_string())),
+            );
         }
     }
 
@@ -237,7 +239,12 @@ fn extract_variant_data(variants: Option<&Vec<Value>>) -> ExtractedVariantData {
     let mut seen_files: HashSet<String> = HashSet::new();
     let mut top_level_artifact: Option<JsonMap<String, Value>> = None;
 
-    for variant in variants.into_iter().flatten().filter_map(Value::as_object) {
+    for variant in variants
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_object)
+        .take(MAX_ITERATION_COUNT)
+    {
         let category = variant
             .get(FIELD_ATTRIBUTES)
             .and_then(Value::as_object)
@@ -246,11 +253,13 @@ fn extract_variant_data(variants: Option<&Vec<Value>>) -> ExtractedVariantData {
             .unwrap_or_default();
         let is_documentation = category == "documentation";
 
-        let variant_name = variant
-            .get("name")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string();
+        let variant_name = truncate_field(
+            variant
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+        );
         let scope = classify_variant_scope(variant);
         let precedence = scope_precedence(scope.as_deref());
         let is_runtime = match scope.as_deref() {
@@ -284,20 +293,28 @@ fn extract_variant_data(variants: Option<&Vec<Value>>) -> ExtractedVariantData {
             }
 
             if let Some(files) = variant.get(FIELD_FILES).and_then(Value::as_array) {
-                for file in files.iter().filter_map(Value::as_object) {
-                    let file_path = file
-                        .get("url")
-                        .and_then(Value::as_str)
-                        .or_else(|| file.get("name").and_then(Value::as_str))
-                        .unwrap_or_default()
-                        .to_string();
+                for file in files
+                    .iter()
+                    .filter_map(Value::as_object)
+                    .take(MAX_ITERATION_COUNT)
+                {
+                    let file_path = truncate_field(
+                        file.get("url")
+                            .and_then(Value::as_str)
+                            .or_else(|| file.get("name").and_then(Value::as_str))
+                            .unwrap_or_default()
+                            .to_string(),
+                    );
                     if file_path.is_empty() || !seen_files.insert(file_path.clone()) {
                         continue;
                     }
                     let (size, sha1, md5, sha256, sha512) = extract_file_hashes(file);
                     let mut extra_data = HashMap::new();
                     if let Some(name) = file.get("name").and_then(Value::as_str) {
-                        extra_data.insert("name".to_string(), Value::String(name.to_string()));
+                        extra_data.insert(
+                            "name".to_string(),
+                            Value::String(truncate_field(name.to_string())),
+                        );
                     }
                     file_references.push(FileReference {
                         path: file_path,
@@ -322,6 +339,7 @@ fn extract_variant_data(variants: Option<&Vec<Value>>) -> ExtractedVariantData {
             .into_iter()
             .flatten()
             .filter_map(Value::as_object)
+            .take(MAX_ITERATION_COUNT)
         {
             let Some(group) = dependency.get("group").and_then(Value::as_str) else {
                 continue;
@@ -343,7 +361,7 @@ fn extract_variant_data(variants: Option<&Vec<Value>>) -> ExtractedVariantData {
                 entry.is_optional = is_optional;
                 entry.precedence = precedence;
             }
-            entry.purl = purl;
+            entry.purl = purl.map(truncate_field);
             entry.extracted_requirement = requirement.clone();
             entry.is_pinned = Some(requirement.as_deref().is_some_and(is_exact_version));
             entry.extra_data = merge_dependency_extra_data(entry.extra_data.take(), dep_extra_data);
@@ -538,13 +556,13 @@ fn scope_precedence(scope: Option<&str>) -> u8 {
 
 fn extract_dependency_requirement(version_value: Option<&Value>) -> Option<String> {
     match version_value {
-        Some(Value::String(version)) => Some(version.to_string()),
+        Some(Value::String(version)) => Some(truncate_field(version.to_string())),
         Some(Value::Object(version)) => version
             .get("strictly")
             .or_else(|| version.get("requires"))
             .or_else(|| version.get("prefers"))
             .and_then(Value::as_str)
-            .map(|value| value.to_string()),
+            .map(|value| truncate_field(value.to_string())),
         _ => None,
     }
 }

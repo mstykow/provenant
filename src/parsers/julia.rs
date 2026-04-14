@@ -21,9 +21,8 @@
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use packageurl::PackageUrl;
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
 use toml::Value;
 
@@ -44,6 +43,8 @@ const FIELD_COMPAT: &str = "compat";
 const FIELD_TARGETS: &str = "targets";
 const FIELD_HOMEPAGE: &str = "homepage";
 
+const MAX_RECURSION_DEPTH: usize = 50;
+
 pub struct JuliaProjectTomlParser;
 
 impl PackageParser for JuliaProjectTomlParser {
@@ -61,7 +62,7 @@ impl PackageParser for JuliaProjectTomlParser {
         let name = toml_content
             .get(FIELD_NAME)
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let _uuid = toml_content
             .get(FIELD_UUID)
@@ -71,12 +72,12 @@ impl PackageParser for JuliaProjectTomlParser {
         let version = toml_content
             .get(FIELD_VERSION)
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let raw_license = toml_content
             .get(FIELD_LICENSE)
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let (declared_license_expression, declared_license_expression_spdx, license_detections) =
             raw_license
@@ -92,7 +93,7 @@ impl PackageParser for JuliaProjectTomlParser {
                 })
                 .unwrap_or_else(empty_declared_license_data);
 
-        let extracted_license_statement = raw_license.clone();
+        let extracted_license_statement = raw_license.clone().map(truncate_field);
 
         let dependencies = extract_project_dependencies(&toml_content);
 
@@ -101,12 +102,12 @@ impl PackageParser for JuliaProjectTomlParser {
         let repository_url = toml_content
             .get(FIELD_REPOSITORY)
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let homepage_url = toml_content
             .get(FIELD_HOMEPAGE)
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let description = None;
 
@@ -192,10 +193,8 @@ impl PackageParser for JuliaManifestTomlParser {
 }
 
 fn read_julia_toml(path: &Path) -> Result<Value, String> {
-    let mut file = File::open(path).map_err(|e| format!("Failed to open file: {}", e))?;
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .map_err(|e| format!("Error reading file: {}", e))?;
+    let content =
+        read_file_to_string(path, None).map_err(|e| format!("Failed to read file: {}", e))?;
     toml::from_str(&content).map_err(|e| format!("Failed to parse TOML: {}", e))
 }
 
@@ -222,7 +221,7 @@ fn create_package_url(name: &Option<String>, version: &Option<String>) -> Option
             return None;
         }
 
-        Some(package_url.to_string())
+        Some(truncate_field(package_url.to_string()))
     })
 }
 
@@ -230,12 +229,12 @@ fn extract_parties(toml_content: &Value) -> Vec<Party> {
     let mut parties = Vec::new();
 
     if let Some(authors) = toml_content.get(FIELD_AUTHORS).and_then(|v| v.as_array()) {
-        for author in authors {
+        for author in authors.iter().take(MAX_ITERATION_COUNT) {
             if let Some(author_str) = author.as_str() {
                 parties.push(Party {
                     r#type: None,
                     role: Some("author".to_string()),
-                    name: Some(author_str.trim().to_string()),
+                    name: Some(truncate_field(author_str.trim().to_string())),
                     email: None,
                     url: None,
                     organization: None,
@@ -259,20 +258,20 @@ fn extract_project_dependencies(toml_content: &Value) -> Vec<Dependency> {
 
     let compat_table = toml_content.get(FIELD_COMPAT).and_then(|v| v.as_table());
 
-    for (dep_name, dep_value) in deps_table {
+    for (dep_name, dep_value) in deps_table.iter().take(MAX_ITERATION_COUNT) {
         let uuid = dep_value.as_str().map(String::from);
 
         let extracted_requirement = compat_table
             .and_then(|ct| ct.get(dep_name))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let is_pinned = extracted_requirement
             .as_deref()
             .is_some_and(is_julia_version_pinned);
 
         let purl = match PackageUrl::new(PackageType::Julia.as_str(), dep_name) {
-            Ok(p) => p.to_string(),
+            Ok(p) => truncate_field(p.to_string()),
             Err(e) => {
                 warn!(
                     "Failed to create PackageUrl for julia dependency '{}': {}",
@@ -315,14 +314,14 @@ fn extract_manifest_packages(toml_content: &Value) -> Vec<PackageData> {
         None => return packages,
     };
 
-    for (dep_name, dep_value) in deps_table {
+    for (dep_name, dep_value) in deps_table.iter().take(MAX_ITERATION_COUNT) {
         let dep_entries = match dep_value.as_array() {
             Some(entries) => entries,
             None => continue,
         };
 
-        for dep_entry in dep_entries {
-            let name = Some(dep_name.clone());
+        for dep_entry in dep_entries.iter().take(MAX_ITERATION_COUNT) {
+            let name = Some(truncate_field(dep_name.clone()));
 
             let uuid = dep_entry
                 .get(FIELD_UUID)
@@ -332,7 +331,7 @@ fn extract_manifest_packages(toml_content: &Value) -> Vec<PackageData> {
             let version = dep_entry
                 .get(FIELD_VERSION)
                 .and_then(|v| v.as_str())
-                .map(String::from);
+                .map(|s| truncate_field(s.to_string()));
 
             let purl = create_package_url(&name, &version);
 
@@ -344,7 +343,7 @@ fn extract_manifest_packages(toml_content: &Value) -> Vec<PackageData> {
             let source_url = dep_entry
                 .get("url")
                 .and_then(|v| v.as_str())
-                .map(String::from);
+                .map(|s| truncate_field(s.to_string()));
 
             let mut extra_data_map = std::collections::HashMap::new();
             if let Some(ref uuid_val) = uuid {
@@ -449,16 +448,30 @@ fn extract_project_extra_data(
 }
 
 fn toml_to_json(value: &toml::Value) -> serde_json::Value {
+    toml_to_json_inner(value, 0)
+}
+
+fn toml_to_json_inner(value: &toml::Value, depth: usize) -> serde_json::Value {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!(
+            "Recursion depth exceeded {} in toml_to_json, returning Null",
+            MAX_RECURSION_DEPTH
+        );
+        return serde_json::Value::Null;
+    }
+
     match value {
         toml::Value::String(s) => serde_json::json!(s),
         toml::Value::Integer(i) => serde_json::json!(i),
         toml::Value::Float(f) => serde_json::json!(f),
         toml::Value::Boolean(b) => serde_json::json!(b),
-        toml::Value::Array(a) => serde_json::Value::Array(a.iter().map(toml_to_json).collect()),
+        toml::Value::Array(a) => {
+            serde_json::Value::Array(a.iter().map(|v| toml_to_json_inner(v, depth + 1)).collect())
+        }
         toml::Value::Table(t) => {
             let map: serde_json::Map<String, serde_json::Value> = t
                 .iter()
-                .map(|(k, v)| (k.clone(), toml_to_json(v)))
+                .map(|(k, v)| (k.clone(), toml_to_json_inner(v, depth + 1)))
                 .collect();
             serde_json::Value::Object(map)
         }
