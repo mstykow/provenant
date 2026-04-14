@@ -20,12 +20,23 @@ The license detection system is a multi-phase, multi-strategy detection engine t
 | `--license-references`       | Emit top-level license and rule reference blocks       |
 | `--license-score`            | Filter returned license detections by minimum score    |
 | `--license-url-template`     | Customize top-level `licensedb_url` references         |
+| `--reindex`                  | Force rebuild of the license index cache               |
+| `--license-cache-dir`        | Override the license index cache directory             |
 
 **Default behavior**: Uses the built-in embedded license index. No external files required.
 
 > This document describes the current public license-detection surface and the repository's current engine/module layout.
 
-**Custom rules**: Use `--license-rules-path /path/to/rules` to load from a custom directory containing `.LICENSE` and `.RULE` files. This is an advanced maintainer/expert override rather than the recommended default workflow; normal scans should keep using the embedded artifact. Custom-rule scans still use the normal incremental manifest workflow, and Provenant does not plan a separate persistent startup snapshot cache for this override.
+**Custom rules**: Use `--license-rules-path /path/to/rules` to load from a custom directory containing `.LICENSE` and `.RULE` files. This is an advanced maintainer/expert override rather than the recommended default workflow; normal scans should keep using the embedded artifact. Custom-rule scans are also cached using a content fingerprint of the loaded rules, so the index is rebuilt automatically when the rules change.
+
+### License Index Cache
+
+Provenant caches the built `LicenseIndex` as an rkyv-serialized file to avoid rebuilding it on every run. The cache reduces license engine startup from ~12s (cold) to ~0.8s (warm, release build).
+
+- **Format**: Single flat file (`license_cache.rkyv`, ~340 MB) with a 32-byte SHA-256 fingerprint prefix
+- **Default location**: Next to the provenant binary (overridable with `--license-cache-dir`)
+- **Invalidation**: Automatic when the source rules change (fingerprint mismatch) or when `--reindex` is passed
+- **Fingerprinting**: Embedded rules use SHA-256 of the raw artifact bytes; custom rules use SHA-256 of the sorted rules and licenses
 
 ### Current Public Output Surface
 
@@ -53,25 +64,31 @@ main.rs::init_license_engine()
     │
     ├── No --license-rules-path specified (default)
     │       ↓
-    │   LicenseDetectionEngine::from_embedded()
+    │   Compute SHA-256 fingerprint of embedded artifact bytes
     │       ↓
-    │   Decompress embedded artifact (zstd)
-    │       ↓
-    │   Deserialize LoadedRule/LoadedLicense (MessagePack)
-    │       ↓
-    │   Build LicenseIndex
+    │   Cache hit (fingerprint matches)?
+    │       ├── Yes → Load CachedLicenseIndex from rkyv cache
+    │       │         → Convert to LicenseIndex
+    │       └── No  → Decompress embedded artifact (zstd)
+    │                 → Deserialize LoadedRule/LoadedLicense (MessagePack)
+    │                 → Build LicenseIndex
+    │                 → Save rkyv cache with fingerprint prefix
     │
     └── --license-rules-path specified
-            ↓
-        LicenseDetectionEngine::from_directory(rules_path)
             ↓
         Load .LICENSE and .RULE files from directory
             ↓
         Parse into LoadedRule/LoadedLicense
             ↓
-        Build LicenseIndex
+        Compute SHA-256 fingerprint of sorted rules + licenses
             ↓
-Arc<LicenseDetectionEngine> shared across scanner threads
+        Cache hit (fingerprint matches)?
+            ├── Yes → Load CachedLicenseIndex from rkyv cache
+            │         → Convert to LicenseIndex
+            └── No  → Build LicenseIndex
+                      → Save rkyv cache with fingerprint prefix
+            ↓
+    Arc<LicenseDetectionEngine> shared across scanner threads
 ```
 
 ---
