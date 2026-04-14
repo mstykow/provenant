@@ -296,6 +296,8 @@ sha256 = "pypi-hash"
             .expect("python conda dep missing");
         assert_eq!(python.is_pinned, Some(true));
         assert_eq!(python.is_direct, None);
+        assert_eq!(python.is_runtime, None);
+        assert_eq!(python.is_optional, None);
         assert!(
             python
                 .extra_data
@@ -311,6 +313,8 @@ sha256 = "pypi-hash"
             .expect("requests pypi dep missing");
         assert_eq!(requests.is_pinned, Some(true));
         assert_eq!(requests.is_direct, None);
+        assert_eq!(requests.is_runtime, None);
+        assert_eq!(requests.is_optional, None);
         assert_eq!(
             requests
                 .extra_data
@@ -388,6 +392,8 @@ packages:
             .expect("python conda dep missing");
         assert_eq!(python.is_pinned, Some(true));
         assert_eq!(python.is_direct, None);
+        assert_eq!(python.is_runtime, None);
+        assert_eq!(python.is_optional, None);
         assert!(
             python
                 .extra_data
@@ -403,6 +409,8 @@ packages:
             .expect("requests pypi dep missing");
         assert_eq!(requests.is_pinned, Some(true));
         assert_eq!(requests.is_direct, None);
+        assert_eq!(requests.is_runtime, None);
+        assert_eq!(requests.is_optional, None);
         assert_eq!(
             requests
                 .extra_data
@@ -473,6 +481,12 @@ sha256 = "pypi-v4-hash"
                 .dependencies
                 .iter()
                 .all(|dep| dep.is_direct.is_none())
+        );
+        assert!(
+            package_data
+                .dependencies
+                .iter()
+                .all(|dep| dep.is_runtime.is_none() && dep.is_optional.is_none())
         );
     }
 
