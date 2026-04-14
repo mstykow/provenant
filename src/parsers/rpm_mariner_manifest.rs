@@ -17,10 +17,10 @@
 //! - Spec: https://github.com/microsoft/marinara/
 
 use crate::models::{DatasourceId, PackageType};
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 use crate::models::PackageData;
 
@@ -49,7 +49,7 @@ impl PackageParser for RpmMarinerManifestParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read RPM Mariner manifest {:?}: {}", path, e);
@@ -64,7 +64,7 @@ impl PackageParser for RpmMarinerManifestParser {
 pub(crate) fn parse_rpm_mariner_manifest(content: &str) -> Vec<PackageData> {
     let mut packages = Vec::new();
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         // Only trim whitespace, not tabs
         let line = line.trim_matches(|c: char| c.is_whitespace() && c != '\t');
         if line.is_empty() {
@@ -86,16 +86,16 @@ pub(crate) fn parse_rpm_mariner_manifest(content: &str) -> Vec<PackageData> {
             continue;
         }
 
-        let name = parts[0];
-        let version = parts[1];
-        let arch = parts[7];
-        let filename = parts[9];
+        let name = truncate_field(parts[0].to_string());
+        let version = truncate_field(parts[1].to_string());
+        let arch = truncate_field(parts[7].to_string());
+        let filename = truncate_field(parts[9].to_string());
 
         let qualifiers = if arch.is_empty() {
             None
         } else {
             let mut quals = std::collections::HashMap::new();
-            quals.insert("arch".to_string(), arch.to_string());
+            quals.insert("arch".to_string(), arch.clone());
             Some(quals)
         };
 
@@ -105,23 +105,19 @@ pub(crate) fn parse_rpm_mariner_manifest(content: &str) -> Vec<PackageData> {
             let mut extra = std::collections::HashMap::new();
             extra.insert(
                 "filename".to_string(),
-                serde_json::Value::String(filename.to_string()),
+                serde_json::Value::String(filename.clone()),
             );
             Some(extra)
         };
 
         packages.push(PackageData {
             package_type: Some(PACKAGE_TYPE),
-            namespace: Some("mariner".to_string()),
-            name: if name.is_empty() {
-                None
-            } else {
-                Some(name.to_string())
-            },
+            namespace: Some(truncate_field("mariner".to_string())),
+            name: if name.is_empty() { None } else { Some(name) },
             version: if version.is_empty() {
                 None
             } else {
-                Some(version.to_string())
+                Some(version)
             },
             qualifiers,
             datasource_id: Some(DatasourceId::RpmMarinerManifest),

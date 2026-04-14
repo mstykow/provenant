@@ -11,8 +11,11 @@ use crate::models::{
     DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha256Digest,
 };
 use crate::parsers::python::read_toml_file;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
 
 use super::PackageParser;
+
+const MAX_RECURSION_DEPTH: usize = 50;
 
 const FIELD_PACKAGE: &str = "package";
 const FIELD_NAME: &str = "name";
@@ -89,8 +92,11 @@ fn parse_uv_lock(toml_content: &TomlValue) -> PackageData {
         return default_package_data();
     }
 
-    let package_tables: Vec<&TomlMap<String, TomlValue>> =
-        packages.iter().filter_map(TomlValue::as_table).collect();
+    let package_tables: Vec<&TomlMap<String, TomlValue>> = packages
+        .iter()
+        .take(MAX_ITERATION_COUNT)
+        .filter_map(TomlValue::as_table)
+        .collect();
 
     if package_tables.is_empty() {
         return default_package_data();
@@ -140,7 +146,7 @@ fn parse_uv_lock(toml_content: &TomlValue) -> PackageData {
         package_data.version = root_table
             .get(FIELD_VERSION)
             .and_then(TomlValue::as_str)
-            .map(|value| value.to_string());
+            .map(|value| truncate_field(value.to_string()));
         package_data.is_virtual =
             package_source_table(root_table).is_some_and(|source| source.contains_key("virtual"));
         package_data.purl = package_data
@@ -185,7 +191,7 @@ fn build_top_level_dependency(
     let version = package_table
         .get(FIELD_VERSION)
         .and_then(TomlValue::as_str)
-        .map(|value| value.to_string())?;
+        .map(|value| truncate_field(value.to_string()))?;
 
     let direct_info = direct_infos.get(&name);
     let is_direct = direct_info.is_some();
@@ -202,9 +208,13 @@ fn build_top_level_dependency(
         || (!is_direct && optional_reachable.contains(&name) && !runtime_reachable.contains(&name));
 
     Some(Dependency {
-        purl: create_pypi_purl(&name, Some(&version)),
-        extracted_requirement: direct_info.and_then(|info| info.extracted_requirement.clone()),
-        scope: direct_info.and_then(|info| info.scope.clone()),
+        purl: create_pypi_purl(&name, Some(&version)).map(truncate_field),
+        extracted_requirement: direct_info
+            .and_then(|info| info.extracted_requirement.clone())
+            .map(truncate_field),
+        scope: direct_info
+            .and_then(|info| info.scope.clone())
+            .map(truncate_field),
         is_runtime: Some(is_runtime),
         is_optional: Some(is_optional),
         is_pinned: Some(true),
@@ -229,13 +239,16 @@ fn build_resolved_package(
     let version = package_table
         .get(FIELD_VERSION)
         .and_then(TomlValue::as_str)
-        .map(|value| value.to_string())
+        .map(|value| truncate_field(value.to_string()))
         .unwrap_or_default();
 
     let (_, repository_download_url, api_data_url, purl) =
         build_pypi_urls(Some(&name), Some(&version));
-    let repository_homepage_url = Some(format!("https://pypi.org/project/{}", name));
+    let repository_homepage_url =
+        Some(truncate_field(format!("https://pypi.org/project/{}", name)));
     let (download_url, sha256) = extract_artifact_metadata(package_table);
+
+    let download_url = download_url.map(truncate_field);
 
     ResolvedPackage {
         primary_language: Some("Python".to_string()),
@@ -251,10 +264,10 @@ fn build_resolved_package(
             .map(|edge| edge_to_dependency(edge, package_lookup))
             .collect(),
         repository_homepage_url,
-        repository_download_url,
-        api_data_url,
+        repository_download_url: repository_download_url.map(truncate_field),
+        api_data_url: api_data_url.map(truncate_field),
         datasource_id: Some(DatasourceId::PypiUvLock),
-        purl,
+        purl: purl.map(truncate_field),
         ..ResolvedPackage::new(UvLockParser::PACKAGE_TYPE, String::new(), name, version)
     }
 }
@@ -270,9 +283,9 @@ fn edge_to_dependency(
         .unwrap_or(false);
 
     Dependency {
-        purl: create_pypi_purl(&edge.name, None),
-        extracted_requirement: edge.extracted_requirement,
-        scope: edge.scope,
+        purl: create_pypi_purl(&edge.name, None).map(truncate_field),
+        extracted_requirement: edge.extracted_requirement.map(truncate_field),
+        scope: edge.scope.map(truncate_field),
         is_runtime: Some(edge.is_runtime),
         is_optional: Some(edge.is_optional),
         is_pinned: Some(is_pinned),
@@ -318,7 +331,7 @@ fn collect_root_direct_dependencies(
         .get(FIELD_OPTIONAL_DEPENDENCIES)
         .and_then(TomlValue::as_table)
     {
-        for (group, value) in optional_table {
+        for (group, value) in optional_table.iter().take(MAX_ITERATION_COUNT) {
             let requirement_map = optional_requirements.get(group);
             for edge in collect_dependency_edges_from_array(
                 value.as_array(),
@@ -326,7 +339,10 @@ fn collect_root_direct_dependencies(
                 false,
                 true,
                 requirement_map,
-            ) {
+            )
+            .into_iter()
+            .take(MAX_ITERATION_COUNT)
+            {
                 merge_direct_dependency_info(&mut infos, edge);
             }
         }
@@ -336,7 +352,7 @@ fn collect_root_direct_dependencies(
         .get(FIELD_DEV_DEPENDENCIES)
         .and_then(TomlValue::as_table)
     {
-        for (group, value) in dev_table {
+        for (group, value) in dev_table.iter().take(MAX_ITERATION_COUNT) {
             let requirement_map = dev_requirements.get(group);
             for edge in collect_dependency_edges_from_array(
                 value.as_array(),
@@ -344,7 +360,10 @@ fn collect_root_direct_dependencies(
                 false,
                 false,
                 requirement_map,
-            ) {
+            )
+            .into_iter()
+            .take(MAX_ITERATION_COUNT)
+            {
                 merge_direct_dependency_info(&mut infos, edge);
             }
         }
@@ -435,14 +454,18 @@ fn collect_package_dependency_edges(
         .get(FIELD_OPTIONAL_DEPENDENCIES)
         .and_then(TomlValue::as_table)
     {
-        for (group, value) in optional_table {
-            edges.extend(collect_dependency_edges_from_array(
-                value.as_array(),
-                Some(group.to_string()),
-                false,
-                true,
-                None,
-            ));
+        for (group, value) in optional_table.iter().take(MAX_ITERATION_COUNT) {
+            edges.extend(
+                collect_dependency_edges_from_array(
+                    value.as_array(),
+                    Some(group.to_string()),
+                    false,
+                    true,
+                    None,
+                )
+                .into_iter()
+                .take(MAX_ITERATION_COUNT),
+            );
         }
     }
 
@@ -450,14 +473,18 @@ fn collect_package_dependency_edges(
         .get(FIELD_DEV_DEPENDENCIES)
         .and_then(TomlValue::as_table)
     {
-        for (group, value) in dev_table {
-            edges.extend(collect_dependency_edges_from_array(
-                value.as_array(),
-                Some(group.to_string()),
-                false,
-                false,
-                None,
-            ));
+        for (group, value) in dev_table.iter().take(MAX_ITERATION_COUNT) {
+            edges.extend(
+                collect_dependency_edges_from_array(
+                    value.as_array(),
+                    Some(group.to_string()),
+                    false,
+                    false,
+                    None,
+                )
+                .into_iter()
+                .take(MAX_ITERATION_COUNT),
+            );
         }
     }
 
@@ -520,12 +547,12 @@ fn build_dependency_edge(
     }
 
     let extracted_requirement = requirement_map
-        .and_then(|map| map.get(&name).cloned())
+        .and_then(|map| map.get(&name).cloned().map(truncate_field))
         .or_else(|| {
             table
                 .get(FIELD_SPECIFIER)
                 .and_then(TomlValue::as_str)
-                .map(|value| value.to_string())
+                .map(|value| truncate_field(value.to_string()))
         });
 
     Some(DependencyEdge {
@@ -569,6 +596,7 @@ fn parse_requirement_metadata_table(
 fn parse_requirement_entries(values: &[TomlValue]) -> HashMap<String, String> {
     values
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|value| {
             let table = value.as_table()?;
             let name = table
@@ -578,7 +606,7 @@ fn parse_requirement_entries(values: &[TomlValue]) -> HashMap<String, String> {
             let specifier = table
                 .get(FIELD_SPECIFIER)
                 .and_then(TomlValue::as_str)
-                .map(|value| value.to_string())?;
+                .map(|value| truncate_field(value.to_string()))?;
             Some((name, specifier))
         })
         .collect()
@@ -592,8 +620,17 @@ fn collect_reachable_packages(
 ) -> HashSet<String> {
     let mut visited = HashSet::new();
     let mut queue: VecDeque<(String, Option<String>)> = roots.iter().cloned().collect();
+    let mut iterations: usize = 0;
 
     while let Some((name, source_key)) = queue.pop_front() {
+        iterations += 1;
+        if iterations > MAX_ITERATION_COUNT {
+            warn!(
+                "collect_reachable_packages exceeded MAX_ITERATION_COUNT ({})",
+                MAX_ITERATION_COUNT
+            );
+            break;
+        }
         let Some(index) =
             match_package_index(package_tables, package_lookup, &name, source_key.as_deref())
         else {
@@ -766,7 +803,7 @@ fn extract_artifact_metadata(
         let download_url = sdist_table
             .get("url")
             .and_then(TomlValue::as_str)
-            .map(|value| value.to_string());
+            .map(|value| truncate_field(value.to_string()));
         let sha256 = sdist_table
             .get("hash")
             .and_then(TomlValue::as_str)
@@ -785,7 +822,7 @@ fn extract_artifact_metadata(
     let download_url = wheel_table
         .and_then(|table| table.get("url"))
         .and_then(TomlValue::as_str)
-        .map(|value| value.to_string());
+        .map(|value| truncate_field(value.to_string()));
     let sha256 = wheel_table
         .and_then(|table| table.get("hash"))
         .and_then(TomlValue::as_str)
@@ -826,25 +863,26 @@ fn build_pypi_urls(
     Option<String>,
     Option<String>,
 ) {
-    let repository_homepage_url = name.map(|value| format!("https://pypi.org/project/{}", value));
+    let repository_homepage_url =
+        name.map(|value| truncate_field(format!("https://pypi.org/project/{}", value)));
 
     let repository_download_url = name.and_then(|value| {
         version.map(|ver| {
-            format!(
+            truncate_field(format!(
                 "https://pypi.org/packages/source/{}/{}/{}-{}.tar.gz",
                 &value[..1.min(value.len())],
                 value,
                 value,
                 ver
-            )
+            ))
         })
     });
 
     let api_data_url = name.map(|value| {
         if let Some(ver) = version {
-            format!("https://pypi.org/pypi/{}/{}/json", value, ver)
+            truncate_field(format!("https://pypi.org/pypi/{}/{}/json", value, ver))
         } else {
-            format!("https://pypi.org/pypi/{}/json", value)
+            truncate_field(format!("https://pypi.org/pypi/{}/json", value))
         }
     });
 
@@ -859,12 +897,12 @@ fn build_pypi_urls(
 }
 
 fn normalize_pypi_name(name: &str) -> String {
-    name.trim().to_ascii_lowercase()
+    truncate_field(name.trim().to_ascii_lowercase())
 }
 
 fn create_pypi_purl(name: &str, version: Option<&str>) -> Option<String> {
     if name.contains('[') || name.contains(']') {
-        return Some(build_manual_pypi_purl(name, version));
+        return Some(truncate_field(build_manual_pypi_purl(name, version)));
     }
 
     if let Ok(mut purl) = PackageUrl::new(UvLockParser::PACKAGE_TYPE.as_str(), name) {
@@ -873,10 +911,10 @@ fn create_pypi_purl(name: &str, version: Option<&str>) -> Option<String> {
         {
             return None;
         }
-        return Some(purl.to_string());
+        return Some(truncate_field(purl.to_string()));
     }
 
-    Some(build_manual_pypi_purl(name, version))
+    Some(truncate_field(build_manual_pypi_purl(name, version)))
 }
 
 fn build_manual_pypi_purl(name: &str, version: Option<&str>) -> String {
@@ -892,19 +930,34 @@ fn build_manual_pypi_purl(name: &str, version: Option<&str>) -> String {
 }
 
 fn toml_value_to_json(value: &TomlValue) -> JsonValue {
+    toml_value_to_json_recursive(value, 0)
+}
+
+fn toml_value_to_json_recursive(value: &TomlValue, depth: usize) -> JsonValue {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!(
+            "toml_value_to_json exceeded MAX_RECURSION_DEPTH ({})",
+            MAX_RECURSION_DEPTH
+        );
+        return JsonValue::Null;
+    }
+
     match value {
         TomlValue::String(value) => JsonValue::String(value.clone()),
         TomlValue::Integer(value) => JsonValue::String(value.to_string()),
         TomlValue::Float(value) => JsonValue::String(value.to_string()),
         TomlValue::Boolean(value) => JsonValue::Bool(*value),
         TomlValue::Datetime(value) => JsonValue::String(value.to_string()),
-        TomlValue::Array(values) => {
-            JsonValue::Array(values.iter().map(toml_value_to_json).collect())
-        }
+        TomlValue::Array(values) => JsonValue::Array(
+            values
+                .iter()
+                .map(|v| toml_value_to_json_recursive(v, depth + 1))
+                .collect(),
+        ),
         TomlValue::Table(values) => JsonValue::Object(
             values
                 .iter()
-                .map(|(key, value)| (key.clone(), toml_value_to_json(value)))
+                .map(|(key, value)| (key.clone(), toml_value_to_json_recursive(value, depth + 1)))
                 .collect(),
         ),
     }
