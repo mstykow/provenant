@@ -73,6 +73,7 @@
               "matched_length": 1,
               "match_coverage": 100.0,
               "rule_relevance": 100,
+              "rule_identifier": "parser-declared-license",
               "rule_url": null,
               "matched_text": "MIT"
             }
@@ -115,11 +116,12 @@
               "matched_length": 1,
               "match_coverage": 100.0,
               "rule_relevance": 100,
-              "rule_url": null,
+              "rule_identifier": "spdx_license_id_apache-2.0_for_apache-2.0.RULE",
+              "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/spdx_license_id_apache-2.0_for_apache-2.0.RULE",
               "matched_text": "Apache-2.0"
             }
           ],
-          "identifier": "apache_2_0-b8ac833d-1634-db39-3e2b-365472f52214"
+          "identifier": "apache_2_0-e4602d8c-0914-7fcd-bb51-6018f5c21d97"
         }
       ],
       "extracted_license_statement": "- Apache-2.0\n",
