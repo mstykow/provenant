@@ -10,14 +10,14 @@ It is the maintained package-detection reference for current end-state compariso
 ## Run identity and comparability
 
 - Treat each row as a **snapshot of one recorded `compare-outputs` run**, not as a rolling claim about the current `main` branch.
-- `run-manifest.json` is the source of truth for run identity: target/ref, scan profile/args, command invocations, **Provenant version plus revision/dirty state/diff hash**, and ScanCode runtime/cache identity.
+- `run-manifest.json` is the source of truth for run identity: target/ref, scan profile/args, command invocations, **Provenant version plus revision/dirty state/diff hash**, and ScanCode runtime/cache metadata.
 - Benchmark rows should record both the **benchmark date** and the compare-run **run ID**, because version/hash alone does not say when the snapshot was taken.
 
 ## Timing methodology
 
 - Use the repository-supported `compare-outputs` workflow with the profile that matches the recorded target: `--profile common` for repository-backed and ordinary artifact/rootfs targets, and `--profile common-with-compiled` for artifact targets where compiled-binary package extraction is part of the comparison.
 - Record same-host wall-clock timings for Provenant and ScanCode, plus relative speedup.
-- Record machine information per row. If `run-manifest.json` reports `scancode.cache_hit: true`, use the cached ScanCode raw timing for that target/ref/runtime.
+- Record machine information per row. If `run-manifest.json` reports `scancode.cache_hit: true`, use the cached ScanCode raw timing for that target/ref/runtime. Otherwise treat both scanner timings as license-cache-cold because the maintained workflow disables persistent license-cache reuse during actual execution.
 
 ## Row ordering
 

@@ -84,6 +84,7 @@ It also writes a tab-separated summary file at:
 ### Notes
 
 - The command uses an explicit per-scenario `--cache-dir` so incremental manifest results do not leak across scenarios.
+- The command also adds `--no-license-index-cache` to every Provenant invocation so repeated benchmark runs do not inherit warmed license-index state from earlier repositories.
 - `--target-path` mode scans the directory in place; it does not reset, stash, or otherwise mutate that path.
 - `--repo-url` mode requires `--repo-ref`; the command resolves that ref to a full commit SHA and records the exact SHA in `run-manifest.json`.
 - Warm-run comparisons are meaningful only within one invocation because the command recreates `.provenant/benchmarks` on every run.
@@ -140,7 +141,7 @@ CLI arguments:
 3. Builds Provenant in release mode.
 4. Updates or creates a shared cached mirror under `.provenant/repo-cache/`, resolves the requested ref to a full commit SHA, and materializes a detached checkout for the run.
 5. Resolves the ScanCode runtime identity and, on cache misses, ensures a local Docker-backed ScanCode runtime exists by building the image from `reference/scancode-toolkit` if needed.
-6. Reuses cached ScanCode raw artifacts when available, otherwise runs ScanCode alongside Provenant with the same shared scan profile.
+6. Reuses cached ScanCode raw artifacts when available, otherwise runs ScanCode alongside Provenant with the same shared scan profile and ephemeral license-cache directories.
 7. Saves raw outputs and logs under `raw/`.
 8. Produces reduced comparison artifacts under `comparison/` and prints the absolute artifact paths at the end.
 
@@ -169,12 +170,13 @@ Optional diagnostic logs when available:
 - The command keeps the full raw scanner outputs; it does **not** stream giant machine-readable payloads to stdout.
 - Stdout is reserved for progress, a reduced summary table, and the saved artifact paths.
 - ScanCode currently runs via Docker on all platforms for this workflow because that is the reproducible runtime path verified in this repository.
+- When `compare-outputs` actually executes either scanner, it disables persistent license-cache reuse for fairness: Provenant runs with `--no-license-index-cache`, and ScanCode uses container-local ephemeral cache directories.
 - `compare-outputs` passes the same shared scan args to both scanners. The `common` profile includes installed package database coverage, which is usually a no-op on ordinary source repositories but matters for extracted rootfs/container trees and other artifact targets. Use `common-with-compiled` when you also want Go/Rust compiled-binary package extraction in the shared scan profile.
 - `--repo-url` mode requires `--repo-ref`; the command records both the requested ref and the resolved full commit SHA in `run-manifest.json`.
 - `run-manifest.json` also records the Provenant binary version plus the current Provenant repository revision, dirty state, and diff hash, alongside the ScanCode runtime identity.
 - Repo URL runs reuse cached git objects from `.provenant/repo-cache/`, and the temporary detached checkout is removed after the run so compare artifacts do not retain duplicate full repository trees.
 - Repo URL runs also reuse cached raw ScanCode artifacts from `.provenant/scancode-cache/` when the resolved target commit, ScanCode runtime identity, and effective ScanCode scan args are unchanged.
-- Local `--target-path` runs rerun ScanCode by default. Pass `--scancode-cache-identity <id>` to opt into shared ScanCode cache reuse for a local snapshot you have identified explicitly.
+- Local `--target-path` runs rerun ScanCode by default. Pass `--scancode-cache-identity <id>` to opt into shared ScanCode raw-artifact reuse for a local snapshot you have identified explicitly.
 - Cache hits now require a cached `scancode.json` plus cache `manifest.json`; `scancode-stdout.txt` is reused when available but is no longer required for cache completeness.
 - `scancode-stdout.txt` and `provenant-stdout.txt` are best-effort diagnostic logs. The compare pipeline only requires the JSON outputs, so a log-write failure no longer makes the command fail.
 - The command always adds shared ignore rules for `*.git*` and `target/*` to both scanners so repository metadata and build output do not dominate the comparison artifacts.

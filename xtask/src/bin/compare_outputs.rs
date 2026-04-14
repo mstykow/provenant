@@ -1566,6 +1566,14 @@ fn build_scancode_docker_args(context: &ContextState) -> Vec<String> {
         "--rm".to_string(),
         "--platform".to_string(),
         "linux/amd64".to_string(),
+        "-e".to_string(),
+        "SCANCODE_CACHE=/tmp/scancode-cache".to_string(),
+        "-e".to_string(),
+        "SCANCODE_LICENSE_INDEX_CACHE=/tmp/scancode-license-index-cache".to_string(),
+        "-e".to_string(),
+        "SCANCODE_PACKAGE_INDEX_CACHE=/tmp/scancode-package-index-cache".to_string(),
+        "-e".to_string(),
+        "SCANCODE_TEMP=/tmp/scancode-temp".to_string(),
         "-v".to_string(),
         format!("{}:/input:ro", context.target_dir.display()),
         "-v".to_string(),
@@ -1580,6 +1588,7 @@ fn build_provenant_args(context: &ContextState) -> Vec<String> {
     let mut args = vec![
         "--json-pp".to_string(),
         context.provenant_json.display().to_string(),
+        "--no-license-index-cache".to_string(),
     ];
     args.extend(context.scan_args.clone());
     args.extend([
@@ -1590,28 +1599,6 @@ fn build_provenant_args(context: &ContextState) -> Vec<String> {
         ".".to_string(),
     ]);
     args
-}
-
-fn print_summary_table(path: &Path) -> Result<()> {
-    let labels = ["Metric", "ScanCode", "Provenant", "Delta", "Notes"];
-    let _ = render_tsv_table(path, &labels)?;
-    Ok(())
-}
-
-fn optional_artifact_display(path: &Path) -> String {
-    if path.is_file() {
-        match fs::read_to_string(path) {
-            Ok(content) if content == SCANCODE_PLACEHOLDER_LOG_MESSAGE => {
-                format!("placeholder diagnostic log: {}", path.display())
-            }
-            _ => path.display().to_string(),
-        }
-    } else {
-        format!(
-            "not written (optional diagnostic; intended path: {})",
-            path.display()
-        )
-    }
 }
 
 fn effective_scancode_cache_identity(context: &ContextState) -> Option<&str> {
@@ -1843,6 +1830,28 @@ fn materialize_file(src: &Path, dst: &Path) -> Result<()> {
     }
 }
 
+fn print_summary_table(path: &Path) -> Result<()> {
+    let labels = ["Metric", "ScanCode", "Provenant", "Delta", "Notes"];
+    let _ = render_tsv_table(path, &labels)?;
+    Ok(())
+}
+
+fn optional_artifact_display(path: &Path) -> String {
+    if path.is_file() {
+        match fs::read_to_string(path) {
+            Ok(content) if content == SCANCODE_PLACEHOLDER_LOG_MESSAGE => {
+                format!("placeholder diagnostic log: {}", path.display())
+            }
+            _ => path.display().to_string(),
+        }
+    } else {
+        format!(
+            "not written (optional diagnostic; intended path: {})",
+            path.display()
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1908,14 +1917,6 @@ mod tests {
             scancode_cache_key: None,
             scancode_cache_hit: false,
         }
-    }
-
-    fn unique_temp_dir(name: &str) -> PathBuf {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        std::env::temp_dir().join(format!("compare-outputs-{name}-{nanos}"))
     }
 
     fn write_valid_cache_manifest(cache_dir: &Path, context: &ContextState) {
@@ -1990,6 +1991,14 @@ mod tests {
         assert!(log_warning.is_none());
 
         let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    fn unique_temp_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("compare-outputs-{name}-{nanos}"))
     }
 
     #[test]
@@ -2180,6 +2189,43 @@ mod tests {
         assert!(error.contains("had no matching file scan_errors"));
 
         let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn build_scancode_docker_args_uses_ephemeral_cache_envs() {
+        let context = test_context();
+
+        let args = build_scancode_docker_args(&context);
+
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["-e", "SCANCODE_CACHE=/tmp/scancode-cache"])
+        );
+        assert!(args.windows(2).any(|pair| {
+            pair == [
+                "-e",
+                "SCANCODE_LICENSE_INDEX_CACHE=/tmp/scancode-license-index-cache",
+            ]
+        }));
+        assert!(args.windows(2).any(|pair| {
+            pair == [
+                "-e",
+                "SCANCODE_PACKAGE_INDEX_CACHE=/tmp/scancode-package-index-cache",
+            ]
+        }));
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["-e", "SCANCODE_TEMP=/tmp/scancode-temp"])
+        );
+    }
+
+    #[test]
+    fn build_provenant_args_disables_persistent_license_cache() {
+        let context = test_context();
+
+        let args = build_provenant_args(&context);
+
+        assert!(args.iter().any(|arg| arg == "--no-license-index-cache"));
     }
 
     #[test]
