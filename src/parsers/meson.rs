@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -10,6 +9,7 @@ use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 
 use super::PackageParser;
 use super::license_normalization::normalize_spdx_declared_license;
+use super::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 pub struct MesonParser;
 
@@ -21,7 +21,7 @@ impl PackageParser for MesonParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(error) => {
                 warn!("Failed to read meson.build at {:?}: {}", path, error);
@@ -45,7 +45,7 @@ fn parse_meson_build(content: &str) -> Result<PackageData, String> {
     let mut dependencies = Vec::new();
     let mut control_flow_depth = 0usize;
 
-    for statement in statements {
+    for statement in statements.into_iter().take(MAX_ITERATION_COUNT) {
         let trimmed = statement.trim();
         if trimmed.is_empty() {
             continue;
@@ -116,7 +116,7 @@ fn apply_project_call(
 
     package.package_type = Some(PackageType::Meson);
     package.datasource_id = Some(DatasourceId::MesonBuild);
-    package.name = Some(name.to_string());
+    package.name = Some(truncate_field(name.to_string()));
 
     let languages = call
         .positional
@@ -125,7 +125,7 @@ fn apply_project_call(
         .flat_map(extract_string_values)
         .collect::<Vec<_>>();
     if let Some(primary_language) = languages.first() {
-        package.primary_language = Some(primary_language.clone());
+        package.primary_language = Some(truncate_field(primary_language.clone()));
     }
     if !languages.is_empty() {
         extra_data.insert(
@@ -135,7 +135,7 @@ fn apply_project_call(
     }
 
     if let Some(version) = call.keyword.get("version").and_then(expr_as_string) {
-        package.version = Some(version.to_string());
+        package.version = Some(truncate_field(version.to_string()));
     }
 
     let licenses = call
@@ -144,7 +144,7 @@ fn apply_project_call(
         .map(extract_string_values)
         .unwrap_or_default();
     if !licenses.is_empty() {
-        package.extracted_license_statement = Some(licenses.join("\n"));
+        package.extracted_license_statement = Some(truncate_field(licenses.join("\n")));
         if licenses.len() == 1 {
             let (declared_license_expression, declared_license_expression_spdx, license_detections) =
                 normalize_spdx_declared_license(licenses.first().map(String::as_str));
@@ -198,6 +198,7 @@ fn extract_dependencies_from_call(call: &CallExpr) -> Vec<Dependency> {
 
     dependency_names
         .into_iter()
+        .take(MAX_ITERATION_COUNT)
         .map(|name| {
             let mut extra_data = HashMap::new();
 
@@ -248,7 +249,8 @@ fn extract_dependencies_from_call(call: &CallExpr) -> Vec<Dependency> {
                 purl: build_dependency_purl(&name),
                 extracted_requirement: extracted_requirement
                     .clone()
-                    .filter(|value| !value.is_empty()),
+                    .filter(|value| !value.is_empty())
+                    .map(truncate_field),
                 scope: Some("dependencies".to_string()),
                 is_runtime: Some(native != Some(true)),
                 is_optional: Some(required == Some(false)),
@@ -266,13 +268,13 @@ fn build_project_purl(name: &str, version: Option<&str>) -> Option<String> {
     if let Some(version) = version {
         purl.with_version(version).ok()?;
     }
-    Some(purl.to_string())
+    Some(truncate_field(purl.to_string()))
 }
 
 fn build_dependency_purl(name: &str) -> Option<String> {
     let mut purl = PackageUrl::new("generic", name).ok()?;
     purl.with_namespace("meson").ok()?;
-    Some(purl.to_string())
+    Some(truncate_field(purl.to_string()))
 }
 
 fn default_package_data() -> PackageData {
@@ -301,8 +303,13 @@ fn strip_comments(input: &str) -> Result<String, String> {
     let mut in_string = false;
     let mut string_delimiter = '\0';
     let mut escaped = false;
+    let mut chars_processed = 0usize;
 
     while index < chars.len() {
+        chars_processed += 1;
+        if chars_processed > MAX_ITERATION_COUNT {
+            break;
+        }
         let ch = chars[index];
 
         if in_string {
@@ -353,8 +360,13 @@ fn split_statements(input: &str) -> Vec<String> {
     let mut in_string = false;
     let mut string_delimiter = '\0';
     let mut escaped = false;
+    let mut chars_processed = 0usize;
 
     for ch in input.chars() {
+        chars_processed += 1;
+        if chars_processed > MAX_ITERATION_COUNT {
+            break;
+        }
         current.push(ch);
 
         if in_string {
@@ -440,14 +452,18 @@ fn parse_statement(statement: &str) -> Result<Statement, String> {
 
     if let [Token::Ident(name), Token::Equal, rest @ ..] = tokens.as_slice() {
         let mut parser = Parser::new(rest);
+        parser.depth += 1;
         let expr = parser.parse_expr()?;
+        parser.depth -= 1;
         parser.expect_end()?;
         let _ = name;
         return Ok(Statement::Assignment(expr));
     }
 
     let mut parser = Parser::new(&tokens);
+    parser.depth += 1;
     let expr = parser.parse_expr()?;
+    parser.depth -= 1;
     parser.expect_end()?;
     Ok(Statement::Expr(expr))
 }
@@ -458,6 +474,9 @@ fn tokenize(input: &str) -> Result<Vec<Token>, String> {
     let mut index = 0usize;
 
     while index < chars.len() {
+        if tokens.len() >= MAX_ITERATION_COUNT {
+            break;
+        }
         let ch = chars[index];
         if ch.is_whitespace() {
             index += 1;
@@ -548,17 +567,27 @@ fn is_ident_continue(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || ch == '_'
 }
 
+const MAX_RECURSION_DEPTH: usize = 50;
+
 struct Parser<'a> {
     tokens: &'a [Token],
     index: usize,
+    depth: usize,
 }
 
 impl<'a> Parser<'a> {
     fn new(tokens: &'a [Token]) -> Self {
-        Self { tokens, index: 0 }
+        Self {
+            tokens,
+            index: 0,
+            depth: 0,
+        }
     }
 
     fn parse_expr(&mut self) -> Result<Expr, String> {
+        if self.depth > MAX_RECURSION_DEPTH {
+            return Err("recursion depth exceeded".to_string());
+        }
         match self.peek() {
             Some(Token::Str(value)) => {
                 self.index += 1;
@@ -578,8 +607,16 @@ impl<'a> Parser<'a> {
     fn parse_array(&mut self) -> Result<Expr, String> {
         self.expect(Token::LBracket)?;
         let mut values = Vec::new();
+        let mut element_count = 0usize;
         while !matches!(self.peek(), Some(Token::RBracket)) {
-            values.push(self.parse_expr()?);
+            element_count += 1;
+            if element_count > MAX_ITERATION_COUNT {
+                break;
+            }
+            self.depth += 1;
+            let expr = self.parse_expr()?;
+            self.depth -= 1;
+            values.push(expr);
             if matches!(self.peek(), Some(Token::Comma)) {
                 self.index += 1;
             } else if !matches!(self.peek(), Some(Token::RBracket)) {
@@ -607,17 +644,27 @@ impl<'a> Parser<'a> {
         self.expect(Token::LParen)?;
         let mut positional = Vec::new();
         let mut keyword = HashMap::new();
+        let mut arg_count = 0usize;
 
         while !matches!(self.peek(), Some(Token::RParen)) {
+            arg_count += 1;
+            if arg_count > MAX_ITERATION_COUNT {
+                break;
+            }
             if let (Some(Token::Ident(arg_name)), Some(Token::Colon)) =
                 (self.peek(), self.peek_n(1))
             {
                 let arg_name = arg_name.clone();
                 self.index += 2;
+                self.depth += 1;
                 let value = self.parse_expr()?;
+                self.depth -= 1;
                 keyword.insert(arg_name, value);
             } else {
-                positional.push(self.parse_expr()?);
+                self.depth += 1;
+                let expr = self.parse_expr()?;
+                self.depth -= 1;
+                positional.push(expr);
             }
 
             if matches!(self.peek(), Some(Token::Comma)) {

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -7,8 +6,11 @@ use packageurl::PackageUrl;
 use serde_json::Value as JsonValue;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 use super::PackageParser;
+
+const MAX_RECURSION_DEPTH: usize = 50;
 
 pub struct NixFlakeLockParser;
 
@@ -20,7 +22,7 @@ impl PackageParser for NixFlakeLockParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(error) => {
                 warn!("Failed to read flake.lock at {:?}: {}", path, error);
@@ -56,7 +58,7 @@ impl PackageParser for NixFlakeParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(error) => {
                 warn!("Failed to read flake.nix at {:?}: {}", path, error);
@@ -81,7 +83,7 @@ impl PackageParser for NixDefaultParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(error) => {
                 warn!("Failed to read default.nix at {:?}: {}", path, error);
@@ -158,6 +160,11 @@ impl Lexer {
         let mut tokens = Vec::new();
 
         while let Some(ch) = self.peek() {
+            if tokens.len() >= MAX_ITERATION_COUNT {
+                warn!("Lexer exceeded MAX_ITERATION_COUNT token limit");
+                break;
+            }
+
             if ch.is_whitespace() {
                 self.index += 1;
                 continue;
@@ -432,11 +439,16 @@ impl Lexer {
 struct Parser {
     tokens: Vec<Token>,
     index: usize,
+    depth: usize,
 }
 
 impl Parser {
     fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, index: 0 }
+        Self {
+            tokens,
+            index: 0,
+            depth: 0,
+        }
     }
 
     fn parse(mut self) -> Result<Expr, String> {
@@ -448,22 +460,35 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, String> {
+        if self.depth > MAX_RECURSION_DEPTH {
+            return Err("recursion depth exceeded".to_string());
+        }
+
         if self.peek() == Some(&Token::LBrace) && self.looks_like_lambda_binder_set()? {
             self.skip_lambda_binder_set()?;
             self.expect(&Token::Colon)?;
-            return self.parse_expr();
+            self.depth += 1;
+            let result = self.parse_expr();
+            self.depth -= 1;
+            return result;
         }
 
         if self.looks_like_prefixed_lambda_binder_set()? {
             self.index += 1;
             self.skip_lambda_binder_set()?;
             self.expect(&Token::Colon)?;
-            return self.parse_expr();
+            self.depth += 1;
+            let result = self.parse_expr();
+            self.depth -= 1;
+            return result;
         }
 
         let first = self.parse_term()?;
         if self.consume(&Token::Colon) {
-            return self.parse_expr();
+            self.depth += 1;
+            let result = self.parse_expr();
+            self.depth -= 1;
+            return result;
         }
 
         let mut terms = vec![first];
@@ -472,7 +497,7 @@ impl Parser {
         }
 
         let expr = if terms.len() == 1 {
-            terms.pop().expect("single term")
+            terms.pop().unwrap()
         } else {
             Expr::Application(terms)
         };
@@ -500,9 +525,14 @@ impl Parser {
             Some(Token::Ident(keyword)) if keyword == "let" => self.parse_let_in_expr(),
             Some(Token::Ident(keyword)) if keyword == "with" => {
                 self.index += 1;
+                self.depth += 1;
                 let _ = self.parse_expr()?;
+                self.depth -= 1;
                 self.expect(&Token::Semicolon)?;
-                self.parse_expr()
+                self.depth += 1;
+                let result = self.parse_expr();
+                self.depth -= 1;
+                result
             }
             Some(Token::Ident(keyword)) if keyword == "rec" => {
                 if matches!(self.peek_n(1), Some(Token::LBrace)) {
@@ -516,7 +546,9 @@ impl Parser {
             Some(Token::LBracket) => self.parse_list(),
             Some(Token::LParen) => {
                 self.index += 1;
+                self.depth += 1;
                 let expr = self.parse_expr()?;
+                self.depth -= 1;
                 self.expect(&Token::RParen)?;
                 Ok(expr)
             }
@@ -535,6 +567,11 @@ impl Parser {
                 return Err("unterminated let expression".to_string());
             }
 
+            if bindings.len() >= MAX_ITERATION_COUNT {
+                warn!("parse_let_in_expr exceeded MAX_ITERATION_COUNT bindings limit");
+                break;
+            }
+
             if matches!(self.peek(), Some(Token::Ident(keyword)) if keyword == "inherit") {
                 bindings.extend(self.parse_inherit_entries()?);
                 continue;
@@ -542,15 +579,20 @@ impl Parser {
 
             let key = self.parse_attr_path()?;
             self.expect(&Token::Equals)?;
+            self.depth += 1;
             let value = self.parse_expr()?;
+            self.depth -= 1;
             self.expect(&Token::Semicolon)?;
             bindings.push((key, value));
         }
 
         self.take_exact_ident("in")?;
+        self.depth += 1;
+        let body = self.parse_expr()?;
+        self.depth -= 1;
         Ok(Expr::Let {
             bindings,
-            body: Box::new(self.parse_expr()?),
+            body: Box::new(body),
         })
     }
 
@@ -567,6 +609,11 @@ impl Parser {
                 return Err("unterminated attribute set".to_string());
             }
 
+            if entries.len() >= MAX_ITERATION_COUNT {
+                warn!("parse_attrset exceeded MAX_ITERATION_COUNT entries limit");
+                break;
+            }
+
             if matches!(self.peek(), Some(Token::Ident(keyword)) if keyword == "inherit") {
                 entries.extend(self.parse_inherit_entries()?);
                 continue;
@@ -574,10 +621,14 @@ impl Parser {
 
             let key = self.parse_attr_path()?;
             self.expect(&Token::Equals)?;
+            self.depth += 1;
             let value = self.parse_expr()?;
+            self.depth -= 1;
             self.expect(&Token::Semicolon)?;
             entries.push((key, value));
         }
+
+        Ok(Expr::AttrSet(entries))
     }
 
     fn parse_attr_path(&mut self) -> Result<Vec<String>, String> {
@@ -592,7 +643,9 @@ impl Parser {
         self.take_exact_ident("inherit")?;
 
         let inherit_from = if self.consume(&Token::LParen) {
+            self.depth += 1;
             let expr = self.parse_expr()?;
+            self.depth -= 1;
             self.expect(&Token::RParen)?;
             Some(expr)
         } else {
@@ -603,6 +656,11 @@ impl Parser {
         while !self.consume(&Token::Semicolon) {
             if self.peek().is_none() {
                 return Err("unterminated inherit statement".to_string());
+            }
+
+            if entries.len() >= MAX_ITERATION_COUNT {
+                warn!("parse_inherit_entries exceeded MAX_ITERATION_COUNT entries limit");
+                break;
             }
 
             let name = self.take_attr_key()?;
@@ -626,7 +684,15 @@ impl Parser {
             if self.peek().is_none() {
                 return Err("unterminated list".to_string());
             }
+
+            if items.len() >= MAX_ITERATION_COUNT {
+                warn!("parse_list exceeded MAX_ITERATION_COUNT items limit");
+                break;
+            }
+
+            self.depth += 1;
             items.push(self.parse_expr()?);
+            self.depth -= 1;
         }
         Ok(Expr::List(items))
     }
@@ -775,12 +841,13 @@ impl Parser {
 fn parse_flake_nix(path: &Path, content: &str) -> Result<PackageData, String> {
     let expr = parse_nix_expr(content)?;
     let scopes = Vec::new();
-    let (root, scopes) = root_attrset_with_scopes(&expr, &scopes)
+    let (root, scopes) = root_attrset_with_scopes(&expr, &scopes, 0)
         .ok_or_else(|| "flake.nix root was not an attribute set".to_string())?;
 
     let mut package = default_flake_package_data();
-    package.name = fallback_name(path);
-    package.description = find_string_attr_with_scopes(root, &["description"], &scopes);
+    package.name = fallback_name(path).map(truncate_field);
+    package.description =
+        find_string_attr_with_scopes(root, &["description"], &scopes).map(truncate_field);
     package.purl = package
         .name
         .as_deref()
@@ -822,7 +889,7 @@ fn parse_flake_lock(path: &Path, json: &JsonValue) -> Result<PackageData, String
         .ok_or_else(|| "flake.lock root node missing inputs".to_string())?;
 
     let mut package = default_flake_lock_package_data();
-    package.name = fallback_name(path);
+    package.name = fallback_name(path).map(truncate_field);
     package.purl = package
         .name
         .as_deref()
@@ -835,6 +902,7 @@ fn parse_flake_lock(path: &Path, json: &JsonValue) -> Result<PackageData, String
 
     package.dependencies = root_inputs
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|(input_name, node_ref)| build_lock_dependency(input_name, node_ref, nodes))
         .collect();
     package
@@ -888,7 +956,8 @@ fn build_lock_dependency(
 
     Some(Dependency {
         purl: build_nix_purl(input_name, revision),
-        extracted_requirement: build_locked_requirement(locked, node.get("original")),
+        extracted_requirement: build_locked_requirement(locked, node.get("original"))
+            .map(truncate_field),
         scope: Some("inputs".to_string()),
         is_runtime: Some(false),
         is_optional: Some(false),
@@ -984,7 +1053,7 @@ fn build_flake_dependencies(
 
             Dependency {
                 purl: build_nix_purl(&name, None),
-                extracted_requirement: info.requirement,
+                extracted_requirement: info.requirement.map(truncate_field),
                 scope: Some("inputs".to_string()),
                 is_runtime: Some(false),
                 is_optional: Some(false),
@@ -1041,7 +1110,7 @@ fn collect_input_path(
             }
             Expr::Symbol(value) => {
                 inputs.entry(input_name.clone()).or_default().requirement =
-                    expr_as_string_with_scopes(&Expr::Symbol(value.clone()), scopes)
+                    expr_as_string_with_scopes(&Expr::Symbol(value.clone()), scopes, 0)
             }
             _ => {}
         }
@@ -1063,19 +1132,19 @@ fn apply_input_field(
     scopes: &[&[(Vec<String>, Expr)]],
 ) {
     if path == ["url"] {
-        info.requirement = expr_as_string_with_scopes(expr, scopes);
+        info.requirement = expr_as_string_with_scopes(expr, scopes, 0);
         return;
     }
 
     if path == ["flake"] {
-        info.flake = expr_as_bool_with_scopes(expr, scopes);
+        info.flake = expr_as_bool_with_scopes(expr, scopes, 0);
         return;
     }
 
     if path.len() == 3
         && path[0] == "inputs"
         && path[2] == "follows"
-        && let Some(value) = expr_as_string_with_scopes(expr, scopes)
+        && let Some(value) = expr_as_string_with_scopes(expr, scopes, 0)
     {
         info.follows.push(value);
     }
@@ -1087,16 +1156,17 @@ fn build_list_dependencies(
     runtime: bool,
     scopes: &[&[(Vec<String>, Expr)]],
 ) -> Vec<Dependency> {
-    let Some(expr) = find_attr(entries, &[field_name]) else {
+    let Some(expr) = find_attr(entries, &[field_name], 0) else {
         return Vec::new();
     };
-    let Some(items) = list_items_with_scopes(expr, scopes) else {
+    let Some(items) = list_items_with_scopes(expr, scopes, 0) else {
         return Vec::new();
     };
 
     items
         .iter()
-        .flat_map(|expr| expr_to_dependency_symbols_with_scopes(expr, scopes))
+        .take(MAX_ITERATION_COUNT)
+        .flat_map(|expr| expr_to_dependency_symbols_with_scopes(expr, scopes, 0))
         .filter_map(|symbol| {
             let name = symbol.rsplit('.').next()?.to_string();
             Some(Dependency {
@@ -1117,20 +1187,26 @@ fn build_list_dependencies(
 fn expr_to_dependency_symbols_with_scopes(
     expr: &Expr,
     scopes: &[&[(Vec<String>, Expr)]],
+    depth: usize,
 ) -> Vec<String> {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!("expr_to_dependency_symbols_with_scopes exceeded MAX_RECURSION_DEPTH");
+        return Vec::new();
+    }
+
     match expr {
         Expr::Symbol(symbol) => resolve_symbol(symbol, scopes, 0)
-            .map(|resolved| expr_to_dependency_symbols_with_scopes(resolved, scopes))
+            .map(|resolved| expr_to_dependency_symbols_with_scopes(resolved, scopes, depth + 1))
             .unwrap_or_else(|| vec![symbol.clone()]),
         Expr::Application(parts) => parts
             .iter()
-            .filter_map(|expr| expr_as_symbol_with_scopes(expr, scopes))
+            .filter_map(|expr| expr_as_symbol_with_scopes(expr, scopes, 0))
             .collect(),
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
-            expr_to_dependency_symbols_with_scopes(body, &scopes)
+            expr_to_dependency_symbols_with_scopes(body, &scopes, depth + 1)
         }
-        Expr::Select { .. } => expr_as_symbol_with_scopes(expr, scopes)
+        Expr::Select { .. } => expr_as_symbol_with_scopes(expr, scopes, 0)
             .into_iter()
             .collect(),
         _ => Vec::new(),
@@ -1149,7 +1225,7 @@ fn build_nix_purl(name: &str, version: Option<&str>) -> Option<String> {
     if let Some(version) = version {
         purl.with_version(version).ok()?;
     }
-    Some(purl.to_string())
+    Some(truncate_field(purl.to_string()))
 }
 
 fn parse_nix_expr(content: &str) -> Result<Expr, String> {
@@ -1167,17 +1243,23 @@ fn attrset_entries(expr: &Expr) -> Option<&[(Vec<String>, Expr)]> {
 fn list_items_with_scopes<'a>(
     expr: &'a Expr,
     scopes: &[&'a [(Vec<String>, Expr)]],
+    depth: usize,
 ) -> Option<&'a [Expr]> {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!("list_items_with_scopes exceeded MAX_RECURSION_DEPTH");
+        return None;
+    }
+
     match expr {
         Expr::List(items) => Some(items),
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
-            list_items_with_scopes(body, &scopes)
+            list_items_with_scopes(body, &scopes, depth + 1)
         }
         Expr::Symbol(symbol) => resolve_symbol(symbol, scopes, 0)
-            .and_then(|resolved| list_items_with_scopes(resolved, scopes)),
+            .and_then(|resolved| list_items_with_scopes(resolved, scopes, depth + 1)),
         Expr::Select { target, path } => resolve_select(target, path, scopes, 0)
-            .and_then(|resolved| list_items_with_scopes(resolved, scopes)),
+            .and_then(|resolved| list_items_with_scopes(resolved, scopes, depth + 1)),
         _ => None,
     }
 }
@@ -1189,16 +1271,25 @@ fn expr_as_symbol(expr: &Expr) -> Option<String> {
     }
 }
 
-fn expr_as_symbol_with_scopes(expr: &Expr, scopes: &[&[(Vec<String>, Expr)]]) -> Option<String> {
+fn expr_as_symbol_with_scopes(
+    expr: &Expr,
+    scopes: &[&[(Vec<String>, Expr)]],
+    depth: usize,
+) -> Option<String> {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!("expr_as_symbol_with_scopes exceeded MAX_RECURSION_DEPTH");
+        return None;
+    }
+
     match expr {
         Expr::Symbol(value) => resolve_symbol(value, scopes, 0)
-            .and_then(|resolved| expr_as_symbol_with_scopes(resolved, scopes))
+            .and_then(|resolved| expr_as_symbol_with_scopes(resolved, scopes, depth + 1))
             .or_else(|| Some(value.clone())),
         Expr::Select { target, path } => resolve_select(target, path, scopes, 0)
-            .and_then(|resolved| expr_as_symbol_with_scopes(resolved, scopes)),
+            .and_then(|resolved| expr_as_symbol_with_scopes(resolved, scopes, depth + 1)),
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
-            expr_as_symbol_with_scopes(body, &scopes)
+            expr_as_symbol_with_scopes(body, &scopes, depth + 1)
         }
         _ => expr_as_symbol(expr),
     }
@@ -1212,36 +1303,54 @@ fn expr_as_bool(expr: &Expr) -> Option<bool> {
     }
 }
 
-fn expr_as_bool_with_scopes(expr: &Expr, scopes: &[&[(Vec<String>, Expr)]]) -> Option<bool> {
+fn expr_as_bool_with_scopes(
+    expr: &Expr,
+    scopes: &[&[(Vec<String>, Expr)]],
+    depth: usize,
+) -> Option<bool> {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!("expr_as_bool_with_scopes exceeded MAX_RECURSION_DEPTH");
+        return None;
+    }
+
     match expr {
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
-            expr_as_bool_with_scopes(body, &scopes)
+            expr_as_bool_with_scopes(body, &scopes, depth + 1)
         }
         Expr::Symbol(value) => resolve_symbol(value, scopes, 0)
-            .and_then(|resolved| expr_as_bool_with_scopes(resolved, scopes))
+            .and_then(|resolved| expr_as_bool_with_scopes(resolved, scopes, depth + 1))
             .or_else(|| expr_as_bool(expr)),
         Expr::Select { target, path } => resolve_select(target, path, scopes, 0)
-            .and_then(|resolved| expr_as_bool_with_scopes(resolved, scopes)),
+            .and_then(|resolved| expr_as_bool_with_scopes(resolved, scopes, depth + 1)),
         _ => expr_as_bool(expr),
     }
 }
 
-fn expr_as_string_with_scopes(expr: &Expr, scopes: &[&[(Vec<String>, Expr)]]) -> Option<String> {
+fn expr_as_string_with_scopes(
+    expr: &Expr,
+    scopes: &[&[(Vec<String>, Expr)]],
+    depth: usize,
+) -> Option<String> {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!("expr_as_string_with_scopes exceeded MAX_RECURSION_DEPTH");
+        return None;
+    }
+
     match expr {
         Expr::String(value) => Some(interpolate_string(value, scopes)),
         Expr::Symbol(value) => resolve_symbol(value, scopes, 0)
-            .and_then(|resolved| expr_as_string_with_scopes(resolved, scopes))
+            .and_then(|resolved| expr_as_string_with_scopes(resolved, scopes, depth + 1))
             .or_else(|| Some(value.clone())),
         Expr::Application(parts) => parts
             .last()
-            .and_then(|expr| expr_as_string_with_scopes(expr, scopes)),
+            .and_then(|expr| expr_as_string_with_scopes(expr, scopes, depth + 1)),
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
-            expr_as_string_with_scopes(body, &scopes)
+            expr_as_string_with_scopes(body, &scopes, depth + 1)
         }
         Expr::Select { target, path } => resolve_select(target, path, scopes, 0)
-            .and_then(|resolved| expr_as_string_with_scopes(resolved, scopes)),
+            .and_then(|resolved| expr_as_string_with_scopes(resolved, scopes, depth + 1)),
         _ => None,
     }
 }
@@ -1249,16 +1358,31 @@ fn expr_as_string_with_scopes(expr: &Expr, scopes: &[&[(Vec<String>, Expr)]]) ->
 fn expr_to_scalar_string_with_scopes(
     expr: &Expr,
     scopes: &[&[(Vec<String>, Expr)]],
+    depth: usize,
 ) -> Option<String> {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!("expr_to_scalar_string_with_scopes exceeded MAX_RECURSION_DEPTH");
+        return None;
+    }
+
     match expr {
         Expr::Application(parts) => parts
             .last()
-            .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes)),
-        _ => expr_as_string_with_scopes(expr, scopes),
+            .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes, depth + 1)),
+        _ => expr_as_string_with_scopes(expr, scopes, depth),
     }
 }
 
-fn find_attr<'a>(entries: &'a [(Vec<String>, Expr)], path: &[&str]) -> Option<&'a Expr> {
+fn find_attr<'a>(
+    entries: &'a [(Vec<String>, Expr)],
+    path: &[&str],
+    depth: usize,
+) -> Option<&'a Expr> {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!("find_attr exceeded MAX_RECURSION_DEPTH");
+        return None;
+    }
+
     for (key, value) in entries {
         if key.iter().map(String::as_str).eq(path.iter().copied()) {
             return Some(value);
@@ -1270,7 +1394,7 @@ fn find_attr<'a>(entries: &'a [(Vec<String>, Expr)], path: &[&str]) -> Option<&'
                 .map(String::as_str)
                 .eq(path[..key.len()].iter().copied())
             && let Expr::AttrSet(child_entries) = value
-            && let Some(found) = find_attr(child_entries, &path[key.len()..])
+            && let Some(found) = find_attr(child_entries, &path[key.len()..], depth + 1)
         {
             return Some(found);
         }
@@ -1284,7 +1408,9 @@ fn find_string_attr_with_scopes(
     path: &[&str],
     scopes: &[&[(Vec<String>, Expr)]],
 ) -> Option<String> {
-    find_attr(entries, path).and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes))
+    find_attr(entries, path, 0)
+        .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes, 0))
+        .map(truncate_field)
 }
 
 fn find_mk_derivation_attrset(expr: &Expr) -> Option<&[(Vec<String>, Expr)]> {
@@ -1315,12 +1441,18 @@ fn extend_scopes<'a>(
 fn root_attrset_with_scopes<'a>(
     expr: &'a Expr,
     scopes: &[NixAttrEntriesRef<'a>],
+    depth: usize,
 ) -> Option<(NixAttrEntriesRef<'a>, NixScopeStack<'a>)> {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!("root_attrset_with_scopes exceeded MAX_RECURSION_DEPTH");
+        return None;
+    }
+
     match expr {
         Expr::AttrSet(entries) => Some((entries, scopes.to_vec())),
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
-            root_attrset_with_scopes(body, &scopes)
+            root_attrset_with_scopes(body, &scopes, depth + 1)
         }
         _ => None,
     }
@@ -1330,7 +1462,7 @@ fn lookup_binding<'a>(scopes: &[NixAttrEntriesRef<'a>], name: &str) -> Option<&'
     scopes
         .iter()
         .rev()
-        .find_map(|bindings| find_attr(bindings, &[name]))
+        .find_map(|bindings| find_attr(bindings, &[name], 0))
 }
 
 fn resolve_symbol<'a>(
@@ -1338,7 +1470,7 @@ fn resolve_symbol<'a>(
     scopes: &[NixAttrEntriesRef<'a>],
     depth: usize,
 ) -> Option<&'a Expr> {
-    if depth > 8 {
+    if depth > MAX_RECURSION_DEPTH {
         return None;
     }
 
@@ -1363,7 +1495,7 @@ fn resolve_select<'a>(
     scopes: &[NixAttrEntriesRef<'a>],
     depth: usize,
 ) -> Option<&'a Expr> {
-    if depth > 8 {
+    if depth > MAX_RECURSION_DEPTH {
         return None;
     }
 
@@ -1371,6 +1503,7 @@ fn resolve_select<'a>(
         Expr::AttrSet(entries) => find_attr(
             entries,
             &path.iter().map(String::as_str).collect::<Vec<_>>(),
+            0,
         ),
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
@@ -1407,7 +1540,7 @@ fn interpolate_string(value: &str, scopes: &[&[(Vec<String>, Expr)]]) -> String 
                 .chars()
                 .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
             && let Some(resolved) = resolve_symbol(placeholder, scopes, 0)
-            && let Some(replacement) = expr_as_string_with_scopes(resolved, scopes)
+            && let Some(replacement) = expr_as_string_with_scopes(resolved, scopes, 0)
         {
             result.push_str(&replacement);
         } else {
@@ -1514,11 +1647,11 @@ fn build_default_package_from_attrset(
             .or_else(|| find_string_attr_with_scopes(derivation, &["description"], scopes));
     package.homepage_url = find_string_attr_with_scopes(derivation, &["meta", "homepage"], scopes)
         .or_else(|| find_string_attr_with_scopes(derivation, &["homepage"], scopes));
-    package.extracted_license_statement = find_attr(derivation, &["meta", "license"])
-        .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes))
+    package.extracted_license_statement = find_attr(derivation, &["meta", "license"], 0)
+        .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes, 0))
         .or_else(|| {
-            find_attr(derivation, &["license"])
-                .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes))
+            find_attr(derivation, &["license"], 0)
+                .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes, 0))
         });
     package.dependencies = [
         build_list_dependencies(derivation, "nativeBuildInputs", false, scopes),
@@ -1528,7 +1661,7 @@ fn build_default_package_from_attrset(
     ]
     .concat();
     if package.name.is_none() {
-        package.name = fallback_name(path);
+        package.name = fallback_name(path).map(truncate_field);
     }
     package.purl = package
         .name
@@ -1551,13 +1684,13 @@ fn try_follow_local_nix_application(
 
     let local_path = parts
         .get(1)
-        .and_then(|expr| expr_as_symbol_with_scopes(expr, scopes))?;
+        .and_then(|expr| expr_as_symbol_with_scopes(expr, scopes, 0))?;
     if !is_local_nix_path(&local_path) {
         return None;
     }
 
     let resolved_path = resolve_local_nix_path(path, &local_path)?;
-    let content = fs::read_to_string(&resolved_path).ok()?;
+    let content = read_file_to_string(&resolved_path, None).ok()?;
     let expr = parse_nix_expr(&content).ok()?;
     Some((expr, resolved_path))
 }
@@ -1577,6 +1710,7 @@ fn try_follow_selected_local_import(
         find_attr(
             entries,
             &select_path.iter().map(String::as_str).collect::<Vec<_>>(),
+            0,
         )
     })?;
     Some((selected.clone(), imported_path))
@@ -1656,6 +1790,7 @@ fn extract_flake_compat_package_from_select(
         .file_name()
         .and_then(|name| name.to_str())
         .map(ToOwned::to_owned)
+        .map(truncate_field)
         .or_else(|| fallback_name(path));
     package.purl = package
         .name
@@ -1706,14 +1841,14 @@ fn source_root_from_flake_compat_application(
 
     let import_path = parts
         .get(1)
-        .and_then(|expr| expr_as_symbol_with_scopes(expr, scopes))?;
+        .and_then(|expr| expr_as_symbol_with_scopes(expr, scopes, 0))?;
     if !is_local_nix_path(&import_path) {
         return None;
     }
 
     let args = parts.iter().find_map(attrset_entries)?;
-    let src_value =
-        find_attr(args, &["src"]).and_then(|expr| expr_as_symbol_with_scopes(expr, scopes))?;
+    let src_value = find_attr(args, &["src"], 0)
+        .and_then(|expr| expr_as_symbol_with_scopes(expr, scopes, 0))?;
     if !is_local_path(&src_value) {
         return None;
     }
@@ -1757,6 +1892,7 @@ fn extract_flake_compat_default_package_from_content(
                 .filter(|name| *name != ".")
                 .map(ToOwned::to_owned)
         })
+        .map(truncate_field)
         .or_else(|| fallback_name(path));
     if package.name.is_none() {
         return Err("default.nix did not contain a supported mkDerivation call".to_string());

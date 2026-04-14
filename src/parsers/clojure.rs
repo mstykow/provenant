@@ -1,14 +1,16 @@
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use packageurl::PackageUrl;
 use serde_json::Value as JsonValue;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 
 use super::PackageParser;
+
+const MAX_RECURSION_DEPTH: usize = 50;
 
 pub struct ClojureDepsEdnParser;
 
@@ -20,7 +22,7 @@ impl PackageParser for ClojureDepsEdnParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(error) => {
                 warn!("Failed to read deps.edn at {:?}: {}", path, error);
@@ -56,7 +58,7 @@ impl PackageParser for ClojureProjectCljParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(error) => {
                 warn!("Failed to read project.clj at {:?}: {}", path, error);
@@ -115,6 +117,7 @@ enum Form {
 struct Reader {
     chars: Vec<char>,
     index: usize,
+    depth: usize,
 }
 
 impl Reader {
@@ -122,12 +125,19 @@ impl Reader {
         Self {
             chars: input.chars().collect(),
             index: 0,
+            depth: 0,
         }
     }
 
     fn parse_all(mut self) -> Result<Vec<Form>, String> {
         let mut forms = Vec::new();
+        let mut count = 0usize;
         while self.skip_ws_and_comments() {
+            count += 1;
+            if count > MAX_ITERATION_COUNT {
+                warn!("Reached MAX_ITERATION_COUNT in parse_all, stopping early");
+                break;
+            }
             forms.push(self.parse_form()?);
         }
         Ok(forms)
@@ -155,24 +165,52 @@ impl Reader {
     }
 
     fn parse_form(&mut self) -> Result<Form, String> {
+        if self.depth > MAX_RECURSION_DEPTH {
+            return Err("recursion depth exceeded".to_string());
+        }
         self.skip_ws_and_comments();
         match self.peek() {
             Some('"') => self.parse_string().map(Form::String),
             Some(':') => self.parse_keyword().map(Form::Keyword),
-            Some('[') => self.parse_collection('[', ']').map(Form::Vector),
-            Some('(') => self.parse_collection('(', ')').map(Form::List),
-            Some('{') => self.parse_map(),
+            Some('[') => {
+                self.depth += 1;
+                let result = self.parse_collection('[', ']').map(Form::Vector);
+                self.depth -= 1;
+                result
+            }
+            Some('(') => {
+                self.depth += 1;
+                let result = self.parse_collection('(', ')').map(Form::List);
+                self.depth -= 1;
+                result
+            }
+            Some('{') => {
+                self.depth += 1;
+                let result = self.parse_map();
+                self.depth -= 1;
+                result
+            }
             Some('^') => {
                 self.index += 1;
+                self.depth += 1;
                 let _ = self.parse_form()?;
-                self.parse_form()
+                let result = self.parse_form();
+                self.depth -= 1;
+                result
             }
             Some('~') | Some('\'') | Some('`') | Some('@') => {
                 self.index += 1;
+                self.depth += 1;
                 let form = self.parse_form()?;
+                self.depth -= 1;
                 Ok(Form::Prefixed(Box::new(form)))
             }
-            Some('#') => self.parse_dispatch_form(),
+            Some('#') => {
+                self.depth += 1;
+                let result = self.parse_dispatch_form();
+                self.depth -= 1;
+                result
+            }
             Some(_) => self.parse_atom(),
             None => Err("unexpected end of input".to_string()),
         }
@@ -265,6 +303,7 @@ impl Reader {
     fn parse_collection(&mut self, open: char, close: char) -> Result<Vec<Form>, String> {
         self.expect(open)?;
         let mut forms = Vec::new();
+        let mut count = 0usize;
         loop {
             self.skip_ws_and_comments();
             if self.peek() == Some(close) {
@@ -274,13 +313,20 @@ impl Reader {
             if self.peek().is_none() {
                 return Err(format!("unterminated collection starting with {open}"));
             }
+            count += 1;
+            if count > MAX_ITERATION_COUNT {
+                warn!("Reached MAX_ITERATION_COUNT in parse_collection, stopping early");
+                break;
+            }
             forms.push(self.parse_form()?);
         }
+        Ok(forms)
     }
 
     fn parse_map(&mut self) -> Result<Form, String> {
         self.expect('{')?;
         let mut entries = Vec::new();
+        let mut count = 0usize;
         loop {
             self.skip_ws_and_comments();
             if self.peek() == Some('}') {
@@ -290,6 +336,11 @@ impl Reader {
             if self.peek().is_none() {
                 return Err("unterminated map".to_string());
             }
+            count += 1;
+            if count > MAX_ITERATION_COUNT {
+                warn!("Reached MAX_ITERATION_COUNT in parse_map, stopping early");
+                break;
+            }
             let key = self.parse_form()?;
             self.skip_ws_and_comments();
             if self.peek() == Some('}') {
@@ -298,6 +349,7 @@ impl Reader {
             let value = self.parse_form()?;
             entries.push((key, value));
         }
+        Ok(Form::Map(entries))
     }
 
     fn parse_atom(&mut self) -> Result<Form, String> {
@@ -415,10 +467,10 @@ fn parse_project_clj_form(form: &Form) -> Result<PackageData, String> {
     };
 
     let mut package = default_package_data(Some(DatasourceId::ClojureProjectClj));
-    package.namespace = namespace.clone();
-    package.name = Some(name.clone());
-    package.version = Some(version.to_string());
-    package.purl = build_maven_purl(namespace.as_deref(), &name, Some(version));
+    package.namespace = namespace.clone().map(truncate_field);
+    package.name = Some(truncate_field(name.clone()));
+    package.version = Some(truncate_field(version.to_string()));
+    package.purl = build_maven_purl(namespace.as_deref(), &name, Some(version)).map(truncate_field);
 
     let mut index = 3usize;
     while index + 1 < items.len() {
@@ -429,16 +481,20 @@ fn parse_project_clj_form(form: &Form) -> Result<PackageData, String> {
         let value = &items[index + 1];
 
         match key {
-            "description" => package.description = form_as_string(value).map(ToOwned::to_owned),
-            "url" => package.homepage_url = form_as_string(value).map(ToOwned::to_owned),
+            "description" => {
+                package.description = form_as_string(value).map(|s| truncate_field(s.to_owned()))
+            }
+            "url" => {
+                package.homepage_url = form_as_string(value).map(|s| truncate_field(s.to_owned()))
+            }
             "license" => {
-                package.extracted_license_statement = format_license(value);
+                package.extracted_license_statement = format_license(value).map(truncate_field);
             }
             "scm" => {
                 if let Form::Map(entries) = value {
                     package.vcs_url = map_get_keyword(entries, "url")
                         .and_then(form_as_string)
-                        .map(ToOwned::to_owned);
+                        .map(|s| truncate_field(s.to_owned()));
                 }
             }
             "dependencies" => {
@@ -482,6 +538,7 @@ fn extract_deps_map(
 ) -> Vec<Dependency> {
     entries
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|(lib, coord)| build_deps_edn_dependency(lib, coord, scope, runtime))
         .collect()
 }
@@ -522,8 +579,9 @@ fn build_deps_edn_dependency(
             namespace.as_deref(),
             &name,
             requirement.as_deref().map(strip_exact_prefix),
-        ),
-        extracted_requirement: requirement,
+        )
+        .map(truncate_field),
+        extracted_requirement: requirement.map(truncate_field),
         scope: scope.map(ToOwned::to_owned),
         is_runtime: Some(runtime),
         is_optional: Some(scope.is_some()),
@@ -537,6 +595,7 @@ fn build_deps_edn_dependency(
 fn extract_project_dependencies(entries: &[Form], scope: Option<&str>) -> Vec<Dependency> {
     entries
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|entry| {
             let Form::Vector(parts) = entry else {
                 return None;
@@ -567,8 +626,9 @@ fn extract_project_dependencies(entries: &[Form], scope: Option<&str>) -> Vec<De
                     namespace.as_deref(),
                     &name,
                     Some(strip_exact_prefix(version)),
-                ),
-                extracted_requirement: Some(version.to_string()),
+                )
+                .map(truncate_field),
+                extracted_requirement: Some(truncate_field(version.to_string())),
                 scope: scope.map(ToOwned::to_owned),
                 is_runtime: Some(is_runtime),
                 is_optional: Some(is_optional),
