@@ -45,8 +45,8 @@ use crate::license_detection::embedded::index::{
 use crate::license_detection::index::CachedLicenseIndex;
 use crate::license_detection::index::build_index_from_loaded;
 use crate::license_detection::license_cache::{
-    LicenseCacheConfig, cache_file_size, compute_artifact_fingerprint, compute_rules_fingerprint,
-    delete_cache, load_cached_index, save_cached_index,
+    LicenseCacheConfig, LicenseCacheNamespace, cache_file_size, compute_artifact_fingerprint,
+    compute_rules_fingerprint, delete_cache, load_cached_index, save_cached_index,
 };
 use crate::license_detection::query::Query;
 use crate::license_detection::rules::{
@@ -463,10 +463,11 @@ impl LicenseDetectionEngine {
 
     /// Create a new license detection engine from the embedded license index.
     ///
-    /// Convenience method that uses the default cache directory (next to the
-    /// provenant binary) and does not force a reindex.
+    /// Convenience method that uses the default Provenant cache root and does
+    /// not force a reindex.
     pub fn from_embedded() -> Result<Self> {
-        let cache_config = LicenseCacheConfig::new(LicenseCacheConfig::default_cache_dir(), false);
+        let cache_config =
+            LicenseCacheConfig::new(LicenseCacheConfig::default_root_dir(), false, true);
         Self::from_embedded_with_cache(&cache_config)
     }
 
@@ -489,7 +490,9 @@ impl LicenseDetectionEngine {
         let fingerprint = compute_artifact_fingerprint(artifact_bytes);
 
         if !cache_config.reindex {
-            if let Some(cached) = load_cached_index(cache_config, &fingerprint)? {
+            if let Some(cached) =
+                load_cached_index(cache_config, LicenseCacheNamespace::Embedded, &fingerprint)?
+            {
                 let start = Instant::now();
                 let spdx_version = cached.spdx_license_list_version.clone();
                 let index = index::LicenseIndex::from(cached);
@@ -500,7 +503,7 @@ impl LicenseDetectionEngine {
                 return Self::from_index(index, spdx_version);
             }
         } else {
-            delete_cache(cache_config)?;
+            delete_cache(cache_config, LicenseCacheNamespace::Embedded, &fingerprint)?;
         }
 
         let snapshot = load_loader_snapshot_from_bytes(artifact_bytes)
@@ -516,9 +519,16 @@ impl LicenseDetectionEngine {
 
         let mut cached = CachedLicenseIndex::from(index.clone());
         cached.spdx_license_list_version = spdx_version.clone();
-        if let Err(e) = save_cached_index(cache_config, &cached, &fingerprint) {
+        if let Err(e) = save_cached_index(
+            cache_config,
+            LicenseCacheNamespace::Embedded,
+            &cached,
+            &fingerprint,
+        ) {
             eprintln!("Warning: failed to save license index cache: {}", e);
-        } else if let Some(size) = cache_file_size(cache_config) {
+        } else if let Some(size) =
+            cache_file_size(cache_config, LicenseCacheNamespace::Embedded, &fingerprint)
+        {
             eprintln!(
                 "License index cache saved ({:.1} MB)",
                 size as f64 / 1_048_576.0
@@ -530,10 +540,11 @@ impl LicenseDetectionEngine {
 
     /// Create a new license detection engine from a directory of license rules.
     ///
-    /// Convenience method that uses the default cache directory (next to the
-    /// provenant binary) and does not force a reindex.
+    /// Convenience method that uses the default Provenant cache root and does
+    /// not force a reindex.
     pub fn from_directory(rules_path: &Path) -> Result<Self> {
-        let cache_config = LicenseCacheConfig::new(LicenseCacheConfig::default_cache_dir(), false);
+        let cache_config =
+            LicenseCacheConfig::new(LicenseCacheConfig::default_root_dir(), false, true);
         Self::from_directory_with_cache(rules_path, &cache_config)
     }
 
@@ -569,7 +580,11 @@ impl LicenseDetectionEngine {
         let fingerprint = compute_rules_fingerprint(&loaded_rules, &loaded_licenses);
 
         if !cache_config.reindex {
-            if let Some(cached) = load_cached_index(cache_config, &fingerprint)? {
+            if let Some(cached) = load_cached_index(
+                cache_config,
+                LicenseCacheNamespace::CustomRules,
+                &fingerprint,
+            )? {
                 let start = Instant::now();
                 let index = index::LicenseIndex::from(cached);
                 eprintln!(
@@ -580,7 +595,11 @@ impl LicenseDetectionEngine {
                 return Self::from_index(index, spdx_version);
             }
         } else {
-            delete_cache(cache_config)?;
+            delete_cache(
+                cache_config,
+                LicenseCacheNamespace::CustomRules,
+                &fingerprint,
+            )?;
         }
 
         let start = Instant::now();
@@ -593,9 +612,18 @@ impl LicenseDetectionEngine {
         let spdx_license_list_version = detect_scancode_spdx_license_list_version(&rules_dir)?;
 
         let cached = CachedLicenseIndex::from(index.clone());
-        if let Err(e) = save_cached_index(cache_config, &cached, &fingerprint) {
+        if let Err(e) = save_cached_index(
+            cache_config,
+            LicenseCacheNamespace::CustomRules,
+            &cached,
+            &fingerprint,
+        ) {
             eprintln!("Warning: failed to save license index cache: {}", e);
-        } else if let Some(size) = cache_file_size(cache_config) {
+        } else if let Some(size) = cache_file_size(
+            cache_config,
+            LicenseCacheNamespace::CustomRules,
+            &fingerprint,
+        ) {
             eprintln!(
                 "License index cache saved ({:.1} MB)",
                 size as f64 / 1_048_576.0

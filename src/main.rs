@@ -81,6 +81,7 @@ fn run() -> Result<()> {
     progress.set_processes(cli.processes);
     progress.set_scan_names(configured_scan_names(&cli));
     progress.init_logging_bridge();
+    let mut shared_license_cache_config: Option<LicenseCacheConfig> = None;
 
     progress.start_setup();
     validate_scan_option_compatibility(&cli)?;
@@ -92,6 +93,14 @@ fn run() -> Result<()> {
     progress.finish_setup();
 
     progress.start_discovery();
+
+    let mut shared_cache_config = if cli.from_json {
+        let cache_config = prepare_cache_config(None, &cli)?;
+        shared_license_cache_config = Some(build_license_cache_config(&cache_config, &cli));
+        Some(cache_config)
+    } else {
+        None
+    };
 
     let (
         mut scan_result,
@@ -136,7 +145,9 @@ fn run() -> Result<()> {
         let mut native_include_patterns = cli.include.clone();
         native_include_patterns.extend(native_input_includes);
 
-        let cache_config = prepare_cache_for_scan(&scan_path, &cli)?;
+        let cache_config = prepare_cache_config(Some(Path::new(&scan_path)), &cli)?;
+        shared_license_cache_config = Some(build_license_cache_config(&cache_config, &cli));
+        shared_cache_config = Some(cache_config.clone());
         let collection_exclude_patterns =
             build_collection_exclude_patterns(Path::new(&scan_path), cache_config.root_dir());
 
@@ -176,7 +187,12 @@ fn run() -> Result<()> {
         let license_engine = if cli.license {
             progress.start_setup();
             progress.start_license_detection_engine_creation();
-            let engine = init_license_engine(&cli)?;
+            let engine = init_license_engine(
+                shared_cache_config
+                    .as_ref()
+                    .expect("cache config should be prepared before license engine init"),
+                &cli,
+            )?;
             progress.finish_license_detection_engine_creation("setup_scan:licenses");
             progress.finish_setup();
             progress.output_written(&describe_license_engine_source(
@@ -315,6 +331,7 @@ fn run() -> Result<()> {
                 &scan_result.files,
                 active_license_engine.as_deref(),
                 cli.license_rules_path.as_deref(),
+                shared_license_cache_config.as_ref(),
             )
         })?;
         if let Some(clue_rule_lookup) = clue_rule_lookup.as_ref() {
@@ -474,7 +491,12 @@ fn run() -> Result<()> {
 
     if should_recompute_license_references && active_license_engine.is_none() {
         progress.start_license_detection_engine_creation();
-        active_license_engine = Some(init_license_engine(&cli)?);
+        active_license_engine = Some(init_license_engine(
+            shared_cache_config
+                .as_ref()
+                .expect("cache config should be prepared before license engine init"),
+            &cli,
+        )?);
         progress.finish_license_detection_engine_creation("finalize:license-engine-creation");
     }
 
@@ -597,12 +619,6 @@ fn validate_scan_option_compatibility(cli: &Cli) -> Result<()> {
         ));
     }
 
-    if cli.from_json && (cli.cache_dir.is_some() || cli.cache_clear) {
-        return Err(anyhow!(
-            "Persistent cache options are only supported for directory scan mode, not --from-json"
-        ));
-    }
-
     if cli.from_json && cli.incremental {
         return Err(anyhow!(
             "--incremental is only supported for directory scan mode, not --from-json"
@@ -626,10 +642,10 @@ fn validate_scan_option_compatibility(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-fn prepare_cache_for_scan(scan_path: &str, cli: &Cli) -> Result<CacheConfig> {
+fn prepare_cache_config(scan_root: Option<&Path>, cli: &Cli) -> Result<CacheConfig> {
     let env_cache_dir = env::var_os(CACHE_DIR_ENV_VAR).map(PathBuf::from);
     let config = CacheConfig::from_overrides(
-        Path::new(scan_path),
+        scan_root,
         cli.cache_dir.as_deref().map(Path::new),
         env_cache_dir.as_deref(),
         cli.incremental,
@@ -646,6 +662,14 @@ fn prepare_cache_for_scan(scan_path: &str, cli: &Cli) -> Result<CacheConfig> {
     }
 
     Ok(config)
+}
+
+fn build_license_cache_config(cache_root: &CacheConfig, cli: &Cli) -> LicenseCacheConfig {
+    LicenseCacheConfig::new(
+        cache_root.root_dir().to_path_buf(),
+        cli.reindex,
+        !cli.no_license_index_cache,
+    )
 }
 
 fn partition_incremental_files(
@@ -930,13 +954,8 @@ where
     pool.install(f)
 }
 
-fn init_license_engine(cli: &Cli) -> Result<Arc<LicenseDetectionEngine>> {
-    let cache_dir = cli
-        .license_cache_dir
-        .as_deref()
-        .map(PathBuf::from)
-        .unwrap_or_else(LicenseCacheConfig::default_cache_dir);
-    let cache_config = LicenseCacheConfig::new(cache_dir, cli.reindex);
+fn init_license_engine(cache_root: &CacheConfig, cli: &Cli) -> Result<Arc<LicenseDetectionEngine>> {
+    let cache_config = build_license_cache_config(cache_root, cli);
 
     match &cli.license_rules_path {
         Some(p) => {

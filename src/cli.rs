@@ -301,10 +301,9 @@ pub struct Cli {
     #[arg(long)]
     pub reindex: bool,
 
-    /// Directory for the license index cache file.
-    /// Defaults to the directory containing the provenant binary.
-    #[arg(long, value_name = "PATH")]
-    pub license_cache_dir: Option<String>,
+    /// Build the license index in memory for this run without reading or writing persistent cache files.
+    #[arg(long = "no-license-index-cache")]
+    pub no_license_index_cache: bool,
 
     /// Include matched text in license detection output
     #[arg(long = "license-text", requires = "license")]
@@ -621,10 +620,10 @@ impl Cli {
             self.license_diagnostics,
         );
         push_string_option(&mut flags, "--license-policy", self.license_policy.as_ref());
-        push_string_option(
+        push_bool_option(
             &mut flags,
-            "--license-cache-dir",
-            self.license_cache_dir.as_ref(),
+            "--no-license-index-cache",
+            self.no_license_index_cache,
         );
         push_bool_option(&mut flags, "--license-references", self.license_references);
         push_bool_option(&mut flags, "--reindex", self.reindex);
@@ -1605,6 +1604,24 @@ mod tests {
         .expect("cli parse should accept incremental flag");
 
         assert!(parsed.incremental);
+    }
+
+    #[test]
+    fn test_parses_license_cache_control_flags() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--license",
+            "--reindex",
+            "--no-license-index-cache",
+            "samples",
+        ])
+        .expect("cli parse should accept license cache flags");
+
+        assert!(parsed.license);
+        assert!(parsed.reindex);
+        assert!(parsed.no_license_index_cache);
     }
 
     #[test]

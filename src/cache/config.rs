@@ -36,7 +36,7 @@ impl CacheConfig {
         Self::new(scan_root.join(DEFAULT_CACHE_DIR_NAME))
     }
 
-    fn project_cache_root() -> Option<PathBuf> {
+    pub(crate) fn project_cache_root() -> Option<PathBuf> {
         ProjectDirs::from("com", "Provenant", "provenant")
             .map(|dirs| dirs.cache_dir().to_path_buf())
     }
@@ -45,8 +45,12 @@ impl CacheConfig {
         Self::project_cache_root().unwrap_or_else(|| scan_root.join(DEFAULT_CACHE_DIR_NAME))
     }
 
+    pub fn default_root_dir_without_scan_root() -> PathBuf {
+        Self::project_cache_root().unwrap_or_else(|| PathBuf::from(DEFAULT_CACHE_DIR_NAME))
+    }
+
     pub fn resolve_root_dir(
-        scan_root: &Path,
+        scan_root: Option<&Path>,
         cli_cache_dir: Option<&Path>,
         env_cache_dir: Option<&Path>,
     ) -> PathBuf {
@@ -58,11 +62,14 @@ impl CacheConfig {
             return path.to_path_buf();
         }
 
-        Self::default_root_dir(scan_root)
+        match scan_root {
+            Some(scan_root) => Self::default_root_dir(scan_root),
+            None => Self::default_root_dir_without_scan_root(),
+        }
     }
 
     pub fn from_overrides(
-        scan_root: &Path,
+        scan_root: Option<&Path>,
         cli_cache_dir: Option<&Path>,
         env_cache_dir: Option<&Path>,
         incremental: bool,
@@ -160,16 +167,24 @@ mod tests {
         let env_dir = Path::new("/env-cache");
 
         assert_eq!(
-            CacheConfig::resolve_root_dir(scan_root, Some(cli_dir), Some(env_dir)),
+            CacheConfig::resolve_root_dir(Some(scan_root), Some(cli_dir), Some(env_dir)),
             cli_dir
         );
         assert_eq!(
-            CacheConfig::resolve_root_dir(scan_root, None, Some(env_dir)),
+            CacheConfig::resolve_root_dir(Some(scan_root), None, Some(env_dir)),
             env_dir
         );
         assert_eq!(
-            CacheConfig::resolve_root_dir(scan_root, None, None),
+            CacheConfig::resolve_root_dir(Some(scan_root), None, None),
             CacheConfig::default_root_dir(scan_root)
+        );
+    }
+
+    #[test]
+    fn test_resolve_root_dir_without_scan_root_uses_project_or_relative_default() {
+        assert_eq!(
+            CacheConfig::resolve_root_dir(None, None, None),
+            CacheConfig::default_root_dir_without_scan_root()
         );
     }
 

@@ -96,7 +96,7 @@ fn validate_scan_option_compatibility_rejects_scan_flags_with_from_json() {
 }
 
 #[test]
-fn validate_scan_option_compatibility_rejects_cache_root_flags_with_from_json() {
+fn validate_scan_option_compatibility_allows_cache_root_flags_with_from_json() {
     let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
@@ -108,8 +108,22 @@ fn validate_scan_option_compatibility_rejects_cache_root_flags_with_from_json() 
     ])
     .unwrap();
 
-    let error = validate_scan_option_compatibility(&cli).unwrap_err();
-    assert!(error.to_string().contains("Persistent cache options"));
+    assert!(validate_scan_option_compatibility(&cli).is_ok());
+}
+
+#[test]
+fn validate_scan_option_compatibility_allows_license_cache_opt_out_with_from_json() {
+    let cli = crate::cli::Cli::try_parse_from([
+        "provenant",
+        "--json-pp",
+        "scan.json",
+        "--from-json",
+        "--no-license-index-cache",
+        "sample-scan.json",
+    ])
+    .unwrap();
+
+    assert!(validate_scan_option_compatibility(&cli).is_ok());
 }
 
 #[test]
@@ -793,7 +807,7 @@ fn prepare_cache_for_scan_defaults_to_scan_root_cache_directory_without_creating
     let cli =
         crate::cli::Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "sample-dir"])
             .unwrap();
-    let config = prepare_cache_for_scan(scan_root.to_str().unwrap(), &cli).unwrap();
+    let config = prepare_cache_config(Some(&scan_root), &cli).unwrap();
 
     assert_eq!(config.root_dir(), CacheConfig::default_root_dir(&scan_root));
     assert!(!config.incremental_enabled());
@@ -820,7 +834,7 @@ fn prepare_cache_for_scan_respects_cache_dir_and_cache_clear() {
         "sample-dir",
     ])
     .unwrap();
-    let config = prepare_cache_for_scan(scan_root.to_str().unwrap(), &cli).unwrap();
+    let config = prepare_cache_config(Some(&scan_root), &cli).unwrap();
 
     assert_eq!(config.root_dir(), explicit_cache_dir);
     assert!(!stale_file.exists());
@@ -840,10 +854,30 @@ fn prepare_cache_for_scan_creates_incremental_dir_when_enabled() {
         "sample-dir",
     ])
     .unwrap();
-    let config = prepare_cache_for_scan(scan_root.to_str().unwrap(), &cli).unwrap();
+    let config = prepare_cache_config(Some(&scan_root), &cli).unwrap();
 
     assert!(config.incremental_enabled());
     assert!(config.incremental_dir().exists());
+}
+
+#[test]
+fn prepare_cache_config_without_scan_root_uses_non_scan_default() {
+    let cli = crate::cli::Cli::try_parse_from([
+        "provenant",
+        "--json-pp",
+        "scan.json",
+        "--from-json",
+        "sample-scan.json",
+    ])
+    .unwrap();
+
+    let config = prepare_cache_config(None, &cli).unwrap();
+
+    assert_eq!(
+        config.root_dir(),
+        CacheConfig::default_root_dir_without_scan_root()
+    );
+    assert!(!config.incremental_enabled());
 }
 
 #[test]
@@ -885,6 +919,36 @@ fn build_collection_exclude_patterns_skips_explicit_in_tree_cache_dir() {
     fs::write(scan_root.join("docs").join("README.md"), "hello").unwrap();
     fs::write(
         explicit_cache_dir.join("incremental").join("manifest.json"),
+        "cached",
+    )
+    .unwrap();
+
+    let config = CacheConfig::new(explicit_cache_dir.clone());
+    let exclude_patterns = build_collection_exclude_patterns(&scan_root, config.root_dir());
+    let collected = collect_paths(&scan_root, 0, &exclude_patterns);
+
+    assert!(
+        collected
+            .files
+            .iter()
+            .all(|(path, _)| !path.starts_with(&explicit_cache_dir))
+    );
+    assert!(collected.excluded_count >= 1);
+}
+
+#[test]
+fn build_collection_exclude_patterns_skips_license_index_files_under_cache_root() {
+    let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+    let scan_root = temp_dir.path().join("scan");
+    let explicit_cache_dir = scan_root.join("custom-cache");
+    fs::create_dir_all(scan_root.join("docs")).unwrap();
+    fs::create_dir_all(explicit_cache_dir.join("license-index").join("embedded")).unwrap();
+    fs::write(scan_root.join("docs").join("README.md"), "hello").unwrap();
+    fs::write(
+        explicit_cache_dir
+            .join("license-index")
+            .join("embedded")
+            .join("cache.rkyv"),
         "cached",
     )
     .unwrap();

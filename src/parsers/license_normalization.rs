@@ -7,6 +7,7 @@ use crate::license_detection::expression::{
     LicenseExpression, parse_expression, simplify_expression,
 };
 use crate::license_detection::index::LicenseIndex;
+use crate::license_detection::license_cache::LicenseCacheConfig;
 use crate::models::{LicenseDetection, LineNumber, Match, MatchScore, PackageData};
 use crate::utils::spdx::{
     ExpressionRelation, combine_license_expressions, combine_license_expressions_with_relation,
@@ -15,7 +16,9 @@ use crate::utils::spdx::{
 pub(crate) const PARSER_DECLARED_MATCHER: &str = "parser-declared-license";
 
 static PARSER_LICENSE_ENGINE: LazyLock<Option<LicenseDetectionEngine>> = LazyLock::new(|| {
-    match LicenseDetectionEngine::from_embedded() {
+    let cache_config =
+        LicenseCacheConfig::new(LicenseCacheConfig::default_root_dir(), false, false);
+    match LicenseDetectionEngine::from_embedded_with_cache(&cache_config) {
         Ok(engine) => Some(engine),
         Err(error) => {
             warn!(
