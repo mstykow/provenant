@@ -24,10 +24,9 @@ use crate::models::{
     DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha512Digest,
 };
 use crate::parser_warn as warn;
-use crate::parsers::utils::{npm_purl, parse_sri};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, npm_purl, parse_sri, truncate_field};
 use serde_json::Value as JsonValue;
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::Path;
 use yaml_serde::Value;
 
@@ -56,7 +55,7 @@ impl PackageParser for YarnLockParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match crate::parsers::utils::read_file_to_string(path, None) {
             Ok(content) => content,
             Err(e) => {
                 warn!("Failed to read yarn.lock at {:?}: {}", path, e);
@@ -104,7 +103,7 @@ fn parse_yarn_v2(
     let mut dependencies = Vec::new();
     let package_extra_data = extract_yarn_v2_package_extra_data(yaml_map);
 
-    for (spec, details) in yaml_map {
+    for (spec, details) in yaml_map.iter().take(MAX_ITERATION_COUNT) {
         if spec.as_str().map(|s| s == "__metadata").unwrap_or(false) {
             continue;
         }
@@ -123,11 +122,13 @@ fn parse_yarn_v2(
         let resolution = extract_yaml_string(details_map, "resolution").unwrap_or_default();
 
         let (namespace_opt, name, resolved_version) = parse_yarn_v2_resolution(&resolution);
-        let namespace = namespace_opt.unwrap_or_default();
+        let namespace = namespace_opt.map(truncate_field).unwrap_or_default();
+        let name = truncate_field(name);
+        let resolved_version = truncate_field(resolved_version);
         let full_name = full_package_name(&namespace, &name);
         let manifest_info = manifest_dependencies.get(&full_name);
-        let purl = create_purl(&namespace, &name, &resolved_version);
-        let checksum = extract_yaml_string(details_map, "checksum");
+        let purl = create_purl(&namespace, &name, &resolved_version).map(truncate_field);
+        let checksum = extract_yaml_string(details_map, "checksum").map(truncate_field);
 
         let deps_yaml = details_map.get("dependencies");
         let peer_deps_yaml = details_map.get("peerDependencies");
@@ -185,7 +186,7 @@ fn parse_yarn_v2(
 
         let dependency = Dependency {
             purl,
-            extracted_requirement: Some(resolved_version.clone()),
+            extracted_requirement: Some(truncate_field(resolved_version.clone())),
             scope,
             is_runtime,
             is_optional,
@@ -194,7 +195,7 @@ fn parse_yarn_v2(
             resolved_package: Some(Box::new(resolved_package)),
             extra_data: Some(HashMap::from([(
                 "resolution".to_string(),
-                JsonValue::String(resolution),
+                JsonValue::String(truncate_field(resolution)),
             )])),
         };
 
@@ -255,7 +256,7 @@ fn parse_yarn_v1(
     let mut dependencies = Vec::new();
     let mut seen_purls = HashSet::new();
 
-    for block in content.split("\n\n") {
+    for block in content.split("\n\n").take(MAX_ITERATION_COUNT) {
         if is_empty_or_comment_block(block) {
             continue;
         }
@@ -395,6 +396,9 @@ fn parse_yarn_v1_block(
     }
 
     let (namespace, name, constraint) = parse_yarn_v1_requirement(requirement_line);
+    let namespace = truncate_field(namespace);
+    let name = truncate_field(name);
+    let constraint = truncate_field(constraint);
 
     if name.is_empty() {
         return None;
@@ -412,14 +416,16 @@ fn parse_yarn_v1_block(
         }
 
         if trimmed.starts_with("version") {
-            version = extract_quoted_value(trimmed).unwrap_or_default();
+            version = truncate_field(extract_quoted_value(trimmed).unwrap_or_default());
         } else if trimmed.starts_with("resolved") {
-            resolved_url = extract_quoted_value(trimmed).unwrap_or_default();
+            resolved_url = truncate_field(extract_quoted_value(trimmed).unwrap_or_default());
         } else if trimmed.starts_with("integrity") {
-            integrity = trimmed
-                .strip_prefix("integrity")
-                .map(|s| s.trim().to_string())
-                .unwrap_or_default();
+            integrity = truncate_field(
+                trimmed
+                    .strip_prefix("integrity")
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_default(),
+            );
         } else if trimmed.starts_with("dependencies") {
             // Dependencies block - parse indented lines
             continue;
@@ -441,7 +447,7 @@ fn parse_yarn_v1_block(
 
     let full_name = full_package_name(&namespace, &name);
     let manifest_info = manifest_dependencies.get(&full_name);
-    let purl = create_purl(&namespace, &name, &version);
+    let purl = create_purl(&namespace, &name, &version).map(truncate_field);
     let (scope, is_runtime, is_optional, is_direct) = manifest_info
         .map(|info| {
             (
@@ -507,7 +513,7 @@ fn load_manifest_dependency_info(path: &Path) -> HashMap<String, ManifestDepende
     };
 
     let manifest_path = parent.join("package.json");
-    let Ok(content) = fs::read_to_string(manifest_path) else {
+    let Ok(content) = crate::parsers::utils::read_file_to_string(&manifest_path, None) else {
         return HashMap::new();
     };
 
@@ -567,7 +573,7 @@ fn load_manifest_dependency_info(path: &Path) -> HashMap<String, ManifestDepende
         .get("peerDependencies")
         .and_then(|value| value.as_object())
     {
-        for name in peer_dependencies.keys() {
+        for name in peer_dependencies.keys().take(MAX_ITERATION_COUNT) {
             dependencies.insert(
                 name.clone(),
                 ManifestDependencyInfo {
@@ -589,7 +595,7 @@ fn insert_manifest_dependency_info(
     info: ManifestDependencyInfo,
 ) {
     if let Some(entries) = json.get(field).and_then(|value| value.as_object()) {
-        for name in entries.keys() {
+        for name in entries.keys().take(MAX_ITERATION_COUNT) {
             dependencies.insert(name.clone(), info.clone());
         }
     }
@@ -634,8 +640,11 @@ fn parse_yarn_v1_dependency_line(
     }
 
     let (namespace, name, constraint) = parse_yarn_v1_requirement(trimmed);
+    let namespace = truncate_field(namespace);
+    let name = truncate_field(name);
+    let constraint = truncate_field(constraint);
 
-    let purl = create_purl(&namespace, &name, parent_version);
+    let purl = create_purl(&namespace, &name, parent_version).map(truncate_field);
 
     Some(Dependency {
         purl,
@@ -740,7 +749,7 @@ fn extract_yarn_v2_resolved_extra_data(
     let mut extra_data = HashMap::new();
     extra_data.insert(
         "resolution".to_string(),
-        JsonValue::String(resolution.to_string()),
+        JsonValue::String(truncate_field(resolution.to_string())),
     );
 
     for field in ["languageName", "linkType", "bin", "dependenciesMeta"] {
@@ -768,7 +777,7 @@ fn parse_yaml_dependencies(yaml_value: Option<&Value>) -> Vec<Dependency> {
     if let Some(deps_value) = yaml_value
         && let Some(mapping) = deps_value.as_mapping()
     {
-        for (key, value) in mapping {
+        for (key, value) in mapping.iter().take(MAX_ITERATION_COUNT) {
             let name = match key.as_str() {
                 Some(s) => s.to_string(),
                 None => continue,
@@ -780,7 +789,10 @@ fn parse_yaml_dependencies(yaml_value: Option<&Value>) -> Vec<Dependency> {
             };
 
             let (namespace, dep_name) = extract_namespace_and_name(&name);
-            let purl = create_purl(&namespace, &dep_name, &constraint);
+            let namespace = truncate_field(namespace);
+            let dep_name = truncate_field(dep_name);
+            let constraint = truncate_field(constraint);
+            let purl = create_purl(&namespace, &dep_name, &constraint).map(truncate_field);
 
             dependencies.push(Dependency {
                 purl,

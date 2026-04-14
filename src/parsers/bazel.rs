@@ -17,6 +17,7 @@
 //! Python implementation: `reference/scancode-toolkit/src/packagedcode/build.py` (BazelBuildHandler)
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
 use packageurl::PackageUrl;
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use std::path::Path;
@@ -30,6 +31,7 @@ use super::PackageParser;
 
 type StarlarkCallArgs = ast::CallArgsP<ast::AstNoPayload>;
 const SCANCODE_SIMPLE_TOP_LEVEL_KEY: &str = "scancode_simple_top_level";
+const MAX_RECURSION_DEPTH: usize = 50;
 
 struct StarlarkCall<'a> {
     func: &'a ast::AstExpr,
@@ -62,13 +64,16 @@ impl PackageParser for BazelBuildParser {
 /// Parse a Bazel BUILD file and extract all package data
 fn parse_bazel_build(path: &Path) -> Result<Vec<PackageData>, String> {
     let content =
-        std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+        crate::parsers::utils::read_file_to_string(path, None).map_err(|e| e.to_string())?;
     let module = parse_starlark_module("<BUILD>", content)?;
     let scancode_simple_top_level = is_scancode_simple_top_level_module(&module);
 
     let mut packages = Vec::new();
 
-    for statement in top_level_statements(&module) {
+    for statement in top_level_statements(&module)
+        .iter()
+        .take(MAX_ITERATION_COUNT)
+    {
         if let Some(mut package_data) = extract_package_from_statement(statement) {
             set_scancode_simple_top_level(&mut package_data, scancode_simple_top_level);
             packages.push(package_data);
@@ -89,12 +94,12 @@ fn extract_package_from_statement(statement: &ast::AstStmt) -> Option<PackageDat
 
     let name = extract_string_kwarg(&call, "name")?;
     let licenses = extract_string_list_kwarg(&call, "licenses");
-    let purl = build_bazel_purl(&name, None);
+    let purl = build_bazel_purl(&name, None).map(truncate_field);
 
     Some(PackageData {
         package_type: Some(BazelBuildParser::PACKAGE_TYPE),
-        name: Some(name),
-        extracted_license_statement: licenses.map(|licenses| licenses.join(", ")),
+        name: Some(truncate_field(name)),
+        extracted_license_statement: licenses.map(|licenses| truncate_field(licenses.join(", "))),
         datasource_id: Some(DatasourceId::BazelBuild),
         purl,
         ..Default::default()
@@ -112,13 +117,14 @@ fn fallback_package_data(path: &Path) -> PackageData {
         .parent()
         .and_then(|p| p.file_name())
         .and_then(|n| n.to_str())
-        .map(|s| s.to_string());
+        .map(|s| truncate_field(s.to_string()));
 
     PackageData {
         package_type: Some(BazelBuildParser::PACKAGE_TYPE),
         purl: name
             .as_deref()
-            .and_then(|name| build_bazel_purl(name, None)),
+            .and_then(|name| build_bazel_purl(name, None))
+            .map(truncate_field),
         name,
         datasource_id: Some(DatasourceId::BazelBuild),
         ..Default::default()
@@ -248,7 +254,7 @@ impl PackageParser for BazelModuleParser {
 
 fn parse_bazel_module(path: &Path) -> Result<PackageData, String> {
     let content =
-        std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+        crate::parsers::utils::read_file_to_string(path, None).map_err(|e| e.to_string())?;
     let module = parse_starlark_module("<MODULE.bazel>", content)?;
 
     let mut package = default_bazel_module_package_data();
@@ -256,7 +262,10 @@ fn parse_bazel_module(path: &Path) -> Result<PackageData, String> {
     let mut dependencies = Vec::new();
     let mut overrides = Vec::new();
 
-    for statement in top_level_statements(&module) {
+    for statement in top_level_statements(&module)
+        .iter()
+        .take(MAX_ITERATION_COUNT)
+    {
         let Some(call) = extract_call(statement) else {
             continue;
         };
@@ -267,14 +276,17 @@ fn parse_bazel_module(path: &Path) -> Result<PackageData, String> {
 
         match function_name {
             "module" => {
-                package.name = extract_string_kwarg(&call, "name");
-                package.version = extract_string_kwarg(&call, "version");
+                package.name = extract_string_kwarg(&call, "name").map(truncate_field);
+                package.version = extract_string_kwarg(&call, "version").map(truncate_field);
                 package.purl = package
                     .name
                     .as_deref()
-                    .and_then(|name| build_bazel_purl(name, package.version.as_deref()));
+                    .and_then(|name| build_bazel_purl(name, package.version.as_deref()))
+                    .map(truncate_field);
 
-                if let Some(repo_name) = extract_string_kwarg(&call, "repo_name") {
+                if let Some(repo_name) =
+                    extract_string_kwarg(&call, "repo_name").map(truncate_field)
+                {
                     extra_data.insert("repo_name".to_string(), JsonValue::String(repo_name));
                 }
                 if let Some(compatibility_level) = extract_int_kwarg(&call, "compatibility_level") {
@@ -374,7 +386,11 @@ fn extract_string_list_kwarg(call: &StarlarkCall<'_>, key: &str) -> Option<Vec<S
         ast::ExprP::List(items) | ast::ExprP::Tuple(items) => items,
         _ => return None,
     };
-    let values: Vec<_> = items.iter().filter_map(expr_as_string).collect();
+    let values: Vec<_> = items
+        .iter()
+        .take(MAX_ITERATION_COUNT)
+        .filter_map(expr_as_string)
+        .collect();
     (!values.is_empty()).then_some(values)
 }
 
@@ -387,23 +403,26 @@ fn extract_int_kwarg(call: &StarlarkCall<'_>, key: &str) -> Option<i64> {
 }
 
 fn extract_kwarg_json(call: &StarlarkCall<'_>, key: &str) -> Option<JsonValue> {
-    extract_named_kwarg(call, key).and_then(expr_to_json)
+    extract_named_kwarg(call, key).and_then(|expr| expr_to_json(expr, 0))
 }
 
 fn extract_bazel_dependency(call: &StarlarkCall<'_>) -> Option<Dependency> {
-    let name = extract_string_kwarg(call, "name")?;
-    let version = extract_string_kwarg(call, "version");
+    let name = extract_string_kwarg(call, "name").map(truncate_field)?;
+    let version = extract_string_kwarg(call, "version").map(truncate_field);
     let is_dev = extract_bool_kwarg(call, "dev_dependency").unwrap_or(false);
     let mut extra_data = JsonMap::new();
 
-    for field in ["repo_name", "max_compatibility_level", "registry"] {
+    for field in ["repo_name", "max_compatibility_level", "registry"]
+        .iter()
+        .take(MAX_ITERATION_COUNT)
+    {
         if let Some(value) = extract_kwarg_json(call, field) {
             extra_data.insert(field.to_string(), value);
         }
     }
 
     Some(Dependency {
-        purl: build_bazel_purl(&name, version.as_deref()),
+        purl: build_bazel_purl(&name, version.as_deref()).map(truncate_field),
         extracted_requirement: version.clone(),
         scope: Some(if is_dev { "dev" } else { "dependencies" }.to_string()),
         is_runtime: Some(!is_dev),
@@ -418,9 +437,9 @@ fn extract_bazel_dependency(call: &StarlarkCall<'_>) -> Option<Dependency> {
 fn extract_override(kind: &str, call: &StarlarkCall<'_>) -> JsonValue {
     let mut override_map = JsonMap::new();
     override_map.insert("kind".to_string(), JsonValue::String(kind.to_string()));
-    for argument in &call.args.args {
+    for argument in call.args.args.iter().take(MAX_ITERATION_COUNT) {
         if let ast::ArgumentP::Named(name, value) = &argument.node
-            && let Some(value) = expr_to_json(value)
+            && let Some(value) = expr_to_json(value, 0)
         {
             override_map.insert(name.node.clone(), value);
         }
@@ -453,7 +472,10 @@ fn expr_as_i64(expr: &ast::AstExpr) -> Option<i64> {
     }
 }
 
-fn expr_to_json(expr: &ast::AstExpr) -> Option<JsonValue> {
+fn expr_to_json(expr: &ast::AstExpr, depth: usize) -> Option<JsonValue> {
+    if depth > MAX_RECURSION_DEPTH {
+        return None;
+    }
     match &expr.node {
         ast::ExprP::Literal(ast::AstLiteral::String(value)) => {
             Some(JsonValue::String(value.node.clone()))
@@ -475,15 +497,18 @@ fn expr_to_json(expr: &ast::AstExpr) -> Option<JsonValue> {
             _ => None,
         },
         ast::ExprP::List(elts) | ast::ExprP::Tuple(elts) => Some(JsonValue::Array(
-            elts.iter().filter_map(expr_to_json).collect(),
+            elts.iter()
+                .take(MAX_ITERATION_COUNT)
+                .filter_map(|e| expr_to_json(e, depth + 1))
+                .collect(),
         )),
         ast::ExprP::Dict(items) => {
             let mut map = JsonMap::new();
-            for (key, value) in items {
+            for (key, value) in items.iter().take(MAX_ITERATION_COUNT) {
                 let Some(key) = expr_as_string(key) else {
                     continue;
                 };
-                if let Some(value) = expr_to_json(value) {
+                if let Some(value) = expr_to_json(value, depth + 1) {
                     map.insert(key, value);
                 }
             }

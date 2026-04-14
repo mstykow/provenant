@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -7,7 +6,7 @@ use packageurl::PackageUrl;
 use serde_json::Value;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
-use crate::parsers::utils::split_name_email;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, split_name_email, truncate_field};
 
 use super::PackageParser;
 
@@ -21,7 +20,7 @@ impl PackageParser for VcpkgManifestParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match crate::parsers::utils::read_file_to_string(path, None) {
             Ok(content) => content,
             Err(e) => {
                 warn!("Failed to read vcpkg.json at {:?}: {}", path, e);
@@ -50,11 +49,11 @@ fn default_package_data() -> PackageData {
 }
 
 fn parse_vcpkg_manifest(path: &Path, json: &Value) -> PackageData {
-    let name = get_non_empty_string(json, "name");
-    let version = manifest_version(json);
-    let description = get_string_or_array(json, "description");
-    let homepage_url = get_non_empty_string(json, "homepage");
-    let extracted_license_statement = get_string_or_array(json, "license");
+    let name = get_non_empty_string(json, "name").map(truncate_field);
+    let version = manifest_version(json).map(truncate_field);
+    let description = get_string_or_array(json, "description").map(truncate_field);
+    let homepage_url = get_non_empty_string(json, "homepage").map(truncate_field);
+    let extracted_license_statement = get_string_or_array(json, "license").map(truncate_field);
     let parties = extract_maintainers(json);
     let dependencies = extract_dependencies(json);
     let extra_data = build_extra_data(path, json);
@@ -75,7 +74,8 @@ fn parse_vcpkg_manifest(path: &Path, json: &Value) -> PackageData {
         datasource_id: Some(DatasourceId::VcpkgJson),
         purl: name
             .as_deref()
-            .and_then(|name| build_vcpkg_purl(name, version.as_deref())),
+            .and_then(|name| build_vcpkg_purl(name, version.as_deref()))
+            .map(truncate_field),
         ..default_package_data()
     }
 }
@@ -107,6 +107,7 @@ fn extract_maintainers(json: &Value) -> Vec<Party> {
         Value::String(s) => vec![s.clone()],
         Value::Array(values) => values
             .iter()
+            .take(MAX_ITERATION_COUNT)
             .filter_map(Value::as_str)
             .map(ToOwned::to_owned)
             .collect(),
@@ -120,8 +121,8 @@ fn extract_maintainers(json: &Value) -> Vec<Party> {
             Party {
                 r#type: Some("person".to_string()),
                 role: Some("maintainer".to_string()),
-                name,
-                email,
+                name: name.map(truncate_field),
+                email: email.map(truncate_field),
                 url: None,
                 organization: None,
                 organization_url: None,
@@ -135,11 +136,16 @@ fn extract_dependencies(json: &Value) -> Vec<Dependency> {
     let mut dependencies: Vec<Dependency> = json
         .get("dependencies")
         .and_then(Value::as_array)
-        .map(|deps| deps.iter().filter_map(parse_dependency_entry).collect())
+        .map(|deps| {
+            deps.iter()
+                .take(MAX_ITERATION_COUNT)
+                .filter_map(parse_dependency_entry)
+                .collect()
+        })
         .unwrap_or_default();
 
     if let Some(features) = json.get("features").and_then(Value::as_object) {
-        for (feature_name, feature_value) in features {
+        for (feature_name, feature_value) in features.iter().take(MAX_ITERATION_COUNT) {
             let Some(feature_dependencies) =
                 feature_value.get("dependencies").and_then(Value::as_array)
             else {
@@ -148,6 +154,7 @@ fn extract_dependencies(json: &Value) -> Vec<Dependency> {
 
             for dependency in feature_dependencies
                 .iter()
+                .take(MAX_ITERATION_COUNT)
                 .filter_map(parse_dependency_entry)
                 .map(|mut dependency| {
                     let mut extra_data = dependency.extra_data.take().unwrap_or_default();
@@ -170,8 +177,8 @@ fn extract_dependencies(json: &Value) -> Vec<Dependency> {
 fn parse_dependency_entry(value: &Value) -> Option<Dependency> {
     match value {
         Value::String(name) => Some(Dependency {
-            purl: build_vcpkg_purl(name, None),
-            extracted_requirement: Some(name.clone()),
+            purl: build_vcpkg_purl(name, None).map(truncate_field),
+            extracted_requirement: Some(truncate_field(name.clone())),
             scope: Some("dependencies".to_string()),
             is_runtime: Some(true),
             is_optional: Some(false),
@@ -189,8 +196,8 @@ fn parse_dependency_entry(value: &Value) -> Option<Dependency> {
             let extracted_requirement = obj
                 .get("version>=")
                 .and_then(Value::as_str)
-                .map(ToOwned::to_owned)
-                .or_else(|| Some(name.to_string()));
+                .map(|v| truncate_field(v.to_owned()))
+                .or_else(|| Some(truncate_field(name.to_string())));
 
             let host = obj.get("host").and_then(Value::as_bool).unwrap_or(false);
             let mut extra = HashMap::new();
@@ -207,7 +214,7 @@ fn parse_dependency_entry(value: &Value) -> Option<Dependency> {
             }
 
             Some(Dependency {
-                purl: build_vcpkg_purl(name, None),
+                purl: build_vcpkg_purl(name, None).map(truncate_field),
                 extracted_requirement,
                 scope: Some("dependencies".to_string()),
                 is_runtime: Some(!host),
@@ -251,7 +258,7 @@ fn build_extra_data(path: &Path, json: &Value) -> Option<HashMap<String, Value>>
 
 fn read_sibling_configuration(path: &Path) -> Option<Value> {
     let sibling_path = path.with_file_name("vcpkg-configuration.json");
-    let content = fs::read_to_string(&sibling_path).ok()?;
+    let content = crate::parsers::utils::read_file_to_string(&sibling_path, None).ok()?;
     match serde_json::from_str(&content) {
         Ok(value) => Some(value),
         Err(e) => {
