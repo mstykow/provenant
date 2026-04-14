@@ -1210,8 +1210,31 @@ fn looks_like_local_variable_reference(s: &str) -> bool {
         && chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
 }
 
+fn resolve_ruby_read_root(base_dir: Option<&Path>) -> Option<PathBuf> {
+    let base_dir = base_dir?;
+    let current_dir = std::env::current_dir().ok();
+
+    current_dir
+        .and_then(|cwd| {
+            let canonical_cwd = cwd.canonicalize().ok()?;
+            let canonical_base = base_dir.canonicalize().ok()?;
+            canonical_base
+                .starts_with(&canonical_cwd)
+                .then_some(canonical_cwd)
+        })
+        .or_else(|| base_dir.canonicalize().ok())
+}
+
+fn resolve_ruby_read_path(path: PathBuf, allowed_root: &Path) -> Option<PathBuf> {
+    let canonical_path = path.canonicalize().ok()?;
+    canonical_path
+        .starts_with(allowed_root)
+        .then_some(canonical_path)
+}
+
 fn resolve_file_read_argument(args: &str, base_dir: Option<&Path>) -> Option<String> {
     let base_dir = base_dir?;
+    let allowed_root = resolve_ruby_read_root(base_dir.into())?;
     let relative_path = extract_first_ruby_value(args)?;
     if relative_path.is_empty() {
         return None;
@@ -1224,7 +1247,9 @@ fn resolve_file_read_argument(args: &str, base_dir: Option<&Path>) -> Option<Str
         base_dir.join(candidate)
     };
 
-    fs::read_to_string(path)
+    let safe_path = resolve_ruby_read_path(path, &allowed_root)?;
+
+    fs::read_to_string(safe_path)
         .ok()
         .map(|content| content.trim().to_string())
         .filter(|content| !content.is_empty())
@@ -1304,6 +1329,7 @@ fn load_required_ruby_contexts(content: &str, base_dir: Option<&Path>) -> Vec<St
     let Some(base_dir) = base_dir else {
         return contexts;
     };
+    let allowed_root = resolve_ruby_read_root(Some(base_dir));
 
     let require_re = match Regex::new(r#"(?m)^\s*require(?:_relative)?\s+["']([^"']+)["']"#) {
         Ok(re) => re,
@@ -1315,7 +1341,13 @@ fn load_required_ruby_contexts(content: &str, base_dir: Option<&Path>) -> Vec<St
             continue;
         };
         for candidate in candidate_require_paths(base_dir, required) {
-            if let Ok(required_content) = fs::read_to_string(&candidate) {
+            let Some(safe_candidate) = allowed_root
+                .as_deref()
+                .and_then(|root| resolve_ruby_read_path(candidate, root))
+            else {
+                continue;
+            };
+            if let Ok(required_content) = fs::read_to_string(&safe_candidate) {
                 contexts.push(required_content);
                 break;
             }

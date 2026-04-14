@@ -38,6 +38,13 @@ pub fn assign_ruby_package_resources(files: &mut [FileInfo], packages: &[Package
 }
 
 fn ruby_package_root(package: &Package) -> Option<PathBuf> {
+    if package
+        .datasource_ids
+        .contains(&crate::models::DatasourceId::GemArchive)
+    {
+        return None;
+    }
+
     for datafile_path in &package.datafile_paths {
         let path = Path::new(datafile_path);
 

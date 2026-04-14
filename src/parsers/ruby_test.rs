@@ -420,6 +420,78 @@ DEPENDENCIES
         );
     }
 
+    #[test]
+    fn test_gemspec_file_read_does_not_escape_base_dir_without_scan_root() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let package_dir = temp_dir.path().join("pkg");
+        fs::create_dir_all(&package_dir).expect("create package dir");
+        fs::write(temp_dir.path().join("RAILS_VERSION"), "8.2.0.alpha\n")
+            .expect("write outside file");
+
+        let gemspec_path = package_dir.join("rails.gemspec");
+        fs::write(
+            &gemspec_path,
+            r#"
+version = File.read(File.expand_path("../RAILS_VERSION", __dir__)).strip
+
+Gem::Specification.new do |spec|
+  spec.name = "rails"
+  spec.version = version
+  spec.summary = "Full-stack web application framework."
+  spec.homepage = "https://rubyonrails.org"
+  spec.license = "MIT"
+end
+"#,
+        )
+        .expect("write gemspec");
+
+        let package_data =
+            crate::parsers::ruby::GemspecParser::extract_first_package(&gemspec_path);
+
+        assert_eq!(package_data.name.as_deref(), Some("rails"));
+        assert_eq!(package_data.version.as_deref(), Some("version"));
+        assert_eq!(package_data.purl.as_deref(), Some("pkg:gem/rails@version"));
+    }
+
+    #[test]
+    fn test_gemspec_require_relative_does_not_escape_base_dir_without_scan_root() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let package_dir = temp_dir.path().join("pkg");
+        fs::create_dir_all(&package_dir).expect("create package dir");
+        fs::write(
+            temp_dir.path().join("version.rb"),
+            "module Rails\n  VERSION = \"8.2.0.alpha\"\nend\n",
+        )
+        .expect("write outside ruby file");
+
+        let gemspec_path = package_dir.join("rails.gemspec");
+        fs::write(
+            &gemspec_path,
+            r#"
+require_relative "../version"
+
+Gem::Specification.new do |spec|
+  spec.name = "rails"
+  spec.version = Rails::VERSION
+  spec.summary = "Full-stack web application framework."
+  spec.homepage = "https://rubyonrails.org"
+  spec.license = "MIT"
+end
+"#,
+        )
+        .expect("write gemspec");
+
+        let package_data =
+            crate::parsers::ruby::GemspecParser::extract_first_package(&gemspec_path);
+
+        assert_eq!(package_data.name.as_deref(), Some("rails"));
+        assert_eq!(package_data.version.as_deref(), Some("Rails::VERSION"));
+        assert_eq!(
+            package_data.purl.as_deref(),
+            Some("pkg:gem/rails@Rails::VERSION")
+        );
+    }
+
     // ==========================================================================
     // Test: Frozen strings in Gemfile (Bug #1 integration test)
     // ==========================================================================
