@@ -1,6 +1,6 @@
 # Incremental Scanning Implementation Plan
 
-> **Status**: 🟢 Complete — incremental scanning, XDG cache defaults, and cache lock coordination are implemented
+> **Status**: 🟢 Complete — incremental scanning, XDG cache defaults, cache lock coordination, and license index caching are implemented
 > **Current contract owner**: [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) for runtime design, [`../../CLI_GUIDE.md`](../../CLI_GUIDE.md) for user-facing behavior, and [`../../TESTING_STRATEGY.md`](../../TESTING_STRATEGY.md) for verification expectations
 
 ## Overview
@@ -41,12 +41,11 @@ This document is retained as the completed rollout record.
 - Distributed/shared-remote caching
 - Cache eviction or size-management policies
 - A Rust-specific `--no-cache` flag
-- A dedicated persistent startup snapshot cache for custom `--license-rules-path`
-  directories
+- Cache eviction or size-management policies for the license index cache
+- Distributed/shared-remote caching
 
-Custom `--license-rules-path` scans remain supported and still participate in
-the normal incremental manifest workflow. A separate persistent startup snapshot
-cache for that advanced override is not planned.
+Custom `--license-rules-path` scans now participate in the license index cache
+(see below) in addition to the normal incremental manifest workflow.
 
 ## Reference Constraints from Python ScanCode
 
@@ -66,6 +65,7 @@ That means Provenant's `--incremental` remains a beyond-parity feature, while
 | Piece                     | Purpose                                                              | Status         |
 | ------------------------- | -------------------------------------------------------------------- | -------------- |
 | Embedded license artifact | Default startup source for license matching data                     | ✅ Implemented |
+| License index cache       | rkyv-serialized index cache with content-based fingerprinting        | ✅ Implemented |
 | Incremental manifest      | Reuse unchanged file results within the same scan root/options space | ✅ Implemented |
 
 ### Cache Root and CLI Surface
@@ -78,22 +78,27 @@ The cache root is resolved in this order:
 
 Supported CLI behavior:
 
-| Flag              | Role                                               | Final decision  |
-| ----------------- | -------------------------------------------------- | --------------- |
-| `--cache-dir`     | Chooses shared incremental cache root              | Keep            |
-| `--cache-clear`   | Clears selected incremental cache root before scan | Keep            |
-| `--incremental`   | Enables unchanged-file reuse                       | Keep            |
-| `--max-in-memory` | Controls in-run spill behavior                     | Keep for parity |
-| `--no-cache`      | Redundant with opt-in incremental reuse            | Not planned     |
+| Flag                  | Role                                               | Final decision  |
+| --------------------- | -------------------------------------------------- | --------------- |
+| `--cache-dir`         | Chooses shared incremental cache root              | Keep            |
+| `--cache-clear`       | Clears selected incremental cache root before scan | Keep            |
+| `--incremental`       | Enables unchanged-file reuse                       | Keep            |
+| `--max-in-memory`     | Controls in-run spill behavior                     | Keep for parity |
+| `--no-cache`          | Redundant with opt-in incremental reuse            | Not planned     |
+| `--reindex`           | Forces rebuild of license index cache              | Keep            |
+| `--license-cache-dir` | Overrides license index cache directory            | Keep            |
 
-Custom `--license-rules-path` scans continue to use the same incremental manifest workflow. A
-separate persistent startup snapshot cache for that override is not planned.
+Custom `--license-rules-path` scans now participate in the license index cache
+(see License Index Cache section below) in addition to the normal incremental
+manifest workflow.
 
 ### Persistence Model
 
 - Incremental manifests live under
   `incremental/<input-fingerprint>/manifest.json`.
 - Manifests are stored as JSON for readability and operational inspection.
+- License index cache lives as a single `license_cache.rkyv` file next to the
+  provenant binary by default (overridable with `--license-cache-dir`).
 
 ### Invalidation Model
 
@@ -102,6 +107,8 @@ separate persistent startup snapshot cache for that override is not planned.
 - Manifest reuse is gated by a fingerprint derived from relevant scan/runtime
   settings.
 - Manifest decode or compatibility failures degrade to **full rescan + rewrite**.
+- License index cache is invalidated by a SHA-256 content fingerprint stored as
+  a 32-byte prefix in the cache file. Mismatch triggers a full rebuild.
 
 ### Concurrency and Write Safety
 
@@ -117,6 +124,38 @@ separate persistent startup snapshot cache for that override is not planned.
 - file-state fingerprint
 - content SHA256
 - prior `FileInfo` for reuse after validation
+
+**Stored in the license index cache**:
+
+- 32-byte SHA-256 content fingerprint (prefix)
+- rkyv-serialized `CachedLicenseIndex` containing the full runtime index
+  (token dictionaries, automatons, rules, licenses, and index structures)
+- ~340 MB uncompressed on disk
+- SPDX license list version string (so warm path avoids re-parsing the source)
+
+### License Index Cache
+
+The license index cache avoids rebuilding the `LicenseIndex` from scratch on
+every run. Building the index takes ~12s (release); loading from cache takes
+~0.8s (release).
+
+**Fingerprinting strategy**:
+
+- _Embedded rules_ (default): SHA-256 of the raw embedded artifact bytes. The
+  bytes are already in memory via `include_bytes!`, so the hash computation is
+  nearly free (~1ms). This allows the warm path to check the cache _before_
+  doing any zstd decompression or MessagePack deserialization.
+- _Custom rules_ (`--license-rules-path`): SHA-256 of the sorted rules and
+  licenses (sorted by `identifier` / `key`). Sorting ensures deterministic
+  output regardless of filesystem iteration order.
+
+**Cache location**: `license_cache.rkyv` next to the provenant binary by
+default. Override with `--license-cache-dir`.
+
+**Invalidation**: The cache is automatically invalidated when the source rules
+change (fingerprint mismatch) or when `--reindex` is passed. A new provenant
+binary with different embedded rules will also invalidate the cache since the
+artifact bytes differ.
 
 ## Rollout Summary
 
@@ -161,7 +200,11 @@ separate persistent startup snapshot cache for that override is not planned.
 - [x] Platform-native XDG/ProjectDirs defaults are used when no override is supplied
 - [x] Atomic persistence prevents partial manifest files from becoming visible as valid entries
 - [x] Custom `--license-rules-path` scans continue to use the incremental manifest workflow
-- [x] A separate persistent startup snapshot cache for `--license-rules-path` is explicitly not planned
+- [x] License index cache uses rkyv serialization with SHA-256 content fingerprinting
+- [x] Custom `--license-rules-path` scans participate in the license index cache
+- [x] `--reindex` forces a license index cache rebuild
+- [x] `--license-cache-dir` overrides the license index cache location
+- [x] Cache file lives next to the provenant binary by default
 
 ## Dependencies
 
@@ -170,6 +213,8 @@ separate persistent startup snapshot cache for that override is not planned.
 | `sha2`        | Content hashing                       | ✅ Existing |
 | `directories` | Platform-native cache-root resolution | ✅ Added    |
 | `fd-lock`     | Multi-process lock coordination       | ✅ Added    |
+| `rkyv`        | Zero-copy license index serialization | ✅ Added    |
+| `rancor`      | rkyv error handling                   | ✅ Added    |
 
 ## Related Documents
 

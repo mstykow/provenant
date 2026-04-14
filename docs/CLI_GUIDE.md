@@ -155,6 +155,26 @@ dependency logs by default so normal scan output stays readable. To inspect the 
 logs for a debugging run, rerun with `RUST_LOG=pdf_oxide=warn` (or `=error` if you only want
 higher-severity dependency logs).
 
+#### License index cache
+
+On first use with `--license`, Provenant builds a license index from the embedded rules and saves
+it as a cache file next to the binary (`license_cache.rkyv`, ~340 MB). Subsequent runs load the
+cache instead of rebuilding the index, reducing startup from ~12s to ~0.8s.
+
+The cache is automatically invalidated when:
+
+- a new provenant binary ships with different embedded rules (detected via SHA-256 fingerprint)
+- custom rules loaded with `--license-rules-path` change between runs
+
+Two CLI flags control cache behavior:
+
+- `--reindex` — force a cache rebuild, ignoring any existing cache
+- `--license-cache-dir <DIR>` — override the cache directory (default: next to the provenant binary)
+
+```sh
+provenant --json-pp scan.json --license --reindex /path/to/project
+```
+
 ### 3. "I want file metadata such as checksums and type hints"
 
 ```sh
@@ -459,6 +479,8 @@ These are worth learning early because they change what the output means:
 - `--tallies-key-files` requires `--tallies` and `--classify`
 - `--tallies-by-facet` requires `--facet` and `--tallies`
 - `--debian <FILE>` requires `--license`, `--copyright`, and `--license-text`
+- `--reindex` requires `--license`
+- `--license-cache-dir` requires `--license`
 
 ## A Simple Decision Guide
 
