@@ -928,11 +928,11 @@ gem "specific-range", ">= 1.0.0", "< 1.5.0", "!= 1.2.3"
 
         assert_eq!(
             package_data.declared_license_expression.as_deref(),
-            Some("ruby AND bsd-2-clause")
+            Some("bsd-2-clause AND ruby")
         );
         assert_eq!(
             package_data.declared_license_expression_spdx.as_deref(),
-            Some("Ruby AND BSD-2-Clause")
+            Some("BSD-2-Clause AND Ruby")
         );
         assert_eq!(package_data.license_detections.len(), 1);
         assert!(package_data.extracted_license_statement.is_some());
