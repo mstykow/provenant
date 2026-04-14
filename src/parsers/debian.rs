@@ -32,6 +32,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
@@ -42,7 +43,9 @@ use crate::models::{
     PackageType, Party,
 };
 use crate::parsers::rfc822::{self, Rfc822Metadata};
-use crate::parsers::utils::{read_file_to_string, split_name_email};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, read_file_to_string, split_name_email, truncate_field,
+};
 use crate::utils::spdx::combine_license_expressions;
 
 use super::PackageParser;
@@ -52,6 +55,17 @@ use super::license_normalization::{
 };
 
 const PACKAGE_TYPE: PackageType = PackageType::Deb;
+
+const MAX_ARCHIVE_SIZE: u64 = 1024 * 1024 * 1024;
+const MAX_FILE_SIZE: u64 = 50 * 1024 * 1024;
+const MAX_COMPRESSION_RATIO: usize = 100;
+
+static DEP_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"^\s*([a-zA-Z0-9][a-zA-Z0-9.+\-]+)\s*(?:\(([<>=!]+)\s*([^)]+)\))?\s*(?:\[.*\])?\s*$",
+    )
+    .expect("compile-time constant dependency regex")
+});
 
 fn default_package_data(datasource_id: DatasourceId) -> PackageData {
     PackageData {
@@ -277,7 +291,6 @@ fn parse_debian_control(content: &str) -> Vec<PackageData> {
         return Vec::new();
     }
 
-    // Determine if first paragraph is a Source paragraph
     let has_source = rfc822::get_header_first(&paragraphs[0].headers, "source").is_some();
 
     let (source_paragraph, binary_start) = if has_source {
@@ -286,12 +299,17 @@ fn parse_debian_control(content: &str) -> Vec<PackageData> {
         (None, 0)
     };
 
-    // Extract source-level shared metadata
     let source_meta = source_paragraph.map(extract_source_meta);
 
     let mut packages = Vec::new();
+    let mut count = 0usize;
 
     for para in &paragraphs[binary_start..] {
+        count += 1;
+        if count > MAX_ITERATION_COUNT {
+            warn!("parse_debian_control: exceeded MAX_ITERATION_COUNT paragraphs, stopping");
+            break;
+        }
         if let Some(pkg) = build_package_from_paragraph(
             para,
             source_meta.as_ref(),
@@ -318,8 +336,14 @@ fn parse_debian_control(content: &str) -> Vec<PackageData> {
 fn parse_dpkg_status(content: &str) -> Vec<PackageData> {
     let paragraphs = rfc822::parse_rfc822_paragraphs(content);
     let mut packages = Vec::new();
+    let mut count = 0usize;
 
     for para in &paragraphs {
+        count += 1;
+        if count > MAX_ITERATION_COUNT {
+            warn!("parse_dpkg_status: exceeded MAX_ITERATION_COUNT paragraphs, stopping");
+            break;
+        }
         let status = rfc822::get_header_first(&para.headers, "status");
         if status.as_deref() != Some("install ok installed") {
             continue;
@@ -402,15 +426,15 @@ fn extract_source_meta(paragraph: &Rfc822Metadata) -> SourceMeta {
         }
     }
 
-    let homepage_url = rfc822::get_header_first(&paragraph.headers, "homepage");
+    let homepage_url = rfc822::get_header_first(&paragraph.headers, "homepage").map(truncate_field);
 
-    // VCS-Git: may contain branch info after space
     let vcs_url = rfc822::get_header_first(&paragraph.headers, "vcs-git")
-        .map(|url| url.split_whitespace().next().unwrap_or(&url).to_string());
+        .map(|url| truncate_field(url.split_whitespace().next().unwrap_or(&url).to_string()));
 
-    let code_view_url = rfc822::get_header_first(&paragraph.headers, "vcs-browser");
+    let code_view_url =
+        rfc822::get_header_first(&paragraph.headers, "vcs-browser").map(truncate_field);
 
-    let bug_tracking_url = rfc822::get_header_first(&paragraph.headers, "bugs");
+    let bug_tracking_url = rfc822::get_header_first(&paragraph.headers, "bugs").map(truncate_field);
 
     SourceMeta {
         parties,
@@ -430,12 +454,14 @@ fn build_package_from_paragraph(
     source_meta: Option<&SourceMeta>,
     datasource_id: DatasourceId,
 ) -> Option<PackageData> {
-    let name = rfc822::get_header_first(&paragraph.headers, "package")?;
-    let version = rfc822::get_header_first(&paragraph.headers, "version");
-    let architecture = rfc822::get_header_first(&paragraph.headers, "architecture");
-    let description = rfc822::get_header_first(&paragraph.headers, "description");
+    let name = rfc822::get_header_first(&paragraph.headers, "package").map(truncate_field)?;
+    let version = rfc822::get_header_first(&paragraph.headers, "version").map(truncate_field);
+    let architecture =
+        rfc822::get_header_first(&paragraph.headers, "architecture").map(truncate_field);
+    let description =
+        rfc822::get_header_first(&paragraph.headers, "description").map(truncate_field);
     let maintainer_str = rfc822::get_header_first(&paragraph.headers, "maintainer");
-    let homepage = rfc822::get_header_first(&paragraph.headers, "homepage");
+    let homepage = rfc822::get_header_first(&paragraph.headers, "homepage").map(truncate_field);
     let source_field = rfc822::get_header_first(&paragraph.headers, "source");
     let section = rfc822::get_header_first(&paragraph.headers, "section");
     let installed_size = rfc822::get_header_first(&paragraph.headers, "installed-size");
@@ -564,8 +590,8 @@ fn build_package_from_paragraph(
 }
 
 fn build_package_from_source_paragraph(paragraph: &Rfc822Metadata) -> Option<PackageData> {
-    let name = rfc822::get_header_first(&paragraph.headers, "source")?;
-    let version = rfc822::get_header_first(&paragraph.headers, "version");
+    let name = rfc822::get_header_first(&paragraph.headers, "source").map(truncate_field)?;
+    let version = rfc822::get_header_first(&paragraph.headers, "version").map(truncate_field);
     let maintainer_str = rfc822::get_header_first(&paragraph.headers, "maintainer");
 
     let namespace = detect_namespace(version.as_deref(), maintainer_str.as_deref());
@@ -731,20 +757,12 @@ fn parse_dependency_field(
 ) -> Vec<Dependency> {
     let mut deps = Vec::new();
 
-    // Regex for parsing individual dependency: name (operator version)
-    // Debian operators: <<, <=, =, >=, >>
-    let dep_re = Regex::new(
-        r"^\s*([a-zA-Z0-9][a-zA-Z0-9.+\-]+)\s*(?:\(([<>=!]+)\s*([^)]+)\))?\s*(?:\[.*\])?\s*$",
-    )
-    .unwrap();
-
-    for group in dep_str.split(',') {
+    for group in dep_str.split(',').take(MAX_ITERATION_COUNT) {
         let group = group.trim();
         if group.is_empty() {
             continue;
         }
 
-        // Handle alternatives (|)
         let alternatives: Vec<&str> = group.split('|').collect();
         let has_alternatives = alternatives.len() > 1;
 
@@ -754,7 +772,7 @@ fn parse_dependency_field(
                 continue;
             }
 
-            if let Some(caps) = dep_re.captures(alt) {
+            if let Some(caps) = DEP_RE.captures(alt) {
                 let pkg_name = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("");
                 let operator = caps.get(2).map(|m| m.as_str().trim());
                 let version = caps.get(3).map(|m| m.as_str().trim());
@@ -763,13 +781,12 @@ fn parse_dependency_field(
                     continue;
                 }
 
-                // Skip substitution variables like ${shlibs:Depends}
                 if pkg_name.starts_with('$') {
                     continue;
                 }
 
                 let extracted_requirement = match (operator, version) {
-                    (Some(op), Some(ver)) => Some(format!("{} {}", op, ver)),
+                    (Some(op), Some(ver)) => Some(truncate_field(format!("{} {}", op, ver))),
                     _ => None,
                 };
 
@@ -905,8 +922,14 @@ fn strip_pgp_signature(content: &str) -> String {
     let mut result = String::new();
     let mut in_pgp_block = false;
     let mut in_signature = false;
+    let mut count = 0usize;
 
     for line in content.lines() {
+        count += 1;
+        if count > MAX_ITERATION_COUNT {
+            warn!("strip_pgp_signature: exceeded MAX_ITERATION_COUNT lines, stopping");
+            break;
+        }
         if line.starts_with("-----BEGIN PGP SIGNED MESSAGE-----") {
             in_pgp_block = true;
             continue;
@@ -940,9 +963,9 @@ fn parse_dsc_content(content: &str) -> PackageData {
     let metadata = rfc822::parse_rfc822_content(&clean_content);
     let headers = &metadata.headers;
 
-    let name = rfc822::get_header_first(headers, "source");
-    let version = rfc822::get_header_first(headers, "version");
-    let architecture = rfc822::get_header_first(headers, "architecture");
+    let name = rfc822::get_header_first(headers, "source").map(truncate_field);
+    let version = rfc822::get_header_first(headers, "version").map(truncate_field);
+    let architecture = rfc822::get_header_first(headers, "architecture").map(truncate_field);
     let namespace = Some("debian".to_string());
 
     let mut package = PackageData {
@@ -951,10 +974,10 @@ fn parse_dsc_content(content: &str) -> PackageData {
         namespace: namespace.clone(),
         name: name.clone(),
         version: version.clone(),
-        description: rfc822::get_header_first(headers, "description"),
-        homepage_url: rfc822::get_header_first(headers, "homepage"),
-        vcs_url: rfc822::get_header_first(headers, "vcs-git"),
-        code_view_url: rfc822::get_header_first(headers, "vcs-browser"),
+        description: rfc822::get_header_first(headers, "description").map(truncate_field),
+        homepage_url: rfc822::get_header_first(headers, "homepage").map(truncate_field),
+        vcs_url: rfc822::get_header_first(headers, "vcs-git").map(truncate_field),
+        code_view_url: rfc822::get_header_first(headers, "vcs-browser").map(truncate_field),
         ..Default::default()
     };
 
@@ -1112,13 +1135,14 @@ fn parse_source_tarball_filename(filename: &str, datasource_id: DatasourceId) ->
         return default_package_data(datasource_id);
     }
 
-    let name = parts[0].to_string();
+    let name = truncate_field(parts[0].to_string());
     let version_with_suffix = parts[1];
 
     let version = version_with_suffix
         .trim_end_matches(".orig")
         .trim_end_matches(".debian")
         .to_string();
+    let version = truncate_field(version);
 
     let namespace = Some("debian".to_string());
 
@@ -1233,16 +1257,25 @@ fn parse_debian_file_list(
     datasource_id: DatasourceId,
 ) -> PackageData {
     let (name, arch_qualifier) = if let Some((pkg, arch)) = filename.split_once(':') {
-        (Some(pkg.to_string()), Some(arch.to_string()))
+        (
+            Some(truncate_field(pkg.to_string())),
+            Some(arch.to_string()),
+        )
     } else if filename == "md5sums" {
         (None, None)
     } else {
-        (Some(filename.to_string()), None)
+        (Some(truncate_field(filename.to_string())), None)
     };
 
     let mut file_references = Vec::new();
+    let mut count = 0usize;
 
     for line in content.lines() {
+        count += 1;
+        if count > MAX_ITERATION_COUNT {
+            warn!("parse_debian_file_list: exceeded MAX_ITERATION_COUNT lines, stopping");
+            break;
+        }
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
@@ -1405,7 +1438,13 @@ fn parse_copyright_file(content: &str, package_name: Option<&str>) -> PackageDat
     let mut other_license_detections = Vec::new();
 
     if is_dep5 {
+        let mut para_count = 0usize;
         for para in &paragraphs {
+            para_count += 1;
+            if para_count > MAX_ITERATION_COUNT {
+                warn!("parse_copyright_file: exceeded MAX_ITERATION_COUNT paragraphs, stopping");
+                break;
+            }
             if let Some(copyright_text) =
                 rfc822::get_header_first(&para.metadata.headers, "copyright")
             {
@@ -1482,7 +1521,7 @@ fn parse_copyright_file(content: &str, package_name: Option<&str>) -> PackageDat
     let extracted_license_statement = if license_statements.is_empty() {
         None
     } else {
-        Some(license_statements.join(" AND "))
+        Some(truncate_field(license_statements.join(" AND ")))
     };
 
     let license_detections = primary_license_detection.into_iter().collect::<Vec<_>>();
@@ -1507,7 +1546,7 @@ fn parse_copyright_file(content: &str, package_name: Option<&str>) -> PackageDat
         datasource_id: Some(DatasourceId::DebianCopyright),
         package_type: Some(PACKAGE_TYPE),
         namespace: namespace.clone(),
-        name: package_name.map(|s| s.to_string()),
+        name: package_name.map(|s| truncate_field(s.to_string())),
         parties,
         declared_license_expression,
         declared_license_expression_spdx,
@@ -1531,8 +1570,16 @@ fn parse_copyright_paragraphs_with_lines(content: &str) -> Vec<CopyrightParagrap
     let mut paragraphs = Vec::new();
     let mut current_lines = Vec::new();
     let mut current_start_line = 1usize;
+    let mut count = 0usize;
 
     for (idx, line) in content.lines().enumerate() {
+        count += 1;
+        if count > MAX_ITERATION_COUNT {
+            warn!(
+                "parse_copyright_paragraphs_with_lines: exceeded MAX_ITERATION_COUNT lines, stopping"
+            );
+            break;
+        }
         let line_no = idx + 1;
         if line.is_empty() {
             if !current_lines.is_empty() {
@@ -1617,7 +1664,16 @@ fn build_primary_license_detection(
     line_no: usize,
 ) -> LicenseDetection {
     let normalized = normalize_debian_license_name(license_name);
-    let line = LineNumber::new(line_no).unwrap();
+    let line = match LineNumber::new(line_no) {
+        Some(l) => l,
+        None => {
+            warn!(
+                "build_primary_license_detection: line number {} out of range, clamping to 1",
+                line_no
+            );
+            LineNumber::new(1).expect("1 is a valid line number")
+        }
+    };
 
     build_declared_license_detection(
         &normalized,
@@ -1644,8 +1700,14 @@ fn normalize_debian_license_name(license_name: &str) -> NormalizedDeclaredLicens
 
 fn parse_copyright_holders(text: &str) -> Vec<String> {
     let mut holders = Vec::new();
+    let mut count = 0usize;
 
     for line in text.lines() {
+        count += 1;
+        if count > MAX_ITERATION_COUNT {
+            warn!("parse_copyright_holders: exceeded MAX_ITERATION_COUNT lines, stopping");
+            break;
+        }
         let line = line.trim();
         if line.is_empty() {
             continue;
@@ -1678,8 +1740,14 @@ fn parse_copyright_holders(text: &str) -> Vec<String> {
 fn extract_unstructured_field(content: &str, field_name: &str) -> Option<String> {
     let mut in_field = false;
     let mut field_content = String::new();
+    let mut count = 0usize;
 
     for line in content.lines() {
+        count += 1;
+        if count > MAX_ITERATION_COUNT {
+            warn!("extract_unstructured_field: exceeded MAX_ITERATION_COUNT lines, stopping");
+            break;
+        }
         if line.starts_with(field_name) {
             in_field = true;
             field_content.push_str(line.trim_start_matches(field_name).trim());
@@ -1698,7 +1766,7 @@ fn extract_unstructured_field(content: &str, field_name: &str) -> Option<String>
     if trimmed.is_empty() {
         None
     } else {
-        Some(trimmed.to_string())
+        Some(truncate_field(trimmed.to_string()))
     }
 }
 
@@ -1743,40 +1811,107 @@ fn extract_deb_archive(path: &Path) -> Result<PackageData, String> {
     use liblzma::read::XzDecoder;
     use std::io::{Cursor, Read};
 
+    let file_metadata =
+        std::fs::metadata(path).map_err(|e| format!("Failed to stat .deb file: {}", e))?;
+    if file_metadata.len() > MAX_ARCHIVE_SIZE {
+        return Err(format!(
+            ".deb file exceeds MAX_ARCHIVE_SIZE ({} bytes)",
+            file_metadata.len()
+        ));
+    }
+    let compressed_size = file_metadata.len() as usize;
+
     let file = std::fs::File::open(path).map_err(|e| format!("Failed to open .deb file: {}", e))?;
 
     let mut archive = ar::Archive::new(file);
     let mut package: Option<PackageData> = None;
+    let mut total_extracted: usize = 0;
 
     while let Some(entry_result) = archive.next_entry() {
-        let mut entry = entry_result.map_err(|e| format!("Failed to read ar entry: {}", e))?;
+        let entry = entry_result.map_err(|e| format!("Failed to read ar entry: {}", e))?;
 
-        let entry_name = std::str::from_utf8(entry.header().identifier())
-            .map_err(|e| format!("Invalid entry name: {}", e))?;
+        let entry_name_raw = entry.header().identifier();
+        let entry_name = String::from_utf8_lossy(entry_name_raw);
+        let had_replacement = entry_name_raw.iter().any(|&b| b > 127);
+        if had_replacement {
+            warn!(
+                "extract_deb_archive: non-UTF-8 bytes in entry name replaced with lossy conversion"
+            );
+        }
         let entry_name = entry_name.trim().to_string();
 
         if entry_name == "control.tar.gz" || entry_name.starts_with("control.tar") {
+            let entry_size = entry.header().size();
+            if entry_size > MAX_FILE_SIZE {
+                warn!(
+                    "extract_deb_archive: control tar entry exceeds MAX_FILE_SIZE ({} bytes), skipping",
+                    entry_size
+                );
+                continue;
+            }
             let mut control_data = Vec::new();
             entry
+                .take(MAX_FILE_SIZE)
                 .read_to_end(&mut control_data)
                 .map_err(|e| format!("Failed to read control.tar.gz: {}", e))?;
 
+            total_extracted += control_data.len();
+            if compressed_size > 0 && total_extracted / compressed_size > MAX_COMPRESSION_RATIO {
+                warn!(
+                    "extract_deb_archive: compression ratio exceeded MAX_COMPRESSION_RATIO, stopping"
+                );
+                break;
+            }
+            if total_extracted > MAX_ARCHIVE_SIZE as usize {
+                warn!(
+                    "extract_deb_archive: cumulative extracted size exceeded MAX_ARCHIVE_SIZE, stopping"
+                );
+                break;
+            }
+
             if entry_name.ends_with(".gz") {
                 let decoder = GzDecoder::new(Cursor::new(control_data));
-                if let Some(parsed_package) = parse_control_tar_archive(decoder)? {
+                if let Some(parsed_package) =
+                    parse_control_tar_archive(decoder, &mut total_extracted, compressed_size)?
+                {
                     package = Some(parsed_package);
                 }
             } else if entry_name.ends_with(".xz") {
                 let decoder = XzDecoder::new(Cursor::new(control_data));
-                if let Some(parsed_package) = parse_control_tar_archive(decoder)? {
+                if let Some(parsed_package) =
+                    parse_control_tar_archive(decoder, &mut total_extracted, compressed_size)?
+                {
                     package = Some(parsed_package);
                 }
             }
         } else if entry_name.starts_with("data.tar") {
+            let entry_size = entry.header().size();
+            if entry_size > MAX_FILE_SIZE {
+                warn!(
+                    "extract_deb_archive: data tar entry exceeds MAX_FILE_SIZE ({} bytes), skipping",
+                    entry_size
+                );
+                continue;
+            }
             let mut data = Vec::new();
             entry
+                .take(MAX_FILE_SIZE)
                 .read_to_end(&mut data)
                 .map_err(|e| format!("Failed to read data archive: {}", e))?;
+
+            total_extracted += data.len();
+            if compressed_size > 0 && total_extracted / compressed_size > MAX_COMPRESSION_RATIO {
+                warn!(
+                    "extract_deb_archive: compression ratio exceeded MAX_COMPRESSION_RATIO, stopping"
+                );
+                break;
+            }
+            if total_extracted > MAX_ARCHIVE_SIZE as usize {
+                warn!(
+                    "extract_deb_archive: cumulative extracted size exceeded MAX_ARCHIVE_SIZE, stopping"
+                );
+                break;
+            }
 
             let Some(current_package) = package.as_mut() else {
                 continue;
@@ -1784,10 +1919,20 @@ fn extract_deb_archive(path: &Path) -> Result<PackageData, String> {
 
             if entry_name.ends_with(".gz") {
                 let decoder = GzDecoder::new(Cursor::new(data));
-                merge_deb_data_archive(decoder, current_package)?;
+                merge_deb_data_archive(
+                    decoder,
+                    current_package,
+                    &mut total_extracted,
+                    compressed_size,
+                )?;
             } else if entry_name.ends_with(".xz") {
                 let decoder = XzDecoder::new(Cursor::new(data));
-                merge_deb_data_archive(decoder, current_package)?;
+                merge_deb_data_archive(
+                    decoder,
+                    current_package,
+                    &mut total_extracted,
+                    compressed_size,
+                )?;
             }
         }
     }
@@ -1795,7 +1940,11 @@ fn extract_deb_archive(path: &Path) -> Result<PackageData, String> {
     package.ok_or_else(|| ".deb archive does not contain control.tar.* metadata".to_string())
 }
 
-fn parse_control_tar_archive<R: std::io::Read>(reader: R) -> Result<Option<PackageData>, String> {
+fn parse_control_tar_archive<R: std::io::Read>(
+    reader: R,
+    total_extracted: &mut usize,
+    compressed_size: usize,
+) -> Result<Option<PackageData>, String> {
     use std::io::Read;
 
     let mut tar_archive = tar::Archive::new(reader);
@@ -1804,18 +1953,51 @@ fn parse_control_tar_archive<R: std::io::Read>(reader: R) -> Result<Option<Packa
         .entries()
         .map_err(|e| format!("Failed to read tar entries: {}", e))?
     {
-        let mut tar_entry =
-            tar_entry_result.map_err(|e| format!("Failed to read tar entry: {}", e))?;
+        let tar_entry = tar_entry_result.map_err(|e| format!("Failed to read tar entry: {}", e))?;
 
         let tar_path = tar_entry
             .path()
             .map_err(|e| format!("Failed to get tar path: {}", e))?;
 
+        if tar_path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            warn!(
+                "parse_control_tar_archive: skipping tar entry with path traversal: {:?}",
+                tar_path
+            );
+            continue;
+        }
+
+        if tar_entry.size() > MAX_FILE_SIZE {
+            warn!(
+                "parse_control_tar_archive: tar entry exceeds MAX_FILE_SIZE ({} bytes), skipping",
+                tar_entry.size()
+            );
+            continue;
+        }
+
         if tar_path.ends_with("control") {
             let mut control_content = String::new();
             tar_entry
+                .take(MAX_FILE_SIZE)
                 .read_to_string(&mut control_content)
                 .map_err(|e| format!("Failed to read control file: {}", e))?;
+
+            *total_extracted += control_content.len();
+            if compressed_size > 0 && *total_extracted / compressed_size > MAX_COMPRESSION_RATIO {
+                warn!(
+                    "parse_control_tar_archive: compression ratio exceeded MAX_COMPRESSION_RATIO, stopping"
+                );
+                return Ok(None);
+            }
+            if *total_extracted > MAX_ARCHIVE_SIZE as usize {
+                warn!(
+                    "parse_control_tar_archive: cumulative extracted size exceeded MAX_ARCHIVE_SIZE, stopping"
+                );
+                return Ok(None);
+            }
 
             let paragraphs = rfc822::parse_rfc822_paragraphs(&control_content);
             if paragraphs.is_empty() {
@@ -1838,6 +2020,8 @@ fn parse_control_tar_archive<R: std::io::Read>(reader: R) -> Result<Option<Packa
 fn merge_deb_data_archive<R: std::io::Read>(
     reader: R,
     package: &mut PackageData,
+    total_extracted: &mut usize,
+    compressed_size: usize,
 ) -> Result<(), String> {
     use std::io::Read;
 
@@ -1847,12 +2031,32 @@ fn merge_deb_data_archive<R: std::io::Read>(
         .entries()
         .map_err(|e| format!("Failed to read data tar entries: {}", e))?
     {
-        let mut tar_entry =
+        let tar_entry =
             tar_entry_result.map_err(|e| format!("Failed to read data tar entry: {}", e))?;
 
         let tar_path = tar_entry
             .path()
             .map_err(|e| format!("Failed to get data tar path: {}", e))?;
+
+        if tar_path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            warn!(
+                "merge_deb_data_archive: skipping tar entry with path traversal: {:?}",
+                tar_path
+            );
+            continue;
+        }
+
+        if tar_entry.size() > MAX_FILE_SIZE {
+            warn!(
+                "merge_deb_data_archive: tar entry exceeds MAX_FILE_SIZE ({} bytes), skipping",
+                tar_entry.size()
+            );
+            continue;
+        }
+
         let tar_path_str = tar_path.to_string_lossy();
 
         if tar_path_str.ends_with(&format!(
@@ -1864,8 +2068,23 @@ fn merge_deb_data_archive<R: std::io::Read>(
         )) {
             let mut copyright_content = String::new();
             tar_entry
+                .take(MAX_FILE_SIZE)
                 .read_to_string(&mut copyright_content)
                 .map_err(|e| format!("Failed to read copyright file from data tar: {}", e))?;
+
+            *total_extracted += copyright_content.len();
+            if compressed_size > 0 && *total_extracted / compressed_size > MAX_COMPRESSION_RATIO {
+                warn!(
+                    "merge_deb_data_archive: compression ratio exceeded MAX_COMPRESSION_RATIO, stopping"
+                );
+                return Ok(());
+            }
+            if *total_extracted > MAX_ARCHIVE_SIZE as usize {
+                warn!(
+                    "merge_deb_data_archive: cumulative extracted size exceeded MAX_ARCHIVE_SIZE, stopping"
+                );
+                return Ok(());
+            }
 
             let copyright_pkg = parse_copyright_file(&copyright_content, package.name.as_deref());
             merge_debian_copyright_into_package(package, &copyright_pkg);
@@ -1905,10 +2124,10 @@ fn parse_deb_filename(filename: &str) -> PackageData {
         return default_package_data(DatasourceId::DebianDeb);
     }
 
-    let name = parts[0].to_string();
-    let version = parts[1].to_string();
+    let name = truncate_field(parts[0].to_string());
+    let version = truncate_field(parts[1].to_string());
     let architecture = if parts.len() >= 3 {
-        Some(parts[2].to_string())
+        Some(truncate_field(parts[2].to_string()))
     } else {
         None
     };
@@ -2040,8 +2259,14 @@ pub(crate) fn extract_package_name_from_deb_path(path: &Path) -> Option<String> 
 
 fn parse_md5sums_in_package(content: &str, package_name: Option<&str>) -> PackageData {
     let mut file_references = Vec::new();
+    let mut count = 0usize;
 
     for line in content.lines() {
+        count += 1;
+        if count > MAX_ITERATION_COUNT {
+            warn!("parse_md5sums_in_package: exceeded MAX_ITERATION_COUNT lines, stopping");
+            break;
+        }
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
@@ -2082,7 +2307,7 @@ fn parse_md5sums_in_package(content: &str, package_name: Option<&str>) -> Packag
         datasource_id: Some(DatasourceId::DebianMd5SumsInExtractedDeb),
         package_type: Some(PACKAGE_TYPE),
         namespace: namespace.clone(),
-        name: package_name.map(|s| s.to_string()),
+        name: package_name.map(|s| truncate_field(s.to_string())),
         file_references,
         ..Default::default()
     };

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use packageurl::PackageUrl;
 use serde_json::Value as JsonValue;
 
@@ -11,6 +11,8 @@ use crate::models::{
 };
 
 use super::PackageParser;
+
+const MAX_RECURSION_DEPTH: usize = 50;
 
 pub struct HexLockParser;
 
@@ -30,6 +32,7 @@ struct Parser<'a> {
     chars: Vec<char>,
     pos: usize,
     source: &'a str,
+    depth: usize,
 }
 
 impl PackageParser for HexLockParser {
@@ -40,7 +43,7 @@ impl PackageParser for HexLockParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(e) => {
                 warn!("Failed to read mix.lock at {:?}: {}", path, e);
@@ -81,7 +84,7 @@ fn parse_mix_lock(content: &str) -> Result<PackageData, String> {
     };
 
     let mut dependencies = Vec::new();
-    for (key, value) in entries {
+    for (key, value) in entries.into_iter().take(MAX_ITERATION_COUNT) {
         if let Some(dep) = build_dependency_from_lock_entry(&key, &value)? {
             dependencies.push(dep);
         }
@@ -96,7 +99,7 @@ fn build_dependency_from_lock_entry(
     key: &Term,
     value: &Term,
 ) -> Result<Option<Dependency>, String> {
-    let app_name = term_to_string(key)?;
+    let app_name = truncate_field(term_to_string(key)?);
 
     let tuple = match value {
         Term::Tuple(items) => items,
@@ -112,13 +115,13 @@ fn build_dependency_from_lock_entry(
         return Ok(None);
     }
 
-    let package_name = term_to_atom(&tuple[1])?;
-    let version = term_to_string(&tuple[2])?;
-    let inner_checksum = term_to_string(&tuple[3])?;
+    let package_name = truncate_field(term_to_atom(&tuple[1])?);
+    let version = truncate_field(term_to_string(&tuple[2])?);
+    let inner_checksum = truncate_field(term_to_string(&tuple[3])?);
     let managers = term_to_atom_list(&tuple[4])?;
     let nested_dependencies = term_to_dependency_tuples(&tuple[5])?;
-    let repo = term_to_string(&tuple[6])?;
-    let outer_checksum = term_to_string(&tuple[7])?;
+    let repo = truncate_field(term_to_string(&tuple[6])?);
+    let outer_checksum = truncate_field(term_to_string(&tuple[7])?);
 
     let purl = build_hex_purl(&package_name, Some(&version), Some(&repo));
     let resolved_package = ResolvedPackage {
@@ -130,25 +133,33 @@ fn build_dependency_from_lock_entry(
         md5: None,
         is_virtual: true,
         extra_data: Some(HashMap::from([
-            ("repo".to_string(), JsonValue::String(repo.clone())),
+            (
+                "repo".to_string(),
+                JsonValue::String(truncate_field(repo.clone())),
+            ),
             (
                 "outer_checksum".to_string(),
-                JsonValue::String(outer_checksum.clone()),
+                JsonValue::String(truncate_field(outer_checksum.clone())),
             ),
             (
                 "managers".to_string(),
-                JsonValue::Array(managers.into_iter().map(JsonValue::String).collect()),
+                JsonValue::Array(
+                    managers
+                        .into_iter()
+                        .map(|m| JsonValue::String(truncate_field(m)))
+                        .collect(),
+                ),
             ),
         ])),
         dependencies: nested_dependencies
             .into_iter()
             .map(build_nested_dependency)
             .collect::<Result<Vec<_>, _>>()?,
-        repository_homepage_url: Some(build_hexdocs_homepage(&package_name, &repo)),
+        repository_homepage_url: Some(truncate_field(build_hexdocs_homepage(&package_name, &repo))),
         repository_download_url: None,
-        api_data_url: Some(build_hex_api_url(&package_name, &repo)),
+        api_data_url: Some(truncate_field(build_hex_api_url(&package_name, &repo))),
         datasource_id: Some(DatasourceId::HexMixLock),
-        purl: build_hex_purl(&package_name, Some(&version), Some(&repo)),
+        purl: build_hex_purl(&package_name, Some(&version), Some(&repo)).map(truncate_field),
         ..ResolvedPackage::new(
             PackageType::Hex,
             if repo == "hexpm" {
@@ -162,8 +173,8 @@ fn build_dependency_from_lock_entry(
     };
 
     Ok(Some(Dependency {
-        purl,
-        extracted_requirement: Some(version),
+        purl: purl.map(truncate_field),
+        extracted_requirement: Some(truncate_field(version)),
         scope: Some("dependencies".to_string()),
         is_runtime: None,
         is_optional: None,
@@ -172,19 +183,21 @@ fn build_dependency_from_lock_entry(
         resolved_package: Some(Box::new(resolved_package)),
         extra_data: Some(HashMap::from([(
             "app".to_string(),
-            JsonValue::String(app_name),
+            JsonValue::String(truncate_field(app_name)),
         )])),
     }))
 }
 
 fn build_nested_dependency(tuple: DependencyTuple) -> Result<Dependency, String> {
-    let package_name = tuple
-        .hex_name
-        .clone()
-        .unwrap_or_else(|| tuple.app_name.clone());
+    let package_name = truncate_field(
+        tuple
+            .hex_name
+            .clone()
+            .unwrap_or_else(|| tuple.app_name.clone()),
+    );
     Ok(Dependency {
-        purl: build_hex_purl(&package_name, None, tuple.repo.as_deref()),
-        extracted_requirement: Some(tuple.requirement),
+        purl: build_hex_purl(&package_name, None, tuple.repo.as_deref()).map(truncate_field),
+        extracted_requirement: Some(truncate_field(tuple.requirement)),
         scope: Some("dependencies".to_string()),
         is_runtime: Some(!tuple.optional),
         is_optional: Some(tuple.optional),
@@ -219,17 +232,25 @@ fn term_to_dependency_tuples(term: &Term) -> Result<Vec<DependencyTuple>, String
     };
 
     let mut result = Vec::new();
-    for item in items {
+    for item in items.iter().take(MAX_ITERATION_COUNT) {
         let tuple = match item {
             Term::Tuple(items) if items.len() == 3 => items,
             _ => continue,
         };
 
-        let app_name = term_to_atom(&tuple[0])?;
-        let requirement = term_to_string(&tuple[1])?;
+        let app_name = truncate_field(term_to_atom(&tuple[0])?);
+        let requirement = truncate_field(term_to_string(&tuple[1])?);
         let opts = term_to_keyword_map(&tuple[2])?;
-        let hex_name = opts.get("hex").map(term_to_atom).transpose()?;
-        let repo = opts.get("repo").map(term_to_string).transpose()?;
+        let hex_name = opts
+            .get("hex")
+            .map(term_to_atom)
+            .transpose()?
+            .map(truncate_field);
+        let repo = opts
+            .get("repo")
+            .map(term_to_string)
+            .transpose()?
+            .map(truncate_field);
         let optional = opts
             .get("optional")
             .and_then(|term| match term {
@@ -327,10 +348,14 @@ impl<'a> Parser<'a> {
             chars: source.chars().collect(),
             pos: 0,
             source,
+            depth: 0,
         }
     }
 
     fn parse_term(&mut self) -> Result<Term, String> {
+        if self.depth > MAX_RECURSION_DEPTH {
+            return Err("recursion depth exceeded".to_string());
+        }
         self.skip_ws();
         match self.peek() {
             Some('%') => self.parse_map(),
@@ -349,21 +374,31 @@ impl<'a> Parser<'a> {
         self.expect('%')?;
         self.expect('{')?;
         let mut entries = Vec::new();
+        let mut count = 0usize;
         loop {
             self.skip_ws();
             if self.peek() == Some('}') {
                 self.pos += 1;
                 break;
             }
+            if count >= MAX_ITERATION_COUNT {
+                warn!("map entry count exceeded MAX_ITERATION_COUNT in mix.lock");
+                break;
+            }
+            self.depth += 1;
             let key = self.parse_term()?;
+            self.depth -= 1;
             self.skip_ws();
             if self.starts_with("=>") {
                 self.expect_sequence("=>")?;
             } else {
                 self.expect(':')?;
             }
+            self.depth += 1;
             let value = self.parse_term()?;
+            self.depth -= 1;
             entries.push((key, value));
+            count += 1;
             self.skip_ws();
             if self.peek() == Some(',') {
                 self.pos += 1;
@@ -375,13 +410,21 @@ impl<'a> Parser<'a> {
     fn parse_tuple(&mut self) -> Result<Term, String> {
         self.expect('{')?;
         let mut items = Vec::new();
+        let mut count = 0usize;
         loop {
             self.skip_ws();
             if self.peek() == Some('}') {
                 self.pos += 1;
                 break;
             }
+            if count >= MAX_ITERATION_COUNT {
+                warn!("tuple item count exceeded MAX_ITERATION_COUNT in mix.lock");
+                break;
+            }
+            self.depth += 1;
             items.push(self.parse_term()?);
+            self.depth -= 1;
+            count += 1;
             self.skip_ws();
             if self.peek() == Some(',') {
                 self.pos += 1;
@@ -395,6 +438,7 @@ impl<'a> Parser<'a> {
         let mut keyword_entries = Vec::new();
         let mut items = Vec::new();
         let mut saw_keyword = false;
+        let mut count = 0usize;
 
         loop {
             self.skip_ws();
@@ -402,15 +446,24 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 break;
             }
+            if count >= MAX_ITERATION_COUNT {
+                warn!("list item count exceeded MAX_ITERATION_COUNT in mix.lock");
+                break;
+            }
 
             if let Some(keyword) = self.try_parse_keyword_key() {
                 saw_keyword = true;
+                self.depth += 1;
                 let value = self.parse_term()?;
+                self.depth -= 1;
                 keyword_entries.push((keyword, value));
             } else {
+                self.depth += 1;
                 items.push(self.parse_term()?);
+                self.depth -= 1;
             }
 
+            count += 1;
             self.skip_ws();
             if self.peek() == Some(',') {
                 self.pos += 1;
