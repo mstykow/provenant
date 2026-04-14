@@ -21,7 +21,7 @@ The license detection system is a multi-phase, multi-strategy detection engine t
 | `--license-score`            | Filter returned license detections by minimum score    |
 | `--license-url-template`     | Customize top-level `licensedb_url` references         |
 | `--reindex`                  | Force rebuild of the license index cache               |
-| `--license-cache-dir`        | Override the license index cache directory             |
+| `--no-license-index-cache`   | Disable persistent license index cache reads/writes    |
 
 **Default behavior**: Uses the built-in embedded license index. No external files required.
 
@@ -33,8 +33,9 @@ The license detection system is a multi-phase, multi-strategy detection engine t
 
 Provenant caches the built `LicenseIndex` as an rkyv-serialized file to avoid rebuilding it on every run. The cache reduces license engine startup from ~12s (cold) to ~0.8s (warm, release build).
 
-- **Format**: Single flat file (`license_cache.rkyv`, ~340 MB) with a 32-byte SHA-256 fingerprint prefix
-- **Default location**: Next to the provenant binary (overridable with `--license-cache-dir`)
+- **Format**: Fingerprinted rkyv files under the shared cache root, for example `license-index/embedded/<fingerprint>.rkyv` or `license-index/custom/<fingerprint>.rkyv`, each with a 32-byte SHA-256 fingerprint prefix
+- **Default location**: Under the shared cache root selected by `--cache-dir`, `PROVENANT_CACHE`, or the platform-native default
+- **Opt-out**: `--no-license-index-cache` skips both persistent reads and persistent writes for that run
 - **Invalidation**: Automatic when the source rules change (fingerprint mismatch) or when `--reindex` is passed
 - **Fingerprinting**: Embedded rules use SHA-256 of the raw artifact bytes; custom rules use SHA-256 of the sorted rules and licenses
 
