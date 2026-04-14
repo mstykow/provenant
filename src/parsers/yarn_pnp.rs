@@ -1,10 +1,9 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::Path;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 use crate::parser_warn as warn;
-use crate::parsers::utils::npm_purl;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, npm_purl, truncate_field};
 
 use super::PackageParser;
 
@@ -18,7 +17,7 @@ impl PackageParser for YarnPnpParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match crate::parsers::utils::read_file_to_string(path, None) {
             Ok(content) => content,
             Err(error) => {
                 warn!("Failed to read .pnp.cjs at {:?}: {}", path, error);
@@ -63,7 +62,7 @@ fn parse_yarn_pnp(content: &str) -> Result<PackageData, String> {
     let mut seen_locators = HashSet::new();
     let mut dependencies = Vec::new();
 
-    for entry in registry_entries {
+    for entry in registry_entries.iter().take(MAX_ITERATION_COUNT) {
         let Some(locator) = entry.get(0).and_then(serde_json::Value::as_str) else {
             continue;
         };
@@ -74,10 +73,15 @@ fn parse_yarn_pnp(content: &str) -> Result<PackageData, String> {
             continue;
         };
 
-        let version = reference.strip_prefix("npm:");
+        let version = reference
+            .strip_prefix("npm:")
+            .map(|v| truncate_field(v.to_string()));
         dependencies.push(Dependency {
-            purl: npm_purl(name, version),
-            extracted_requirement: Some(reference.to_string()),
+            purl: npm_purl(
+                truncate_field(name.to_string()).as_str(),
+                version.as_deref(),
+            ),
+            extracted_requirement: Some(truncate_field(reference.to_string())),
             scope: Some("dependencies".to_string()),
             is_runtime: Some(true),
             is_optional: Some(false),
@@ -90,7 +94,7 @@ fn parse_yarn_pnp(content: &str) -> Result<PackageData, String> {
             resolved_package: None,
             extra_data: Some(HashMap::from([(
                 "locator".to_string(),
-                serde_json::Value::String(locator.to_string()),
+                serde_json::Value::String(truncate_field(locator.to_string())),
             )])),
         });
     }
@@ -117,11 +121,15 @@ fn parse_dependency_pairs(value: &serde_json::Value) -> HashMap<String, String> 
     if let Some(array) = value.as_array() {
         return array
             .iter()
+            .take(MAX_ITERATION_COUNT)
             .filter_map(|pair| {
                 let pair = pair.as_array()?;
                 let name = pair.first()?.as_str()?;
                 let reference = pair.get(1)?.as_str()?;
-                Some((name.to_string(), reference.to_string()))
+                Some((
+                    truncate_field(name.to_string()),
+                    truncate_field(reference.to_string()),
+                ))
             })
             .collect();
     }
@@ -130,10 +138,14 @@ fn parse_dependency_pairs(value: &serde_json::Value) -> HashMap<String, String> 
         .as_object()
         .into_iter()
         .flatten()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|(name, reference)| {
-            reference
-                .as_str()
-                .map(|reference| (name.clone(), reference.to_string()))
+            reference.as_str().map(|reference| {
+                (
+                    truncate_field(name.clone()),
+                    truncate_field(reference.to_string()),
+                )
+            })
         })
         .collect()
 }

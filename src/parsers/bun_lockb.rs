@@ -8,7 +8,7 @@ use serde_json::Value as JsonValue;
 use crate::models::{
     DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha512Digest,
 };
-use crate::parsers::utils::{npm_purl, parse_sri};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, npm_purl, parse_sri, truncate_field};
 
 use super::PackageParser;
 
@@ -20,6 +20,7 @@ const FIELD_COUNT_WITHOUT_SCRIPTS: usize = 7;
 const FIELD_COUNT_WITH_SCRIPTS: usize = 8;
 const PACKAGE_FIELD_LENGTHS: [usize; 8] = [8, 8, 64, 8, 8, 88, 20, 48];
 const DEPENDENCY_ENTRY_SIZE: usize = 26;
+const MAX_MANIFEST_SIZE: u64 = 100 * 1024 * 1024;
 
 #[derive(Clone, Copy)]
 struct SliceRef {
@@ -73,6 +74,21 @@ impl PackageParser for BunLockbParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
+        let file_size = match std::fs::metadata(path) {
+            Ok(meta) => meta.len(),
+            Err(e) => {
+                warn!("Failed to stat bun.lockb at {:?}: {}", path, e);
+                return vec![default_package_data()];
+            }
+        };
+        if file_size > MAX_MANIFEST_SIZE {
+            warn!(
+                "bun.lockb at {:?} is too large ({} bytes, max {})",
+                path, file_size, MAX_MANIFEST_SIZE
+            );
+            return vec![default_package_data()];
+        }
+
         let bytes = match std::fs::read(path) {
             Ok(bytes) => bytes,
             Err(e) => {
@@ -160,6 +176,13 @@ fn parse_packages(
     packages_begin: usize,
     packages_end: usize,
 ) -> Result<Vec<BunLockbPackage>, String> {
+    if list_len > MAX_ITERATION_COUNT {
+        return Err(format!(
+            "bun.lockb package count {} exceeds maximum {}",
+            list_len, MAX_ITERATION_COUNT
+        ));
+    }
+
     let mut packages = vec![
         BunLockbPackage {
             name_ref: [0; 8],
@@ -291,7 +314,7 @@ fn build_package_data_from_lockb(
         .ok_or_else(|| "bun.lockb contains no packages".to_string())?;
 
     let mut package_data = default_package_data();
-    package_data.name = Some(root_package.name.clone());
+    package_data.name = Some(truncate_field(root_package.name.clone()));
     package_data.purl = npm_purl(&root_package.name, None);
 
     let extra_data = package_data.extra_data.get_or_insert_with(HashMap::new);
@@ -329,6 +352,7 @@ fn parse_dependency_entries(
 
     bytes
         .chunks_exact(DEPENDENCY_ENTRY_SIZE)
+        .take(MAX_ITERATION_COUNT)
         .map(|entry| {
             Ok(BunLockbDependencyEntry {
                 name: decode_bun_string(&entry[0..8], string_bytes)?,
@@ -346,7 +370,13 @@ fn parse_resolution_ids(bytes: &[u8]) -> Result<Vec<u32>, String> {
 
     bytes
         .chunks_exact(4)
-        .map(|chunk| Ok(u32::from_le_bytes(chunk.try_into().unwrap())))
+        .take(MAX_ITERATION_COUNT)
+        .map(|chunk| {
+            let arr: [u8; 4] = chunk
+                .try_into()
+                .map_err(|_| "Invalid bun.lockb resolution entry".to_string())?;
+            Ok(u32::from_le_bytes(arr))
+        })
         .collect()
 }
 
@@ -368,6 +398,7 @@ fn build_dependencies_for_package(
     dep_slice
         .iter()
         .zip(res_slice.iter())
+        .take(MAX_ITERATION_COUNT)
         .map(|(entry, package_id)| {
             let manifest = behavior_to_manifest(entry.behavior);
             let resolved_package = if (*package_id as usize) < packages.len() {
@@ -388,8 +419,8 @@ fn build_dependencies_for_package(
                 .and_then(|pkg| (!pkg.version.is_empty()).then_some(pkg.version.as_str()));
 
             Ok(Dependency {
-                purl: npm_purl(&entry.name, version),
-                extracted_requirement: Some(entry.literal.clone()),
+                purl: npm_purl(&truncate_field(entry.name.clone()), version),
+                extracted_requirement: Some(truncate_field(entry.literal.clone())),
                 scope: Some(manifest.scope.to_string()),
                 is_runtime: Some(manifest.is_runtime),
                 is_optional: Some(manifest.is_optional),
@@ -413,7 +444,11 @@ fn build_resolved_package(
 
     Ok(ResolvedPackage {
         primary_language: Some("JavaScript".to_string()),
-        download_url: package.resolution.resolved.clone(),
+        download_url: package
+            .resolution
+            .resolved
+            .as_ref()
+            .map(|s| truncate_field(s.clone())),
         sha1: None,
         sha256: None,
         sha512: package
@@ -439,9 +474,10 @@ fn build_resolved_package(
         purl: None,
         ..ResolvedPackage::new(
             PackageType::Npm,
-            namespace.unwrap_or_default(),
-            name.unwrap_or_else(|| package.name.clone()),
-            package.resolution.version.clone().unwrap_or_default(),
+            namespace.map(truncate_field).unwrap_or_default(),
+            name.map(truncate_field)
+                .unwrap_or_else(|| truncate_field(package.name.clone())),
+            truncate_field(package.resolution.version.clone().unwrap_or_default()),
         )
     })
 }
@@ -450,8 +486,16 @@ fn parse_slice_ref(bytes: &[u8]) -> Result<SliceRef, String> {
     if bytes.len() != 8 {
         return Err("Invalid bun.lockb slice length".to_string());
     }
-    let off = u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
-    let len = u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
+    let off = u32::from_le_bytes(
+        bytes[0..4]
+            .try_into()
+            .map_err(|_| "Invalid bun.lockb slice offset".to_string())?,
+    ) as usize;
+    let len = u32::from_le_bytes(
+        bytes[4..8]
+            .try_into()
+            .map_err(|_| "Invalid bun.lockb slice length".to_string())?,
+    ) as usize;
     Ok(SliceRef { off, len })
 }
 
@@ -468,9 +512,21 @@ fn parse_resolution(bytes: &[u8], string_bytes: &[u8]) -> Result<BunLockbResolut
         }),
         2 => {
             let resolved = decode_bun_string(&bytes[8..16], string_bytes)?;
-            let major = u32::from_le_bytes(bytes[16..20].try_into().unwrap());
-            let minor = u32::from_le_bytes(bytes[20..24].try_into().unwrap());
-            let patch = u32::from_le_bytes(bytes[24..28].try_into().unwrap());
+            let major = u32::from_le_bytes(
+                bytes[16..20]
+                    .try_into()
+                    .map_err(|_| "Invalid bun.lockb version major".to_string())?,
+            );
+            let minor = u32::from_le_bytes(
+                bytes[20..24]
+                    .try_into()
+                    .map_err(|_| "Invalid bun.lockb version minor".to_string())?,
+            );
+            let patch = u32::from_le_bytes(
+                bytes[24..28]
+                    .try_into()
+                    .map_err(|_| "Invalid bun.lockb version patch".to_string())?,
+            );
             let tag_suffix = decode_version_suffix(&bytes[32..64], string_bytes)?;
             let version = if let Some(suffix) = tag_suffix {
                 format!("{}.{}.{}{}", major, minor, patch, suffix)
@@ -479,22 +535,22 @@ fn parse_resolution(bytes: &[u8], string_bytes: &[u8]) -> Result<BunLockbResolut
             };
 
             Ok(BunLockbResolution {
-                version: Some(version),
-                resolved: (!resolved.is_empty()).then_some(resolved),
+                version: Some(truncate_field(version)),
+                resolved: (!resolved.is_empty()).then_some(truncate_field(resolved)),
             })
         }
         72 => {
             let workspace = decode_bun_string(&bytes[8..16], string_bytes)?;
             Ok(BunLockbResolution {
                 version: None,
-                resolved: Some(format!("workspace:{}", workspace)),
+                resolved: Some(truncate_field(format!("workspace:{}", workspace))),
             })
         }
         4 | 8 | 16 | 24 | 32 | 64 | 80 | 100 => {
             let resolved = decode_bun_string(&bytes[8..16], string_bytes)?;
             Ok(BunLockbResolution {
                 version: None,
-                resolved: (!resolved.is_empty()).then_some(resolved),
+                resolved: (!resolved.is_empty()).then_some(truncate_field(resolved)),
             })
         }
         _ => Err(format!("Unsupported bun.lockb resolution tag {}", tag)),
@@ -528,20 +584,35 @@ fn decode_bun_string(bytes: &[u8], string_bytes: &[u8]) -> Result<String, String
 
     if bytes[7] & 0x80 == 0 {
         let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
-        return std::str::from_utf8(&bytes[..end])
-            .map(|s| s.to_string())
-            .map_err(|e| format!("Invalid inline bun.lockb UTF-8: {}", e));
+        let slice = &bytes[..end];
+        return if let Ok(s) = std::str::from_utf8(slice) {
+            Ok(s.to_string())
+        } else {
+            warn!("Invalid bun.lockb UTF-8 in string, using lossy conversion");
+            Ok(String::from_utf8_lossy(slice).into_owned())
+        };
     }
 
-    let off = u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
-    let len_raw = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
+    let off = u32::from_le_bytes(
+        bytes[0..4]
+            .try_into()
+            .map_err(|_| "Invalid bun.lockb string offset".to_string())?,
+    ) as usize;
+    let len_raw = u32::from_le_bytes(
+        bytes[4..8]
+            .try_into()
+            .map_err(|_| "Invalid bun.lockb string length".to_string())?,
+    );
     let len = (len_raw & 0x7fff_ffff) as usize;
     let slice = string_bytes
         .get(off..off + len)
         .ok_or_else(|| "bun.lockb string offset out of bounds".to_string())?;
-    std::str::from_utf8(slice)
-        .map(|s| s.to_string())
-        .map_err(|e| format!("Invalid external bun.lockb UTF-8: {}", e))
+    if let Ok(s) = std::str::from_utf8(slice) {
+        Ok(s.to_string())
+    } else {
+        warn!("Invalid bun.lockb UTF-8 in string, using lossy conversion");
+        Ok(String::from_utf8_lossy(slice).into_owned())
+    }
 }
 
 fn parse_integrity(bytes: &[u8]) -> Option<String> {
