@@ -55,6 +55,13 @@ Provenant does not treat "compatible" as a vague marketing claim. Public verific
 
 Those documents track what has already been compared against ScanCode, provide the maintained package-detection verification record, and point to the saved verification artifacts used to review remaining gaps.
 
+One important nuance in that comparison work is that Provenant distinguishes between ScanCode's
+formal schema contract and ScanCode's common emitted defaults. For dependency booleans such as
+`is_runtime`, `is_optional`, `is_pinned`, and `is_direct`, the formal ScanCode schema allows
+nullable and omitted values. Provenant therefore keeps these fields unset when the datasource does
+not actually prove them, rather than coercing output to common ScanCode defaults and overstating
+dependency intent.
+
 ## Related Docs
 
 - [README](../README.md) for installation, usage, and positioning
