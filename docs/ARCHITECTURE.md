@@ -167,6 +167,13 @@ All parsers output the same normalized `PackageData` shape. The durable categori
 
 The field-level schema evolves over time and is owned by the Rust model definitions, not this overview.
 
+For dependency booleans and similar semantic hints, Provenant prefers **honest unknowns** over
+invented certainty. If a manifest or lockfile does not prove flags such as `is_runtime`,
+`is_optional`, `is_direct`, or `is_pinned`, the parser should leave them unset rather than
+coercing ScanCode-style defaults into the core data model. Compatibility-oriented normalization, if
+ever needed for stricter downstream consumers, belongs in an explicit output-layer decision rather
+than in parser semantics.
+
 **Rationale:**
 
 - Normalizes differences across all supported ecosystems

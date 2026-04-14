@@ -152,6 +152,14 @@ If the license surface is weak or ambiguous, keep the parser raw-only:
 - Populate `dependencies` whenever the format actually carries dependency data.
 - Preserve the ecosystem's native scope terminology unless an existing parser pattern says
   otherwise.
+- When the source format does **not** prove dependency intent, leave semantic booleans such as
+  `is_runtime`, `is_optional`, `is_direct`, and `is_pinned` unset instead of guessing or forcing
+  defaults.
+- Only emit those booleans when the datasource can actually justify them. Lockfiles and other
+  resolved-package inventories often prove version pinning or direct/transitive structure, but they
+  frequently do **not** prove runtime-vs-development or optional-vs-required semantics.
+- If a downstream compatibility surface ever needs stricter normalization for these fields, do that
+  as an explicit output-layer transformation rather than changing parser semantics.
 - Treat parser tests and parser goldens as interface-contract checks for dependency fields, not just
   smoke tests.
 
