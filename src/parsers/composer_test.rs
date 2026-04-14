@@ -342,11 +342,11 @@ mod tests {
         );
         assert_eq!(
             package_data.declared_license_expression.as_deref(),
-            Some("mit OR apache-2.0")
+            Some("apache-2.0 OR mit")
         );
         assert_eq!(
             package_data.declared_license_expression_spdx.as_deref(),
-            Some("MIT OR Apache-2.0")
+            Some("Apache-2.0 OR MIT")
         );
         assert_eq!(package_data.license_detections.len(), 1);
     }
@@ -396,11 +396,11 @@ mod tests {
         );
         assert_eq!(
             package_data.declared_license_expression.as_deref(),
-            Some("mit OR apache-2.0")
+            Some("apache-2.0 OR mit")
         );
         assert_eq!(
             package_data.declared_license_expression_spdx.as_deref(),
-            Some("MIT OR Apache-2.0")
+            Some("Apache-2.0 OR MIT")
         );
         assert_eq!(package_data.license_detections.len(), 1);
     }

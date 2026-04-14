@@ -653,8 +653,8 @@ mod tests {
         let (declared, declared_spdx, detections) =
             normalize_spdx_declared_license(Some("MIT OR Apache-2.0"));
 
-        assert_eq!(declared.as_deref(), Some("mit OR apache-2.0"));
-        assert_eq!(declared_spdx.as_deref(), Some("MIT OR Apache-2.0"));
+        assert_eq!(declared.as_deref(), Some("apache-2.0 OR mit"));
+        assert_eq!(declared_spdx.as_deref(), Some("Apache-2.0 OR MIT"));
         assert_eq!(detections.len(), 1);
     }
 
@@ -687,10 +687,10 @@ mod tests {
         )
         .expect("combined expression");
 
-        assert_eq!(combined.declared_license_expression, "mit OR apache-2.0");
+        assert_eq!(combined.declared_license_expression, "apache-2.0 OR mit");
         assert_eq!(
             combined.declared_license_expression_spdx,
-            "MIT OR Apache-2.0"
+            "Apache-2.0 OR MIT"
         );
     }
 
