@@ -121,7 +121,7 @@ mod tests {
         let mapping = build_spdx_mapping(&licenses);
 
         let result = mapping.expression_scancode_to_spdx("mit AND gpl-2.0-plus");
-        assert_eq!(result.unwrap(), "MIT AND GPL-2.0-or-later");
+        assert_eq!(result.unwrap(), "GPL-2.0-or-later AND MIT");
     }
 
     #[test]
@@ -130,7 +130,7 @@ mod tests {
         let mapping = build_spdx_mapping(&licenses);
 
         let result = mapping.expression_scancode_to_spdx("mit OR apache-2.0");
-        assert_eq!(result.unwrap(), "MIT OR Apache-2.0");
+        assert_eq!(result.unwrap(), "Apache-2.0 OR MIT");
     }
 
     #[test]
@@ -196,7 +196,7 @@ mod tests {
 
         assert!(spdx_expr.is_ok());
         let exp_str = spdx_expr.unwrap();
-        assert_eq!(exp_str, "MIT OR GPL-2.0-or-later");
+        assert_eq!(exp_str, "GPL-2.0-or-later OR MIT");
     }
 
     #[test]
@@ -205,7 +205,7 @@ mod tests {
         let mapping = build_spdx_mapping(&licenses);
 
         let result = mapping.expression_scancode_to_spdx("MIT AND Apache-2.0");
-        assert_eq!(result.unwrap(), "MIT AND Apache-2.0");
+        assert_eq!(result.unwrap(), "Apache-2.0 AND MIT");
     }
 
     #[test]
