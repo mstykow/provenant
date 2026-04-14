@@ -405,6 +405,7 @@ fn run_case(
     args.push(context.provenant_bin.display().to_string());
     args.push("--json".to_string());
     args.push(output_file.display().to_string());
+    args.push("--no-license-index-cache".to_string());
     args.extend(context.scan_args.clone());
     args.extend([
         "--exclude".to_string(),
