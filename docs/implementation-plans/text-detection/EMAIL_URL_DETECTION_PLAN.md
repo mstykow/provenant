@@ -491,7 +491,7 @@ src/
 
 **Integration Points:**
 
-- `src/scanner/process.rs`: Add email/URL detection calls
+- `src/scanner/process/pipeline.rs`: Call email/URL detection during per-file scanning
 - `src/models/file_info.rs`: Use updated `OutputURL` and new `OutputEmail`
 - Output JSON: Match Python ScanCode's output format exactly
 

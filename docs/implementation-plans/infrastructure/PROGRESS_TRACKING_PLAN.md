@@ -168,7 +168,7 @@ The progress/reporting path is now implemented around a centralized manager:
 
 - **`src/progress.rs`**: `ScanProgress`, `ProgressMode`, `ScanStats`, `format_size`, phase timing, TTY/color handling, summary rendering.
 - **`src/main.rs`**: Progress lifecycle wiring for discovery → SPDX load → scan → assembly → output → summary.
-- **`src/scanner/process.rs`**: Per-file progress callbacks via `progress.file_completed(...)`, mode-aware error display, runtime error reporting.
+- **`src/scanner/process/orchestrator.rs` + `src/scanner/process/pipeline.rs`**: Per-file progress callbacks via `progress.file_completed(...)`, mode-aware error display, runtime error reporting.
 - **`src/scanner/count.rs`**: `count_with_size(...)` for initial file/dir/excluded/bytes statistics.
 - **Logging bridge**: `indicatif-log-bridge` + runtime `env_logger` initialization.
 

@@ -361,9 +361,9 @@ Rust also now supports a **beyond-parity** image metadata path for supported ima
 The scanner now derives text through a shared helper in `src/utils/file.rs`, and the copyright golden harness reuses the same helper via `src/copyright/golden_utils.rs::read_input_content()`. This keeps runtime and fixture ingestion aligned for the inputs exercised by this plan.
 
 - **Python reference behavior**: `textcode.analysis.numbered_text_lines()` is path-aware and routes extractable PDFs and text-bearing binaries into the same downstream clue detectors.
-- **Current Rust runtime behavior**: `src/scanner/process.rs` now uses the shared path-aware ingestion helper before copyright/email/url/license text detection, so the live scanner no longer misses these input classes.
+- **Current Rust runtime behavior**: the scanner process pipeline under `src/scanner/process/` now uses the shared path-aware ingestion helper before copyright/email/url/license text detection, so the live scanner no longer misses these input classes.
 - **Not part of this parity plan**: image/media metadata extraction. The Python reference `tests/textcode/test_analysis.py` explicitly asserts that files in `media_without_text/` yield no numbered text lines, so lack of image metadata scanning is not a parity shortfall here. Rust now implements EXIF/XMP image metadata clue extraction for supported image formats as a separate beyond-parity capability.
-- **Separate intentional divergence**: `src/scanner/process.rs` still short-circuits PEM certificate files before clue extraction. This differs from the Python reference, but it remains an explicit product decision made to resolve Rust issue `#222`, not a hidden parity gap in the copyright/email/url scanner path.
+- **Separate intentional divergence**: the scanner process special-case handling under `src/scanner/process/` still short-circuits PEM certificate files before clue extraction. This differs from the Python reference, but it remains an explicit product decision made to resolve Rust issue `#222`, not a hidden parity gap in the copyright/email/url scanner path.
 
 **Classification**: Closed parity gap.
 
