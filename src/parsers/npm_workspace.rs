@@ -18,7 +18,8 @@
 
 use crate::models::PackageData;
 use crate::models::{DatasourceId, PackageType};
-use std::fs;
+use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use std::path::Path;
 use yaml_serde::Value;
 
@@ -40,10 +41,10 @@ impl PackageParser for NpmWorkspaceParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(e) => {
-                crate::parser_warn!("Failed to read npm workspace file at {:?}: {}", path, e);
+                warn!("Failed to read npm workspace file at {:?}: {}", path, e);
                 return vec![default_package_data()];
             }
         };
@@ -78,8 +79,9 @@ fn parse_workspace_file(workspace_data: &Value) -> PackageData {
         Some(workspace_patterns) => {
             let workspaces_vec: Vec<String> = workspace_patterns
                 .iter()
+                .take(MAX_ITERATION_COUNT)
                 .filter_map(|v| v.as_str())
-                .map(|s| s.to_string())
+                .map(|s| truncate_field(s.to_string()))
                 .collect();
 
             PackageData {

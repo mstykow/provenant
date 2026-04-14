@@ -23,7 +23,7 @@
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 use crate::parser_warn as warn;
-use crate::parsers::utils::read_file_to_string;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use std::borrow::Cow;
@@ -869,7 +869,16 @@ impl PackageParser for MavenParser {
         let mut in_relocation = false;
         let mut relocation = MavenDependencyData::default();
 
+        let mut iteration_count: usize = 0;
         loop {
+            iteration_count += 1;
+            if iteration_count > MAX_ITERATION_COUNT {
+                warn!(
+                    "Exceeded MAX_ITERATION_COUNT ({}) parsing pom.xml at {:?}; stopping early",
+                    MAX_ITERATION_COUNT, path
+                );
+                break;
+            }
             match reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e)) => {
                     let element_name = e.name().as_ref().to_vec();
@@ -964,7 +973,17 @@ impl PackageParser for MavenParser {
                     }
                 }
                 Ok(Event::Text(e)) => {
-                    let text = e.decode().unwrap_or_default().to_string();
+                    let text = match e.decode() {
+                        Ok(Cow::Borrowed(s)) => s.to_string(),
+                        Ok(Cow::Owned(s)) => s,
+                        Err(_) => {
+                            warn!(
+                                "Invalid UTF-8 in XML text content in {:?}; using lossy conversion",
+                                path
+                            );
+                            String::from_utf8_lossy(e.as_ref()).into_owned()
+                        }
+                    };
                     let current_path = current_element.last().map(|v| v.as_slice());
                     let current_parent = current_element
                         .len()
@@ -979,7 +998,7 @@ impl PackageParser for MavenParser {
                             .last()
                             .and_then(|name| std::str::from_utf8(name).ok())
                         {
-                            properties.insert(property_name.to_string(), text);
+                            properties.insert(property_name.to_string(), truncate_field(text));
                         } else {
                             warn!("Failed to decode Maven property name in {:?}", path);
                         }
@@ -1297,7 +1316,20 @@ impl PackageParser for MavenParser {
                     }
                 }
                 Ok(Event::Comment(e)) => {
-                    let comment = e.decode().unwrap_or_default().trim().to_string();
+                    let comment = match e.decode() {
+                        Ok(Cow::Borrowed(s)) => s.trim().to_string(),
+                        Ok(Cow::Owned(s)) => s.trim().to_string(),
+                        Err(_) => {
+                            warn!(
+                                "Invalid UTF-8 in XML comment in {:?}; using lossy conversion",
+                                path
+                            );
+                            String::from_utf8_lossy(e.as_ref())
+                                .into_owned()
+                                .trim()
+                                .to_string()
+                        }
+                    };
                     if current_element.is_empty()
                         && !comment.is_empty()
                         && is_license_like_comment(&comment)
@@ -1954,7 +1986,8 @@ impl PackageParser for MavenParser {
             package_data.extra_data = Some(extra_data);
         }
 
-        package_data.extracted_license_statement = build_license_statement(&licenses);
+        package_data.extracted_license_statement =
+            build_license_statement(&licenses).map(truncate_field);
         let (declared_license_expression, declared_license_expression_spdx, license_detections) =
             build_maven_declared_license_data(
                 &licenses,
@@ -1963,6 +1996,26 @@ impl PackageParser for MavenParser {
         package_data.declared_license_expression = declared_license_expression;
         package_data.declared_license_expression_spdx = declared_license_expression_spdx;
         package_data.license_detections = license_detections;
+
+        package_data.namespace = package_data.namespace.map(truncate_field);
+        package_data.name = package_data.name.map(truncate_field);
+        package_data.version = package_data.version.map(truncate_field);
+        package_data.description = package_data.description.map(truncate_field);
+        package_data.homepage_url = package_data.homepage_url.map(truncate_field);
+        package_data.vcs_url = package_data.vcs_url.map(truncate_field);
+        package_data.purl = package_data.purl.map(truncate_field);
+        package_data.code_view_url = package_data.code_view_url.map(truncate_field);
+        package_data.bug_tracking_url = package_data.bug_tracking_url.map(truncate_field);
+        package_data.download_url = package_data.download_url.map(truncate_field);
+        package_data.repository_homepage_url =
+            package_data.repository_homepage_url.map(truncate_field);
+        package_data.repository_download_url =
+            package_data.repository_download_url.map(truncate_field);
+        package_data.api_data_url = package_data.api_data_url.map(truncate_field);
+        for dep in &mut package_data.dependencies {
+            dep.purl = dep.purl.take().map(truncate_field);
+            dep.extracted_requirement = dep.extracted_requirement.take().map(truncate_field);
+        }
 
         vec![package_data]
     }
@@ -2109,9 +2162,9 @@ fn parse_pom_properties(path: &Path) -> PackageData {
         }
     }
 
-    package_data.namespace = group_id.clone();
-    package_data.name = artifact_id.clone();
-    package_data.version = version.clone();
+    package_data.namespace = group_id.map(truncate_field);
+    package_data.name = artifact_id.map(truncate_field);
+    package_data.version = version.map(truncate_field);
 
     // Generate PURL
     if let (Some(group_id), Some(artifact_id), Some(version)) = (
@@ -2119,10 +2172,10 @@ fn parse_pom_properties(path: &Path) -> PackageData {
         &package_data.name,
         &package_data.version,
     ) {
-        package_data.purl = Some(format!(
+        package_data.purl = Some(truncate_field(format!(
             "pkg:maven/{}/{}@{}",
             group_id, artifact_id, version
-        ));
+        )));
     }
 
     package_data
@@ -2331,6 +2384,19 @@ fn parse_manifest_mf(path: &Path) -> PackageData {
         }
     }
 
+    package_data.name = package_data.name.map(truncate_field);
+    package_data.version = package_data.version.map(truncate_field);
+    package_data.namespace = package_data.namespace.map(truncate_field);
+    package_data.description = package_data.description.map(truncate_field);
+    package_data.homepage_url = package_data.homepage_url.map(truncate_field);
+    package_data.extracted_license_statement =
+        package_data.extracted_license_statement.map(truncate_field);
+    package_data.purl = package_data.purl.map(truncate_field);
+    for dep in &mut package_data.dependencies {
+        dep.purl = dep.purl.take().map(truncate_field);
+        dep.extracted_requirement = dep.extracted_requirement.take().map(truncate_field);
+    }
+
     package_data
 }
 
@@ -2342,7 +2408,10 @@ pub(crate) fn parse_osgi_package_list(package_list: &str, scope: &str) -> Vec<De
     let mut dependencies = Vec::new();
 
     // Split by comma, but be careful not to split within quoted strings
-    for package_entry in split_osgi_list(package_list) {
+    for package_entry in split_osgi_list(package_list)
+        .into_iter()
+        .take(MAX_ITERATION_COUNT)
+    {
         let package_entry = package_entry.trim();
         if package_entry.is_empty() {
             continue;
@@ -2386,7 +2455,10 @@ pub(crate) fn parse_osgi_package_list(package_list: &str, scope: &str) -> Vec<De
 pub(crate) fn parse_osgi_bundle_list(bundle_list: &str, scope: &str) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
 
-    for bundle_entry in split_osgi_list(bundle_list) {
+    for bundle_entry in split_osgi_list(bundle_list)
+        .into_iter()
+        .take(MAX_ITERATION_COUNT)
+    {
         let bundle_entry = bundle_entry.trim();
         if bundle_entry.is_empty() {
             continue;
