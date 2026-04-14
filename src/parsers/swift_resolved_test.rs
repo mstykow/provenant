@@ -204,7 +204,7 @@ mod tests {
 
         for dep in &data.dependencies {
             assert_eq!(dep.is_runtime, None);
-            assert_eq!(dep.is_optional, Some(false));
+            assert_eq!(dep.is_optional, None);
             assert_eq!(dep.is_pinned, Some(true));
             assert_eq!(dep.is_direct, None);
             assert_eq!(dep.scope.as_deref(), Some("dependencies"));
