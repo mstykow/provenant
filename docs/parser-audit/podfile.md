@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/podfile.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -104,3 +104,11 @@ No `Command::new`, `std::process::Command`, or subprocess usage found.
 3. **[P2: DoS] Add iteration count cap** (100K) to line processing loop with early-break and warning
 4. **[P2: DoS] Add string field truncation** at 10MB with warning log
 5. **[Additional] Replace `.unwrap()`** in `lazy_static!` with `expect()` or `Regex::new(...).expect("POD_PATTERN regex is valid")` for explicit panics with context
+
+## Remediation
+
+- **#1 P2 File Size**: Replaced `fs::read_to_string` with `read_file_to_string(path, None)` — enforces 100MB size check before reading and provides lossy UTF-8 fallback.
+- **#2 P2 Iteration**: Added `.take(MAX_ITERATION_COUNT)` to `content.lines()` iteration.
+- **#3 P2 String Length**: Applied `truncate_field()` to name, version_req, git_url, local_path, purl, extracted_requirement.
+- **#4 P4 UTF-8**: Fixed automatically by `read_file_to_string` — lossy UTF-8 conversion replaces silent failure on non-UTF-8 content.
+- **#5 Additional**: Replaced `lazy_static!` + `.unwrap()` with `LazyLock<Regex>` + `.expect("valid regex")` for explicit panic with context.

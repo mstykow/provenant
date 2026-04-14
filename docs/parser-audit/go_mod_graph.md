@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/go_mod_graph.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -100,3 +100,13 @@ No `Command::new` or subprocess usage found.
 3. Add 10 MB string field truncation with warning
 4. Add `fs::metadata()` pre-check before file read
 5. Add lossy UTF-8 conversion with warning for encoding errors
+
+## Remediation
+
+| #   | Finding             | Fix                                                                                                            |
+| --- | ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 1   | P2: File Size       | Replaced `fs::read_to_string` with `read_file_to_string(path, None)` which enforces 100MB size limit           |
+| 2   | P2: Iteration Count | Added `.take(MAX_ITERATION_COUNT)` to line iteration                                                           |
+| 3   | P2: String Length   | Applied `truncate_field()` to root_module, purl, extracted_requirement, homepage_url, vcs_url, namespace, name |
+| 4   | P4: File Exists     | `read_file_to_string` uses `fs::metadata()` pre-check internally                                               |
+| 5   | P4: UTF-8 Encoding  | `read_file_to_string` provides lossy UTF-8 fallback internally                                                 |

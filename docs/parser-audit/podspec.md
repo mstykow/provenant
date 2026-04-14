@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/podspec.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -119,3 +119,12 @@ No `Command::new`, `std::process::Command`, or subprocess usage found.
 4. **[P2: DoS] Add iteration count caps** (100K) to all line processing loops with early-break and warning
 5. **[Additional] Replace `.unwrap()`** in `lazy_static!` blocks with `expect("regex is valid")` for explicit panics with context
 6. **[P2: DoS] Add string field truncation** at 10MB with warning log
+
+## Remediation
+
+- Finding #1 (P2 File Size): Replaced `fs::read_to_string` with `read_file_to_string(path, None)` which enforces 100MB size limit
+- Finding #2 (P2 Iteration): Added `.take(MAX_ITERATION_COUNT)` caps to all 6 line-processing loops
+- Finding #3 (P2 String Length): Applied `truncate_field()` to all extracted string values (name, version, description, homepage_url, license, vcs_url, purl, extracted_requirement, party name/email)
+- Finding #4 (P4 UTF-8): Fixed automatically by `read_file_to_string` (lossy UTF-8 fallback)
+- Finding #5 (Additional .unwrap()): Replaced nested `.unwrap_or_else(|_| ... .unwrap())` with safe `.or_else().ok()` pattern
+- Finding #6 (Additional lazy_static): Replaced `lazy_static!` regex block with `std::sync::LazyLock<Regex>` + `.expect("valid regex")`

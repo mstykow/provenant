@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/gradle_lock.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -97,3 +97,13 @@ No `Command::new` or subprocess usage found.
 3. Add 10 MB string field truncation with warning
 4. Add `fs::metadata()` pre-check before `File::open`
 5. Add explicit lossy UTF-8 conversion with warning for encoding errors
+
+## Remediation
+
+| #   | Finding             | Fix                                                                                                      |
+| --- | ------------------- | -------------------------------------------------------------------------------------------------------- |
+| 1   | P2: File Size       | Replaced `File::open`+`BufReader` with `read_file_to_string(path, None)` which enforces 100MB size limit |
+| 2   | P2: Iteration Count | Added `.take(MAX_ITERATION_COUNT)` to line iteration                                                     |
+| 3   | P2: String Length   | Applied `truncate_field()` to group, artifact, version, purl, and configuration strings                  |
+| 4   | P4: File Exists     | `read_file_to_string` uses `fs::metadata()` pre-check internally                                         |
+| 5   | P4: UTF-8 Encoding  | `read_file_to_string` provides lossy UTF-8 fallback internally                                           |

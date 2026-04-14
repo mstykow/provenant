@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/podfile_lock.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -101,3 +101,10 @@ No `Command::new`, `std::process::Command`, or subprocess usage found.
 2. **[P4: Input] Add lossy UTF-8 fallback** — use `fs::read()` + `String::from_utf8_lossy()` instead of `fs::read_to_string()`
 3. **[P2: DoS] Add iteration count caps** (100K) to all YAML sequence/mapping loops with early-break and warning
 4. **[P2: DoS] Add string field truncation** at 10MB with warning log
+
+## Remediation
+
+- **#1 P2 File Size**: Replaced `fs::read_to_string` with `read_file_to_string(path, None)` — enforces 100MB size check before reading and provides lossy UTF-8 fallback.
+- **#2 P2 Iteration**: Added `.take(MAX_ITERATION_COUNT)` to all 8 YAML sequence/mapping iteration sites (PODS, DEPENDENCIES, SPEC REPOS, CHECKSUMS loops).
+- **#3 P2 String Length**: Applied `truncate_field()` to all extracted string values (namespace, name, version, requirement, repo_name, checksum, etc.).
+- **#4 P4 UTF-8**: Fixed automatically by `read_file_to_string` — lossy UTF-8 conversion replaces silent failure on non-UTF-8 content.

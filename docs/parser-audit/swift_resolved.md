@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/swift_resolved.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -96,3 +96,10 @@ No subprocess calls found.
 
 1. Add `fs::metadata().len()` check before reading, reject >100MB
 2. Add iteration cap (100K) on pins processing
+
+## Remediation
+
+- Finding #1 (P2 File Size): Replaced `File::open`+`read_to_string` with `read_file_to_string(path, None)` — provides 100MB size check, file-exists check, and lossy UTF-8 fallback
+- Finding #2 (P2 Iteration): Added `MAX_ITERATION_COUNT` caps to `parse_v2_v3_pins` and `parse_v1_pins` pins iteration
+- Finding #3 (P2 String Length): Applied `truncate_field()` to all extracted string values (name, version, purl, namespace, extracted_requirement)
+- Finding #4 (P4 UTF-8): Fixed automatically by switching to `read_file_to_string`

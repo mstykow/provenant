@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/uv_lock.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -117,3 +117,13 @@ No `Command::new` or subprocess usage found.
 2. Add recursion depth limit to `toml_value_to_json` (max 50)
 3. Add 100K iteration caps on package/dependency iteration
 4. Add lossy UTF-8 fallback with warning log
+
+## Remediation
+
+All 5 findings addressed:
+
+1. **P2-FileSize**: Already covered by `read_toml_file` → `read_file_to_string` which enforces a size limit.
+2. **P2-Recursion**: Added `MAX_RECURSION_DEPTH=50` to `toml_value_to_json`.
+3. **P2-Iteration**: Added `MAX_ITERATION_COUNT` caps on package/dependency/edge iteration.
+4. **P2-StringLength**: Added `truncate_field` on name, version, purl, extracted_requirement, scope, and URL fields.
+5. **P4-UTF8**: Already covered by `read_file_to_string`.

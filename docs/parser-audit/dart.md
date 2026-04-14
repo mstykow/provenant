@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/dart.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -97,3 +97,11 @@ None.
 3. Add 100K iteration cap in dependency extraction and BFS traversal loops
 4. Add lossy UTF-8 fallback on read failure
 5. Add 10MB field value truncation with warning
+
+## Remediation
+
+- Finding #1 (P2 File Size): Replaced `fs::read_to_string` with `read_file_to_string(path, None)` — provides 100MB size check, file-exists check, and lossy UTF-8 fallback
+- Finding #2 (P2 Recursion Depth): Added `depth: usize` parameter and `MAX_RECURSION_DEPTH = 50` to `format_dependency_mapping`, with `warn!` on overflow
+- Finding #3 (P2 Iteration Count): Added `MAX_ITERATION_COUNT` caps to lock packages, SDKs, dependency maps, BFS queue, format_dependency_mapping, and authors loops
+- Finding #4 (P2 String Length): Applied `truncate_field()` to all extracted string values across all parsers
+- Finding #5 (P4 UTF-8): Fixed automatically by switching to `read_file_to_string`

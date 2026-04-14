@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/buck.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -102,3 +102,10 @@ No `Command::new` or subprocess usage found.
 3. Add 10 MB string field truncation with warning
 4. Add `fs::metadata()` pre-check before file read
 5. Add lossy UTF-8 conversion with warning for encoding errors
+
+## Remediation
+
+- Finding #1 (P2 File Size): Replaced `std::fs::read_to_string` with `read_file_to_string(path, None)` — provides 100MB size check, file-exists check, and lossy UTF-8 fallback
+- Finding #2 (P2 Iteration Count): Added `MAX_ITERATION_COUNT` caps to statement iteration, dict extraction, list extraction, and string list kwarg
+- Finding #3 (P2 String Length): Applied `truncate_field()` to all extracted string values (name, version, namespace, extracted_license_statement, copyright, homepage_url, download_url, vcs_url, purl, subpath)
+- Findings #4, #5 (P4): Fixed automatically by switching to `read_file_to_string`

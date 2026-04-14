@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/rpm_mariner_manifest.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -97,3 +97,13 @@ No `Command::new` or subprocess usage found.
 1. Add fs::metadata().len() check before reading with 100MB limit
 2. Add iteration count cap on line loop
 3. Add String::from_utf8_lossy() fallback for UTF-8 handling
+
+## Remediation
+
+All 5 findings addressed:
+
+1. **P2-FileSize**: Replaced `fs::read_to_string` with `read_file_to_string` which enforces a size limit.
+2. **P2-Iteration**: Added `MAX_ITERATION_COUNT` cap on lines.
+3. **P2-StringLength**: Added `truncate_field` on name, version, arch, filename, and namespace.
+4. **P4-Pre-check**: Covered by `read_file_to_string`.
+5. **P4-UTF8**: Covered by `read_file_to_string`.

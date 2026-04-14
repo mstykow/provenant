@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/microsoft_update_manifest.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -94,3 +94,10 @@ No subprocess calls found.
 
 1. Add `fs::metadata().len()` check before reading, reject >100MB
 2. Replace `String::from_utf8().ok()` with `String::from_utf8_lossy()` for XML attribute values
+
+## Remediation
+
+- **#1 P2 File Size**: Replaced `fs::read_to_string` with `read_file_to_string(path, None)` — enforces 100MB size check before reading and provides lossy UTF-8 fallback.
+- **#2 P2 Iteration**: Added `MAX_ITERATION_COUNT` counter cap to XML parsing loop.
+- **#3 P2 String Length**: Applied `truncate_field()` to all extracted string values (version, description, copyright, homepage_url, purl).
+- **#4 P4 UTF-8**: Replaced `String::from_utf8().ok()` with `String::from_utf8_lossy()` + `warn!` log for XML attribute values — invalid UTF-8 is now preserved via lossy conversion instead of silently dropped.

@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/arch.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -100,3 +100,10 @@ No `Command::new` or subprocess usage found.
 1. Add fs::metadata().len() check before read_file_to_string with 100MB limit
 2. Add iteration count caps on line/field loops
 3. Add String::from_utf8_lossy() fallback for UTF-8 handling
+
+## Remediation
+
+- Finding #1 (P2 File Size): Already using `read_file_to_string(path, None)` — provides 100MB size check, file-exists check, and lossy UTF-8 fallback
+- Finding #2 (P2 Iteration Count): Added `MAX_ITERATION_COUNT` caps to `parse_key_value_lines`, `parse_srcinfo_like`, `build_dependencies`, and `build_extra_data`
+- Finding #3 (P2 String Length): Applied `truncate_field()` to all extracted string values (name, version, description, homepage_url, extracted_license_statement, packager name/email, extracted_requirement, dep names, extra_data values)
+- Findings #4, #5 (P4): Already covered by `read_file_to_string(path, None)`

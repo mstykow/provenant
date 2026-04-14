@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/rpm_specfile.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -105,3 +105,14 @@ No `Command::new` or subprocess usage found.
 2. Add iteration count caps on line/dependency loops
 3. Add String::from_utf8_lossy() fallback for UTF-8 handling
 4. Replace .unwrap() at line 42 with expect() or proper initialization
+
+## Remediation
+
+All 6 findings addressed:
+
+1. **P2-FileSize**: Already covered by `read_file_to_string` which enforces a size limit.
+2. **P2-Iteration**: Added `MAX_ITERATION_COUNT` caps on all 9 iteration sites.
+3. **P2-StringLength**: Added `truncate_field` on all expanded tags, dependencies, and purl.
+4. **P4-UTF8**: Already covered by `read_file_to_string`.
+5. **P4-Pre-check**: Already covered by `read_file_to_string`.
+6. **LazyLock .unwrap()**: Acceptable for compile-time constants; `Regex::new` in `LazyLock` with a static pattern cannot fail at runtime.

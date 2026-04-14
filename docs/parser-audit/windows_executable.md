@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/windows_executable.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -104,3 +104,10 @@ No subprocess calls found.
 1. Replace `String::from_utf16().ok()` with `String::from_utf16_lossy()` at line 423
 2. Add iteration cap (100K) on version block processing
 3. Consider adding explicit file size check documentation for callers
+
+## Remediation
+
+- Finding #1 (P2 File Size): No change needed — parser operates on `bytes: &[u8]` from scanner; sibling license files already have size checks
+- Finding #2 (P2 Iteration): Added `MAX_ITERATION_COUNT` cap to `iter_version_blocks` with `warn!` on overflow
+- Finding #3 (P2 String Length): Applied `truncate_field()` to all extracted string values (name, version, description, homepage_url, purl, company_name, extracted_license_statement, copyright, holder)
+- Finding #4 (P4 UTF-8): Replaced `String::from_utf16().ok()` with lossy conversion using `char::decode_utf16` with `warn!` on invalid UTF-16

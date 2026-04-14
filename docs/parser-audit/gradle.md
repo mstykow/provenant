@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/gradle.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -102,3 +102,13 @@ No `Command::new` or subprocess usage found.
 3. Add 10 MB string field truncation with warning on string token values
 4. Add `fs::metadata()` pre-check before file read
 5. Add lossy UTF-8 conversion with warning for non-UTF-8 files
+
+## Remediation
+
+| #   | Finding             | Fix                                                                                                                                                                 |
+| --- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | P2: File Size       | Replaced `fs::read_to_string` with `read_file_to_string(path, None)` at both call sites (build file + version catalog)                                              |
+| 2   | P2: Iteration Count | Added `MAX_ITERATION_COUNT` caps on lexer token production, `parse_block` iterations, dependency extraction, and catalog parsing                                    |
+| 3   | P2: String Length   | Applied `truncate_field()` to all extracted string values including name, version, namespace, purl, extracted_requirement, license fields, and catalog entry values |
+| 4   | P4: File Exists     | `read_file_to_string` uses `fs::metadata()` pre-check internally                                                                                                    |
+| 5   | P4: UTF-8 Encoding  | `read_file_to_string` provides lossy UTF-8 fallback internally                                                                                                      |

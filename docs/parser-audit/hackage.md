@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/hackage.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -110,3 +110,11 @@ No `Command::new` or subprocess usage found.
 3. Add 10 MB string field truncation with warning
 4. Add `fs::metadata()` pre-check before file read
 5. Add lossy UTF-8 conversion with warning for encoding errors
+
+## Remediation
+
+- #1 P2: File Size — Replaced all 3 `fs::read_to_string` calls with `read_file_to_string(path, None)` (100MB limit)
+- #2 P2: Iteration Count — Added `MAX_ITERATION_COUNT` caps on cabal/stack/dependency parsing loops
+- #3 P2: String Length — Applied `truncate_field()` to all string field values
+- #4 P4: File Exists — Fixed by `read_file_to_string`
+- #5 P4: UTF-8 Encoding — Fixed by `read_file_to_string` (lossy UTF-8 fallback)

@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/pixi.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -102,3 +102,10 @@ No subprocess calls found.
 
 1. Add `fs::metadata().len()` check before reading files, reject >100MB
 2. Add iteration caps (100K) on dependency extraction loops
+
+## Remediation
+
+- **#1 P2 File Size**: Already covered by `read_file_to_string` and `read_toml_file` — both enforce size limits. Verified, no changes needed.
+- **#2 P2 Iteration**: Added `.take(MAX_ITERATION_COUNT)` to all 7 iteration sites (extract_manifest_dependencies, extract_conda_dependencies, extract_pypi_dependencies, extract_v6_lock_dependencies, collect_v6_package_refs, extract_v4_lock_dependencies, extract_authors).
+- **#3 P2 String Length**: Applied `truncate_field()` to all extracted string values in PackageData, Dependency, Party, and FileReference fields.
+- **#4 P4 UTF-8**: Already covered by `read_file_to_string` — lossy UTF-8 conversion is built in. No changes needed.
