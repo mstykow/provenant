@@ -99,3 +99,51 @@ fn test_cap_non_source_json_license_text_keeps_sourcemaps_intact() {
 
     assert_eq!(capped.as_ref(), large_json);
 }
+
+#[test]
+fn test_cap_non_source_json_license_text_keeps_package_locks_intact() {
+    let classification = FileInfoClassification {
+        mime_type: "application/json".to_string(),
+        file_type: "JSON text data".to_string(),
+        programming_language: None,
+        is_binary: false,
+        is_text: true,
+        is_archive: false,
+        is_media: false,
+        is_source: false,
+        is_script: false,
+    };
+    let large_json = format!("{{\"packages\":\"{}\"}}", "x".repeat(200_000));
+
+    let capped = cap_non_source_json_license_text(
+        Path::new("package-lock.json"),
+        &classification,
+        &large_json,
+    );
+
+    assert_eq!(capped.as_ref(), large_json);
+}
+
+#[test]
+fn test_cap_non_source_json_license_text_keeps_npm_shrinkwrap_intact() {
+    let classification = FileInfoClassification {
+        mime_type: "application/json".to_string(),
+        file_type: "JSON text data".to_string(),
+        programming_language: None,
+        is_binary: false,
+        is_text: true,
+        is_archive: false,
+        is_media: false,
+        is_source: false,
+        is_script: false,
+    };
+    let large_json = format!("{{\"packages\":\"{}\"}}", "x".repeat(200_000));
+
+    let capped = cap_non_source_json_license_text(
+        Path::new("npm-shrinkwrap.json"),
+        &classification,
+        &large_json,
+    );
+
+    assert_eq!(capped.as_ref(), large_json);
+}
