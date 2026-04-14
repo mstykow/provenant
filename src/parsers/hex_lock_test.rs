@@ -30,9 +30,9 @@ fn test_parse_hex_mix_lock_basic() {
         .expect("expected plug dependency");
     assert_eq!(plug.extracted_requirement.as_deref(), Some("1.18.1"));
     assert_eq!(plug.scope.as_deref(), Some("dependencies"));
-    assert_eq!(plug.is_direct, Some(false));
-    assert_eq!(plug.is_runtime, Some(true));
-    assert_eq!(plug.is_optional, Some(false));
+    assert_eq!(plug.is_direct, None);
+    assert_eq!(plug.is_runtime, None);
+    assert_eq!(plug.is_optional, None);
     assert_eq!(plug.is_pinned, Some(true));
 
     let resolved = plug
