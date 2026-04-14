@@ -380,12 +380,17 @@ fn parse_yarn_v1_block(
         return None;
     }
 
-    let requirement_line = lines[0]
+    let requirement_index = lines.iter().position(|line| {
+        let trimmed = line.trim();
+        !trimmed.is_empty() && !trimmed.starts_with('#')
+    })?;
+
+    let requirement_line = lines[requirement_index]
         .trim()
         .strip_suffix(':')
-        .unwrap_or_else(|| lines[0].trim())
+        .unwrap_or_else(|| lines[requirement_index].trim())
         .trim_matches('"');
-    if requirement_line.is_empty() || requirement_line.starts_with('#') {
+    if requirement_line.is_empty() {
         return None;
     }
 
@@ -400,7 +405,7 @@ fn parse_yarn_v1_block(
     let mut integrity = String::new();
     let mut nested_deps = Vec::new();
 
-    for line in &lines[1..] {
+    for line in &lines[requirement_index + 1..] {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
