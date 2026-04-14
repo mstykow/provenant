@@ -38,6 +38,14 @@ mod golden_tests {
     }
 
     #[test]
+    fn test_golden_buck_build_oss_guarded() {
+        run_build_golden(
+            "testdata/buck/oss-guarded/BUCK",
+            "testdata/buck/oss-guarded/BUCK.expected.json",
+        );
+    }
+
+    #[test]
     fn test_golden_buck_metadata_basic() {
         run_metadata_golden(
             "testdata/buck/metadata/METADATA.bzl",

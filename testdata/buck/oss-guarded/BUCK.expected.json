@@ -1,0 +1,8 @@
+[
+  {
+    "type": "buck",
+    "name": "library",
+    "parties": [],
+    "datasource_id": "buck_file"
+  }
+]
