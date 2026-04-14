@@ -2,7 +2,7 @@
 ///
 /// This module provides common file I/O and parsing utilities
 /// used across multiple parser implementations.
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::Read;
 use std::path::Path;
 
@@ -10,16 +10,47 @@ use anyhow::Result;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use packageurl::PackageUrl;
 
-/// Reads a file's entire contents into a String.
+/// Default maximum file size for non-archive manifest files (100 MB).
+pub const MAX_MANIFEST_SIZE: u64 = 100 * 1024 * 1024;
+
+/// Default maximum length for individual string field values (10 MB).
+pub const MAX_FIELD_LENGTH: usize = 10 * 1024 * 1024;
+
+/// Default maximum iteration count for loops processing items (100,000).
+pub const MAX_ITERATION_COUNT: usize = 100_000;
+
+/// Truncates a string field value to [`MAX_FIELD_LENGTH`] bytes if it exceeds
+/// the limit, returning the truncated string. Returns the original string if
+/// within limits.
+pub fn truncate_field(value: String) -> String {
+    if value.len() <= MAX_FIELD_LENGTH {
+        return value;
+    }
+    let truncated = &value[..value.floor_char_boundary(MAX_FIELD_LENGTH)];
+    crate::parser_warn!(
+        "Truncated field value from {} bytes to {} bytes (MAX_FIELD_LENGTH)",
+        value.len(),
+        truncated.len()
+    );
+    truncated.to_string()
+}
+
+/// Reads a file's entire contents into a String with ADR 0004 security checks.
+///
+/// Performs the following validations before reading:
+/// 1. **File existence**: checks `fs::metadata()` before opening
+/// 2. **File size**: rejects files exceeding `max_size` (default 100 MB)
+/// 3. **UTF-8 encoding**: on UTF-8 failure, falls back to lossy conversion with a warning
 ///
 /// # Arguments
 ///
 /// * `path` - Path to the file to read
+/// * `max_size` - Maximum allowed file size in bytes (defaults to [`MAX_MANIFEST_SIZE`])
 ///
 /// # Returns
 ///
-/// * `Ok(String)` - File contents as UTF-8 string
-/// * `Err` - I/O error or UTF-8 decoding error
+/// * `Ok(String)` - File contents as UTF-8 string (lossy if non-UTF-8 bytes found)
+/// * `Err` - File doesn't exist, is too large, or cannot be read
 ///
 /// # Examples
 ///
@@ -27,14 +58,39 @@ use packageurl::PackageUrl;
 /// use std::path::Path;
 /// use provenant::parsers::utils::read_file_to_string;
 ///
-/// let content = read_file_to_string(Path::new("path/to/file.txt"))?;
+/// let content = read_file_to_string(Path::new("path/to/file.txt"), None)?;
 /// # Ok::<(), anyhow::Error>(())
 /// ```
-pub fn read_file_to_string(path: &Path) -> Result<String> {
+pub fn read_file_to_string(path: &Path, max_size: Option<u64>) -> Result<String> {
+    let limit = max_size.unwrap_or(MAX_MANIFEST_SIZE);
+
+    let metadata =
+        fs::metadata(path).map_err(|e| anyhow::anyhow!("Cannot stat file {:?}: {}", path, e))?;
+
+    if metadata.len() > limit {
+        anyhow::bail!(
+            "File {:?} is {} bytes, exceeding the {} byte limit",
+            path,
+            metadata.len(),
+            limit
+        );
+    }
+
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
     let mut file = File::open(path)?;
-    let mut content = String::new();
-    file.read_to_string(&mut content)?;
-    Ok(content)
+    file.read_to_end(&mut bytes)?;
+
+    match String::from_utf8(bytes) {
+        Ok(s) => Ok(s),
+        Err(err) => {
+            let bytes = err.into_bytes();
+            crate::parser_warn!(
+                "File {:?} contains invalid UTF-8; using lossy conversion",
+                path
+            );
+            Ok(String::from_utf8_lossy(&bytes).into_owned())
+        }
+    }
 }
 
 /// Creates a correctly-formatted npm Package URL for scoped or regular packages.
@@ -158,14 +214,14 @@ mod tests {
         let mut file = File::create(&file_path).unwrap();
         file.write_all(b"test content").unwrap();
 
-        let content = read_file_to_string(&file_path).unwrap();
+        let content = read_file_to_string(&file_path, None).unwrap();
         assert_eq!(content, "test content");
     }
 
     #[test]
     fn test_read_file_to_string_nonexistent() {
         let path = Path::new("/nonexistent/file.txt");
-        let result = read_file_to_string(path);
+        let result = read_file_to_string(path, None);
         assert!(result.is_err());
     }
 
@@ -175,7 +231,7 @@ mod tests {
         let file_path = dir.path().join("empty.txt");
         File::create(&file_path).unwrap();
 
-        let content = read_file_to_string(&file_path).unwrap();
+        let content = read_file_to_string(&file_path, None).unwrap();
         assert_eq!(content, "");
     }
 
@@ -312,5 +368,40 @@ mod tests {
         let (name, email) = split_name_email("John Doe email@example.com>");
         assert_eq!(name, Some("John Doe email@example.com>".to_string()));
         assert_eq!(email, None);
+    }
+
+    #[test]
+    fn test_read_file_to_string_oversized() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("big.txt");
+        fs::write(&file_path, "x").unwrap();
+
+        let result = read_file_to_string(&file_path, Some(0));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_file_to_string_lossy_utf8() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("bad_utf8.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(b"hello\xffworld").unwrap();
+
+        let content = read_file_to_string(&file_path, None).unwrap();
+        assert!(content.contains("hello"));
+        assert!(content.contains("world"));
+    }
+
+    #[test]
+    fn test_truncate_field_within_limit() {
+        let s = "short value".to_string();
+        assert_eq!(truncate_field(s.clone()), s);
+    }
+
+    #[test]
+    fn test_truncate_field_exceeds_limit() {
+        let long = "x".repeat(MAX_FIELD_LENGTH + 100);
+        let truncated = truncate_field(long);
+        assert!(truncated.len() <= MAX_FIELD_LENGTH);
     }
 }

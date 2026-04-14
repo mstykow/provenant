@@ -26,7 +26,7 @@ impl PackageParser for ArchSrcinfoParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(e) => {
                 warn!("Failed to read Arch source metadata {:?}: {}", path, e);
@@ -46,7 +46,7 @@ impl PackageParser for ArchPkginfoParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(e) => {
                 warn!("Failed to read Arch .PKGINFO {:?}: {}", path, e);

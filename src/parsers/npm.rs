@@ -23,10 +23,9 @@ use crate::models::{
     Sha512Digest,
 };
 use crate::parser_warn as warn;
-use crate::parsers::utils::{npm_purl, parse_sri};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, npm_purl, parse_sri, truncate_field};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use super::PackageParser;
@@ -231,7 +230,8 @@ impl PackageParser for NpmParser {
 /// Reads and parses a JSON file while tracking line numbers of fields
 fn read_and_parse_json_with_lines(path: &Path) -> Result<(Value, HashMap<String, usize>), String> {
     // Read file once into string
-    let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = crate::parsers::utils::read_file_to_string(path, None)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
 
     // Parse JSON
     let json: Value =
@@ -239,11 +239,10 @@ fn read_and_parse_json_with_lines(path: &Path) -> Result<(Value, HashMap<String,
 
     // Track line numbers for each field by iterating over lines
     let mut field_lines = HashMap::new();
-    for (line_num, line) in content.lines().enumerate() {
+    for (line_num, line) in content.lines().enumerate().take(MAX_ITERATION_COUNT) {
         let trimmed = line.trim();
-        // Look for field names in the format: "field": value
         if let Some(field_name) = extract_field_name(trimmed) {
-            field_lines.insert(field_name, line_num + 1); // 1-based line numbers
+            field_lines.insert(field_name, line_num + 1);
         }
     }
 
@@ -325,7 +324,7 @@ fn extract_license_statement(json: &Value) -> Option<String> {
     }
 
     if let Some(licenses) = json.get(FIELD_LICENSES).and_then(|v| v.as_array()) {
-        for license in licenses {
+        for license in licenses.iter().take(MAX_ITERATION_COUNT) {
             if let Some(license_obj) = license.as_object()
                 && let Some(type_val) = license_obj.get("type").and_then(|v| v.as_str())
             {
@@ -340,7 +339,7 @@ fn extract_license_statement(json: &Value) -> Option<String> {
     if statements.is_empty() {
         None
     } else {
-        Some(format!("{}\n", statements.join("\n")))
+        Some(truncate_field(format!("{}\n", statements.join("\n"))))
     }
 }
 
@@ -349,7 +348,7 @@ fn extract_declared_license_candidate(json: &Value) -> Option<String> {
         .and_then(|value| value.as_str())
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(str::to_string)
+        .map(|s| truncate_field(s.to_string()))
 }
 
 /// Extracts the repository URL from the repository field.
@@ -416,7 +415,7 @@ fn extract_vcs_url(json: &Value) -> Option<String> {
         vcs_url.push_str(directory);
     }
 
-    Some(vcs_url)
+    Some(truncate_field(vcs_url))
 }
 
 /// Normalizes repository URLs by converting various formats to a standard HTTPS URL.
@@ -526,24 +525,22 @@ fn extract_parties(json: &Value) -> Vec<Party> {
 fn extract_party_from_field(field: &Value) -> Option<Party> {
     match field {
         Value::String(s) => {
-            // Try to extract email from "Name <email>" format
             if let Some(email) = extract_email_from_string(s) {
                 Some(Party {
                     r#type: Some("person".to_string()),
                     role: None,
-                    name: extract_name_from_author_string(s),
-                    email: Some(email),
+                    name: extract_name_from_author_string(s).map(truncate_field),
+                    email: Some(truncate_field(email)),
                     url: None,
                     organization: None,
                     organization_url: None,
                     timezone: None,
                 })
             } else {
-                // Treat the string as name if no email found
                 Some(Party {
                     r#type: Some("person".to_string()),
                     role: None,
-                    name: Some(s.clone()),
+                    name: Some(truncate_field(s.clone())),
                     email: None,
                     url: None,
                     organization: None,
@@ -554,13 +551,23 @@ fn extract_party_from_field(field: &Value) -> Option<Party> {
         }
         Value::Object(obj) => Some(Party {
             r#type: Some("person".to_string()),
-            role: obj.get("role").and_then(|v| v.as_str()).map(String::from),
-            name: obj.get("name").and_then(|v| v.as_str()).map(String::from),
-            email: obj.get("email").and_then(|v| v.as_str()).map(String::from),
+            role: obj
+                .get("role")
+                .and_then(|v| v.as_str())
+                .map(|s| truncate_field(s.to_string())),
+            name: obj
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| truncate_field(s.to_string())),
+            email: obj
+                .get("email")
+                .and_then(|v| v.as_str())
+                .map(|s| truncate_field(s.to_string())),
             url: obj
                 .get("url")
                 .and_then(|v| v.as_str())
-                .and_then(normalize_optional_party_url),
+                .and_then(normalize_optional_party_url)
+                .map(truncate_field),
             organization: None,
             organization_url: None,
             timezone: None,
@@ -574,6 +581,7 @@ fn extract_parties_from_array(array: &Value) -> Option<Vec<Party>> {
     if let Value::Array(items) = array {
         let parties = items
             .iter()
+            .take(MAX_ITERATION_COUNT)
             .filter_map(extract_party_from_field)
             .collect::<Vec<_>>();
         if !parties.is_empty() {
@@ -630,7 +638,7 @@ fn extract_non_empty_string(json: &Value, field: &str) -> Option<String> {
         .and_then(|value| value.as_str())
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(String::from)
+        .map(|s| truncate_field(s.to_string()))
 }
 
 fn generate_npm_api_url(
@@ -713,6 +721,7 @@ fn extract_dependency_group(
         .and_then(|deps| deps.as_object())
         .map_or_else(Vec::new, |deps| {
             deps.iter()
+                .take(MAX_ITERATION_COUNT)
                 .filter_map(|(name, version)| {
                     let version_str = version.as_str()?;
 
@@ -725,7 +734,7 @@ fn extract_dependency_group(
                         };
                         return Some(Dependency {
                             purl: Some(package_url),
-                            extracted_requirement: Some(version_str.to_string()),
+                            extracted_requirement: Some(truncate_field(version_str.to_string())),
                             scope: Some(scope.to_string()),
                             is_runtime: Some(is_runtime),
                             is_optional: is_opt,
@@ -754,7 +763,7 @@ fn extract_dependency_group(
 
                     Some(Dependency {
                         purl: Some(package_url),
-                        extracted_requirement: Some(version_str.to_string()),
+                        extracted_requirement: Some(truncate_field(version_str.to_string())),
                         scope: Some(scope.to_string()),
                         is_runtime: Some(is_runtime),
                         is_optional: is_opt,
@@ -824,6 +833,7 @@ fn extract_bundled_dependencies(json: &Value) -> Vec<Dependency> {
 fn extract_bundled_list(bundled_array: &[Value]) -> Vec<Dependency> {
     bundled_array
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|value| {
             let name = value.as_str()?;
             // Create PURL without version for bundled dependencies
@@ -865,6 +875,7 @@ fn extract_peer_dependencies_meta(json: &Value) -> HashMap<String, bool> {
         .map_or_else(HashMap::new, |meta_obj| {
             meta_obj
                 .iter()
+                .take(MAX_ITERATION_COUNT)
                 .filter_map(|(package_name, meta_value)| {
                     meta_value.as_object().and_then(|obj| {
                         obj.get("optional")
@@ -887,12 +898,12 @@ fn extract_overrides(json: &Value) -> Option<serde_json::Value> {
 fn extract_description(json: &Value) -> Option<String> {
     json.get(FIELD_DESCRIPTION)
         .and_then(|v| v.as_str())
-        .map(String::from)
+        .map(|s| truncate_field(s.to_string()))
 }
 
 fn extract_homepage_url(json: &Value) -> Option<String> {
     match json.get(FIELD_HOMEPAGE) {
-        Some(Value::String(homepage)) => normalize_non_empty_string(homepage),
+        Some(Value::String(homepage)) => normalize_non_empty_string(homepage).map(truncate_field),
         _ => None,
     }
 }
@@ -924,8 +935,9 @@ fn extract_keywords_as_vec(json: &Value) -> Vec<String> {
             } else if let Some(arr) = v.as_array() {
                 let keywords: Vec<String> = arr
                     .iter()
+                    .take(MAX_ITERATION_COUNT)
                     .filter_map(|kw| kw.as_str())
-                    .map(String::from)
+                    .map(|s| truncate_field(s.to_string()))
                     .collect();
                 if keywords.is_empty() {
                     None
@@ -950,7 +962,7 @@ fn extract_raw_extra_data_field(json: &Value, field: &str) -> Option<serde_json:
 fn extract_package_manager(json: &Value) -> Option<String> {
     json.get(FIELD_PACKAGE_MANAGER)
         .and_then(|v| v.as_str())
-        .map(String::from)
+        .map(|s| truncate_field(s.to_string()))
 }
 
 fn extract_workspaces(json: &Value) -> Option<serde_json::Value> {
@@ -965,11 +977,12 @@ fn extract_bugs(json: &Value) -> Option<String> {
     match json.get(FIELD_BUGS) {
         Some(bugs) => {
             if let Some(url) = bugs.as_str() {
-                normalize_non_empty_string(url)
+                normalize_non_empty_string(url).map(truncate_field)
             } else if let Some(obj) = bugs.as_object() {
                 obj.get("url")
                     .and_then(|v| v.as_str())
                     .and_then(normalize_non_empty_string)
+                    .map(truncate_field)
             } else {
                 None
             }
@@ -1009,6 +1022,7 @@ fn extract_dist_tarball(dist: &Value) -> Option<String> {
         .or_else(|| dist.get("dnl_url"))
         .and_then(|v| v.as_str())
         .map(normalize_npm_registry_tarball_url)
+        .map(truncate_field)
 }
 
 fn normalize_npm_registry_tarball_url(url: &str) -> String {

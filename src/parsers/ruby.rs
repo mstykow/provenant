@@ -26,7 +26,9 @@
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 use crate::parser_warn as warn;
-use crate::parsers::utils::split_name_email;
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, read_file_to_string, split_name_email, truncate_field,
+};
 use flate2::read::GzDecoder;
 use packageurl::PackageUrl;
 use regex::Regex;
@@ -79,7 +81,7 @@ impl PackageParser for GemfileParser {
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
         let datasource_id = gemfile_datasource_id(path);
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read Gemfile at {:?}: {}", path, e);
@@ -163,7 +165,7 @@ fn parse_gemfile(content: &str) -> PackageData {
         }
     };
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let trimmed = line.trim();
 
         // Skip comments and empty lines
@@ -404,7 +406,7 @@ impl PackageParser for GemfileLockParser {
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
         let datasource_id = gemfile_lock_datasource_id(path);
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read Gemfile.lock at {:?}: {}", path, e);
@@ -533,7 +535,7 @@ fn parse_gemfile_lock(content: &str) -> PackageData {
         }
     };
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let trimmed = line.trim_end();
 
         // Empty line resets state
@@ -988,7 +990,7 @@ impl PackageParser for GemspecParser {
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
         let datasource_id = gemspec_datasource_id(path);
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read .gemspec at {:?}: {}", path, e);
@@ -1307,17 +1309,20 @@ fn resolve_gemspec_scalar_value(
     base_dir: Option<&Path>,
     contexts: &[String],
 ) -> Option<String> {
-    let cleaned = clean_gemspec_value(raw_value);
+    let cleaned = truncate_field(clean_gemspec_value(raw_value));
     if cleaned.is_empty() {
         return None;
     }
 
     if looks_like_constant_reference(&cleaned) {
-        return resolve_variable_version(&cleaned, contexts).or(Some(cleaned));
+        return resolve_variable_version(&cleaned, contexts)
+            .map(truncate_field)
+            .or(Some(cleaned));
     }
 
     if looks_like_local_variable_reference(&cleaned) {
         return resolve_local_variable_value(&cleaned, content, base_dir, contexts)
+            .map(truncate_field)
             .or(Some(cleaned));
     }
 
@@ -1347,7 +1352,7 @@ fn load_required_ruby_contexts(content: &str, base_dir: Option<&Path>) -> Vec<St
             else {
                 continue;
             };
-            if let Ok(required_content) = fs::read_to_string(&safe_candidate) {
+            if let Ok(required_content) = read_file_to_string(&safe_candidate, None) {
                 contexts.push(required_content);
                 break;
             }
@@ -1442,7 +1447,7 @@ fn parse_gemspec_with_context(content: &str, base_dir: Option<&Path>) -> Package
     let mut dependencies: Vec<Dependency> = Vec::new();
 
     // Extract basic fields
-    for caps in field_re.captures_iter(content) {
+    for caps in field_re.captures_iter(content).take(MAX_ITERATION_COUNT) {
         let field_name = match caps.get(1) {
             Some(m) => m.as_str(),
             None => continue,
@@ -1460,24 +1465,24 @@ fn parse_gemspec_with_context(content: &str, base_dir: Option<&Path>) -> Package
             "summary" => {
                 summary = resolve_gemspec_scalar_value(raw_value, content, base_dir, &contexts)
             }
-            "description" => description = Some(clean_gemspec_value(raw_value)),
+            "description" => description = Some(truncate_field(clean_gemspec_value(raw_value))),
             "homepage" => {
                 homepage = resolve_gemspec_scalar_value(raw_value, content, base_dir, &contexts)
             }
-            "license" => license = Some(clean_gemspec_value(raw_value)),
+            "license" => license = Some(truncate_field(clean_gemspec_value(raw_value))),
             _ => {}
         }
     }
 
     // Extract licenses (plural)
-    for caps in licenses_re.captures_iter(content) {
+    for caps in licenses_re.captures_iter(content).take(MAX_ITERATION_COUNT) {
         if let Some(raw) = caps.get(1) {
             licenses = extract_ruby_array(raw.as_str());
         }
     }
 
     // Extract authors
-    for caps in authors_re.captures_iter(content) {
+    for caps in authors_re.captures_iter(content).take(MAX_ITERATION_COUNT) {
         if let Some(raw) = caps.get(1) {
             let raw_str = raw.as_str().trim();
             if raw_str.starts_with('[') {
@@ -1492,7 +1497,7 @@ fn parse_gemspec_with_context(content: &str, base_dir: Option<&Path>) -> Package
     }
 
     // Extract emails
-    for caps in email_re.captures_iter(content) {
+    for caps in email_re.captures_iter(content).take(MAX_ITERATION_COUNT) {
         if let Some(raw) = caps.get(1) {
             let raw_str = raw.as_str().trim();
             if raw_str.starts_with('[') {
@@ -1563,7 +1568,10 @@ fn parse_gemspec_with_context(content: &str, base_dir: Option<&Path>) -> Package
         }
     }
 
-    for caps in dependency_call_re.captures_iter(content) {
+    for caps in dependency_call_re
+        .captures_iter(content)
+        .take(MAX_ITERATION_COUNT)
+    {
         let method = match caps.get(1) {
             Some(m) => m.as_str(),
             None => continue,
@@ -1573,7 +1581,7 @@ fn parse_gemspec_with_context(content: &str, base_dir: Option<&Path>) -> Package
             None => continue,
         };
 
-        let Some(dep_name) = extract_first_ruby_value(args) else {
+        let Some(dep_name) = extract_first_ruby_value(args).map(truncate_field) else {
             continue;
         };
         let version_parts = extract_all_ruby_values(after_first_argument(args));
@@ -1703,14 +1711,29 @@ fn extract_gem_archive(path: &Path) -> Result<PackageData, String> {
     let file = File::open(path).map_err(|e| format!("Failed to open archive: {}", e))?;
     let mut archive = Archive::new(file);
 
+    let mut entry_count: usize = 0;
     for entry_result in archive
         .entries()
         .map_err(|e| format!("Failed to read tar entries: {}", e))?
     {
+        entry_count += 1;
+        if entry_count > MAX_ITERATION_COUNT {
+            warn!(
+                "Exceeded max tar entry count ({}) in .gem archive, stopping iteration",
+                MAX_ITERATION_COUNT
+            );
+            break;
+        }
+
         let entry = entry_result.map_err(|e| format!("Failed to read tar entry: {}", e))?;
         let entry_path = entry
             .path()
             .map_err(|e| format!("Failed to get entry path: {}", e))?;
+        let entry_str = entry_path.to_string_lossy();
+        if entry_str.contains("..") {
+            warn!("Skipping tar entry with path traversal: {}", entry_str);
+            continue;
+        }
 
         if entry_path.to_str() == Some("metadata.gz") {
             let entry_size = entry.size();
@@ -1722,10 +1745,27 @@ fn extract_gem_archive(path: &Path) -> Result<PackageData, String> {
             }
 
             let mut decoder = GzDecoder::new(entry);
-            let mut content = String::new();
-            decoder
-                .read_to_string(&mut content)
+            let mut content = Vec::new();
+            let mut limited = std::io::Read::take(&mut decoder, MAX_FILE_SIZE + 1);
+            limited
+                .read_to_end(&mut content)
                 .map_err(|e| format!("Failed to decompress metadata.gz: {}", e))?;
+
+            if content.len() > MAX_FILE_SIZE as usize {
+                return Err(format!(
+                    "Decompressed metadata too large: exceeds {} byte limit",
+                    MAX_FILE_SIZE
+                ));
+            }
+
+            let content = match String::from_utf8(content) {
+                Ok(s) => s,
+                Err(err) => {
+                    let bytes = err.into_bytes();
+                    warn!("Invalid UTF-8 in gem metadata; using lossy conversion");
+                    String::from_utf8_lossy(&bytes).into_owned()
+                }
+            };
 
             let uncompressed_size = content.len() as u64;
             if entry_size > 0 {
@@ -1736,12 +1776,6 @@ fn extract_gem_archive(path: &Path) -> Result<PackageData, String> {
                         ratio, MAX_COMPRESSION_RATIO
                     ));
                 }
-            }
-            if uncompressed_size > MAX_FILE_SIZE {
-                return Err(format!(
-                    "Decompressed metadata too large: {} bytes (limit: {} bytes)",
-                    uncompressed_size, MAX_FILE_SIZE
-                ));
             }
 
             return parse_gem_metadata_yaml(&content, DatasourceId::GemArchive);
@@ -1763,18 +1797,19 @@ fn parse_gem_metadata_yaml(
     let yaml: yaml_serde::Value =
         yaml_serde::from_str(&cleaned).map_err(|e| format!("Failed to parse YAML: {}", e))?;
 
-    let name = yaml_string(&yaml, "name");
+    let name = yaml_string(&yaml, "name").map(truncate_field);
     let version = yaml.get("version").and_then(|v| {
-        // version can be a simple string or a mapping with a "version" key
         if v.is_string() {
-            v.as_str().map(|s| s.to_string())
+            v.as_str().map(|s| truncate_field(s.to_string()))
         } else {
-            yaml_string(v, "version")
+            yaml_string(v, "version").map(truncate_field)
         }
     });
-    let description = yaml_string(&yaml, "description").or_else(|| yaml_string(&yaml, "summary"));
-    let homepage = yaml_string(&yaml, "homepage");
-    let summary = yaml_string(&yaml, "summary");
+    let description = yaml_string(&yaml, "description")
+        .or_else(|| yaml_string(&yaml, "summary"))
+        .map(truncate_field);
+    let homepage = yaml_string(&yaml, "homepage").map(truncate_field);
+    let summary = yaml_string(&yaml, "summary").map(truncate_field);
 
     // Licenses
     let licenses: Vec<String> = yaml
@@ -1782,7 +1817,7 @@ fn parse_gem_metadata_yaml(
         .and_then(|v| v.as_sequence())
         .map(|seq| {
             seq.iter()
-                .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                .filter_map(|item| item.as_str().map(|s| truncate_field(s.to_string())))
                 .collect()
         })
         .unwrap_or_default();
@@ -1803,7 +1838,7 @@ fn parse_gem_metadata_yaml(
         .and_then(|v| v.as_sequence())
         .map(|seq| {
             seq.iter()
-                .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                .filter_map(|item| item.as_str().map(|s| truncate_field(s.to_string())))
                 .collect()
         })
         .unwrap_or_default();
@@ -1813,10 +1848,10 @@ fn parse_gem_metadata_yaml(
         .map(|v| {
             if let Some(seq) = v.as_sequence() {
                 seq.iter()
-                    .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                    .filter_map(|item| item.as_str().map(|s| truncate_field(s.to_string())))
                     .collect()
             } else if let Some(s) = v.as_str() {
-                vec![s.to_string()]
+                vec![truncate_field(s.to_string())]
             } else {
                 Vec::new()
             }
@@ -1859,13 +1894,19 @@ fn parse_gem_metadata_yaml(
 
     let metadata = yaml.get("metadata");
 
-    let bug_tracking_url = metadata.and_then(|m| yaml_string(m, "bug_tracking_uri"));
+    let bug_tracking_url = metadata
+        .and_then(|m| yaml_string(m, "bug_tracking_uri"))
+        .map(truncate_field);
 
-    let code_view_url = metadata.and_then(|m| yaml_string(m, "source_code_uri"));
+    let code_view_url = metadata
+        .and_then(|m| yaml_string(m, "source_code_uri"))
+        .map(truncate_field);
 
-    let vcs_url = code_view_url
-        .clone()
-        .or_else(|| metadata.and_then(|m| yaml_string(m, "homepage_uri")));
+    let vcs_url = code_view_url.clone().or_else(|| {
+        metadata
+            .and_then(|m| yaml_string(m, "homepage_uri"))
+            .map(truncate_field)
+    });
 
     let file_references = metadata
         .and_then(|m| m.get("files"))
@@ -1899,7 +1940,7 @@ fn parse_gem_metadata_yaml(
         .map(|n| create_gem_purl(n, version.as_deref()))
         .unwrap_or(None);
 
-    let platform = yaml_string(&yaml, "platform");
+    let platform = yaml_string(&yaml, "platform").map(truncate_field);
     let (repository_homepage_url, repository_download_url, api_data_url, download_url) =
         if let Some(n) = name.as_deref() {
             get_rubygems_urls(n, version.as_deref(), platform.as_deref())
@@ -1972,8 +2013,8 @@ fn parse_gem_yaml_dependencies(yaml: &yaml_serde::Value) -> Vec<Dependency> {
         None => return dependencies,
     };
 
-    for dep_value in deps_seq {
-        let dep_name = match yaml_string(dep_value, "name") {
+    for dep_value in deps_seq.iter().take(MAX_ITERATION_COUNT) {
+        let dep_name = match yaml_string(dep_value, "name").map(truncate_field) {
             Some(n) => n,
             None => continue,
         };
@@ -2066,7 +2107,7 @@ impl PackageParser for GemMetadataExtractedParser {
 }
 
 fn extract_gem_metadata_extracted(path: &Path) -> Result<PackageData, String> {
-    let content = fs::read_to_string(path)
+    let content = read_file_to_string(path, None)
         .map_err(|e| format!("Failed to read metadata.gz-extract file: {}", e))?;
 
     parse_gem_metadata_yaml(&content, DatasourceId::GemArchiveExtracted)

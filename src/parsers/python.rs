@@ -35,7 +35,9 @@ use crate::models::{
     DatasourceId, Dependency, FileReference, PackageData, PackageType, Party, Sha256Digest,
 };
 use crate::parser_warn as warn;
-use crate::parsers::utils::{read_file_to_string, split_name_email};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, read_file_to_string, split_name_email, truncate_field,
+};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use bzip2::read::BzDecoder;
@@ -231,7 +233,7 @@ fn merge_sibling_wheel_metadata(path: &Path, package_data: &mut PackageData) {
         return;
     }
 
-    let Ok(content) = read_file_to_string(&wheel_path) else {
+    let Ok(content) = read_file_to_string(&wheel_path, None) else {
         warn!("Failed to read sibling WHEEL file at {:?}", wheel_path);
         return;
     };
@@ -370,7 +372,7 @@ fn is_pip_cache_origin_json(path: &Path) -> bool {
 }
 
 fn extract_from_pip_origin_json(path: &Path) -> PackageData {
-    let content = match read_file_to_string(path) {
+    let content = match read_file_to_string(path, None) {
         Ok(content) => content,
         Err(e) => {
             warn!("Failed to read pip cache origin.json at {:?}: {}", path, e);
@@ -416,10 +418,10 @@ fn extract_from_pip_origin_json(path: &Path) -> PackageData {
     PackageData {
         package_type: Some(PythonParser::PACKAGE_TYPE),
         primary_language: Some("Python".to_string()),
-        name: Some(name),
+        name: Some(truncate_field(name)),
         version: Some(version),
         datasource_id: Some(DatasourceId::PypiPipOriginJson),
-        download_url: Some(download_url.to_string()),
+        download_url: Some(truncate_field(download_url.to_string())),
         sha256: extract_sha256_from_origin_json(&root)
             .and_then(|h| Sha256Digest::from_hex(&h).ok()),
         repository_homepage_url,
@@ -496,7 +498,7 @@ fn normalize_origin_hash(hash: &str) -> Option<String> {
 }
 
 fn extract_from_rfc822_metadata(path: &Path, datasource_id: DatasourceId) -> PackageData {
-    let content = match read_file_to_string(path) {
+    let content = match read_file_to_string(path, None) {
         Ok(content) => content,
         Err(e) => {
             warn!("Failed to read metadata at {:?}: {}", path, e);
@@ -520,7 +522,7 @@ fn merge_sibling_metadata_dependencies(path: &Path, package_data: &mut PackageDa
     if let Some(parent) = path.parent() {
         let direct_requires = parent.join("requires.txt");
         if direct_requires.exists()
-            && let Ok(content) = read_file_to_string(&direct_requires)
+            && let Ok(content) = read_file_to_string(&direct_requires, None)
         {
             extra_dependencies.extend(parse_requires_txt(&content));
         }
@@ -547,7 +549,7 @@ fn merge_sibling_metadata_dependencies(path: &Path, package_data: &mut PackageDa
             });
 
         if let Some(requires_path) = sibling_egg_info_requires
-            && let Ok(content) = read_file_to_string(&requires_path)
+            && let Ok(content) = read_file_to_string(&requires_path, None)
         {
             extra_dependencies.extend(parse_requires_txt(&content));
         }
@@ -571,21 +573,21 @@ fn merge_sibling_metadata_file_references(path: &Path, package_data: &mut Packag
     if let Some(parent) = path.parent() {
         let record_path = parent.join("RECORD");
         if record_path.exists()
-            && let Ok(content) = read_file_to_string(&record_path)
+            && let Ok(content) = read_file_to_string(&record_path, None)
         {
             extra_refs.extend(parse_record_csv(&content));
         }
 
         let installed_files_path = parent.join("installed-files.txt");
         if installed_files_path.exists()
-            && let Ok(content) = read_file_to_string(&installed_files_path)
+            && let Ok(content) = read_file_to_string(&installed_files_path, None)
         {
             extra_refs.extend(parse_installed_files_txt(&content));
         }
 
         let sources_path = parent.join("SOURCES.txt");
         if sources_path.exists()
-            && let Ok(content) = read_file_to_string(&sources_path)
+            && let Ok(content) = read_file_to_string(&sources_path, None)
         {
             extra_refs.extend(parse_sources_txt(&content));
         }
@@ -609,8 +611,17 @@ fn collect_validated_zip_entries<R: Read + std::io::Seek>(
 ) -> Result<Vec<ValidatedZipEntry>, String> {
     let mut total_extracted = 0u64;
     let mut entries = Vec::new();
+    let mut entry_count = 0usize;
 
     for i in 0..archive.len() {
+        entry_count += 1;
+        if entry_count > MAX_ITERATION_COUNT {
+            warn!(
+                "Exceeded max entry count in {} {:?}; stopping at {} entries",
+                archive_type, path, MAX_ITERATION_COUNT
+            );
+            break;
+        }
         if let Ok(file) = archive.by_index_raw(i) {
             let compressed_size = file.compressed_size();
             let uncompressed_size = file.size();
@@ -934,8 +945,18 @@ fn collect_tar_sdist_entries<R: Read>(
 
     let mut total_extracted = 0u64;
     let mut entries = Vec::new();
+    let mut entry_count = 0usize;
 
     for entry_result in archive_entries {
+        entry_count += 1;
+        if entry_count > MAX_ITERATION_COUNT {
+            warn!(
+                "Exceeded max entry count in {} sdist {:?}; stopping at {} entries",
+                archive_type, path, MAX_ITERATION_COUNT
+            );
+            break;
+        }
+
         let mut entry = match entry_result {
             Ok(entry) => entry,
             Err(e) => {
@@ -1586,7 +1607,14 @@ fn read_limited_utf8<R: Read>(
         ));
     }
 
-    String::from_utf8(bytes).map_err(|e| format!("{} is not valid UTF-8: {}", context, e))
+    match String::from_utf8(bytes) {
+        Ok(s) => Ok(s),
+        Err(err) => {
+            let bytes = err.into_bytes();
+            warn!("Invalid UTF-8 in archive entry; using lossy conversion");
+            Ok(String::from_utf8_lossy(&bytes).into_owned())
+        }
+    }
 }
 
 fn normalize_archive_entry_path(entry_path: &str) -> Option<String> {
@@ -1621,8 +1649,17 @@ pub fn parse_record_csv(content: &str) -> Vec<FileReference> {
         .from_reader(content.as_bytes());
 
     let mut file_references = Vec::new();
+    let mut record_count = 0usize;
 
     for result in reader.records() {
+        record_count += 1;
+        if record_count > MAX_ITERATION_COUNT {
+            warn!(
+                "Exceeded max record count in RECORD CSV; stopping at {} records",
+                MAX_ITERATION_COUNT
+            );
+            break;
+        }
         match result {
             Ok(record) => {
                 if record.len() < 3 {
@@ -1816,13 +1853,13 @@ fn build_package_data_from_rfc822(
 ) -> PackageData {
     use super::rfc822::{get_header_all, get_header_first};
 
-    let name = get_header_first(&metadata.headers, "name");
-    let version = get_header_first(&metadata.headers, "version");
-    let summary = get_header_first(&metadata.headers, "summary");
-    let mut homepage_url = get_header_first(&metadata.headers, "home-page");
-    let author = get_header_first(&metadata.headers, "author");
-    let author_email = get_header_first(&metadata.headers, "author-email");
-    let license = get_header_first(&metadata.headers, "license");
+    let name = get_header_first(&metadata.headers, "name").map(truncate_field);
+    let version = get_header_first(&metadata.headers, "version").map(truncate_field);
+    let summary = get_header_first(&metadata.headers, "summary").map(truncate_field);
+    let mut homepage_url = get_header_first(&metadata.headers, "home-page").map(truncate_field);
+    let author = get_header_first(&metadata.headers, "author").map(truncate_field);
+    let author_email = get_header_first(&metadata.headers, "author-email").map(truncate_field);
+    let license = get_header_first(&metadata.headers, "license").map(truncate_field);
     let license_expression = get_header_first(&metadata.headers, "license-expression");
     let download_url = get_header_first(&metadata.headers, "download-url");
     let platform = get_header_first(&metadata.headers, "platform");
@@ -1836,7 +1873,7 @@ fn build_package_data_from_rfc822(
         metadata.body.clone()
     };
 
-    let description = build_description(summary.as_deref(), &description_body);
+    let description = build_description(summary.as_deref(), &description_body).map(truncate_field);
 
     let mut parties = Vec::new();
     if author.is_some() || author_email.is_some() {
@@ -2214,7 +2251,7 @@ fn extract_from_pyproject_toml(path: &Path) -> PackageData {
     let name = project_table
         .get(FIELD_NAME)
         .and_then(|v| v.as_str())
-        .map(String::from);
+        .map(|v| truncate_field(v.to_string()));
 
     let version = project_table
         .get(FIELD_VERSION)
@@ -2239,7 +2276,7 @@ fn extract_from_pyproject_toml(path: &Path) -> PackageData {
     let description = project_table
         .get(FIELD_DESCRIPTION)
         .and_then(|value| value.as_str())
-        .map(|value| value.to_string());
+        .map(|value| truncate_field(value.to_string()));
     let mut keywords = project_table
         .get(FIELD_KEYWORDS)
         .and_then(|value| value.as_array())
@@ -3096,7 +3133,7 @@ fn extract_setup_py_packages(path: &Path) -> Vec<PackageData> {
 }
 
 fn extract_from_setup_py(path: &Path) -> Option<PackageData> {
-    let content = match read_file_to_string(path) {
+    let content = match read_file_to_string(path, None) {
         Ok(content) => content,
         Err(e) => {
             warn!("Failed to read setup.py at {:?}: {}", path, e);
@@ -3242,7 +3279,7 @@ fn collect_sibling_dunder_metadata(root: &Path, content: &str) -> DunderMetadata
             continue;
         }
 
-        let Ok(module_content) = read_file_to_string(&path) else {
+        let Ok(module_content) = read_file_to_string(&path, None) else {
             continue;
         };
 
@@ -3699,17 +3736,19 @@ fn extract_setup_keywords(
 }
 
 fn build_setup_py_package_data(values: &HashMap<String, Value>) -> PackageData {
-    let name = get_value_string(values, "name");
-    let version = get_value_string(values, "version");
-    let description =
-        get_value_string(values, "description").or_else(|| get_value_string(values, "summary"));
-    let homepage_url =
-        get_value_string(values, "url").or_else(|| get_value_string(values, "home_page"));
-    let author = get_value_string(values, "author");
+    let name = get_value_string(values, "name").map(truncate_field);
+    let version = get_value_string(values, "version").map(truncate_field);
+    let description = get_value_string(values, "description")
+        .or_else(|| get_value_string(values, "summary"))
+        .map(truncate_field);
+    let homepage_url = get_value_string(values, "url")
+        .or_else(|| get_value_string(values, "home_page"))
+        .map(truncate_field);
+    let author = get_value_string(values, "author").map(truncate_field);
     let author_email = get_value_string(values, "author_email");
-    let maintainer = get_value_string(values, "maintainer");
+    let maintainer = get_value_string(values, "maintainer").map(truncate_field);
     let maintainer_email = get_value_string(values, "maintainer_email");
-    let license = get_value_string(values, "license");
+    let license = get_value_string(values, "license").map(truncate_field);
     let classifiers = values
         .get("classifiers")
         .and_then(value_to_string_list)
@@ -4094,8 +4133,17 @@ fn parse_requires_txt(content: &str) -> Vec<Dependency> {
     let mut current_scope = "install".to_string();
     let mut current_optional = false;
     let mut current_marker: Option<String> = None;
+    let mut line_count = 0usize;
 
     for line in content.lines() {
+        line_count += 1;
+        if line_count > MAX_ITERATION_COUNT {
+            warn!(
+                "Exceeded max line count in requires.txt; stopping at {} lines",
+                MAX_ITERATION_COUNT
+            );
+            break;
+        }
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
@@ -4148,16 +4196,16 @@ fn build_setup_py_purl(name: Option<&str>, version: Option<&str>) -> Option<Stri
 }
 
 fn extract_from_setup_py_regex(content: &str) -> PackageData {
-    let name = extract_setup_value(content, "name");
-    let version = extract_setup_value(content, "version");
-    let license_expression = extract_setup_value(content, "license");
+    let name = extract_setup_value(content, "name").map(truncate_field);
+    let version = extract_setup_value(content, "version").map(truncate_field);
+    let license_expression = extract_setup_value(content, "license").map(truncate_field);
 
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         normalize_spdx_declared_license(license_expression.as_deref());
     let extracted_license_statement = license_expression.clone();
 
     let dependencies = extract_setup_py_dependencies(content);
-    let homepage_url = extract_setup_value(content, "url");
+    let homepage_url = extract_setup_value(content, "url").map(truncate_field);
     let purl = build_setup_py_purl(name.as_deref(), version.as_deref());
 
     PackageData {
@@ -4217,7 +4265,7 @@ fn extract_from_pypi_json(path: &Path) -> PackageData {
         ..Default::default()
     };
 
-    let content = match read_file_to_string(path) {
+    let content = match read_file_to_string(path, None) {
         Ok(content) => content,
         Err(error) => {
             warn!("Failed to read pypi.json at {:?}: {}", path, error);
@@ -4241,7 +4289,7 @@ fn extract_from_pypi_json(path: &Path) -> PackageData {
     let name = info
         .get("name")
         .and_then(|value| value.as_str())
-        .map(ToOwned::to_owned);
+        .map(|v| truncate_field(v.to_owned()));
     let version = info
         .get("version")
         .and_then(|value| value.as_str())
@@ -4249,22 +4297,22 @@ fn extract_from_pypi_json(path: &Path) -> PackageData {
     let summary = info
         .get("summary")
         .and_then(|value| value.as_str())
-        .map(ToOwned::to_owned);
+        .map(|v| truncate_field(v.to_owned()));
     let description = info
         .get("description")
         .and_then(|value| value.as_str())
         .filter(|value| !value.trim().is_empty())
-        .map(ToOwned::to_owned)
+        .map(|v| truncate_field(v.to_owned()))
         .or(summary);
     let mut homepage_url = info
         .get("home_page")
         .and_then(|value| value.as_str())
-        .map(ToOwned::to_owned);
+        .map(|v| truncate_field(v.to_owned()));
     let author = info
         .get("author")
         .and_then(|value| value.as_str())
         .filter(|value| !value.trim().is_empty())
-        .map(ToOwned::to_owned);
+        .map(|v| truncate_field(v.to_owned()));
     let author_email = info
         .get("author_email")
         .and_then(|value| value.as_str())
@@ -4435,7 +4483,7 @@ fn select_pypi_json_artifact(
 }
 
 fn extract_from_pip_inspect(path: &Path) -> PackageData {
-    let content = match read_file_to_string(path) {
+    let content = match read_file_to_string(path, None) {
         Ok(content) => content,
         Err(e) => {
             warn!("Failed to read pip-inspect.deplock at {:?}: {}", path, e);
@@ -4492,7 +4540,7 @@ fn extract_from_pip_inspect(path: &Path) -> PackageData {
         let name = metadata
             .get("name")
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|v| truncate_field(v.to_string()));
         let version = metadata
             .get("version")
             .and_then(|v| v.as_str())
@@ -4500,15 +4548,15 @@ fn extract_from_pip_inspect(path: &Path) -> PackageData {
         let summary = metadata
             .get("summary")
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|v| truncate_field(v.to_string()));
         let home_page = metadata
             .get("home_page")
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|v| truncate_field(v.to_string()));
         let author = metadata
             .get("author")
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|v| truncate_field(v.to_string()));
         let author_email = metadata
             .get("author_email")
             .and_then(|v| v.as_str())
@@ -4516,11 +4564,11 @@ fn extract_from_pip_inspect(path: &Path) -> PackageData {
         let license = metadata
             .get("license")
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|v| truncate_field(v.to_string()));
         let description = metadata
             .get("description")
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|v| truncate_field(v.to_string()));
         let keywords = metadata
             .get("keywords")
             .and_then(|v| v.as_array())
@@ -4742,7 +4790,7 @@ fn base_dependency_purl(purl: &str) -> String {
 type IniSections = HashMap<String, HashMap<String, Vec<String>>>;
 
 fn extract_from_setup_cfg(path: &Path) -> PackageData {
-    let content = match read_file_to_string(path) {
+    let content = match read_file_to_string(path, None) {
         Ok(content) => content,
         Err(e) => {
             warn!("Failed to read setup.cfg at {:?}: {}", path, e);
@@ -4751,15 +4799,15 @@ fn extract_from_setup_cfg(path: &Path) -> PackageData {
     };
 
     let sections = parse_setup_cfg(&content);
-    let name = get_ini_value(&sections, "metadata", "name");
-    let version = get_ini_value(&sections, "metadata", "version");
-    let description = get_ini_value(&sections, "metadata", "description");
-    let author = get_ini_value(&sections, "metadata", "author");
+    let name = get_ini_value(&sections, "metadata", "name").map(truncate_field);
+    let version = get_ini_value(&sections, "metadata", "version").map(truncate_field);
+    let description = get_ini_value(&sections, "metadata", "description").map(truncate_field);
+    let author = get_ini_value(&sections, "metadata", "author").map(truncate_field);
     let author_email = get_ini_value(&sections, "metadata", "author_email");
-    let maintainer = get_ini_value(&sections, "metadata", "maintainer");
+    let maintainer = get_ini_value(&sections, "metadata", "maintainer").map(truncate_field);
     let maintainer_email = get_ini_value(&sections, "metadata", "maintainer_email");
-    let license = get_ini_value(&sections, "metadata", "license");
-    let mut homepage_url = get_ini_value(&sections, "metadata", "url");
+    let license = get_ini_value(&sections, "metadata", "license").map(truncate_field);
+    let mut homepage_url = get_ini_value(&sections, "metadata", "url").map(truncate_field);
     let classifiers = get_ini_values(&sections, "metadata", "classifiers");
     let keywords = parse_setup_cfg_keywords(get_ini_value(&sections, "metadata", "keywords"));
     let python_requires = get_ini_value(&sections, "options", "python_requires");
@@ -5234,7 +5282,7 @@ fn parse_setup_py_dep_list(deps_str: &str, scope: &str, is_optional: bool) -> Ve
 
 /// Reads and parses a TOML file
 pub(crate) fn read_toml_file(path: &Path) -> Result<TomlValue, String> {
-    let content = read_file_to_string(path).map_err(|e| e.to_string())?;
+    let content = read_file_to_string(path, None).map_err(|e| e.to_string())?;
     toml::from_str(&content).map_err(|e| format!("Failed to parse TOML: {}", e))
 }
 
