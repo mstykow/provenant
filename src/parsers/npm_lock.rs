@@ -68,7 +68,7 @@ impl PackageParser for NpmLockParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(e) => {
                 warn!("Failed to read package-lock.json at {:?}: {}", path, e);
