@@ -2123,6 +2123,12 @@ fn collect_top_level_license_detections_includes_package_origin_detections() {
         detections[1].reference_matches[0].from_file.as_deref(),
         Some("project/package.json")
     );
+    assert_eq!(
+        detections[1].reference_matches[0]
+            .rule_identifier
+            .as_deref(),
+        Some("parser-declared-license")
+    );
 }
 
 #[test]

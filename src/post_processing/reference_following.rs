@@ -1192,7 +1192,11 @@ fn public_match_to_internal(
         rule_length: detection_match.matched_length.unwrap_or_default(),
         match_coverage: detection_match.match_coverage.unwrap_or_default() as f32,
         rule_relevance: detection_match.rule_relevance.unwrap_or_default(),
-        rule_identifier: detection_match.rule_identifier.clone().unwrap_or_default(),
+        rule_identifier: detection_match
+            .rule_identifier
+            .clone()
+            .or_else(|| detection_match.matcher.clone())
+            .unwrap_or_default(),
         rule_url: detection_match.rule_url.clone().unwrap_or_default(),
         matched_text: detection_match.matched_text.clone(),
         referenced_filenames: detection_match.referenced_filenames.clone(),
@@ -1224,7 +1228,8 @@ fn internal_match_to_public(
         matched_length: Some(detection_match.matched_length),
         match_coverage: Some(match_coverage),
         rule_relevance: Some(detection_match.rule_relevance),
-        rule_identifier: Some(detection_match.rule_identifier),
+        rule_identifier: (!detection_match.rule_identifier.is_empty())
+            .then_some(detection_match.rule_identifier),
         rule_url: (!detection_match.rule_url.is_empty()).then_some(detection_match.rule_url),
         matched_text: detection_match.matched_text,
         referenced_filenames: detection_match.referenced_filenames,
