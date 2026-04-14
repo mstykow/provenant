@@ -1,6 +1,6 @@
 {
   "summary": {
-    "declared_license_expression": "mit OR apache-2.0",
+    "declared_license_expression": "apache-2.0 OR mit",
     "license_clarity_score": {
       "score": 100,
       "declared_license": true,
@@ -51,16 +51,16 @@
       "vcs_url": "https://github.com/rust-random/rand",
       "copyright": null,
       "holder": null,
-      "declared_license_expression": "mit OR apache-2.0",
-      "declared_license_expression_spdx": "MIT OR Apache-2.0",
+      "declared_license_expression": "apache-2.0 OR mit",
+      "declared_license_expression_spdx": "Apache-2.0 OR MIT",
       "license_detections": [
         {
-          "license_expression": "mit OR apache-2.0",
-          "license_expression_spdx": "MIT OR Apache-2.0",
+          "license_expression": "apache-2.0 OR mit",
+          "license_expression_spdx": "Apache-2.0 OR MIT",
           "matches": [
             {
-              "license_expression": "mit OR apache-2.0",
-              "license_expression_spdx": "MIT OR Apache-2.0",
+              "license_expression": "apache-2.0 OR mit",
+              "license_expression_spdx": "Apache-2.0 OR MIT",
               "from_file": "no_license_ambiguity/Cargo.toml",
               "start_line": 1,
               "end_line": 1,
