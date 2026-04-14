@@ -66,7 +66,15 @@ pub fn refine_author(s: &str) -> Option<String> {
 
 fn looks_like_prose_fragment_author(s: &str) -> bool {
     let trimmed = s.trim();
-    if trimmed.is_empty() || trimmed.contains('@') {
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    if contains_standalone_at_prefixed_token(trimmed) {
+        return true;
+    }
+
+    if contains_email_address(trimmed) {
         return false;
     }
 
@@ -119,6 +127,53 @@ fn looks_like_prose_fragment_author(s: &str) -> bool {
         .count();
 
     starts_lowercase || capitalized_word_count < 2
+}
+
+fn contains_standalone_at_prefixed_token(s: &str) -> bool {
+    s.split_whitespace().any(|word| {
+        let token = word.trim_matches(|ch: char| {
+            matches!(
+                ch,
+                ',' | ';' | ':' | '.' | '(' | ')' | '[' | ']' | '{' | '}' | '"' | '\'' | '`'
+            )
+        });
+
+        if !token.starts_with('@') || token.len() <= 1 {
+            return false;
+        }
+
+        let lower = token.to_ascii_lowercase();
+        if matches!(
+            lower.as_str(),
+            "@author"
+                | "@authors"
+                | "@generated"
+                | "@param"
+                | "@rem"
+                | "@return"
+                | "@see"
+                | "@since"
+                | "@version"
+        ) {
+            return false;
+        }
+
+        let mut chars = token[1..].chars();
+        let Some(first) = chars.next() else {
+            return false;
+        };
+
+        (first.is_ascii_alphabetic() || first == '_')
+            && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    })
+}
+
+fn contains_email_address(s: &str) -> bool {
+    static EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)\b[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+\b").expect("valid email regex")
+    });
+
+    EMAIL_RE.is_match(s)
 }
 
 fn looks_like_structured_key_with_hex_value(s: &str) -> bool {

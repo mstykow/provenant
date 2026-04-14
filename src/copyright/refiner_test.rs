@@ -1472,6 +1472,18 @@ fn test_refine_author_drops_dollar_prefixed_code_tokens() {
 }
 
 #[test]
+fn test_refine_author_drops_annotation_like_prose_without_breaking_email_authors() {
+    assert_eq!(
+        refine_author("the observation proposal even intended for @Observable to work with value"),
+        None
+    );
+    assert_eq!(
+        refine_author("stephane@hillion.org Stephane Hillion"),
+        Some("stephane@hillion.org Stephane Hillion".to_string())
+    );
+}
+
+#[test]
 fn test_refine_author_drops_structured_key_with_hex_value() {
     assert_eq!(
         refine_author("TargetAttributes 33CC10EC2044A3C60003C045"),
