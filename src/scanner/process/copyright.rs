@@ -206,5 +206,5 @@ fn contains_year(text: &str) -> bool {
 }
 
 #[cfg(test)]
-#[path = "tests/copyright.rs"]
+#[path = "copyright_test.rs"]
 mod tests;

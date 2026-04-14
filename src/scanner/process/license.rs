@@ -224,5 +224,5 @@ fn matched_text_diagnostics_from_match(
 }
 
 #[cfg(test)]
-#[path = "tests/license.rs"]
+#[path = "license_test.rs"]
 mod tests;
