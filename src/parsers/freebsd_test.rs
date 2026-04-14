@@ -74,7 +74,7 @@ fn test_license_and() {
 
     assert_eq!(
         pkg.extracted_license_statement,
-        Some("PSFL AND BSD3CLAUSE".to_string())
+        Some("BSD3CLAUSE AND PSFL".to_string())
     );
 }
 
@@ -86,7 +86,7 @@ fn test_license_or() {
 
     assert_eq!(
         pkg.extracted_license_statement,
-        Some("RUBY OR GPLv2".to_string())
+        Some("GPLv2 OR RUBY".to_string())
     );
 }
 
@@ -98,7 +98,7 @@ fn test_license_dual() {
 
     assert_eq!(
         pkg.extracted_license_statement,
-        Some("GPLv3 OR RUBY OR GPLv2".to_string())
+        Some("GPLv2 OR GPLv3 OR RUBY".to_string())
     );
 }
 
@@ -357,7 +357,7 @@ fn test_multi_license_file() {
     assert_eq!(pkg.name, Some("py27-idna".to_string()));
     assert_eq!(
         pkg.extracted_license_statement,
-        Some("PSFL AND BSD3CLAUSE".to_string())
+        Some("BSD3CLAUSE AND PSFL".to_string())
     );
 }
 
@@ -371,7 +371,7 @@ fn test_dual_license_file() {
     assert_eq!(pkg.name, Some("rubygem-facets".to_string()));
     assert_eq!(
         pkg.extracted_license_statement,
-        Some("RUBY OR GPLv2".to_string())
+        Some("GPLv2 OR RUBY".to_string())
     );
 }
 
