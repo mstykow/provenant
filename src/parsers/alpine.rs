@@ -1246,7 +1246,7 @@ p:so:libtest.so.1
         );
         assert_eq!(
             pkg.declared_license_expression_spdx.as_deref(),
-            Some("MIT AND ICU AND Unicode-TOU")
+            Some("ICU AND MIT AND Unicode-TOU")
         );
         assert_eq!(pkg.dependencies.len(), 3);
         let depends_dev = pkg
