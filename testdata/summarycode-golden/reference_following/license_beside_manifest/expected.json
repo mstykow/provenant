@@ -73,6 +73,33 @@
       ]
     },
     {
+      "identifier": "mit-6914bd3d-93be-35a5-ddad-8a441ad0ed45",
+      "license_expression": "mit",
+      "license_expression_spdx": "MIT",
+      "detection_count": 1,
+      "detection_log": ["unknown-reference-to-local-file"],
+      "reference_matches": [
+        {
+          "from_file": "codebase/demo-1.0.dist-info/METADATA",
+          "license_expression": "unknown-license-reference",
+          "license_expression_spdx": "LicenseRef-scancode-unknown-license-reference",
+          "rule_identifier": "parser-declared-license"
+        },
+        {
+          "from_file": "codebase/demo-1.0.dist-info/LICENSE",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit_14.RULE"
+        },
+        {
+          "from_file": "codebase/demo-1.0.dist-info/LICENSE",
+          "license_expression": "mit",
+          "license_expression_spdx": "MIT",
+          "rule_identifier": "mit.LICENSE"
+        }
+      ]
+    },
+    {
       "identifier": "mit-79774d50-708a-392c-de7f-ef6d29bbf18c",
       "license_expression": "mit",
       "license_expression_spdx": "MIT",
@@ -90,33 +117,6 @@
           "license_expression": "unknown-license-reference",
           "license_expression_spdx": "LicenseRef-scancode-unknown-license-reference",
           "rule_identifier": "unknown-license-reference_see_license_at_manifest_1.RULE"
-        },
-        {
-          "from_file": "codebase/demo-1.0.dist-info/LICENSE",
-          "license_expression": "mit",
-          "license_expression_spdx": "MIT",
-          "rule_identifier": "mit_14.RULE"
-        },
-        {
-          "from_file": "codebase/demo-1.0.dist-info/LICENSE",
-          "license_expression": "mit",
-          "license_expression_spdx": "MIT",
-          "rule_identifier": "mit.LICENSE"
-        }
-      ]
-    },
-    {
-      "identifier": "mit-946d5424-f316-1245-80ab-ef6c198972d8",
-      "license_expression": "mit",
-      "license_expression_spdx": "MIT",
-      "detection_count": 1,
-      "detection_log": ["unknown-reference-to-local-file"],
-      "reference_matches": [
-        {
-          "from_file": "codebase/demo-1.0.dist-info/METADATA",
-          "license_expression": "unknown-license-reference",
-          "license_expression_spdx": "LicenseRef-scancode-unknown-license-reference",
-          "rule_identifier": ""
         },
         {
           "from_file": "codebase/demo-1.0.dist-info/LICENSE",
@@ -231,14 +231,14 @@
           "license_expression": "mit",
           "license_expression_spdx": "MIT",
           "detection_log": ["unknown-reference-to-local-file"],
-          "identifier": "mit-946d5424-f316-1245-80ab-ef6c198972d8",
+          "identifier": "mit-6914bd3d-93be-35a5-ddad-8a441ad0ed45",
           "matches": [
             {
               "from_file": "codebase/demo-1.0.dist-info/METADATA",
               "matched_text": "license: MIT\n",
               "license_expression": "unknown-license-reference",
               "license_expression_spdx": "LicenseRef-scancode-unknown-license-reference",
-              "rule_identifier": "",
+              "rule_identifier": "parser-declared-license",
               "referenced_filenames": ["LICENSE"]
             },
             {
