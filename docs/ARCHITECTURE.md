@@ -566,23 +566,24 @@ See [ADR 0008: Output Schema Type Separation](adr/0008-output-schema-separation.
 
 **Caching**:
 
-Provenant uses one shared persistent cache root for the opt-in incremental manifest stored under
-`incremental/`.
+Provenant uses one shared persistent cache root for both the opt-in incremental manifests stored
+under `incremental/` and the reusable license index cache stored under `license-index/`.
 
 The cache implementation lives in `src/cache/` (`config`, `io`, `locking`, `incremental`). It
 provides cache-root selection, sidecar lock coordination for cache writes/clears, incremental
-manifest persistence, and atomic manifest persistence.
+manifest persistence, and atomic persistence helpers reused by cache writers.
 
 The intent is straightforward: repeated scans of the same checkout should reuse unchanged file
 results from the last completed scan instead of rescanning the whole tree every time.
 
 User-facing behavior is:
 
-1. `--cache-dir` and `PROVENANT_CACHE` select the shared incremental cache root
+1. `--cache-dir` and `PROVENANT_CACHE` select the shared persistent cache root
 2. `--cache-clear` clears that root before scanning
 3. `--incremental` reuses unchanged file results from the last completed scan after validating stored metadata + SHA256 against the previous manifest
+4. license scans reuse a persistent license-index cache under that same root unless `--no-license-index-cache` is set
 
-Custom `--license-rules-path` scans still participate in the incremental manifest workflow. A separate persistent startup snapshot cache for that advanced override is intentionally not planned.
+Custom `--license-rules-path` scans still participate in the incremental manifest workflow, and their fingerprinted license-index cache entries also live under the shared `license-index/custom/` namespace.
 
 **Progress Tracking**:
 
