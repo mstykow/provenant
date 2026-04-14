@@ -456,21 +456,19 @@ fn collect_dependencies(
             Some(value) => value,
             None => continue,
         };
-        let requirement = match dependency_requirement_from_value(requirement_value) {
-            Some(value) => value,
-            None => continue,
-        };
-
-        let is_pinned = is_pubspec_version_pinned(&requirement);
+        let requirement = dependency_requirement_from_value(requirement_value);
+        let is_pinned = requirement
+            .as_deref()
+            .is_some_and(is_pubspec_version_pinned);
         let purl = if is_pinned {
-            build_dependency_purl(name, Some(requirement.as_str()))
+            build_dependency_purl(name, requirement.as_deref())
         } else {
             build_dependency_purl(name, None)
         };
 
         dependencies.push(Dependency {
             purl,
-            extracted_requirement: Some(requirement),
+            extracted_requirement: requirement,
             scope: scope.map(|value| value.to_string()),
             is_runtime: Some(is_runtime),
             is_optional: Some(is_optional),

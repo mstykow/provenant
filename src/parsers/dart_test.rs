@@ -127,6 +127,61 @@ dev_dependencies:
     }
 
     #[test]
+    fn test_extract_workspace_shorthand_dependencies_without_versions() {
+        let content = r#"
+name: counter
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod:
+  hooks_riverpod:
+
+dev_dependencies:
+  riverpod_generator:
+"#;
+
+        let (_temp_dir, pubspec_path) = create_temp_file("pubspec.yaml", content);
+        let package_data = PubspecYamlParser::extract_first_package(&pubspec_path);
+
+        let flutter_riverpod = find_dependency(&package_data.dependencies, "flutter_riverpod")
+            .expect("flutter_riverpod dependency should be present");
+        assert_eq!(flutter_riverpod.extracted_requirement, None);
+        assert_eq!(flutter_riverpod.scope.as_deref(), Some("dependencies"));
+        assert_eq!(flutter_riverpod.is_runtime, Some(true));
+        assert_eq!(flutter_riverpod.is_optional, Some(false));
+        assert_eq!(flutter_riverpod.is_pinned, Some(false));
+        assert_eq!(flutter_riverpod.is_direct, Some(true));
+        assert_eq!(
+            flutter_riverpod.purl.as_deref(),
+            Some("pkg:pubspec/flutter_riverpod")
+        );
+
+        let hooks_riverpod = find_dependency(&package_data.dependencies, "hooks_riverpod")
+            .expect("hooks_riverpod dependency should be present");
+        assert_eq!(hooks_riverpod.extracted_requirement, None);
+        assert_eq!(hooks_riverpod.scope.as_deref(), Some("dependencies"));
+        assert_eq!(hooks_riverpod.is_pinned, Some(false));
+
+        let riverpod_generator = find_dependency(&package_data.dependencies, "riverpod_generator")
+            .expect("riverpod_generator dependency should be present");
+        assert_eq!(riverpod_generator.extracted_requirement, None);
+        assert_eq!(
+            riverpod_generator.scope.as_deref(),
+            Some("dev_dependencies")
+        );
+        assert_eq!(riverpod_generator.is_runtime, Some(false));
+        assert_eq!(riverpod_generator.is_optional, Some(true));
+        assert_eq!(riverpod_generator.is_pinned, Some(false));
+        assert_eq!(riverpod_generator.is_direct, Some(true));
+        assert_eq!(
+            riverpod_generator.purl.as_deref(),
+            Some("pkg:pubspec/riverpod_generator")
+        );
+    }
+
+    #[test]
     fn test_extract_sha256_hashes() {
         let content = r#"
 packages:
