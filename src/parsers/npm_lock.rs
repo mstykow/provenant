@@ -23,10 +23,11 @@ use crate::models::{
     DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha1Digest, Sha512Digest,
 };
 use crate::parser_warn as warn;
-use crate::parsers::utils::{npm_purl, parse_sri};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, npm_purl, parse_sri, read_file_to_string, truncate_field,
+};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use super::PackageParser;
@@ -43,6 +44,7 @@ const FIELD_DEV: &str = "dev";
 const FIELD_OPTIONAL: &str = "optional";
 const FIELD_DEV_OPTIONAL: &str = "devOptional";
 const FIELD_LINK: &str = "link";
+const MAX_RECURSION_DEPTH: usize = 50;
 
 /// npm lockfile parser supporting package-lock.json v1, v2, and v3 formats.
 ///
@@ -66,7 +68,7 @@ impl PackageParser for NpmLockParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(e) => {
                 warn!("Failed to read package-lock.json at {:?}: {}", path, e);
@@ -87,17 +89,19 @@ impl PackageParser for NpmLockParser {
             .and_then(|v| v.as_i64())
             .unwrap_or(1);
 
-        let root_name = json
-            .get(FIELD_NAME)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let root_name = truncate_field(
+            json.get(FIELD_NAME)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        );
 
-        let root_version = json
-            .get(FIELD_VERSION)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let root_version = truncate_field(
+            json.get(FIELD_VERSION)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        );
 
         vec![if lockfile_version == 1 {
             parse_lockfile_v1(&json, root_name, root_version, lockfile_version)
@@ -140,12 +144,12 @@ fn parse_lockfile_v2_plus(
 
     // Root dependencies are in top-level "dependencies" and "devDependencies"
     if let Some(root_deps_obj) = json.get(FIELD_DEPENDENCIES).and_then(|v| v.as_object()) {
-        for key in root_deps_obj.keys() {
+        for key in root_deps_obj.keys().take(MAX_ITERATION_COUNT) {
             root_deps.insert(key.clone());
         }
     }
     if let Some(root_dev_deps_obj) = json.get("devDependencies").and_then(|v| v.as_object()) {
-        for key in root_dev_deps_obj.keys() {
+        for key in root_dev_deps_obj.keys().take(MAX_ITERATION_COUNT) {
             root_deps.insert(key.clone());
         }
     }
@@ -157,7 +161,7 @@ fn parse_lockfile_v2_plus(
 
     let mut dependencies = Vec::new();
 
-    for (key, value) in packages {
+    for (key, value) in packages.iter().take(MAX_ITERATION_COUNT) {
         // Skip the root package (empty string key)
         if key.is_empty() {
             continue;
@@ -180,7 +184,7 @@ fn parse_lockfile_v2_plus(
         let version = value
             .get(FIELD_VERSION)
             .and_then(|v| v.as_str())
-            .map(str::to_string);
+            .map(|v| truncate_field(v.to_string()));
 
         let is_dev = value
             .get(FIELD_DEV)
@@ -195,7 +199,10 @@ fn parse_lockfile_v2_plus(
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        let resolved = value.get(FIELD_RESOLVED).and_then(|v| v.as_str());
+        let resolved = value
+            .get(FIELD_RESOLVED)
+            .and_then(|v| v.as_str())
+            .map(|v| truncate_field(v.to_string()));
         let integrity = value.get(FIELD_INTEGRITY).and_then(|v| v.as_str());
         let from = value.get("from").and_then(|v| v.as_str());
         let in_bundle = value
@@ -366,11 +373,19 @@ fn parse_dependencies_v1_with_depth(
     dependencies_obj: &serde_json::Map<String, Value>,
     depth: usize,
 ) -> Vec<Dependency> {
+    if depth >= MAX_RECURSION_DEPTH {
+        warn!(
+            "Max recursion depth {} exceeded in v1 dependency parsing",
+            MAX_RECURSION_DEPTH
+        );
+        return Vec::new();
+    }
+
     let mut dependencies = Vec::new();
 
-    for (package_name, dep_data) in dependencies_obj {
+    for (package_name, dep_data) in dependencies_obj.iter().take(MAX_ITERATION_COUNT) {
         let version = match dep_data.get(FIELD_VERSION).and_then(|v| v.as_str()) {
-            Some(v) => v.to_string(),
+            Some(v) => truncate_field(v.to_string()),
             None => continue,
         };
 
@@ -383,7 +398,10 @@ fn parse_dependencies_v1_with_depth(
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        let resolved = dep_data.get(FIELD_RESOLVED).and_then(|v| v.as_str());
+        let resolved = dep_data
+            .get(FIELD_RESOLVED)
+            .and_then(|v| v.as_str())
+            .map(|v| truncate_field(v.to_string()));
         let integrity = dep_data.get(FIELD_INTEGRITY).and_then(|v| v.as_str());
         let from = dep_data.get("from").and_then(|v| v.as_str());
         let in_bundle = dep_data
@@ -403,7 +421,7 @@ fn parse_dependencies_v1_with_depth(
             package_name,
             version,
             is_dev,
-            false, // v1 lockfiles don't have devOptional flag
+            false,
             is_optional,
             resolved,
             integrity,
@@ -554,7 +572,7 @@ fn collect_root_dependency_names(
     root_deps: &mut std::collections::HashSet<String>,
 ) {
     if let Some(entries) = value.and_then(|value| value.as_object()) {
-        for key in entries.keys() {
+        for key in entries.keys().take(MAX_ITERATION_COUNT) {
             root_deps.insert(key.clone());
         }
     }
@@ -689,7 +707,7 @@ fn build_npm_dependency(
     is_dev: bool,
     is_dev_optional: bool,
     is_optional: bool,
-    resolved: Option<&str>,
+    resolved: Option<String>,
     integrity: Option<&str>,
     is_direct: bool,
     from: Option<&str>,
@@ -697,19 +715,24 @@ fn build_npm_dependency(
     nested_deps: Vec<Dependency>,
 ) -> Dependency {
     let (dep_namespace, dep_name) = extract_namespace_and_name(package_name);
+    let dep_namespace = truncate_field(dep_namespace);
+    let dep_name = truncate_field(dep_name);
     let (scope, is_runtime, is_optional_flag) =
         determine_scope(is_dev, is_dev_optional, is_optional);
 
     let alias_spec = parse_npm_alias_spec(&version);
     let (purl_namespace, purl_name, resolved_version, is_pinned, dep_purl, download_url) =
         if let Some((alias_namespace, alias_name, alias_constraint)) = alias_spec.clone() {
+            let alias_namespace = truncate_field(alias_namespace);
+            let alias_name = truncate_field(alias_name);
+            let alias_constraint = truncate_field(alias_constraint);
             let is_pinned = is_exact_version(&alias_constraint);
             let dep_purl = create_purl(
                 &alias_namespace,
                 &alias_name,
                 is_pinned.then_some(alias_constraint.as_str()),
             );
-            let download_url = non_version_download_url(&alias_constraint, resolved);
+            let download_url = non_version_download_url(&alias_constraint, resolved.as_deref());
 
             (
                 alias_namespace,
@@ -726,7 +749,7 @@ fn build_npm_dependency(
                 &dep_name,
                 is_pinned.then_some(version.as_str()),
             );
-            let download_url = non_version_download_url(&version, resolved);
+            let download_url = non_version_download_url(&version, resolved.as_deref());
 
             (
                 dep_namespace.clone(),
@@ -739,7 +762,7 @@ fn build_npm_dependency(
         };
 
     let (sha1_from_integrity, sha512_from_integrity) = parse_integrity_field(integrity);
-    let sha1_from_url = resolved.and_then(parse_resolved_url);
+    let sha1_from_url = resolved.as_deref().and_then(parse_resolved_url);
     let sha1 = sha1_from_integrity.or(sha1_from_url);
 
     let mut dep_extra_data = HashMap::new();
@@ -775,7 +798,7 @@ fn build_npm_dependency(
 
     Dependency {
         purl: dep_purl,
-        extracted_requirement: Some(version),
+        extracted_requirement: Some(truncate_field(version)),
         scope: Some(scope.to_string()),
         is_runtime: Some(is_runtime),
         is_optional: Some(is_optional_flag),
@@ -791,21 +814,23 @@ fn build_link_dependency(
     is_dev: bool,
     is_dev_optional: bool,
     is_optional: bool,
-    resolved: Option<&str>,
+    resolved: Option<String>,
     is_direct: bool,
 ) -> Dependency {
     let (dep_namespace, dep_name) = extract_namespace_and_name(package_name);
+    let dep_namespace = truncate_field(dep_namespace);
+    let dep_name = truncate_field(dep_name);
     let (scope, is_runtime, is_optional_flag) =
         determine_scope(is_dev, is_dev_optional, is_optional);
     let mut extra_data = HashMap::from([("link".to_string(), Value::Bool(true))]);
 
-    if let Some(resolved) = resolved {
-        extra_data.insert("resolved".to_string(), Value::String(resolved.to_string()));
+    if let Some(resolved) = &resolved {
+        extra_data.insert("resolved".to_string(), Value::String(resolved.clone()));
     }
 
     Dependency {
         purl: create_purl(&dep_namespace, &dep_name, None),
-        extracted_requirement: resolved.map(str::to_string),
+        extracted_requirement: resolved.map(truncate_field),
         scope: Some(scope.to_string()),
         is_runtime: Some(is_runtime),
         is_optional: Some(is_optional_flag),

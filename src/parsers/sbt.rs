@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -9,6 +8,9 @@ use serde_json::json;
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 
 use super::PackageParser;
+use super::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
+
+const MAX_RECURSION_DEPTH: usize = 50;
 
 pub struct SbtParser;
 
@@ -20,7 +22,7 @@ impl PackageParser for SbtParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(error) => {
                 warn!("Failed to read {:?}: {}", path, error);
@@ -44,12 +46,12 @@ impl PackageParser for SbtParser {
         vec![PackageData {
             package_type: Some(Self::PACKAGE_TYPE),
             primary_language: Some("Scala".to_string()),
-            namespace: parsed.organization,
-            name: parsed.name,
-            version: parsed.version,
-            description: parsed.description,
-            homepage_url,
-            extracted_license_statement,
+            namespace: parsed.organization.map(truncate_field),
+            name: parsed.name.map(truncate_field),
+            version: parsed.version.map(truncate_field),
+            description: parsed.description.map(truncate_field),
+            homepage_url: homepage_url.map(truncate_field),
+            extracted_license_statement: extracted_license_statement.map(truncate_field),
             dependencies: parsed.dependencies,
             datasource_id: Some(DatasourceId::SbtBuildSbt),
             purl,
@@ -184,8 +186,14 @@ fn split_top_level_statements(input: &str) -> Vec<String> {
     let mut brace_depth = 0usize;
     let mut in_string = false;
     let mut escaped = false;
+    let mut iterations = 0usize;
 
     for ch in input.chars() {
+        iterations += 1;
+        if iterations > MAX_ITERATION_COUNT {
+            break;
+        }
+
         if in_string {
             current.push(ch);
             if escaped {
@@ -250,8 +258,14 @@ fn tokenize(statement: &str) -> Vec<Token> {
     let chars: Vec<char> = statement.chars().collect();
     let mut tokens = Vec::new();
     let mut index = 0;
+    let mut iterations = 0usize;
 
     while index < chars.len() {
+        iterations += 1;
+        if iterations > MAX_ITERATION_COUNT {
+            break;
+        }
+
         let ch = chars[index];
 
         if ch.is_whitespace() {
@@ -387,7 +401,7 @@ fn matches_chars(chars: &[char], index: usize, expected: &[char]) -> bool {
 fn resolve_string_aliases(statements: &[String]) -> HashMap<String, String> {
     let mut raw_aliases = HashMap::new();
 
-    for statement in statements {
+    for statement in statements.iter().take(MAX_ITERATION_COUNT) {
         let tokens = tokenize(statement);
         if let Some((name, expr)) = parse_alias_declaration(&tokens) {
             raw_aliases.insert(name, expr);
@@ -397,7 +411,9 @@ fn resolve_string_aliases(statements: &[String]) -> HashMap<String, String> {
     let mut resolved = HashMap::new();
     for name in raw_aliases.keys() {
         let mut visiting = HashSet::new();
-        if let Some(value) = resolve_alias_value(name, &raw_aliases, &mut resolved, &mut visiting) {
+        if let Some(value) =
+            resolve_alias_value(name, &raw_aliases, &mut resolved, &mut visiting, 0)
+        {
             resolved.insert(name.clone(), value);
         }
     }
@@ -430,7 +446,16 @@ fn resolve_alias_value(
     raw_aliases: &HashMap<String, AliasExpr>,
     resolved: &mut HashMap<String, String>,
     visiting: &mut HashSet<String>,
+    depth: usize,
 ) -> Option<String> {
+    if depth >= MAX_RECURSION_DEPTH {
+        warn!(
+            "Recursion depth exceeded in alias resolution for '{}'",
+            name
+        );
+        return None;
+    }
+
     if let Some(value) = resolved.get(name) {
         return Some(value.clone());
     }
@@ -442,7 +467,7 @@ fn resolve_alias_value(
     let value = match raw_aliases.get(name)? {
         AliasExpr::Literal(value) => Some(value.clone()),
         AliasExpr::Reference(reference) => {
-            resolve_alias_value(reference, raw_aliases, resolved, visiting)
+            resolve_alias_value(reference, raw_aliases, resolved, visiting, depth + 1)
         }
     };
 
@@ -501,7 +526,7 @@ fn parse_statements(statements: &[String], aliases: &HashMap<String, String>) ->
     let bundle_aliases = resolve_seq_aliases(statements);
     let mut state = SbtParseAccumulator::default();
 
-    for statement in statements {
+    for statement in statements.iter().take(MAX_ITERATION_COUNT) {
         let tokens = tokenize(statement);
         process_statement_tokens(&tokens, aliases, &bundle_aliases, &mut state);
     }
@@ -607,8 +632,8 @@ fn parse_literal_string_expr(
     aliases: &HashMap<String, String>,
 ) -> Option<String> {
     match tokens {
-        [Token::Str(value)] => Some(value.clone()),
-        [Token::Ident(name)] => aliases.get(name).cloned(),
+        [Token::Str(value)] => Some(truncate_field(value.clone())),
+        [Token::Ident(name)] => aliases.get(name).cloned().map(truncate_field),
         _ => None,
     }
 }
@@ -633,7 +658,7 @@ fn parse_url_expr(tokens: &[Token]) -> Option<String> {
             Token::Str(url),
             Token::Symbol(")"),
             Token::Symbol(")"),
-        ] if some == "Some" && url_fn == "url" => Some(url.clone()),
+        ] if some == "Some" && url_fn == "url" => Some(truncate_field(url.clone())),
         _ => None,
     }
 }
@@ -650,8 +675,8 @@ fn parse_license_append(tokens: &[Token]) -> Option<LicenseEntry> {
             Token::Str(url),
             Token::Symbol(")"),
         ] if name == "licenses" && url_fn == "url" => Some(LicenseEntry {
-            name: license_name.clone(),
-            url: url.clone(),
+            name: truncate_field(license_name.clone()),
+            url: truncate_field(url.clone()),
         }),
         _ => None,
     }
@@ -707,8 +732,8 @@ fn parse_dependency_seq(
     };
 
     let mut dependencies = Vec::new();
-    for item in items {
-        if let Some(dependency) = parse_dependency_expr(&item, aliases, inherited_scope) {
+    for item in items.iter().take(MAX_ITERATION_COUNT) {
+        if let Some(dependency) = parse_dependency_expr(item, aliases, inherited_scope) {
             dependencies.push(dependency);
         }
     }
@@ -915,6 +940,9 @@ fn build_dependency(
     scope: Option<String>,
     operator: &str,
 ) -> Option<Dependency> {
+    let namespace = truncate_field(namespace);
+    let name = truncate_field(name);
+    let version = truncate_field(version);
     let purl = build_maven_purl(
         Some(namespace.as_str()),
         Some(name.as_str()),

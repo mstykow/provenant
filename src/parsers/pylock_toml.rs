@@ -13,6 +13,7 @@ use crate::models::{
     Sha512Digest,
 };
 use crate::parsers::python::read_toml_file;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
 
 use super::PackageParser;
 
@@ -38,6 +39,7 @@ const FIELD_WHEELS: &str = "wheels";
 const FIELD_HASHES: &str = "hashes";
 const FIELD_TOOL: &str = "tool";
 const FIELD_ATTESTATION_IDENTITIES: &str = "attestation-identities";
+const MAX_RECURSION_DEPTH: usize = 50;
 
 pub struct PylockTomlParser;
 
@@ -116,6 +118,7 @@ fn parse_pylock_toml(toml_content: &TomlValue) -> PackageData {
 
     let package_tables: Vec<&TomlMap<String, TomlValue>> = package_values
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(TomlValue::as_table)
         .collect();
     if package_tables.is_empty() {
@@ -232,7 +235,7 @@ fn build_top_level_dependency(
     Some(Dependency {
         purl: create_pypi_purl(&name, version.as_deref()),
         extracted_requirement: None,
-        scope,
+        scope: scope.map(truncate_field),
         is_runtime: Some(is_runtime),
         is_optional: Some(is_optional),
         is_pinned: Some(is_package_pinned(package_table)),
@@ -305,6 +308,7 @@ fn build_resolved_dependency(package_table: &TomlMap<String, TomlValue>) -> Opti
 }
 
 fn build_dependency_indices(package_tables: &[&TomlMap<String, TomlValue>]) -> Vec<Vec<usize>> {
+    let mut total_iterations: usize = 0;
     package_tables
         .iter()
         .map(|package_table| {
@@ -315,6 +319,10 @@ fn build_dependency_indices(package_tables: &[&TomlMap<String, TomlValue>]) -> V
                 .flatten()
                 .filter_map(TomlValue::as_table)
                 .flat_map(|reference| {
+                    if total_iterations >= MAX_ITERATION_COUNT {
+                        return Vec::new();
+                    }
+                    total_iterations += 1;
                     resolve_dependency_reference_indices(package_tables, reference)
                 })
                 .collect()
@@ -329,6 +337,7 @@ fn resolve_dependency_reference_indices(
     let matches: Vec<usize> = package_tables
         .iter()
         .enumerate()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|(index, package_table)| {
             package_reference_matches(package_table, reference).then_some(index)
         })
@@ -348,11 +357,15 @@ fn package_reference_matches(
     reference.iter().all(|(key, ref_value)| {
         package_table
             .get(key)
-            .is_some_and(|pkg_value| toml_values_match(pkg_value, ref_value))
+            .is_some_and(|pkg_value| toml_values_match(pkg_value, ref_value, 0))
     })
 }
 
-fn toml_values_match(left: &TomlValue, right: &TomlValue) -> bool {
+fn toml_values_match(left: &TomlValue, right: &TomlValue, depth: usize) -> bool {
+    if depth >= MAX_RECURSION_DEPTH {
+        warn!("toml_values_match: recursion depth limit exceeded");
+        return false;
+    }
     match (left, right) {
         (TomlValue::String(left), TomlValue::String(right)) => left == right,
         (TomlValue::Integer(left), TomlValue::Integer(right)) => left == right,
@@ -364,12 +377,12 @@ fn toml_values_match(left: &TomlValue, right: &TomlValue) -> bool {
                 && left
                     .iter()
                     .zip(right.iter())
-                    .all(|(left, right)| toml_values_match(left, right))
+                    .all(|(left, right)| toml_values_match(left, right, depth + 1))
         }
         (TomlValue::Table(left), TomlValue::Table(right)) => {
             right.iter().all(|(key, right_value)| {
                 left.get(key)
-                    .is_some_and(|left_value| toml_values_match(left_value, right_value))
+                    .is_some_and(|left_value| toml_values_match(left_value, right_value, depth + 1))
             })
         }
         _ => false,
@@ -393,6 +406,9 @@ fn collect_reachable_indices(dependency_indices: &[Vec<usize>], roots: &[usize])
     let mut queue: VecDeque<usize> = roots.iter().copied().collect();
 
     while let Some(index) = queue.pop_front() {
+        if visited.len() >= MAX_ITERATION_COUNT {
+            break;
+        }
         if !visited.insert(index) {
             continue;
         }
@@ -457,7 +473,7 @@ fn extract_marker_memberships(marker: &str, variable_name: &str) -> Vec<String> 
         .filter_map(|captures| {
             captures
                 .get(1)
-                .map(|value| value.as_str().trim().to_string())
+                .map(|value| truncate_field(value.as_str().trim().to_string()))
         })
         .filter(|value| !value.is_empty())
         .collect();
@@ -482,14 +498,14 @@ fn normalized_package_name(package_table: &TomlMap<String, TomlValue>) -> Option
     package_table
         .get(FIELD_NAME)
         .and_then(TomlValue::as_str)
-        .map(|value| value.trim().to_ascii_lowercase())
+        .map(|value| truncate_field(value.trim().to_ascii_lowercase()))
 }
 
 fn package_version(package_table: &TomlMap<String, TomlValue>) -> Option<String> {
     package_table
         .get(FIELD_VERSION)
         .and_then(TomlValue::as_str)
-        .map(|value| value.to_string())
+        .map(|value| truncate_field(value.to_string()))
 }
 
 fn is_package_pinned(package_table: &TomlMap<String, TomlValue>) -> bool {
@@ -580,12 +596,12 @@ fn extract_artifact_metadata(
             archive_table
                 .get("url")
                 .and_then(TomlValue::as_str)
-                .map(|value| value.to_string())
+                .map(|value| truncate_field(value.to_string()))
                 .or_else(|| {
                     archive_table
                         .get("path")
                         .and_then(TomlValue::as_str)
-                        .map(|value| value.to_string())
+                        .map(|value| truncate_field(value.to_string()))
                 }),
             extract_hash_by_name(archive_table, "sha256"),
             extract_hash_by_name(archive_table, "sha512"),
@@ -598,12 +614,12 @@ fn extract_artifact_metadata(
             sdist_table
                 .get("url")
                 .and_then(TomlValue::as_str)
-                .map(|value| value.to_string())
+                .map(|value| truncate_field(value.to_string()))
                 .or_else(|| {
                     sdist_table
                         .get("path")
                         .and_then(TomlValue::as_str)
-                        .map(|value| value.to_string())
+                        .map(|value| truncate_field(value.to_string()))
                 }),
             extract_hash_by_name(sdist_table, "sha256"),
             extract_hash_by_name(sdist_table, "sha512"),
@@ -621,12 +637,12 @@ fn extract_artifact_metadata(
         wheel_table
             .and_then(|table| table.get("url"))
             .and_then(TomlValue::as_str)
-            .map(|value| value.to_string())
+            .map(|value| truncate_field(value.to_string()))
             .or_else(|| {
                 wheel_table
                     .and_then(|table| table.get("path"))
                     .and_then(TomlValue::as_str)
-                    .map(|value| value.to_string())
+                    .map(|value| truncate_field(value.to_string()))
             }),
         wheel_table.and_then(|table| extract_hash_by_name(table, "sha256")),
         wheel_table.and_then(|table| extract_hash_by_name(table, "sha512")),
@@ -640,7 +656,7 @@ fn extract_hash_by_name(table: &TomlMap<String, TomlValue>, name: &str) -> Optio
         .and_then(TomlValue::as_table)
         .and_then(|hashes| hashes.get(name))
         .and_then(TomlValue::as_str)
-        .map(|value| value.to_string())
+        .map(|value| truncate_field(value.to_string()))
 }
 
 fn extract_string_set(toml_content: &TomlValue, key: &str) -> HashSet<String> {
@@ -699,7 +715,7 @@ fn create_pypi_purl(name: &str, version: Option<&str>) -> Option<String> {
         {
             return None;
         }
-        return Some(purl.to_string());
+        return Some(truncate_field(purl.to_string()));
     }
 
     let mut purl = format!("pkg:pypi/{}", name);
@@ -709,7 +725,7 @@ fn create_pypi_purl(name: &str, version: Option<&str>) -> Option<String> {
         purl.push('@');
         purl.push_str(version);
     }
-    Some(purl)
+    Some(truncate_field(purl))
 }
 
 fn toml_value_to_json(value: &TomlValue) -> JsonValue {

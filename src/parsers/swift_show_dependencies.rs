@@ -12,15 +12,18 @@
 //! - Extracts full dependency graph with versions (beyond Python which only extracts name)
 //! - Spec: https://forums.swift.org/t/swiftpm-show-dependencies-without-fetching-dependencies/51154
 
-use std::fs;
+use std::collections::HashSet;
 use std::path::Path;
 
 use crate::parser_warn as warn;
 use serde::{Deserialize, Serialize};
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 use super::PackageParser;
+
+const MAX_RECURSION_DEPTH: usize = 50;
 
 const PACKAGE_TYPE: PackageType = PackageType::Swift;
 
@@ -64,7 +67,7 @@ impl PackageParser for SwiftShowDependenciesParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!(
@@ -96,9 +99,9 @@ pub(crate) fn parse_swift_show_dependencies(content: &str) -> PackageData {
     PackageData {
         package_type: Some(PACKAGE_TYPE),
         primary_language: Some("Swift".to_string()),
-        name: data.name,
-        version,
-        homepage_url,
+        name: data.name.map(truncate_field),
+        version: version.map(truncate_field),
+        homepage_url: homepage_url.map(truncate_field),
         dependencies,
         datasource_id: Some(DatasourceId::SwiftPackageShowDependencies),
         purl,
@@ -108,36 +111,79 @@ pub(crate) fn parse_swift_show_dependencies(content: &str) -> PackageData {
 
 fn flatten_dependencies(deps: &[SwiftDependency]) -> Vec<Dependency> {
     let mut result = Vec::new();
+
     for dep in deps {
-        flatten_dependency(dep, true, &mut result);
+        let mut path = HashSet::new();
+        flatten_dependency(dep, true, &mut result, &mut path, 0);
     }
 
     result
 }
 
-fn flatten_dependency(dep: &SwiftDependency, is_direct: bool, result: &mut Vec<Dependency>) {
-    if let Some(dependency) = build_dependency(dep, is_direct) {
+fn flatten_dependency(
+    dep: &SwiftDependency,
+    is_direct: bool,
+    result: &mut Vec<Dependency>,
+    path: &mut HashSet<String>,
+    depth: usize,
+) {
+    if depth >= MAX_RECURSION_DEPTH {
+        warn!(
+            "Recursion depth exceeded in swift dependency flattening at depth {}",
+            depth
+        );
+        return;
+    }
+
+    if result.len() >= MAX_ITERATION_COUNT {
+        return;
+    }
+
+    let dep_key = dep
+        .identity
+        .as_deref()
+        .or(dep.name.as_deref())
+        .unwrap_or("")
+        .to_string();
+    if !dep_key.is_empty() && !path.insert(dep_key.clone()) {
+        return;
+    }
+
+    if let Some(dependency) = build_dependency(dep, is_direct, depth) {
         result.push(dependency);
     }
 
     for child in &dep.dependencies {
-        flatten_dependency(child, false, result);
+        flatten_dependency(child, false, result, path, depth + 1);
+    }
+
+    if !dep_key.is_empty() {
+        path.remove(&dep_key);
     }
 }
 
-fn build_dependency(dep: &SwiftDependency, is_direct: bool) -> Option<Dependency> {
-    let name = dep.name.as_ref()?.clone();
+fn build_dependency(dep: &SwiftDependency, is_direct: bool, depth: usize) -> Option<Dependency> {
+    if depth >= MAX_RECURSION_DEPTH {
+        warn!(
+            "Recursion depth exceeded in swift dependency building at depth {}",
+            depth
+        );
+        return None;
+    }
+
+    let name = truncate_field(dep.name.as_ref()?.clone());
     let version = normalize_version(dep.version.clone());
     let purl = create_dependency_purl(dep, &name, version.as_deref());
     let nested_dependencies = dep
         .dependencies
         .iter()
-        .filter_map(|child| build_dependency(child, true))
+        .take(MAX_ITERATION_COUNT)
+        .filter_map(|child| build_dependency(child, true, depth + 1))
         .collect();
 
     Some(Dependency {
-        purl: Some(purl.clone()),
-        extracted_requirement: version.clone(),
+        purl: Some(truncate_field(purl.clone())),
+        extracted_requirement: version.clone().map(truncate_field),
         scope: Some("dependencies".to_string()),
         is_runtime: None,
         is_optional: None,
@@ -160,9 +206,9 @@ fn build_dependency(dep: &SwiftDependency, is_direct: bool) -> Option<Dependency
             purl: None,
             ..ResolvedPackage::new(
                 PACKAGE_TYPE,
-                extract_namespace(dep.url.as_deref()).unwrap_or_default(),
+                truncate_field(extract_namespace(dep.url.as_deref()).unwrap_or_default()),
                 name,
-                version.clone().unwrap_or_default(),
+                truncate_field(version.clone().unwrap_or_default()),
             )
         })),
         extra_data: None,
