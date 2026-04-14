@@ -462,6 +462,30 @@ struct GemInfo {
     requirements: Vec<String>,
 }
 
+fn select_primary_path_gem(gems: &HashMap<String, GemInfo>) -> Option<GemInfo> {
+    let mut path_gems: Vec<&GemInfo> = gems.values().filter(|gem| gem.gem_type == "PATH").collect();
+    path_gems.sort_by(|left, right| {
+        left.remote
+            .as_deref()
+            .cmp(&right.remote.as_deref())
+            .then_with(|| left.name.cmp(&right.name))
+    });
+
+    path_gems
+        .iter()
+        .copied()
+        .find(|gem| gem.pinned && gem.remote.as_deref() == Some("."))
+        .or_else(|| path_gems.iter().copied().find(|gem| gem.pinned))
+        .or_else(|| {
+            path_gems
+                .iter()
+                .copied()
+                .find(|gem| gem.remote.as_deref() == Some("."))
+        })
+        .or_else(|| path_gems.first().copied())
+        .cloned()
+}
+
 /// Parses Gemfile.lock content using a state machine.
 fn parse_gemfile_lock(content: &str) -> PackageData {
     let mut state = ParseState::None;
@@ -666,7 +690,7 @@ fn parse_gemfile_lock(content: &str) -> PackageData {
         }
     }
 
-    let primary_gem = gems.values().find(|gem| gem.gem_type == "PATH").cloned();
+    let primary_gem = select_primary_path_gem(&gems);
 
     let (
         package_name,
@@ -1180,6 +1204,101 @@ fn candidate_constant_names(var_name: &str) -> Vec<String> {
     names
 }
 
+fn looks_like_local_variable_reference(s: &str) -> bool {
+    let mut chars = s.chars();
+    matches!(chars.next(), Some('_' | 'a'..='z'))
+        && chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
+}
+
+fn resolve_file_read_argument(args: &str, base_dir: Option<&Path>) -> Option<String> {
+    let base_dir = base_dir?;
+    let relative_path = extract_first_ruby_value(args)?;
+    if relative_path.is_empty() {
+        return None;
+    }
+
+    let candidate = Path::new(&relative_path);
+    let path = if candidate.is_absolute() {
+        candidate.to_path_buf()
+    } else {
+        base_dir.join(candidate)
+    };
+
+    fs::read_to_string(path)
+        .ok()
+        .map(|content| content.trim().to_string())
+        .filter(|content| !content.is_empty())
+}
+
+fn resolve_scalar_expression(
+    expression: &str,
+    base_dir: Option<&Path>,
+    contexts: &[String],
+) -> Option<String> {
+    let expression = if let Some(pos) = expression.find(" #") {
+        expression[..pos].trim()
+    } else {
+        expression.trim()
+    };
+
+    let file_read_re = Regex::new(r#"^File\.read\((.+)\)(?:\.strip)?(?:\.freeze)?$"#).ok()?;
+    if let Some(caps) = file_read_re.captures(expression) {
+        return caps
+            .get(1)
+            .and_then(|m| resolve_file_read_argument(m.as_str(), base_dir));
+    }
+
+    if let Some(value) = extract_first_ruby_value(expression) {
+        return Some(value);
+    }
+
+    let cleaned = clean_gemspec_value(expression);
+    if looks_like_constant_reference(&cleaned) {
+        return resolve_variable_version(&cleaned, contexts).or(Some(cleaned));
+    }
+
+    None
+}
+
+fn resolve_local_variable_value(
+    var_name: &str,
+    content: &str,
+    base_dir: Option<&Path>,
+    contexts: &[String],
+) -> Option<String> {
+    let escaped = regex::escape(var_name.trim());
+    let pattern = format!(r#"(?m)^\s*{}\s*=\s*(.+)$"#, escaped);
+    let re = Regex::new(&pattern).ok()?;
+
+    re.captures_iter(content).find_map(|caps| {
+        caps.get(1)
+            .and_then(|m| resolve_scalar_expression(m.as_str(), base_dir, contexts))
+    })
+}
+
+fn resolve_gemspec_scalar_value(
+    raw_value: &str,
+    content: &str,
+    base_dir: Option<&Path>,
+    contexts: &[String],
+) -> Option<String> {
+    let cleaned = clean_gemspec_value(raw_value);
+    if cleaned.is_empty() {
+        return None;
+    }
+
+    if looks_like_constant_reference(&cleaned) {
+        return resolve_variable_version(&cleaned, contexts).or(Some(cleaned));
+    }
+
+    if looks_like_local_variable_reference(&cleaned) {
+        return resolve_local_variable_value(&cleaned, content, base_dir, contexts)
+            .or(Some(cleaned));
+    }
+
+    Some(cleaned)
+}
+
 fn load_required_ruby_contexts(content: &str, base_dir: Option<&Path>) -> Vec<String> {
     let mut contexts = vec![content.to_string()];
     let Some(base_dir) = base_dir else {
@@ -1302,39 +1421,16 @@ fn parse_gemspec_with_context(content: &str, base_dir: Option<&Path>) -> Package
         };
 
         match field_name {
-            "name" => {
-                let cleaned = clean_gemspec_value(raw_value);
-                name = if looks_like_constant_reference(&cleaned) {
-                    resolve_variable_version(&cleaned, &contexts).or(Some(cleaned))
-                } else {
-                    Some(cleaned)
-                }
-            }
+            "name" => name = resolve_gemspec_scalar_value(raw_value, content, base_dir, &contexts),
             "version" => {
-                let cleaned = clean_gemspec_value(raw_value);
-                // Bug #2: Check if version is a variable reference
-                if looks_like_constant_reference(&cleaned) {
-                    version = resolve_variable_version(&cleaned, &contexts).or(Some(cleaned));
-                } else {
-                    version = Some(cleaned);
-                }
+                version = resolve_gemspec_scalar_value(raw_value, content, base_dir, &contexts);
             }
             "summary" => {
-                let cleaned = clean_gemspec_value(raw_value);
-                summary = if looks_like_constant_reference(&cleaned) {
-                    resolve_variable_version(&cleaned, &contexts).or(Some(cleaned))
-                } else {
-                    Some(cleaned)
-                }
+                summary = resolve_gemspec_scalar_value(raw_value, content, base_dir, &contexts)
             }
             "description" => description = Some(clean_gemspec_value(raw_value)),
             "homepage" => {
-                let cleaned = clean_gemspec_value(raw_value);
-                homepage = if looks_like_constant_reference(&cleaned) {
-                    resolve_variable_version(&cleaned, &contexts).or(Some(cleaned))
-                } else {
-                    Some(cleaned)
-                }
+                homepage = resolve_gemspec_scalar_value(raw_value, content, base_dir, &contexts)
             }
             "license" => license = Some(clean_gemspec_value(raw_value)),
             _ => {}

@@ -320,6 +320,106 @@ end
         assert_eq!(byebug.unwrap().is_runtime, Some(false));
     }
 
+    #[test]
+    fn test_gemspec_resolves_local_file_read_variable() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let version_path = temp_dir.path().join("RAILS_VERSION");
+        fs::write(&version_path, "8.2.0.alpha\n").expect("write version file");
+
+        let gemspec_path = temp_dir.path().join("rails.gemspec");
+        fs::write(
+            &gemspec_path,
+            r#"
+version = File.read(File.expand_path("RAILS_VERSION", __dir__)).strip
+
+Gem::Specification.new do |spec|
+  spec.name = "rails"
+  spec.version = version
+  spec.summary = "Full-stack web application framework."
+  spec.homepage = "https://rubyonrails.org"
+  spec.license = "MIT"
+end
+"#,
+        )
+        .expect("write gemspec");
+
+        let package_data =
+            crate::parsers::ruby::GemspecParser::extract_first_package(&gemspec_path);
+
+        assert_eq!(package_data.name.as_deref(), Some("rails"));
+        assert_eq!(package_data.version.as_deref(), Some("8.2.0.alpha"));
+        assert_eq!(
+            package_data.purl.as_deref(),
+            Some("pkg:gem/rails@8.2.0.alpha")
+        );
+        assert_eq!(
+            package_data.download_url.as_deref(),
+            Some("https://rubygems.org/downloads/rails-8.2.0.alpha.gem")
+        );
+        assert_eq!(
+            package_data.repository_homepage_url.as_deref(),
+            Some("https://rubygems.org/gems/rails/versions/8.2.0.alpha")
+        );
+    }
+
+    #[test]
+    fn test_gemfile_lock_prefers_repo_root_pinned_path_package() {
+        let lockfile_path = PathBuf::from("testdata/ruby-golden/gemfile-lock-path/Gemfile.lock");
+        let package_data = GemfileLockParser::extract_first_package(&lockfile_path);
+
+        assert_eq!(package_data.name.as_deref(), Some("my-local-gem"));
+        assert_eq!(package_data.version.as_deref(), Some("1.0.0"));
+        assert_eq!(
+            package_data.purl.as_deref(),
+            Some("pkg:gem/my-local-gem@1.0.0")
+        );
+    }
+
+    #[test]
+    fn test_gemfile_lock_prefers_root_path_over_auxiliary_paths() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let lockfile_path = temp_dir.path().join("Gemfile.lock");
+        fs::write(
+            &lockfile_path,
+            r#"
+PATH
+  remote: .
+  specs:
+    rails (8.2.0.alpha)
+      activesupport (= 8.2.0.alpha)
+
+PATH
+  remote: tools/releaser
+  specs:
+    releaser (1.0.0)
+      thor (~> 1.0)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    activesupport (8.2.0.alpha)
+    thor (1.3.2)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  rails!
+  releaser!
+"#,
+        )
+        .expect("write lockfile");
+
+        let package_data = GemfileLockParser::extract_first_package(&lockfile_path);
+
+        assert_eq!(package_data.name.as_deref(), Some("rails"));
+        assert_eq!(package_data.version.as_deref(), Some("8.2.0.alpha"));
+        assert_eq!(
+            package_data.purl.as_deref(),
+            Some("pkg:gem/rails@8.2.0.alpha")
+        );
+    }
+
     // ==========================================================================
     // Test: Frozen strings in Gemfile (Bug #1 integration test)
     // ==========================================================================
