@@ -192,7 +192,7 @@ and the resulting package data shape.
 - Max depth limits are respected
 - Empty directories handled gracefully
 - Incremental manifest persistence and unchanged-file reuse across repeated scans
-- Cache-root CLI wiring behavior (`--cache-dir`, `--cache-clear`, `--incremental`) via startup/runtime tests
+- Cache-root CLI wiring behavior (`--cache-dir`, `--cache-clear`, `--incremental`, `--no-license-index-cache`) via startup/runtime tests, including license-index cache placement under the shared root
 
 **Why This Matters**: Layer 3 proves scanner-wired package contracts; Layer 4 proves the system still works together from the user's perspective.
 
