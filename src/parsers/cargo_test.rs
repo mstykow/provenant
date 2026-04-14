@@ -224,20 +224,20 @@ license = "CC0-1.0 OR MIT-0 OR Apache-2.0"
 
         assert_eq!(
             package_data.declared_license_expression.as_deref(),
-            Some("cc0-1.0 OR mit-0 OR apache-2.0")
+            Some("apache-2.0 OR cc0-1.0 OR mit-0")
         );
         assert_eq!(
             package_data.declared_license_expression_spdx.as_deref(),
-            Some("CC0-1.0 OR MIT-0 OR Apache-2.0")
+            Some("Apache-2.0 OR CC0-1.0 OR MIT-0")
         );
         assert_eq!(package_data.license_detections.len(), 1);
         assert_eq!(
             package_data.license_detections[0].license_expression,
-            "cc0-1.0 OR mit-0 OR apache-2.0"
+            "apache-2.0 OR cc0-1.0 OR mit-0"
         );
         assert_eq!(
             package_data.license_detections[0].license_expression_spdx,
-            "CC0-1.0 OR MIT-0 OR Apache-2.0"
+            "Apache-2.0 OR CC0-1.0 OR MIT-0"
         );
         assert_eq!(
             package_data.extracted_license_statement.as_deref(),

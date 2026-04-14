@@ -19,16 +19,16 @@
     ],
     "homepage_url": "https://crates.io/crates/constant_time_eq",
     "vcs_url": "https://github.com/cesarb/constant_time_eq",
-    "declared_license_expression": "cc0-1.0 OR mit-0 OR apache-2.0",
-    "declared_license_expression_spdx": "CC0-1.0 OR MIT-0 OR Apache-2.0",
+    "declared_license_expression": "apache-2.0 OR cc0-1.0 OR mit-0",
+    "declared_license_expression_spdx": "Apache-2.0 OR CC0-1.0 OR MIT-0",
     "license_detections": [
       {
-        "license_expression": "cc0-1.0 OR mit-0 OR apache-2.0",
-        "license_expression_spdx": "CC0-1.0 OR MIT-0 OR Apache-2.0",
+        "license_expression": "apache-2.0 OR cc0-1.0 OR mit-0",
+        "license_expression_spdx": "Apache-2.0 OR CC0-1.0 OR MIT-0",
         "matches": [
           {
-            "license_expression": "cc0-1.0 OR mit-0 OR apache-2.0",
-            "license_expression_spdx": "CC0-1.0 OR MIT-0 OR Apache-2.0",
+            "license_expression": "apache-2.0 OR cc0-1.0 OR mit-0",
+            "license_expression_spdx": "Apache-2.0 OR CC0-1.0 OR MIT-0",
             "from_file": null,
             "score": 100.0
           }
