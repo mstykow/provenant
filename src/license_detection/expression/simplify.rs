@@ -11,7 +11,7 @@ use super::{LicenseExpression, ParseError};
 ///
 /// # Returns
 /// Simplified expression with duplicate and subsumed licenses removed,
-/// preserving order.
+/// using deterministic canonical ordering for boolean operand chains.
 pub fn simplify_expression(expr: &LicenseExpression) -> LicenseExpression {
     match expr {
         LicenseExpression::License(key) => LicenseExpression::License(key.clone()),
@@ -25,6 +25,7 @@ pub fn simplify_expression(expr: &LicenseExpression) -> LicenseExpression {
             let mut seen = HashSet::new();
             collect_unique_and(expr, &mut unique, &mut seen);
             prune_subsumed_operands(&mut unique, true);
+            sort_operands_canonically(&mut unique);
             build_expression_from_list(&unique, true)
         }
         LicenseExpression::Or { .. } => {
@@ -32,9 +33,18 @@ pub fn simplify_expression(expr: &LicenseExpression) -> LicenseExpression {
             let mut seen = HashSet::new();
             collect_unique_or(expr, &mut unique, &mut seen);
             prune_subsumed_operands(&mut unique, false);
+            sort_operands_canonically(&mut unique);
             build_expression_from_list(&unique, false)
         }
     }
+}
+
+fn sort_operands_canonically(operands: &mut [LicenseExpression]) {
+    operands.sort_by_cached_key(canonical_operand_sort_key);
+}
+
+fn canonical_operand_sort_key(expr: &LicenseExpression) -> String {
+    expression_to_string(expr).to_ascii_lowercase()
 }
 
 fn prune_subsumed_operands(operands: &mut Vec<LicenseExpression>, outer_is_and: bool) {
@@ -507,7 +517,7 @@ mod tests {
     fn test_simplify_expression_no_change() {
         let expr = super::super::parse::parse_expression("MIT AND Apache-2.0").unwrap();
         let simplified = simplify_expression(&expr);
-        assert_eq!(expression_to_string(&simplified), "mit AND apache-2.0");
+        assert_eq!(expression_to_string(&simplified), "apache-2.0 AND mit");
     }
 
     #[test]
@@ -535,7 +545,7 @@ mod tests {
     fn test_simplify_preserves_different_licenses() {
         let expr = super::super::parse::parse_expression("mit AND apache-2.0").unwrap();
         let simplified = simplify_expression(&expr);
-        assert_eq!(expression_to_string(&simplified), "mit AND apache-2.0");
+        assert_eq!(expression_to_string(&simplified), "apache-2.0 AND mit");
     }
 
     #[test]
@@ -578,11 +588,11 @@ mod tests {
             super::super::parse::parse_expression("(mit AND apache-2.0) OR (mit AND apache-2.0)")
                 .unwrap();
         let simplified = simplify_expression(&expr);
-        assert_eq!(expression_to_string(&simplified), "mit AND apache-2.0");
+        assert_eq!(expression_to_string(&simplified), "apache-2.0 AND mit");
     }
 
     #[test]
-    fn test_simplify_preserves_order() {
+    fn test_simplify_sorts_operands_canonically() {
         let expr =
             super::super::parse::parse_expression("apache-2.0 AND mit AND apache-2.0").unwrap();
         let simplified = simplify_expression(&expr);
@@ -593,7 +603,7 @@ mod tests {
     fn test_simplify_mit_and_mit_and_apache() {
         let expr = super::super::parse::parse_expression("mit AND mit AND apache-2.0").unwrap();
         let simplified = simplify_expression(&expr);
-        assert_eq!(expression_to_string(&simplified), "mit AND apache-2.0");
+        assert_eq!(expression_to_string(&simplified), "apache-2.0 AND mit");
     }
 
     #[test]
@@ -620,7 +630,7 @@ mod tests {
         .unwrap();
         let simplified = simplify_expression(&expr);
 
-        assert_eq!(expression_to_string(&simplified), "mit AND apache-2.0");
+        assert_eq!(expression_to_string(&simplified), "apache-2.0 AND mit");
     }
 
     #[test]
@@ -631,7 +641,7 @@ mod tests {
         .unwrap();
         let simplified = simplify_expression(&expr);
 
-        assert_eq!(expression_to_string(&simplified), "mit OR apache-2.0");
+        assert_eq!(expression_to_string(&simplified), "apache-2.0 OR mit");
     }
 
     #[test]
@@ -642,7 +652,7 @@ mod tests {
 
         assert_eq!(
             expression_to_string(&simplified),
-            "gpl-2.0-or-later AND gpl-2.0-only"
+            "gpl-2.0-only AND gpl-2.0-or-later"
         );
     }
 
@@ -825,13 +835,13 @@ mod tests {
     #[test]
     fn test_combine_expressions_two_or() {
         let result = combine_expressions_or(&["mit", "apache-2.0"], true).unwrap();
-        assert_eq!(result, "mit OR apache-2.0");
+        assert_eq!(result, "apache-2.0 OR mit");
     }
 
     #[test]
     fn test_combine_expressions_multiple_and() {
         let result = combine_expressions_and(&["mit", "apache-2.0", "gpl-2.0-plus"], true).unwrap();
-        assert_eq!(result, "mit AND apache-2.0 AND gpl-2.0-plus");
+        assert_eq!(result, "apache-2.0 AND gpl-2.0-plus AND mit");
     }
 
     #[test]
@@ -856,7 +866,7 @@ mod tests {
     #[test]
     fn test_combine_expressions_complex_with_simplification() {
         let result = combine_expressions_and(&["mit OR apache-2.0", "gpl-2.0-plus"], true).unwrap();
-        assert_eq!(result, "(mit OR apache-2.0) AND gpl-2.0-plus");
+        assert_eq!(result, "(apache-2.0 OR mit) AND gpl-2.0-plus");
         let expr = super::super::parse::parse_expression(&result).unwrap();
         assert!(matches!(expr, LicenseExpression::And { .. }));
         let keys = expr.license_keys();
