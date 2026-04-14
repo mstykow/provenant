@@ -111,4 +111,40 @@ mod tests {
             DatasourceId::GemArchive,
         );
     }
+
+    #[test]
+    fn test_ruby_gem_archive_does_not_claim_unrelated_siblings() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        fs::copy(
+            "testdata/ruby/example-gem-1.2.3.gem",
+            temp_dir.path().join("example-gem-1.2.3.gem"),
+        )
+        .expect("copy gem archive fixture");
+        fs::write(temp_dir.path().join("README.md"), "unrelated sibling")
+            .expect("write unrelated file");
+
+        let (files, result) = scan_and_assemble(temp_dir.path());
+
+        let package = result
+            .packages
+            .iter()
+            .find(|package| package.name.as_deref() == Some("example-gem"))
+            .expect("standalone ruby gem archive should assemble into a package");
+
+        assert_file_links_to_package(
+            &files,
+            "/example-gem-1.2.3.gem",
+            &package.package_uid,
+            DatasourceId::GemArchive,
+        );
+
+        let readme = files
+            .iter()
+            .find(|file| file.path.ends_with("README.md"))
+            .expect("README should be present in scan results");
+        assert!(
+            readme.for_packages.is_empty(),
+            "standalone gem archive should not claim unrelated sibling files"
+        );
+    }
 }
