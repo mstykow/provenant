@@ -165,10 +165,10 @@ fn build_dependency_from_lock_entry(
         purl,
         extracted_requirement: Some(version),
         scope: Some("dependencies".to_string()),
-        is_runtime: Some(true),
-        is_optional: Some(false),
+        is_runtime: None,
+        is_optional: None,
         is_pinned: Some(true),
-        is_direct: Some(false),
+        is_direct: None,
         resolved_package: Some(Box::new(resolved_package)),
         extra_data: Some(HashMap::from([(
             "app".to_string(),
