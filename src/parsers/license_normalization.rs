@@ -254,6 +254,10 @@ pub(crate) fn build_declared_license_detection(
     normalized: &NormalizedDeclaredLicense,
     metadata: DeclaredLicenseMatchMetadata<'_>,
 ) -> LicenseDetection {
+    let (rule_identifier, rule_url) =
+        derive_declared_rule_metadata(normalized, metadata.matched_text)
+            .unwrap_or_else(|| (PARSER_DECLARED_MATCHER.to_string(), None));
+
     LicenseDetection {
         license_expression: normalized.declared_license_expression.clone(),
         license_expression_spdx: normalized.declared_license_expression_spdx.clone(),
@@ -268,8 +272,8 @@ pub(crate) fn build_declared_license_detection(
             matched_length: Some(metadata.matched_text.split_whitespace().count()),
             match_coverage: Some(100.0),
             rule_relevance: Some(100),
-            rule_identifier: None,
-            rule_url: None,
+            rule_identifier: Some(rule_identifier),
+            rule_url,
             matched_text: Some(metadata.matched_text.to_string()),
             referenced_filenames: metadata
                 .referenced_filenames
@@ -279,6 +283,39 @@ pub(crate) fn build_declared_license_detection(
         detection_log: vec![],
         identifier: None,
     }
+}
+
+fn derive_declared_rule_metadata(
+    normalized: &NormalizedDeclaredLicense,
+    matched_text: &str,
+) -> Option<(String, Option<String>)> {
+    let matched_text = matched_text.trim();
+    if matched_text.is_empty() {
+        return None;
+    }
+
+    let engine = PARSER_LICENSE_ENGINE.as_ref()?;
+    let detections = engine.detect_with_kind(matched_text, false, false).ok()?;
+    let license_match = detections
+        .into_iter()
+        .find(|detection| detection_matches_normalized_expression(detection, normalized))?
+        .matches
+        .into_iter()
+        .next()?;
+
+    Some((
+        license_match.rule_identifier,
+        (!license_match.rule_url.is_empty()).then_some(license_match.rule_url),
+    ))
+}
+
+fn detection_matches_normalized_expression(
+    detection: &crate::license_detection::LicenseDetection,
+    normalized: &NormalizedDeclaredLicense,
+) -> bool {
+    detection.license_expression.as_deref() == Some(normalized.declared_license_expression.as_str())
+        || detection.license_expression_spdx.as_deref()
+            == Some(normalized.declared_license_expression_spdx.as_str())
 }
 
 pub(crate) fn finalize_package_declared_license_references(package_data: &mut PackageData) {
@@ -339,30 +376,14 @@ pub(crate) fn finalize_package_declared_license_references(package_data: &mut Pa
         package_data.declared_license_expression = Some("unknown-license-reference".to_string());
         package_data.declared_license_expression_spdx =
             Some("LicenseRef-scancode-unknown-license-reference".to_string());
-        package_data.license_detections = vec![LicenseDetection {
-            license_expression: "unknown-license-reference".to_string(),
-            license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
-            matches: vec![Match {
-                license_expression: "unknown-license-reference".to_string(),
-                license_expression_spdx: "LicenseRef-scancode-unknown-license-reference"
-                    .to_string(),
-                from_file: None,
-                start_line: LineNumber::ONE,
-                end_line: LineNumber::ONE,
-                matcher: Some(PARSER_DECLARED_MATCHER.to_string()),
-                score: MatchScore::MAX,
-                matched_length: Some(statement.split_whitespace().count()),
-                match_coverage: Some(100.0),
-                rule_relevance: Some(100),
-                rule_identifier: None,
-                rule_url: None,
-                matched_text: Some(statement.to_string()),
-                referenced_filenames: Some(referenced_filenames),
-                matched_text_diagnostics: None,
-            }],
-            detection_log: vec![],
-            identifier: None,
-        }];
+        package_data.license_detections = vec![build_declared_license_detection(
+            &NormalizedDeclaredLicense::new(
+                "unknown-license-reference",
+                "LicenseRef-scancode-unknown-license-reference",
+            ),
+            DeclaredLicenseMatchMetadata::single_line(statement)
+                .with_referenced_filenames(&referenced_filename_slices),
+        )];
     }
 }
 
@@ -708,5 +729,39 @@ mod tests {
             LineNumber::new(4).expect("valid")
         );
         assert_eq!(detection.matches[0].matched_text.as_deref(), Some("MIT"));
+        assert!(
+            detection.matches[0]
+                .rule_identifier
+                .as_deref()
+                .is_some_and(|identifier| !identifier.is_empty())
+        );
+    }
+
+    #[test]
+    fn test_build_declared_license_detection_preserves_engine_rule_metadata() {
+        let mit_license_text = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/testdata/license-golden/single-license/mit.txt"
+        ));
+        let normalized = NormalizedDeclaredLicense::new("mit", "MIT");
+        let (expected_rule_identifier, expected_rule_url) =
+            derive_declared_rule_metadata(&normalized, mit_license_text)
+                .expect("full MIT license text should derive rule metadata");
+
+        let detection = build_declared_license_detection(
+            &normalized,
+            DeclaredLicenseMatchMetadata::new(
+                mit_license_text,
+                LineNumber::new(10).unwrap(),
+                LineNumber::new(31).unwrap(),
+            ),
+        );
+
+        assert_ne!(expected_rule_identifier, PARSER_DECLARED_MATCHER);
+        assert_eq!(
+            detection.matches[0].rule_identifier.as_deref(),
+            Some(expected_rule_identifier.as_str())
+        );
+        assert_eq!(detection.matches[0].rule_url, expected_rule_url);
     }
 }
