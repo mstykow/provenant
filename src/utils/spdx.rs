@@ -217,7 +217,7 @@ mod tests {
     fn combine_license_expressions_preserves_spdx_case() {
         let result = combine_license_expressions(vec!["MIT".to_string(), "Apache-2.0".to_string()]);
 
-        assert_eq!(result.as_deref(), Some("MIT AND Apache-2.0"));
+        assert_eq!(result.as_deref(), Some("Apache-2.0 AND MIT"));
     }
 
     #[test]
@@ -228,7 +228,7 @@ mod tests {
             "Unicode-TOU".to_string(),
         ]);
 
-        assert_eq!(result.as_deref(), Some("MIT AND ICU AND Unicode-TOU"));
+        assert_eq!(result.as_deref(), Some("ICU AND MIT AND Unicode-TOU"));
     }
 
     #[test]
@@ -240,7 +240,7 @@ mod tests {
 
         assert_eq!(
             result.as_deref(),
-            Some("GPL-2.0 WITH Classpath-exception-2.0 AND GPL-2.0")
+            Some("GPL-2.0 AND GPL-2.0 WITH Classpath-exception-2.0")
         );
     }
 
