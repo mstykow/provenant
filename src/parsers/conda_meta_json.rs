@@ -18,10 +18,10 @@
 
 use crate::models::{DatasourceId, FileReference, Md5Digest, PackageType, Sha256Digest};
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -76,7 +76,7 @@ impl PackageParser for CondaMetaJsonParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read conda-meta JSON file {:?}: {}", path, e);
@@ -106,28 +106,36 @@ pub(crate) fn parse_conda_meta_json_with_path(content: &str, _path: Option<&Path
     if let Some(ref requested_spec) = metadata.requested_spec {
         extra_data.insert(
             "requested_spec".to_string(),
-            Value::String(requested_spec.clone()),
+            Value::String(truncate_field(requested_spec.clone())),
         );
     }
     if let Some(ref channel) = metadata.channel {
-        extra_data.insert("channel".to_string(), Value::String(channel.clone()));
+        extra_data.insert(
+            "channel".to_string(),
+            Value::String(truncate_field(channel.clone())),
+        );
     }
     if let Some(ref extracted_package_dir) = metadata.extracted_package_dir {
         extra_data.insert(
             "extracted_package_dir".to_string(),
-            Value::String(extracted_package_dir.clone()),
+            Value::String(truncate_field(extracted_package_dir.clone())),
         );
     }
     if let Some(ref files) = metadata.files {
         extra_data.insert(
             "files".to_string(),
-            Value::Array(files.iter().map(|f| Value::String(f.clone())).collect()),
+            Value::Array(
+                files
+                    .iter()
+                    .map(|f| Value::String(truncate_field(f.clone())))
+                    .collect(),
+            ),
         );
     }
     if let Some(ref package_tarball_full_path) = metadata.package_tarball_full_path {
         extra_data.insert(
             "package_tarball_full_path".to_string(),
-            Value::String(package_tarball_full_path.clone()),
+            Value::String(truncate_field(package_tarball_full_path.clone())),
         );
     }
 
@@ -158,10 +166,10 @@ pub(crate) fn parse_conda_meta_json_with_path(content: &str, _path: Option<&Path
     PackageData {
         package_type: Some(PACKAGE_TYPE),
         primary_language: Some("Python".to_string()),
-        name: metadata.name,
-        version: metadata.version,
-        extracted_license_statement: metadata.license,
-        download_url: metadata.url,
+        name: metadata.name.map(truncate_field),
+        version: metadata.version.map(truncate_field),
+        extracted_license_statement: metadata.license.map(truncate_field),
+        download_url: metadata.url.map(truncate_field),
         size: metadata.size,
         md5: metadata.md5.and_then(|h| Md5Digest::from_hex(&h).ok()),
         sha256: metadata
@@ -186,7 +194,7 @@ fn build_conda_file_references(
         && let Some(relative) = condense_to_pkgs_relative(extracted_dir)
     {
         refs.push(FileReference {
-            path: relative,
+            path: truncate_field(relative),
             size: None,
             sha1: None,
             md5: None,
@@ -200,7 +208,7 @@ fn build_conda_file_references(
         && let Some(relative) = condense_to_pkgs_relative(tarball)
     {
         refs.push(FileReference {
-            path: relative,
+            path: truncate_field(relative),
             size: None,
             sha1: None,
             md5: None,
@@ -211,9 +219,9 @@ fn build_conda_file_references(
     }
 
     if let Some(files) = files {
-        for file in files {
+        for file in files.iter().take(MAX_ITERATION_COUNT) {
             refs.push(FileReference {
-                path: file.clone(),
+                path: truncate_field(file.clone()),
                 size: None,
                 sha1: None,
                 md5: None,

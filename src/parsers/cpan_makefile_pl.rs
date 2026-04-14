@@ -13,11 +13,11 @@
 //! - Python reference has stub-only handler with no parse() method - this is BEYOND PARITY
 
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 use std::sync::LazyLock;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use packageurl::PackageUrl;
 use regex::Regex;
 use serde_json::json;
@@ -65,7 +65,7 @@ impl PackageParser for CpanMakefilePlParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read Makefile.PL file {:?}: {}", path, e);
@@ -96,18 +96,18 @@ pub(crate) fn parse_makefile_pl_with_base(content: &str, base_dir: Option<&Path>
 
     let fields = parse_hash_fields(&makefile_block);
 
-    let name = fields.get("NAME").map(|n| n.to_string());
+    let name = fields.get("NAME").map(|n| truncate_field(n.to_string()));
     let resolved_metadata = resolve_referenced_metadata(&fields, base_dir);
 
     let version = fields
         .get("VERSION")
-        .map(|v| v.to_string())
+        .map(|v| truncate_field(v.to_string()))
         .or_else(|| resolved_metadata.version.clone());
     let description = fields
         .get("ABSTRACT")
-        .map(|d| d.to_string())
+        .map(|d| truncate_field(d.to_string()))
         .or_else(|| resolved_metadata.abstract_text.clone());
-    let extracted_license_statement = fields.get("LICENSE").map(|l| l.to_string());
+    let extracted_license_statement = fields.get("LICENSE").map(|l| truncate_field(l.to_string()));
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         extracted_license_statement
             .as_deref()
@@ -127,13 +127,22 @@ pub(crate) fn parse_makefile_pl_with_base(content: &str, base_dir: Option<&Path>
 
     let mut extra_data = HashMap::new();
     if let Some(min_perl) = fields.get("MIN_PERL_VERSION") {
-        extra_data.insert("MIN_PERL_VERSION".to_string(), json!(min_perl));
+        extra_data.insert(
+            "MIN_PERL_VERSION".to_string(),
+            json!(truncate_field(min_perl.to_string())),
+        );
     }
     if let Some(version_from) = fields.get("VERSION_FROM") {
-        extra_data.insert("VERSION_FROM".to_string(), json!(version_from));
+        extra_data.insert(
+            "VERSION_FROM".to_string(),
+            json!(truncate_field(version_from.to_string())),
+        );
     }
     if let Some(abstract_from) = fields.get("ABSTRACT_FROM") {
-        extra_data.insert("ABSTRACT_FROM".to_string(), json!(abstract_from));
+        extra_data.insert(
+            "ABSTRACT_FROM".to_string(),
+            json!(truncate_field(abstract_from.to_string())),
+        );
     }
 
     // Build PURL: convert Foo::Bar to Foo-Bar for CPAN naming convention
@@ -251,12 +260,12 @@ fn read_safe_metadata_file(base_dir: &Path, relative_path: &str) -> Option<Strin
         return None;
     }
 
-    let metadata = fs::metadata(&canonical_candidate).ok()?;
+    let metadata = std::fs::metadata(&canonical_candidate).ok()?;
     if !metadata.is_file() || metadata.len() > MAX_METADATA_FILE_SIZE {
         return None;
     }
 
-    fs::read_to_string(canonical_candidate).ok()
+    read_file_to_string(&canonical_candidate, None).ok()
 }
 
 fn extract_version_from_module_content(content: &str) -> Option<String> {
@@ -264,6 +273,7 @@ fn extract_version_from_module_content(content: &str) -> Option<String> {
         .captures(content)
         .and_then(|caps| caps.get(1).or_else(|| caps.get(2)))
         .map(|m| m.as_str().trim().to_string())
+        .map(truncate_field)
         .filter(|value| !value.is_empty())
 }
 
@@ -288,7 +298,7 @@ fn extract_abstract_from_module_content(content: &str) -> Option<String> {
             if let Some((_, abstract_text)) = trimmed.split_once(" - ") {
                 let abstract_text = abstract_text.trim();
                 if !abstract_text.is_empty() {
-                    return Some(abstract_text.to_string());
+                    return Some(truncate_field(abstract_text.to_string()));
                 }
             }
         }
@@ -312,6 +322,9 @@ fn extract_writemakefile_block(content: &str) -> String {
     let chars: Vec<char> = content_from_start.chars().collect();
 
     for (i, &ch) in chars.iter().enumerate() {
+        if i >= MAX_ITERATION_COUNT {
+            break;
+        }
         match ch {
             '(' => depth += 1,
             ')' => {
@@ -335,12 +348,11 @@ fn extract_writemakefile_block(content: &str) -> String {
 fn parse_hash_fields(content: &str) -> HashMap<String, String> {
     let mut fields = HashMap::new();
 
-    for cap in RE_SIMPLE_KV.captures_iter(content) {
-        let key = cap
-            .get(1)
-            .expect("group 1 always exists")
-            .as_str()
-            .to_string();
+    for cap in RE_SIMPLE_KV
+        .captures_iter(content)
+        .take(MAX_ITERATION_COUNT)
+    {
+        let key = cap.get(1).map(|m| m.as_str()).unwrap_or("").to_string();
         let value = cap
             .get(2)
             .or_else(|| cap.get(3))
@@ -363,9 +375,12 @@ fn parse_hash_fields(content: &str) -> HashMap<String, String> {
 }
 
 fn parse_hash_dependencies(content: &str, fields: &mut HashMap<String, String>) {
-    for cap in RE_HASH_BLOCK.captures_iter(content) {
-        let key = cap.get(1).expect("group 1 always exists").as_str();
-        let hash_content = cap.get(2).expect("group 2 always exists").as_str();
+    for cap in RE_HASH_BLOCK
+        .captures_iter(content)
+        .take(MAX_ITERATION_COUNT)
+    {
+        let key = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+        let hash_content = cap.get(2).map(|m| m.as_str()).unwrap_or("");
 
         // For dependency hashes, we'll store them with a special marker
         // so parse_dependencies can find them
@@ -380,10 +395,11 @@ fn parse_hash_dependencies(content: &str, fields: &mut HashMap<String, String>) 
 
 fn parse_author_array(content: &str, fields: &mut HashMap<String, String>) {
     if let Some(cap) = RE_AUTHOR_ARRAY.captures(content) {
-        let array_content = cap.get(1).expect("group 1 always exists").as_str();
+        let array_content = cap.get(1).map(|m| m.as_str()).unwrap_or("");
 
         let authors: Vec<String> = RE_QUOTED_STRING
             .captures_iter(array_content)
+            .take(MAX_ITERATION_COUNT)
             .filter_map(|c| c.get(1).map(|m| m.as_str().to_string()))
             .collect();
 
@@ -418,7 +434,6 @@ fn parse_author(fields: &HashMap<String, String>) -> Vec<Party> {
             .collect();
     }
 
-    // Single author
     if let Some(author_str) = fields.get("AUTHOR") {
         let (name, email) = parse_author_string(author_str);
         return vec![Party {
@@ -437,7 +452,6 @@ fn parse_author(fields: &HashMap<String, String>) -> Vec<Party> {
 }
 
 fn parse_author_string(s: &str) -> (Option<String>, Option<String>) {
-    // Parse "Name <email@example.com>" format
     if let Some(start) = s.find('<')
         && let Some(end) = s.find('>')
         && start < end
@@ -448,17 +462,16 @@ fn parse_author_string(s: &str) -> (Option<String>, Option<String>) {
             if name.is_empty() {
                 None
             } else {
-                Some(name.to_string())
+                Some(truncate_field(name.to_string()))
             },
             if email.is_empty() {
                 None
             } else {
-                Some(email.to_string())
+                Some(truncate_field(email.to_string()))
             },
         );
     }
-    // No email found, treat entire string as name
-    (Some(s.trim().to_string()), None)
+    (Some(truncate_field(s.trim().to_string())), None)
 }
 
 fn parse_dependencies(fields: &HashMap<String, String>) -> Vec<Dependency> {
@@ -490,8 +503,11 @@ fn parse_dependencies(fields: &HashMap<String, String>) -> Vec<Dependency> {
 fn extract_deps_from_hash(hash_content: &str, scope: &str, is_runtime: bool) -> Vec<Dependency> {
     let mut deps = Vec::new();
 
-    for cap in RE_DEP_PAIR.captures_iter(hash_content) {
-        let module_name = cap.get(1).expect("group 1 always exists").as_str();
+    for cap in RE_DEP_PAIR
+        .captures_iter(hash_content)
+        .take(MAX_ITERATION_COUNT)
+    {
+        let module_name = cap.get(1).map(|m| m.as_str()).unwrap_or("");
 
         // Skip perl itself
         if module_name == "perl" {
@@ -506,7 +522,7 @@ fn extract_deps_from_hash(hash_content: &str, scope: &str, is_runtime: bool) -> 
 
         let extracted_requirement = match version {
             Some("0") | Some("") | None => None,
-            Some(v) => Some(v.to_string()),
+            Some(v) => Some(truncate_field(v.to_string())),
         };
 
         let purl = PackageUrl::new("cpan", module_name)
@@ -516,7 +532,7 @@ fn extract_deps_from_hash(hash_content: &str, scope: &str, is_runtime: bool) -> 
         deps.push(Dependency {
             purl,
             extracted_requirement,
-            scope: Some(scope.to_string()),
+            scope: Some(truncate_field(scope.to_string())),
             is_runtime: Some(is_runtime),
             is_optional: Some(false),
             is_pinned: None,

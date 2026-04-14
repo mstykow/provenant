@@ -12,10 +12,10 @@
 //! - Dependencies from [Prereq] sections (beyond Python which has no parser)
 
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use serde_json::json;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
@@ -38,7 +38,7 @@ impl PackageParser for CpanDistIniParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read dist.ini file {:?}: {}", path, e);
@@ -58,10 +58,12 @@ impl PackageParser for CpanDistIniParser {
 pub(crate) fn parse_dist_ini(content: &str) -> PackageData {
     let (root_fields, sections) = parse_ini_structure(content);
 
-    let name = root_fields.get("name").map(|s| s.replace('-', "::"));
-    let version = root_fields.get("version").cloned();
-    let description = root_fields.get("abstract").cloned();
-    let extracted_license_statement = root_fields.get("license").cloned();
+    let name = root_fields
+        .get("name")
+        .map(|s| truncate_field(s.replace('-', "::")));
+    let version = root_fields.get("version").cloned().map(truncate_field);
+    let description = root_fields.get("abstract").cloned().map(truncate_field);
+    let extracted_license_statement = root_fields.get("license").cloned().map(truncate_field);
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         extracted_license_statement
             .as_deref()
@@ -75,7 +77,10 @@ pub(crate) fn parse_dist_ini(content: &str) -> PackageData {
                 )
             })
             .unwrap_or_else(empty_declared_license_data);
-    let copyright_holder = root_fields.get("copyright_holder").cloned();
+    let copyright_holder = root_fields
+        .get("copyright_holder")
+        .cloned()
+        .map(truncate_field);
 
     let parties = parse_author(&root_fields);
     let dependencies = parse_dependencies(&sections);
@@ -131,7 +136,7 @@ fn parse_ini_structure(
     let mut sections: HashMap<String, HashMap<String, String>> = HashMap::new();
     let mut current_section: Option<String> = None;
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let line = line.trim();
 
         if line.is_empty() || line.starts_with(';') || line.starts_with('#') {
@@ -145,7 +150,7 @@ fn parse_ini_structure(
 
         if let Some((key, value)) = line.split_once('=') {
             let key = key.trim().to_string();
-            let value = value.trim().to_string();
+            let value = truncate_field(value.trim().to_string());
 
             if let Some(section_name) = &current_section {
                 sections
@@ -179,7 +184,7 @@ fn parse_author(fields: &HashMap<String, String>) -> Vec<Party> {
             } else {
                 vec![Party {
                     role: Some("author".to_string()),
-                    name: Some(author_str.clone()),
+                    name: Some(truncate_field(author_str.clone())),
                     r#type: None,
                     email: None,
                     url: None,
@@ -196,8 +201,8 @@ fn parse_author_string(s: &str) -> Option<(String, String)> {
     if let Some(start) = s.find('<')
         && let Some(end) = s.find('>')
     {
-        let name = s[..start].trim().to_string();
-        let email = s[start + 1..end].trim().to_string();
+        let name = truncate_field(s[..start].trim().to_string());
+        let email = truncate_field(s[start + 1..end].trim().to_string());
         return Some((name, email));
     }
     None
@@ -209,7 +214,7 @@ fn parse_dependencies(sections: &HashMap<String, HashMap<String, String>>) -> Ve
     let mut sorted_sections: Vec<_> = sections.iter().collect();
     sorted_sections.sort_by(|(left_name, _), (right_name, _)| left_name.cmp(right_name));
 
-    for (section_name, fields) in sorted_sections {
+    for (section_name, fields) in sorted_sections.iter().take(MAX_ITERATION_COUNT) {
         let Some(scope) = classify_prereq_scope(section_name) else {
             continue;
         };
@@ -217,12 +222,12 @@ fn parse_dependencies(sections: &HashMap<String, HashMap<String, String>>) -> Ve
         let mut sorted_fields: Vec<_> = fields.iter().collect();
         sorted_fields.sort_by(|(left_name, _), (right_name, _)| left_name.cmp(right_name));
 
-        for (module_name, version_req) in sorted_fields {
-            let purl = format!("pkg:cpan/{}", module_name);
-            let extracted_requirement = if version_req == "0" || version_req.is_empty() {
+        for (module_name, version_req) in sorted_fields.iter().take(MAX_ITERATION_COUNT) {
+            let purl = truncate_field(format!("pkg:cpan/{}", module_name));
+            let extracted_requirement = if version_req.as_str() == "0" || version_req.is_empty() {
                 None
             } else {
-                Some(version_req.clone())
+                Some(truncate_field(version_req.to_string()))
             };
 
             dependencies.push(Dependency {

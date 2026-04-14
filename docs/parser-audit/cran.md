@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/cran.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -103,3 +103,13 @@ None.
 3. Add lossy UTF-8 fallback on read failure
 4. Replace `.unwrap()` on regex captures with safer alternatives (e.g., `expect()` with message or `if let`)
 5. Add 10MB field value truncation with warning
+
+## Remediation
+
+| #   | Finding             | Fix                                                                                                |
+| --- | ------------------- | -------------------------------------------------------------------------------------------------- |
+| 1   | P2: File Size       | Replaced `File::open`+`read_to_string` with `read_file_to_string` which enforces 100MB limit       |
+| 2   | P2: Iteration Count | Added `MAX_ITERATION_COUNT` caps on 3 sites (parse_dcf, parse_dependencies, split_author)          |
+| 3   | P2: String Length   | Applied `truncate_field` on all output strings                                                     |
+| 4   | P4: UTF-8 Encoding  | Fixed by `read_file_to_string` which provides lossy UTF-8 fallback                                 |
+| 5   | .unwrap()           | Replaced raw `.unwrap()` on regex captures with safe `match`; migrated `lazy_static` to `LazyLock` |
