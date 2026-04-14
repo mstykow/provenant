@@ -16,6 +16,7 @@ use crate::cache::{
 };
 use crate::cli::{Cli, ProcessMode};
 use crate::license_detection::LicenseDetectionEngine;
+use crate::license_detection::license_cache::LicenseCacheConfig;
 use crate::models::{FileInfo, FileType, Sha256Digest};
 use crate::output::{OutputWriteConfig, write_output_file};
 use crate::post_processing::{
@@ -175,7 +176,7 @@ fn run() -> Result<()> {
         let license_engine = if cli.license {
             progress.start_setup();
             progress.start_license_detection_engine_creation();
-            let engine = init_license_engine(&cli.license_rules_path)?;
+            let engine = init_license_engine(&cli)?;
             progress.finish_license_detection_engine_creation("setup_scan:licenses");
             progress.finish_setup();
             progress.output_written(&describe_license_engine_source(
@@ -473,7 +474,7 @@ fn run() -> Result<()> {
 
     if should_recompute_license_references && active_license_engine.is_none() {
         progress.start_license_detection_engine_creation();
-        active_license_engine = Some(init_license_engine(&cli.license_rules_path)?);
+        active_license_engine = Some(init_license_engine(&cli)?);
         progress.finish_license_detection_engine_creation("finalize:license-engine-creation");
     }
 
@@ -929,18 +930,25 @@ where
     pool.install(f)
 }
 
-fn init_license_engine(rules_path: &Option<String>) -> Result<Arc<LicenseDetectionEngine>> {
-    match rules_path {
+fn init_license_engine(cli: &Cli) -> Result<Arc<LicenseDetectionEngine>> {
+    let cache_dir = cli
+        .license_cache_dir
+        .as_deref()
+        .map(PathBuf::from)
+        .unwrap_or_else(LicenseCacheConfig::default_cache_dir);
+    let cache_config = LicenseCacheConfig::new(cache_dir, cli.reindex);
+
+    match &cli.license_rules_path {
         Some(p) => {
             let path = PathBuf::from(p);
             if !path.exists() {
                 return Err(anyhow!("License rules path does not exist: {:?}", path));
             }
-            let engine = LicenseDetectionEngine::from_directory(&path)?;
+            let engine = LicenseDetectionEngine::from_directory_with_cache(&path, &cache_config)?;
             Ok(Arc::new(engine))
         }
         None => {
-            let engine = LicenseDetectionEngine::from_embedded()?;
+            let engine = LicenseDetectionEngine::from_embedded_with_cache(&cache_config)?;
             Ok(Arc::new(engine))
         }
     }
