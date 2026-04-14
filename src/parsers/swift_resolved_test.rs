@@ -57,7 +57,7 @@ mod tests {
         assert_eq!(dep0.extracted_requirement.as_deref(), Some("24.4.0"));
         assert_eq!(dep0.scope.as_deref(), Some("dependencies"));
         assert_eq!(dep0.is_runtime, None);
-        assert_eq!(dep0.is_optional, Some(false));
+        assert_eq!(dep0.is_optional, None);
         assert_eq!(dep0.is_pinned, Some(true));
         assert_eq!(dep0.is_direct, None);
 
