@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 
 use crate::license_detection::LicenseDetectionEngine;
 use crate::license_detection::index::LicenseIndex;
+use crate::license_detection::license_cache::LicenseCacheConfig;
 use crate::models::{FileInfo, LineNumber, Match, Package, TopLevelDependency};
 use anyhow::Result;
 
@@ -149,6 +150,7 @@ pub(crate) fn prepare_filter_clue_rule_lookup(
     files: &[crate::models::FileInfo],
     active_license_engine: Option<&LicenseDetectionEngine>,
     rules_path: Option<&str>,
+    license_cache_config: Option<&LicenseCacheConfig>,
 ) -> Result<Option<ClueRuleLookup>> {
     let needs_rule_lookup = files.iter().any(|file| {
         file.license_detections
@@ -173,9 +175,15 @@ pub(crate) fn prepare_filter_clue_rule_lookup(
         return Ok(Some(build_clue_rule_lookup(active_license_engine.index())));
     }
 
-    let fallback_engine = match rules_path {
-        Some(path) => LicenseDetectionEngine::from_directory(Path::new(path))?,
-        None => LicenseDetectionEngine::from_embedded()?,
+    let fallback_engine = match (rules_path, license_cache_config) {
+        (Some(path), Some(cache_config)) => {
+            LicenseDetectionEngine::from_directory_with_cache(Path::new(path), cache_config)?
+        }
+        (Some(path), None) => LicenseDetectionEngine::from_directory(Path::new(path))?,
+        (None, Some(cache_config)) => {
+            LicenseDetectionEngine::from_embedded_with_cache(cache_config)?
+        }
+        (None, None) => LicenseDetectionEngine::from_embedded()?,
     };
     Ok(Some(build_clue_rule_lookup(fallback_engine.index())))
 }
