@@ -6,16 +6,16 @@
     "description": "International Components for Unicode library",
     "parties": [],
     "homepage_url": "http://site.icu-project.org/",
-    "declared_license_expression": "mit AND x11 AND unicode-tou",
-    "declared_license_expression_spdx": "MIT AND ICU AND Unicode-TOU",
+    "declared_license_expression": "mit AND unicode-tou AND x11",
+    "declared_license_expression_spdx": "ICU AND MIT AND Unicode-TOU",
     "license_detections": [
       {
-        "license_expression": "mit AND x11 AND unicode-tou",
-        "license_expression_spdx": "MIT AND ICU AND Unicode-TOU",
+        "license_expression": "mit AND unicode-tou AND x11",
+        "license_expression_spdx": "ICU AND MIT AND Unicode-TOU",
         "matches": [
           {
-            "license_expression": "mit AND x11 AND unicode-tou",
-            "license_expression_spdx": "MIT AND ICU AND Unicode-TOU",
+            "license_expression": "mit AND unicode-tou AND x11",
+            "license_expression_spdx": "ICU AND MIT AND Unicode-TOU",
             "start_line": 1,
             "end_line": 1,
             "matcher": "1-spdx-id",
