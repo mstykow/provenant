@@ -523,7 +523,6 @@ pub static ASSEMBLERS: &[AssemblerConfig] = &[
             DatasourceId::GemfileExtracted,
             DatasourceId::GemfileLock,
             DatasourceId::GemfileLockExtracted,
-            DatasourceId::GemArchive,
         ],
         sibling_file_patterns: &[
             "metadata.gz-extract",
@@ -535,6 +534,11 @@ pub static ASSEMBLERS: &[AssemblerConfig] = &[
             "Gemfile.lock",
         ],
         mode: AssemblyMode::SiblingMerge,
+    },
+    AssemblerConfig {
+        datasource_ids: &[DatasourceId::GemArchive],
+        sibling_file_patterns: &["*.gem"],
+        mode: AssemblyMode::OnePerPackageData,
     },
     // Conda ecosystem
     AssemblerConfig {

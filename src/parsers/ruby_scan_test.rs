@@ -78,4 +78,37 @@ mod tests {
             DatasourceId::GemfileLock,
         );
     }
+
+    #[test]
+    fn test_ruby_gem_archive_scan_assembles_standalone_package() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        fs::copy(
+            "testdata/ruby/example-gem-1.2.3.gem",
+            temp_dir.path().join("example-gem-1.2.3.gem"),
+        )
+        .expect("copy gem archive fixture");
+
+        let (files, result) = scan_and_assemble(temp_dir.path());
+
+        let package = result
+            .packages
+            .iter()
+            .find(|package| package.name.as_deref() == Some("example-gem"))
+            .expect("standalone ruby gem archive should assemble into a package");
+
+        assert_eq!(package.package_type, Some(PackageType::Gem));
+        assert_eq!(package.version.as_deref(), Some("1.2.3"));
+        assert_eq!(package.purl.as_deref(), Some("pkg:gem/example-gem@1.2.3"));
+        assert_dependency_present(
+            &result.dependencies,
+            "pkg:gem/rails",
+            "example-gem-1.2.3.gem",
+        );
+        assert_file_links_to_package(
+            &files,
+            "/example-gem-1.2.3.gem",
+            &package.package_uid,
+            DatasourceId::GemArchive,
+        );
+    }
 }
