@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 
 use crate::license_detection::expression::{
-    LicenseExpression, expression_to_string, parse_expression,
+    LicenseExpression, expression_to_string, parse_expression, simplify_expression,
 };
 use crate::license_detection::models::License;
 
@@ -103,7 +103,7 @@ impl SpdxMapping {
     /// ```
     pub fn expression_scancode_to_spdx(&self, scancode_expr: &str) -> Result<String, String> {
         let parsed = parse_expression(scancode_expr).map_err(|e| format!("Parse error: {}", e))?;
-        let converted = self.convert_expression_to_spdx(&parsed);
+        let converted = simplify_expression(&self.convert_expression_to_spdx(&parsed));
         Ok(expression_to_string(&converted))
     }
 
