@@ -415,6 +415,10 @@ fn from_json_loaded_manifest_detections_can_be_recomputed_into_top_level_uniques
         top_level[0].reference_matches[0].from_file.as_deref(),
         Some("project/package.json")
     );
+    assert_eq!(
+        top_level[0].reference_matches[0].rule_identifier.as_deref(),
+        Some("parser-declared-license")
+    );
 }
 
 #[test]
@@ -458,6 +462,10 @@ fn from_json_recomputes_top_level_uniques_even_without_shaping_flags() {
     assert_eq!(top_level.len(), 1);
     assert_eq!(top_level[0].license_expression, "gpl-2.0-only");
     assert_ne!(top_level[0].identifier, "stale-id");
+    assert_eq!(
+        top_level[0].reference_matches[0].rule_identifier.as_deref(),
+        Some("parser-declared-license")
+    );
 }
 
 #[test]

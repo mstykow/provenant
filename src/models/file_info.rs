@@ -330,6 +330,10 @@ pub(crate) fn enrich_license_detection_provenance(detection: &mut LicenseDetecti
         if detection_match.from_file.is_none() {
             detection_match.from_file = Some(path.to_string());
         }
+
+        if detection_match.rule_identifier.is_none() {
+            detection_match.rule_identifier = detection_match.matcher.clone();
+        }
     }
 
     if detection.identifier.is_none() {
@@ -1173,6 +1177,12 @@ mod tests {
                 .as_deref(),
             Some("project/package.json")
         );
+        assert_eq!(
+            file_info.package_data[0].license_detections[0].matches[0]
+                .rule_identifier
+                .as_deref(),
+            Some("parser-declared-license")
+        );
         assert!(
             file_info.package_data[0].license_detections[0]
                 .identifier
@@ -1217,6 +1227,12 @@ mod tests {
                 .from_file
                 .as_deref(),
             Some("project/package.json")
+        );
+        assert_eq!(
+            package.license_detections[0].matches[0]
+                .rule_identifier
+                .as_deref(),
+            Some("parser-declared-license")
         );
         assert!(package.license_detections[0].identifier.is_some());
     }
