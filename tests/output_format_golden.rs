@@ -348,6 +348,17 @@ fn test_json_contract_preserves_scancode_style_nulls_for_package_like_objects() 
         version: Some("1.3.0".to_string()),
         ..Default::default()
     };
+    let mut package_data = package_data;
+    package_data.parties = vec![Party {
+        r#type: None,
+        role: Some("author".to_string()),
+        name: Some("Example Author".to_string()),
+        email: None,
+        url: None,
+        organization: None,
+        organization_url: None,
+        timezone: None,
+    }];
     let package = Package::from_package_data(&package_data, "package.json".to_string());
 
     let file = sample_plain_text_file(
@@ -414,6 +425,21 @@ fn test_json_contract_preserves_scancode_style_nulls_for_package_like_objects() 
     assert!(package_data["md5"].is_null());
     assert!(package_data["sha256"].is_null());
     assert!(package_data["sha512"].is_null());
+
+    let party = &package["parties"][0];
+    assert!(party.get("type").is_some());
+    assert_eq!(party["type"], Value::Null);
+    assert_eq!(party["role"], serde_json::json!("author"));
+    assert_eq!(party["name"], serde_json::json!("Example Author"));
+    assert!(party.get("email").is_some());
+    assert_eq!(party["email"], Value::Null);
+    assert!(party.get("url").is_some());
+    assert_eq!(party["url"], Value::Null);
+
+    let package_data_party = &value["files"][0]["package_data"][0]["parties"][0];
+    assert_eq!(package_data_party["type"], Value::Null);
+    assert_eq!(package_data_party["email"], Value::Null);
+    assert_eq!(package_data_party["url"], Value::Null);
 
     let dependency = &value["dependencies"][0];
     assert!(dependency["extra_data"].is_null());
