@@ -202,7 +202,7 @@ pub fn merge_overlapping_matches(matches: &[LicenseMatch]) -> Vec<LicenseMatch> 
                     break;
                 }
 
-                if current.surround(next) {
+                if current.surround(next) && current.qoverlap(next) > 0 {
                     let combined = combine_matches(current, next);
                     if !both_rule_aligned
                         || combined.query_span().len() == combined.effective_ispan().len()
@@ -212,7 +212,7 @@ pub fn merge_overlapping_matches(matches: &[LicenseMatch]) -> Vec<LicenseMatch> 
                         continue;
                     }
                 }
-                if next.surround(current) {
+                if next.surround(current) && next.qoverlap(current) > 0 {
                     let combined = combine_matches(current, next);
                     if !both_rule_aligned
                         || combined.query_span().len() == combined.effective_ispan().len()
