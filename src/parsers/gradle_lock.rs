@@ -22,11 +22,10 @@ use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Resolved
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use super::PackageParser;
+use super::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 /// Gradle gradle.lockfile parser.
 ///
@@ -43,16 +42,15 @@ impl PackageParser for GradleLockfileParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let file = match File::open(path) {
-            Ok(f) => f,
+        let content = match read_file_to_string(path, None) {
+            Ok(c) => c,
             Err(e) => {
-                warn!("Failed to open gradle.lockfile at {:?}: {}", path, e);
+                warn!("Failed to read gradle.lockfile at {:?}: {}", path, e);
                 return vec![default_package_data()];
             }
         };
 
-        let reader = BufReader::new(file);
-        let dependencies = extract_dependencies(reader);
+        let dependencies = extract_dependencies(&content);
 
         vec![PackageData {
             package_type: Some(Self::PACKAGE_TYPE),
@@ -102,18 +100,10 @@ impl PackageParser for GradleLockfileParser {
 }
 
 /// Extract dependencies from gradle.lockfile
-fn extract_dependencies<R: BufRead>(reader: R) -> Vec<Dependency> {
+fn extract_dependencies(content: &str) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
 
-    for line in reader.lines() {
-        let line = match line {
-            Ok(l) => l,
-            Err(e) => {
-                warn!("Failed to read line from gradle.lockfile: {}", e);
-                continue;
-            }
-        };
-
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let line = line.trim();
 
         // Skip empty lines and comments
@@ -146,7 +136,7 @@ fn parse_dependency_line(line: &str) -> Option<Dependency> {
         .split(',')
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
+        .map(|v| truncate_field(v.to_string()))
         .collect();
 
     // Parse GAV (group:artifact:version)
@@ -155,15 +145,15 @@ fn parse_dependency_line(line: &str) -> Option<Dependency> {
         return None;
     }
 
-    let group = parts[0].to_string();
-    let artifact = parts[1].to_string();
-    let version = parts[2].to_string();
+    let group = truncate_field(parts[0].to_string());
+    let artifact = truncate_field(parts[1].to_string());
+    let version = truncate_field(parts[2].to_string());
 
     // Generate purl
     let purl = PackageUrl::new("maven", &artifact).ok().and_then(|mut p| {
         p.with_namespace(&group).ok()?;
         p.with_version(&version).ok()?;
-        Some(p.to_string())
+        Some(truncate_field(p.to_string()))
     });
 
     // Build extra_data with group and artifact separately
@@ -241,7 +231,6 @@ fn default_package_data() -> PackageData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
 
     #[test]
     fn test_is_match_gradle_lockfile() {
@@ -329,8 +318,7 @@ mod tests {
     #[test]
     fn test_extract_dependencies_multiple_lines() {
         let content = "com.example:lib1:1.0.0=compileClasspath\ncom.example:lib2:2.0.0=runtimeClasspath\ncom.test:lib3:3.0.0=testRuntimeClasspath";
-        let reader = Cursor::new(content);
-        let deps = extract_dependencies(reader);
+        let deps = extract_dependencies(content);
 
         assert_eq!(deps.len(), 3);
         assert_eq!(deps[0].resolved_package.as_ref().unwrap().name, "lib1");
@@ -341,8 +329,7 @@ mod tests {
     #[test]
     fn test_extract_dependencies_with_comments_and_empty_lines() {
         let content = "# This is a comment\ncom.example:lib1:1.0.0=compileClasspath\n\n# Another comment\ncom.example:lib2:2.0.0=runtimeClasspath\n";
-        let reader = Cursor::new(content);
-        let deps = extract_dependencies(reader);
+        let deps = extract_dependencies(content);
 
         assert_eq!(deps.len(), 2);
         assert_eq!(deps[0].resolved_package.as_ref().unwrap().name, "lib1");
@@ -352,8 +339,7 @@ mod tests {
     #[test]
     fn test_extract_dependencies_empty_file() {
         let content = "";
-        let reader = Cursor::new(content);
-        let deps = extract_dependencies(reader);
+        let deps = extract_dependencies(content);
 
         assert_eq!(deps.len(), 0);
     }
@@ -361,8 +347,7 @@ mod tests {
     #[test]
     fn test_extract_dependencies_only_comments() {
         let content = "# Comment 1\n# Comment 2\n# Comment 3";
-        let reader = Cursor::new(content);
-        let deps = extract_dependencies(reader);
+        let deps = extract_dependencies(content);
 
         assert_eq!(deps.len(), 0);
     }
@@ -370,8 +355,7 @@ mod tests {
     #[test]
     fn test_extract_first_package_returns_correct_package_type() {
         let content = "com.example:lib:1.0.0=compileClasspath";
-        let reader = Cursor::new(content);
-        let deps = extract_dependencies(reader);
+        let deps = extract_dependencies(content);
 
         assert!(!deps.is_empty());
         assert_eq!(
@@ -408,8 +392,7 @@ mod tests {
     #[test]
     fn test_extract_dependencies_malformed_lines_ignored() {
         let content = "com.example:lib1:1.0.0=compileClasspath\ninvalid-line\ncom.example:lib2:2.0.0=runtimeClasspath";
-        let reader = Cursor::new(content);
-        let deps = extract_dependencies(reader);
+        let deps = extract_dependencies(content);
 
         // Only valid dependencies are extracted
         assert_eq!(deps.len(), 2);

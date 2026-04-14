@@ -24,9 +24,9 @@
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use packageurl::PackageUrl;
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::Path;
 
 use super::PackageParser;
@@ -43,7 +43,7 @@ impl PackageParser for GoModParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read go.mod at {:?}: {}", path, e);
@@ -79,7 +79,7 @@ pub fn parse_go_mod(content: &str) -> PackageData {
     let mut retracted_versions: Vec<String> = Vec::new();
     let mut block_state = BlockState::None;
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let trimmed = line.trim();
 
         if trimmed.is_empty() || trimmed.starts_with("//") {
@@ -141,8 +141,8 @@ pub fn parse_go_mod(content: &str) -> PackageData {
             let module_path = strip_comment(module_path).trim();
             if !module_path.is_empty() {
                 let (ns, n) = split_module_path(module_path);
-                namespace = ns;
-                name = Some(n);
+                namespace = ns.map(truncate_field);
+                name = Some(truncate_field(n));
             }
             continue;
         }
@@ -151,7 +151,7 @@ pub fn parse_go_mod(content: &str) -> PackageData {
         if let Some(version) = trimmed.strip_prefix("go ") {
             let version = strip_comment(version).trim();
             if !version.is_empty() {
-                go_version = Some(version.to_string());
+                go_version = Some(truncate_field(version.to_string()));
             }
             continue;
         }
@@ -160,7 +160,7 @@ pub fn parse_go_mod(content: &str) -> PackageData {
         if let Some(tc) = trimmed.strip_prefix("toolchain ") {
             let tc = strip_comment(tc).trim();
             if !tc.is_empty() {
-                toolchain = Some(tc.to_string());
+                toolchain = Some(truncate_field(tc.to_string()));
             }
             continue;
         }
@@ -210,9 +210,11 @@ pub fn parse_go_mod(content: &str) -> PackageData {
 
     let homepage_url = full_module
         .as_ref()
-        .map(|m| format!("https://pkg.go.dev/{}", m));
+        .map(|m| truncate_field(format!("https://pkg.go.dev/{}", m)));
 
-    let vcs_url = full_module.as_ref().map(|m| format!("https://{}.git", m));
+    let vcs_url = full_module
+        .as_ref()
+        .map(|m| truncate_field(format!("https://{}.git", m)));
 
     let repository_homepage_url = homepage_url.clone();
 
@@ -320,10 +322,8 @@ fn parse_dependency_line(line: &str, scope: &str) -> Option<Dependency> {
     }
 
     let module_path = parts[0];
-    // Bug #8 and #10: Version is taken as-is, preserving +incompatible and pseudo-versions
-    let version = parts[1].to_string();
+    let version = truncate_field(parts[1].to_string());
 
-    // Generate PURL with version
     let purl = create_golang_purl(module_path, Some(&version));
 
     Some(Dependency {
@@ -361,18 +361,18 @@ fn parse_replace_line(line: &str) -> Option<Dependency> {
     let old_module = old_parts[0];
     let old_version = old_parts.get(1).copied();
     let new_module = new_parts[0];
-    let new_version = new_parts.get(1).map(|s| s.to_string());
+    let new_version = new_parts.get(1).map(|s| truncate_field(s.to_string()));
 
     let purl = create_golang_purl(new_module, new_version.as_deref());
 
     let mut extra = std::collections::HashMap::new();
     extra.insert(
         "replace_old".to_string(),
-        serde_json::Value::String(old_module.to_string()),
+        serde_json::Value::String(truncate_field(old_module.to_string())),
     );
     extra.insert(
         "replace_new".to_string(),
-        serde_json::Value::String(new_module.to_string()),
+        serde_json::Value::String(truncate_field(new_module.to_string())),
     );
     if let Some(ref v) = new_version {
         extra.insert(
@@ -383,7 +383,7 @@ fn parse_replace_line(line: &str) -> Option<Dependency> {
     if let Some(ov) = old_version {
         extra.insert(
             "replace_old_version".to_string(),
-            serde_json::Value::String(ov.to_string()),
+            serde_json::Value::String(truncate_field(ov.to_string())),
         );
     }
 
@@ -424,9 +424,12 @@ pub(crate) fn split_module_path(path: &str) -> (Option<String>, String) {
         Some(idx) => {
             let namespace = &path[..idx];
             let name = &path[idx + 1..];
-            (Some(namespace.to_string()), name.to_string())
+            (
+                Some(truncate_field(namespace.to_string())),
+                truncate_field(name.to_string()),
+            )
         }
-        None => (None, path.to_string()),
+        None => (None, truncate_field(path.to_string())),
     }
 }
 
@@ -536,7 +539,7 @@ impl PackageParser for GoSumParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read go.sum at {:?}: {}", path, e);
@@ -556,7 +559,7 @@ pub fn parse_go_sum(content: &str) -> PackageData {
     let mut dependencies = Vec::new();
     let mut seen = HashSet::new();
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
@@ -582,7 +585,7 @@ pub fn parse_go_sum(content: &str) -> PackageData {
 
         dependencies.push(Dependency {
             purl,
-            extracted_requirement: Some(version.to_string()),
+            extracted_requirement: Some(truncate_field(version.to_string())),
             scope: Some("dependency".to_string()),
             is_runtime: Some(true),
             is_optional: Some(false),
@@ -653,7 +656,7 @@ impl PackageParser for GoWorkParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read go.work at {:?}: {}", path, e);
@@ -677,7 +680,7 @@ pub fn parse_go_work(content: &str, work_path: &Path) -> PackageData {
     let mut unresolved_use_paths: Vec<String> = Vec::new();
     let mut block_state = BlockState::None;
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let trimmed = line.trim();
 
         if trimmed.is_empty() || trimmed.starts_with("//") {
@@ -694,7 +697,7 @@ pub fn parse_go_work(content: &str, work_path: &Path) -> PackageData {
                 BlockState::Require => {
                     let use_path = extract_single_go_token(trimmed);
                     if let Some(use_path) = use_path.filter(|path| !path.is_empty()) {
-                        use_paths.push(use_path.to_string());
+                        use_paths.push(truncate_field(use_path));
                     }
                 }
                 BlockState::Replace => {
@@ -719,7 +722,7 @@ pub fn parse_go_work(content: &str, work_path: &Path) -> PackageData {
         if let Some(version) = trimmed.strip_prefix("go ") {
             let version = strip_comment(version).trim();
             if !version.is_empty() {
-                go_version = Some(version.to_string());
+                go_version = Some(truncate_field(version.to_string()));
             }
             continue;
         }
@@ -727,7 +730,7 @@ pub fn parse_go_work(content: &str, work_path: &Path) -> PackageData {
         if let Some(tc) = trimmed.strip_prefix("toolchain ") {
             let tc = strip_comment(tc).trim();
             if !tc.is_empty() {
-                toolchain = Some(tc.to_string());
+                toolchain = Some(truncate_field(tc.to_string()));
             }
             continue;
         }
@@ -735,7 +738,7 @@ pub fn parse_go_work(content: &str, work_path: &Path) -> PackageData {
         if let Some(rest) = trimmed.strip_prefix("use ") {
             let use_path = extract_single_go_token(rest);
             if let Some(use_path) = use_path.filter(|path| !path.is_empty()) {
-                use_paths.push(use_path.to_string());
+                use_paths.push(truncate_field(use_path));
             }
             continue;
         }
@@ -843,9 +846,9 @@ fn resolve_workspace_use_dependencies(
     let mut dependencies = Vec::new();
     let mut unresolved = Vec::new();
 
-    for use_path in use_paths {
+    for use_path in use_paths.iter().take(MAX_ITERATION_COUNT) {
         let go_mod_path = base_dir.join(use_path).join("go.mod");
-        let module_path = fs::read_to_string(&go_mod_path)
+        let module_path = read_file_to_string(&go_mod_path, None)
             .ok()
             .and_then(|content| extract_module_path_from_go_mod(&content));
 
@@ -861,18 +864,18 @@ fn resolve_workspace_use_dependencies(
         let mut extra_data = HashMap::new();
         extra_data.insert(
             "workspace_path".to_string(),
-            serde_json::Value::String(use_path.clone()),
+            serde_json::Value::String(truncate_field(use_path.clone())),
         );
         if let Some(module_path) = module_path {
             extra_data.insert(
                 "workspace_module_path".to_string(),
-                serde_json::Value::String(module_path),
+                serde_json::Value::String(truncate_field(module_path)),
             );
         }
 
         dependencies.push(Dependency {
             purl,
-            extracted_requirement: Some(use_path.clone()),
+            extracted_requirement: Some(truncate_field(use_path.clone())),
             scope: Some("use".to_string()),
             is_runtime: Some(true),
             is_optional: Some(false),
@@ -887,12 +890,12 @@ fn resolve_workspace_use_dependencies(
 }
 
 fn extract_module_path_from_go_mod(content: &str) -> Option<String> {
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let trimmed = line.trim();
         if let Some(module_path) = trimmed.strip_prefix("module ") {
             let module_path = strip_comment(module_path).trim();
             if !module_path.is_empty() {
-                return Some(module_path.to_string());
+                return Some(truncate_field(module_path.to_string()));
             }
         }
     }
@@ -915,7 +918,7 @@ fn parse_workspace_replace_line(line: &str) -> Option<Dependency> {
     let old_module = old_parts[0].as_str();
     let old_version = old_parts.get(1).map(|s| s.as_str());
     let new_module = new_parts[0].as_str();
-    let new_version = new_parts.get(1).cloned();
+    let new_version = new_parts.get(1).map(|s| truncate_field(s.clone()));
     let is_local_path = new_module.starts_with("./")
         || new_module.starts_with("../")
         || new_module.starts_with('/')
@@ -930,11 +933,11 @@ fn parse_workspace_replace_line(line: &str) -> Option<Dependency> {
     let mut extra = std::collections::HashMap::new();
     extra.insert(
         "replace_old".to_string(),
-        serde_json::Value::String(old_module.to_string()),
+        serde_json::Value::String(truncate_field(old_module.to_string())),
     );
     extra.insert(
         "replace_new".to_string(),
-        serde_json::Value::String(new_module.to_string()),
+        serde_json::Value::String(truncate_field(new_module.to_string())),
     );
     if let Some(ref v) = new_version {
         extra.insert(
@@ -945,7 +948,7 @@ fn parse_workspace_replace_line(line: &str) -> Option<Dependency> {
     if let Some(ov) = old_version {
         extra.insert(
             "replace_old_version".to_string(),
-            serde_json::Value::String(ov.to_string()),
+            serde_json::Value::String(truncate_field(ov.to_string())),
         );
     }
     if is_local_path {
@@ -1034,7 +1037,7 @@ impl PackageParser for GodepsParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read Godeps.json at {:?}: {}", path, e);
@@ -1062,12 +1065,12 @@ pub fn parse_godeps_json(content: &str) -> PackageData {
     let import_path = json
         .get("ImportPath")
         .and_then(|v| v.as_str())
-        .map(String::from);
+        .map(|s| truncate_field(s.to_string()));
 
     let go_version = json
         .get("GoVersion")
         .and_then(|v| v.as_str())
-        .map(String::from);
+        .map(|s| truncate_field(s.to_string()));
 
     let (namespace, name) = match &import_path {
         Some(ip) => {
@@ -1084,7 +1087,7 @@ pub fn parse_godeps_json(content: &str) -> PackageData {
     let mut dependencies = Vec::new();
 
     if let Some(deps) = json.get("Deps").and_then(|v| v.as_array()) {
-        for dep in deps {
+        for dep in deps.iter().take(MAX_ITERATION_COUNT) {
             let dep_import_path = dep.get("ImportPath").and_then(|v| v.as_str());
             let rev = dep.get("Rev").and_then(|v| v.as_str());
 
@@ -1093,7 +1096,7 @@ pub fn parse_godeps_json(content: &str) -> PackageData {
 
                 dependencies.push(Dependency {
                     purl: dep_purl,
-                    extracted_requirement: rev.map(String::from),
+                    extracted_requirement: rev.map(|s| truncate_field(s.to_string())),
                     scope: Some("Deps".to_string()),
                     is_runtime: Some(true),
                     is_optional: Some(false),
@@ -1114,9 +1117,11 @@ pub fn parse_godeps_json(content: &str) -> PackageData {
 
     let homepage_url = import_path
         .as_ref()
-        .map(|m| format!("https://pkg.go.dev/{}", m));
+        .map(|m| truncate_field(format!("https://pkg.go.dev/{}", m)));
 
-    let vcs_url = import_path.as_ref().map(|m| format!("https://{}.git", m));
+    let vcs_url = import_path
+        .as_ref()
+        .map(|m| truncate_field(format!("https://{}.git", m)));
 
     PackageData {
         package_type: Some(PACKAGE_TYPE),

@@ -1,10 +1,9 @@
 use std::collections::BTreeMap;
-use std::fs;
 use std::path::Path;
 
-use crate::parser_warn as warn;
-
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
+use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 use super::PackageParser;
 use super::go::{create_golang_purl, split_module_path};
@@ -32,7 +31,7 @@ impl PackageParser for GoModGraphParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read Go module graph at {:?}: {}", path, e);
@@ -54,7 +53,7 @@ pub(crate) fn parse_go_mod_graph(content: &str) -> PackageData {
     let mut root_module: Option<String> = None;
     let mut dependency_map: BTreeMap<String, Dependency> = BTreeMap::new();
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
@@ -75,7 +74,7 @@ pub(crate) fn parse_go_mod_graph(content: &str) -> PackageData {
         let target = parse_graph_module(target);
 
         if source.version.is_none() && root_module.is_none() {
-            root_module = Some(source.module_path.to_string());
+            root_module = Some(truncate_field(source.module_path.to_string()));
         }
 
         let Some(purl) = create_golang_purl(target.module_path, target.version) else {
@@ -90,8 +89,8 @@ pub(crate) fn parse_go_mod_graph(content: &str) -> PackageData {
                 }
             })
             .or_insert_with(|| Dependency {
-                purl: Some(purl),
-                extracted_requirement: target.version.map(str::to_string),
+                purl: Some(truncate_field(purl)),
+                extracted_requirement: target.version.map(|v| truncate_field(v.to_string())),
                 scope: Some("dependency".to_string()),
                 is_runtime: Some(true),
                 is_optional: Some(false),
@@ -109,22 +108,23 @@ pub(crate) fn parse_go_mod_graph(content: &str) -> PackageData {
 
     let homepage_url = root_module
         .as_ref()
-        .map(|module| format!("https://pkg.go.dev/{module}"));
+        .map(|module| truncate_field(format!("https://pkg.go.dev/{module}")));
 
     let vcs_url = root_module
         .as_ref()
-        .map(|module| format!("https://{module}.git"));
+        .map(|module| truncate_field(format!("https://{module}.git")));
 
     let purl = root_module
         .as_deref()
-        .and_then(|module| create_golang_purl(module, None));
+        .and_then(|module| create_golang_purl(module, None))
+        .map(truncate_field);
 
     PackageData {
         package_type: Some(PACKAGE_TYPE),
         primary_language: Some("Go".to_string()),
         datasource_id: Some(DatasourceId::GoModGraph),
-        namespace,
-        name: (!name.is_empty()).then_some(name),
+        namespace: namespace.map(truncate_field),
+        name: (!name.is_empty()).then_some(truncate_field(name)),
         homepage_url: homepage_url.clone(),
         repository_homepage_url: homepage_url,
         vcs_url,
@@ -152,6 +152,7 @@ fn parse_graph_module(token: &str) -> GraphModule<'_> {
 mod tests {
     use super::*;
     use crate::models::DatasourceId;
+    use std::fs;
     use tempfile::NamedTempFile;
 
     #[test]
