@@ -51,6 +51,7 @@ content-hash = "test"
 
         assert_eq!(requests.is_optional, None);
         assert_eq!(requests.is_runtime, None);
+        assert_eq!(requests.is_direct, None);
         assert_eq!(
             requests
                 .extra_data
@@ -68,6 +69,7 @@ content-hash = "test"
 
         assert_eq!(pytest.is_optional, None);
         assert_eq!(pytest.is_runtime, None);
+        assert_eq!(pytest.is_direct, None);
         assert_eq!(
             pytest
                 .extra_data

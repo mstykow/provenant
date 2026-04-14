@@ -210,7 +210,7 @@ fn build_dependency_from_package(package_table: &TomlMap<String, TomlValue>) -> 
         is_runtime: None,
         is_optional: None,
         is_pinned: Some(true),
-        is_direct: Some(false),
+        is_direct: None,
         resolved_package: Some(Box::new(resolved_package)),
         extra_data,
     })
