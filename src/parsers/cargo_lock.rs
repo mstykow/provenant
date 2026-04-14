@@ -20,11 +20,10 @@
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Sha256Digest};
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use packageurl::PackageUrl;
 use serde_json::json;
 use std::collections::{HashMap, hash_map::Entry};
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
 use toml::Value;
 
@@ -66,17 +65,17 @@ impl PackageParser for CargoLockParser {
         let name = root_package
             .and_then(|p| p.get("name"))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let version = root_package
             .and_then(|p| p.get("version"))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let checksum = root_package
             .and_then(|p| p.get("checksum"))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let (sha256, extra_data) = match checksum.as_deref() {
             Some(h) if h.len() == 64 && Sha256Digest::from_hex(h).is_ok() => {
@@ -95,14 +94,20 @@ impl PackageParser for CargoLockParser {
         let purl = match (&name, &version) {
             (Some(n), Some(v)) => PackageUrl::new("cargo", n).ok().and_then(|mut p| {
                 p.with_version(v.as_str()).ok()?;
-                Some(p.to_string())
+                Some(truncate_field(p.to_string()))
             }),
             _ => None,
         };
 
         let api_data_url = match (&name, &version) {
-            (Some(n), Some(v)) => Some(format!("https://crates.io/api/v1/crates/{}/{}", n, v)),
-            (Some(n), None) => Some(format!("https://crates.io/api/v1/crates/{}", n)),
+            (Some(n), Some(v)) => Some(truncate_field(format!(
+                "https://crates.io/api/v1/crates/{}/{}",
+                n, v
+            ))),
+            (Some(n), None) => Some(truncate_field(format!(
+                "https://crates.io/api/v1/crates/{}",
+                n
+            ))),
             _ => None,
         };
 
@@ -154,10 +159,8 @@ impl PackageParser for CargoLockParser {
 }
 
 fn read_cargo_lock(path: &Path) -> Result<Value, String> {
-    let mut file = File::open(path).map_err(|e| format!("Failed to open file: {}", e))?;
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let content =
+        read_file_to_string(path, None).map_err(|e| format!("Failed to read file: {}", e))?;
     toml::from_str(&content).map_err(|e| format!("Failed to parse TOML: {}", e))
 }
 
@@ -178,14 +181,14 @@ fn extract_all_dependencies(
     let package_versions = build_package_versions(packages);
     let package_provenance = build_package_provenance(packages);
     let root_package_key = root_package.and_then(package_key_from_table);
-    for package in packages {
+    for package in packages.iter().take(MAX_ITERATION_COUNT) {
         if let Some(pkg_table) = package.as_table() {
             let is_root_package = package_key_from_table(pkg_table)
                 .zip(root_package_key)
                 .is_some_and(|(package_key, root_key)| package_key == root_key);
 
             if let Some(deps) = pkg_table.get("dependencies").and_then(|v| v.as_array()) {
-                for dep in deps {
+                for dep in deps.iter().take(MAX_ITERATION_COUNT) {
                     if let Some(dep_str) = dep.as_str() {
                         let parsed_dependency = parse_dependency_string(dep_str);
                         let name = parsed_dependency.name;
@@ -200,11 +203,13 @@ fn extract_all_dependencies(
 
                         if !name.is_empty() {
                             let purl = if resolved_version.is_empty() {
-                                PackageUrl::new("cargo", name).ok().map(|p| p.to_string())
+                                PackageUrl::new("cargo", name)
+                                    .ok()
+                                    .map(|p| truncate_field(p.to_string()))
                             } else {
                                 PackageUrl::new("cargo", name).ok().and_then(|mut p| {
                                     p.with_version(resolved_version).ok()?;
-                                    Some(p.to_string())
+                                    Some(truncate_field(p.to_string()))
                                 })
                             };
 
@@ -220,7 +225,7 @@ fn extract_all_dependencies(
                                 extracted_requirement: if resolved_version.is_empty() {
                                     None
                                 } else {
-                                    Some(resolved_version.to_string())
+                                    Some(truncate_field(resolved_version.to_string()))
                                 },
                                 scope: None,
                                 is_runtime: None,
@@ -249,7 +254,11 @@ fn extract_all_dependencies(
         }
     }
 
-    for package in packages.iter().filter_map(|package| package.as_table()) {
+    for package in packages
+        .iter()
+        .take(MAX_ITERATION_COUNT)
+        .filter_map(|package| package.as_table())
+    {
         let Some((name, version)) = package_key_from_table(package) else {
             continue;
         };
@@ -273,8 +282,8 @@ fn extract_all_dependencies(
         }
 
         let dependency = Dependency {
-            purl: Some(purl.to_string()),
-            extracted_requirement: Some(version.to_string()),
+            purl: Some(truncate_field(purl.to_string())),
+            extracted_requirement: Some(truncate_field(version.to_string())),
             scope: None,
             is_runtime: None,
             is_optional: None,
@@ -387,17 +396,26 @@ fn build_dependency_extra_data(
             .and_then(|candidates| select_dependency_provenance(candidates, source_hint))
     {
         if let Some(source) = provenance.source {
-            extra_data.insert("source".to_string(), json!(source));
+            extra_data.insert(
+                "source".to_string(),
+                json!(truncate_field(source.to_string())),
+            );
         }
         if let Some(checksum) = provenance.checksum {
-            extra_data.insert("checksum".to_string(), json!(checksum));
+            extra_data.insert(
+                "checksum".to_string(),
+                json!(truncate_field(checksum.to_string())),
+            );
         }
     }
 
     if !extra_data.contains_key("source")
         && let Some(source) = source_hint
     {
-        extra_data.insert("source".to_string(), json!(source));
+        extra_data.insert(
+            "source".to_string(),
+            json!(truncate_field(source.to_string())),
+        );
     }
 
     if extra_data.is_empty() {

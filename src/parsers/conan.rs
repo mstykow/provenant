@@ -21,7 +21,6 @@
 //! - Version constraints use Conan-specific operators: [>, <, ranges]
 //! - Only exact versions (without operators) are extracted as pinned versions
 
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -36,6 +35,10 @@ use super::PackageParser;
 use super::license_normalization::{
     DeclaredLicenseMatchMetadata, build_declared_license_data, normalize_declared_license_key,
 };
+use super::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
+
+const MAX_AST_DEPTH: usize = 50;
+const MAX_AST_NODES: usize = 10_000;
 
 /// Conan conanfile.py recipe parser.
 ///
@@ -51,7 +54,7 @@ impl PackageParser for ConanFilePyParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let contents = match fs::read_to_string(path) {
+        let contents = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read {}: {}", path.display(), e);
@@ -106,20 +109,35 @@ fn extract_conanfile_data(class_def: &ast::StmtClassDef) -> PackageData {
     let mut requires_list = Vec::new();
     let mut tool_requires_list = Vec::new();
 
-    for stmt in class_def.body.iter() {
+    for stmt in class_def.body.iter().take(MAX_ITERATION_COUNT) {
         match stmt {
             ast::Stmt::Assign(ast::StmtAssign { targets, value, .. }) => {
                 if let Some(target_name) = get_assignment_target(targets) {
                     match target_name.as_str() {
-                        "name" => name = get_string_value(value),
-                        "version" => version = get_string_value(value),
-                        "description" => description = get_string_value(value),
-                        "author" => _author = get_string_value(value),
-                        "homepage" => homepage_url = get_string_value(value),
-                        "url" => vcs_url = get_string_value(value),
-                        "license" => license_list = get_list_values(value),
-                        "topics" => keywords = get_list_values(value),
-                        "requires" => requires_list = get_list_values(value),
+                        "name" => name = get_string_value(value).map(truncate_field),
+                        "version" => version = get_string_value(value).map(truncate_field),
+                        "description" => description = get_string_value(value).map(truncate_field),
+                        "author" => _author = get_string_value(value).map(truncate_field),
+                        "homepage" => homepage_url = get_string_value(value).map(truncate_field),
+                        "url" => vcs_url = get_string_value(value).map(truncate_field),
+                        "license" => {
+                            license_list = get_list_values(value)
+                                .into_iter()
+                                .map(truncate_field)
+                                .collect()
+                        }
+                        "topics" => {
+                            keywords = get_list_values(value)
+                                .into_iter()
+                                .map(truncate_field)
+                                .collect()
+                        }
+                        "requires" => {
+                            requires_list = get_list_values(value)
+                                .into_iter()
+                                .map(truncate_field)
+                                .collect()
+                        }
                         _ => {}
                     }
                 }
@@ -152,16 +170,21 @@ fn extract_conanfile_data(class_def: &ast::StmtClassDef) -> PackageData {
     );
 
     let extracted_license = if !license_list.is_empty() {
-        Some(license_list.join(", "))
+        Some(truncate_field(license_list.join(", ")))
     } else {
         None
     };
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         if license_list.len() == 1 {
             if let Some(normalized) = normalize_declared_license_key(&license_list[0]) {
-                build_declared_license_data(
+                let (expr, spdx, detections) = build_declared_license_data(
                     normalized,
                     DeclaredLicenseMatchMetadata::single_line(&license_list[0]),
+                );
+                (
+                    expr.map(truncate_field),
+                    spdx.map(truncate_field),
+                    detections,
                 )
             } else {
                 (None, None, Vec::new())
@@ -230,9 +253,17 @@ fn get_list_values(expr: &ast::Expr) -> Vec<String> {
 /// Extract self.requires() method calls from function body
 fn extract_self_requires_calls(body: &[ast::Stmt], method_name: &str) -> Option<Vec<String>> {
     let mut requires = Vec::new();
+    let mut node_count = 0usize;
 
     for stmt in body {
-        collect_self_method_calls(stmt, method_name, &mut requires);
+        collect_self_method_calls(stmt, method_name, &mut requires, 0, &mut node_count);
+        if node_count >= MAX_AST_NODES {
+            warn!(
+                "Exceeded MAX_AST_NODES ({}) in extract_self_requires_calls",
+                MAX_AST_NODES
+            );
+            break;
+        }
     }
 
     if requires.is_empty() {
@@ -242,7 +273,25 @@ fn extract_self_requires_calls(body: &[ast::Stmt], method_name: &str) -> Option<
     }
 }
 
-fn collect_self_method_calls(stmt: &ast::Stmt, method_name: &str, out: &mut Vec<String>) {
+fn collect_self_method_calls(
+    stmt: &ast::Stmt,
+    method_name: &str,
+    out: &mut Vec<String>,
+    depth: usize,
+    node_count: &mut usize,
+) {
+    if depth > MAX_AST_DEPTH {
+        warn!(
+            "Exceeded MAX_AST_DEPTH ({}) in collect_self_method_calls",
+            MAX_AST_DEPTH
+        );
+        return;
+    }
+    *node_count += 1;
+    if *node_count > MAX_AST_NODES {
+        return;
+    }
+
     match stmt {
         ast::Stmt::Expr(ast::StmtExpr { value, .. }) => {
             if let ast::Expr::Call(call) = value.as_ref()
@@ -250,7 +299,7 @@ fn collect_self_method_calls(stmt: &ast::Stmt, method_name: &str, out: &mut Vec<
                 && let Some(arg) = call.arguments.args.first()
                 && let Some(req) = get_string_value(arg)
             {
-                out.push(req);
+                out.push(truncate_field(req));
             }
         }
         ast::Stmt::If(ast::StmtIf {
@@ -259,11 +308,11 @@ fn collect_self_method_calls(stmt: &ast::Stmt, method_name: &str, out: &mut Vec<
             ..
         }) => {
             for nested in body {
-                collect_self_method_calls(nested, method_name, out);
+                collect_self_method_calls(nested, method_name, out, depth + 1, node_count);
             }
             for clause in elif_else_clauses {
                 for nested in &clause.body {
-                    collect_self_method_calls(nested, method_name, out);
+                    collect_self_method_calls(nested, method_name, out, depth + 1, node_count);
                 }
             }
         }
@@ -271,7 +320,7 @@ fn collect_self_method_calls(stmt: &ast::Stmt, method_name: &str, out: &mut Vec<
         | ast::Stmt::While(ast::StmtWhile { body, .. })
         | ast::Stmt::For(ast::StmtFor { body, .. }) => {
             for nested in body {
-                collect_self_method_calls(nested, method_name, out);
+                collect_self_method_calls(nested, method_name, out, depth + 1, node_count);
             }
         }
         ast::Stmt::Try(ast::StmtTry {
@@ -282,19 +331,19 @@ fn collect_self_method_calls(stmt: &ast::Stmt, method_name: &str, out: &mut Vec<
             ..
         }) => {
             for nested in body.iter().chain(orelse.iter()).chain(finalbody.iter()) {
-                collect_self_method_calls(nested, method_name, out);
+                collect_self_method_calls(nested, method_name, out, depth + 1, node_count);
             }
             for handler in handlers {
                 let ast::ExceptHandler::ExceptHandler(handler) = handler;
                 for nested in &handler.body {
-                    collect_self_method_calls(nested, method_name, out);
+                    collect_self_method_calls(nested, method_name, out, depth + 1, node_count);
                 }
             }
         }
         ast::Stmt::Match(ast::StmtMatch { cases, .. }) => {
             for case in cases {
                 for nested in &case.body {
-                    collect_self_method_calls(nested, method_name, out);
+                    collect_self_method_calls(nested, method_name, out, depth + 1, node_count);
                 }
             }
         }
@@ -325,7 +374,7 @@ impl PackageParser for ConanfileTxtParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let contents = match fs::read_to_string(path) {
+        let contents = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read {}: {}", path.display(), e);
@@ -359,7 +408,7 @@ impl PackageParser for ConanLockParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let contents = match fs::read_to_string(path) {
+        let contents = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read {}: {}", path.display(), e);
@@ -389,7 +438,7 @@ impl PackageParser for ConanLockParser {
 
 fn parse_conan_reference(ref_str: &str) -> Option<Dependency> {
     let (name, version_spec) = if let Some((n, v)) = ref_str.split_once('/') {
-        (n.trim(), Some(v.trim().to_string()))
+        (n.trim(), Some(truncate_field(v.trim().to_string())))
     } else {
         (ref_str.trim(), None)
     };
@@ -419,7 +468,7 @@ fn parse_conan_reference(ref_str: &str) -> Option<Dependency> {
         .unwrap_or(false);
 
     Some(Dependency {
-        purl: Some(purl),
+        purl: Some(truncate_field(purl)),
         extracted_requirement: version_spec,
         scope: Some("install".to_string()),
         is_runtime: Some(true),
@@ -435,7 +484,7 @@ fn parse_conanfile_txt(contents: &str) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
     let mut current_section = None;
 
-    for line in contents.lines() {
+    for line in contents.lines().take(MAX_ITERATION_COUNT) {
         let trimmed = line.trim();
 
         if trimmed.is_empty() || trimmed.starts_with('#') {
@@ -473,7 +522,7 @@ fn parse_conan_lock(json: &Value) -> Vec<Dependency> {
     if let Some(graph_lock) = json.get("graph_lock")
         && let Some(nodes) = graph_lock.get("nodes").and_then(|n| n.as_object())
     {
-        for (_node_id, node_data) in nodes {
+        for (_node_id, node_data) in nodes.iter().take(MAX_ITERATION_COUNT) {
             if let Some(ref_str) = node_data.get("ref").and_then(|r| r.as_str())
                 && !ref_str.is_empty()
                 && ref_str != "conanfile"
