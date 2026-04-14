@@ -21,11 +21,10 @@
 //! - Source dict stored in extra_data["source"]
 
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use packageurl::PackageUrl;
 use serde_json::Value;
 
@@ -66,25 +65,25 @@ impl PackageParser for PodspecJsonParser {
         let name = json_content
             .get(FIELD_NAME)
             .and_then(|v| v.as_str())
-            .map(|s| s.trim().to_string())
+            .map(|s| truncate_field(s.trim().to_string()))
             .filter(|s| !s.is_empty());
 
         let version = json_content
             .get(FIELD_VERSION)
             .and_then(|v| v.as_str())
-            .map(|s| s.trim().to_string())
+            .map(|s| truncate_field(s.trim().to_string()))
             .filter(|s| !s.is_empty());
 
         let summary = json_content
             .get(FIELD_SUMMARY)
             .and_then(|v| v.as_str())
-            .map(|s| s.trim().to_string())
+            .map(|s| truncate_field(s.trim().to_string()))
             .filter(|s| !s.is_empty());
 
         let mut description = json_content
             .get(FIELD_DESCRIPTION)
             .and_then(|v| v.as_str())
-            .map(|s| s.trim().to_string())
+            .map(|s| truncate_field(s.trim().to_string()))
             .filter(|s| !s.is_empty());
 
         // If summary exists and description doesn't start with summary, prepend it
@@ -99,7 +98,7 @@ impl PackageParser for PodspecJsonParser {
         let homepage_url = json_content
             .get(FIELD_HOMEPAGE)
             .and_then(|v| v.as_str())
-            .map(|s| s.trim().to_string())
+            .map(|s| truncate_field(s.trim().to_string()))
             .filter(|s| !s.is_empty());
 
         let extracted_license_statement = extract_license_statement(&json_content);
@@ -143,8 +142,15 @@ impl PackageParser for PodspecJsonParser {
             );
         }
 
-        // Store full JSON in extra_data
-        extra_data.insert("podspec.json".to_string(), json_content.clone());
+        let raw_json = serde_json::to_string(&json_content).unwrap_or_default();
+        if raw_json.len() <= 10 * 1024 * 1024 {
+            extra_data.insert("podspec.json".to_string(), json_content.clone());
+        } else {
+            warn!(
+                "Skipping podspec.json extra_data entry: serialized size {} bytes exceeds 10MB limit",
+                raw_json.len()
+            );
+        }
 
         let extra_data = if extra_data.is_empty() {
             None
@@ -194,12 +200,15 @@ impl PackageParser for PodspecJsonParser {
         };
 
         let purl = if let Some(name_str) = &name {
-            let mut purl = PackageUrl::new(Self::PACKAGE_TYPE.as_str(), name_str)
-                .unwrap_or_else(|_| PackageUrl::new("generic", name_str).unwrap());
-            if let Some(version_str) = &version {
-                let _ = purl.with_version(version_str);
-            }
-            Some(purl.to_string())
+            let purl = PackageUrl::new(Self::PACKAGE_TYPE.as_str(), name_str)
+                .or_else(|_| PackageUrl::new("generic", name_str))
+                .ok();
+            purl.map(|mut p| {
+                if let Some(version_str) = &version {
+                    let _ = p.with_version(version_str);
+                }
+                p.to_string()
+            })
         } else {
             None
         };
@@ -257,12 +266,8 @@ impl PackageParser for PodspecJsonParser {
     }
 }
 
-/// Reads and parses a JSON file.
 fn read_json_file(path: &Path) -> Result<Value, String> {
-    let mut file = File::open(path).map_err(|e| format!("Failed to open file: {}", e))?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let contents = read_file_to_string(path, None).map_err(|e| e.to_string())?;
     serde_json::from_str(&contents).map_err(|e| format!("Failed to parse JSON: {}", e))
 }
 
@@ -281,7 +286,7 @@ fn default_package_data() -> PackageData {
 fn extract_license_statement(json: &Value) -> Option<String> {
     json.get(FIELD_LICENSE).and_then(|lic| {
         if let Some(lic_str) = lic.as_str() {
-            Some(lic_str.trim().to_string())
+            Some(truncate_field(lic_str.trim().to_string()))
         } else if let Some(lic_obj) = lic.as_object() {
             // If license is a dict, join all values with space
             let values: Vec<String> = lic_obj
@@ -348,7 +353,7 @@ fn extract_source_urls(json: &Value) -> (Option<String>, Option<String>) {
         if let Some(source_obj) = source.as_object() {
             // Git URL takes precedence for vcs_url
             if let Some(git_url) = source_obj.get("git").and_then(|v| v.as_str()) {
-                let git_str = git_url.trim().to_string();
+                let git_str = truncate_field(git_url.trim().to_string());
                 if !git_str.is_empty() {
                     vcs_url = Some(git_str);
                 }
@@ -356,14 +361,14 @@ fn extract_source_urls(json: &Value) -> (Option<String>, Option<String>) {
 
             // HTTP URL is download_url
             if let Some(http_url) = source_obj.get("http").and_then(|v| v.as_str()) {
-                let http_str = http_url.trim().to_string();
+                let http_str = truncate_field(http_url.trim().to_string());
                 if !http_str.is_empty() {
                     download_url = Some(http_str);
                 }
             }
         } else if let Some(source_str) = source.as_str() {
             // If source is a string, use as vcs_url
-            let source_trimmed = source_str.trim().to_string();
+            let source_trimmed = truncate_field(source_str.trim().to_string());
             if !source_trimmed.is_empty() {
                 vcs_url = Some(source_trimmed);
             }
@@ -380,18 +385,17 @@ fn extract_parties(json: &Value) -> Vec<Party> {
     if let Some(authors) = json.get(FIELD_AUTHORS) {
         if let Some(authors_obj) = authors.as_object() {
             // Authors as dict: key=name, value=url
-            for (name, value) in authors_obj {
-                let name_str = name.trim().to_string();
+            for (name, value) in authors_obj.iter().take(MAX_ITERATION_COUNT) {
+                let name_str = truncate_field(name.trim().to_string());
                 if !name_str.is_empty() {
                     let url = value.as_str().and_then(|s| {
                         let trimmed = s.trim();
-                        // Python reference adds ".com" suffix if URL doesn't have it
                         if trimmed.is_empty() {
                             None
                         } else if trimmed.contains("://") || trimmed.contains('.') {
-                            Some(trimmed.to_string())
+                            Some(truncate_field(trimmed.to_string()))
                         } else {
-                            Some(format!("{}.com", trimmed))
+                            Some(truncate_field(format!("{}.com", trimmed)))
                         }
                     });
 
@@ -409,7 +413,7 @@ fn extract_parties(json: &Value) -> Vec<Party> {
             }
         } else if let Some(authors_str) = authors.as_str() {
             // Authors as string
-            let authors_trimmed = authors_str.trim().to_string();
+            let authors_trimmed = truncate_field(authors_str.trim().to_string());
             if !authors_trimmed.is_empty() {
                 parties.push(Party {
                     r#type: Some("organization".to_string()),
@@ -435,7 +439,7 @@ fn extract_dependencies(json: &Value) -> Vec<Dependency> {
     if let Some(deps) = json.get(FIELD_DEPENDENCIES)
         && let Some(deps_obj) = deps.as_object()
     {
-        for (name, requirement) in deps_obj {
+        for (name, requirement) in deps_obj.iter().take(MAX_ITERATION_COUNT) {
             let name_str = name.trim();
             if name_str.is_empty() {
                 continue;
@@ -443,10 +447,10 @@ fn extract_dependencies(json: &Value) -> Vec<Dependency> {
 
             let requirement_str = requirement
                 .as_str()
-                .map(|s| s.trim().to_string())
+                .map(|s| truncate_field(s.trim().to_string()))
                 .filter(|s| !s.is_empty());
 
-            let purl = Some(format!("pkg:cocoapods/{}", name_str));
+            let purl = Some(truncate_field(format!("pkg:cocoapods/{}", name_str)));
 
             dependencies.push(Dependency {
                 purl,

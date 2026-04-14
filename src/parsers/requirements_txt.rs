@@ -23,7 +23,6 @@
 //! - Environment markers are preserved for dependency filtering
 
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::parser_warn as warn;
@@ -32,8 +31,11 @@ use serde_json::Value as JsonValue;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 use crate::parsers::pep508::{Pep508Requirement, parse_pep508_requirement};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 use super::PackageParser;
+
+const MAX_RECURSION_DEPTH: usize = 50;
 
 /// pip requirements.txt parser supporting PEP 508 dependency specifications.
 ///
@@ -123,11 +125,14 @@ fn extract_from_requirements_txt(path: &Path) -> PackageData {
 
     let (scope, is_runtime) = scope_from_filename(path);
 
-    parse_requirements_with_includes(path, &mut state, &scope, is_runtime);
+    parse_requirements_with_includes(path, &mut state, &scope, is_runtime, 0);
 
     let mut extra_data = HashMap::new();
     if let Some(url) = state.index_url {
-        extra_data.insert("index_url".to_string(), JsonValue::String(url));
+        extra_data.insert(
+            "index_url".to_string(),
+            JsonValue::String(truncate_field(url)),
+        );
     }
     if !state.extra_index_urls.is_empty() {
         extra_data.insert(
@@ -136,7 +141,7 @@ fn extract_from_requirements_txt(path: &Path) -> PackageData {
                 state
                     .extra_index_urls
                     .into_iter()
-                    .map(JsonValue::String)
+                    .map(|u| JsonValue::String(truncate_field(u)))
                     .collect(),
             ),
         );
@@ -144,7 +149,13 @@ fn extract_from_requirements_txt(path: &Path) -> PackageData {
     if !state.includes.is_empty() {
         extra_data.insert(
             "requirements_includes".to_string(),
-            JsonValue::Array(state.includes.into_iter().map(JsonValue::String).collect()),
+            JsonValue::Array(
+                state
+                    .includes
+                    .into_iter()
+                    .map(|i| JsonValue::String(truncate_field(i)))
+                    .collect(),
+            ),
         );
     }
     if !state.constraints.is_empty() {
@@ -154,7 +165,7 @@ fn extract_from_requirements_txt(path: &Path) -> PackageData {
                 state
                     .constraints
                     .into_iter()
-                    .map(JsonValue::String)
+                    .map(|c| JsonValue::String(truncate_field(c)))
                     .collect(),
             ),
         );
@@ -174,7 +185,16 @@ fn parse_requirements_with_includes(
     state: &mut ParseState,
     scope: &str,
     is_runtime: bool,
+    depth: usize,
 ) {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!(
+            "Maximum recursion depth ({}) exceeded for include: {:?}",
+            MAX_RECURSION_DEPTH, path
+        );
+        return;
+    }
+
     let abs_path = match path.canonicalize() {
         Ok(p) => p,
         Err(_) => {
@@ -190,7 +210,7 @@ fn parse_requirements_with_includes(
 
     state.visited.insert(abs_path.clone());
 
-    let content = match fs::read_to_string(&abs_path) {
+    let content = match read_file_to_string(&abs_path, None) {
         Ok(c) => c,
         Err(e) => {
             warn!("Cannot read file {:?}: {}", abs_path, e);
@@ -198,7 +218,10 @@ fn parse_requirements_with_includes(
         }
     };
 
-    for line in collect_logical_lines(&content) {
+    for line in collect_logical_lines(&content)
+        .into_iter()
+        .take(MAX_ITERATION_COUNT)
+    {
         let cleaned = strip_inline_comment(&line);
         let trimmed = cleaned.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
@@ -206,26 +229,32 @@ fn parse_requirements_with_includes(
         }
 
         if let Some(url) = parse_option_value(trimmed, "--extra-index-url") {
-            state.extra_index_urls.push(url);
+            state.extra_index_urls.push(truncate_field(url));
             continue;
         }
 
         if let Some(url) = parse_option_value(trimmed, "--index-url") {
-            state.index_url = Some(url);
+            state.index_url = Some(truncate_field(url));
             continue;
         }
 
         if let Some(path_value) = parse_option_value(trimmed, "-r")
             .or_else(|| parse_option_value(trimmed, "--requirement"))
         {
-            state.includes.push(path_value.clone());
+            state.includes.push(truncate_field(path_value.clone()));
             let included_path = abs_path
                 .parent()
                 .unwrap_or_else(|| Path::new("."))
                 .join(&path_value);
 
             if included_path.exists() {
-                parse_requirements_with_includes(&included_path, state, scope, is_runtime);
+                parse_requirements_with_includes(
+                    &included_path,
+                    state,
+                    scope,
+                    is_runtime,
+                    depth + 1,
+                );
             } else {
                 warn!("Included file not found: {:?}", included_path);
             }
@@ -235,14 +264,20 @@ fn parse_requirements_with_includes(
         if let Some(path_value) = parse_option_value(trimmed, "-c")
             .or_else(|| parse_option_value(trimmed, "--constraint"))
         {
-            state.constraints.push(path_value.clone());
+            state.constraints.push(truncate_field(path_value.clone()));
             let constraint_path = abs_path
                 .parent()
                 .unwrap_or_else(|| Path::new("."))
                 .join(&path_value);
 
             if constraint_path.exists() {
-                parse_requirements_with_includes(&constraint_path, state, scope, is_runtime);
+                parse_requirements_with_includes(
+                    &constraint_path,
+                    state,
+                    scope,
+                    is_runtime,
+                    depth + 1,
+                );
             } else {
                 warn!("Constraint file not found: {:?}", constraint_path);
             }
@@ -257,6 +292,13 @@ fn parse_requirements_with_includes(
         }
 
         if let Some(dependency) = build_dependency(trimmed, scope, is_runtime) {
+            if state.dependencies.len() >= MAX_ITERATION_COUNT {
+                warn!(
+                    "Reached maximum dependency count ({}) in {:?}",
+                    MAX_ITERATION_COUNT, abs_path
+                );
+                break;
+            }
             state.dependencies.push(dependency);
         }
     }
@@ -280,7 +322,7 @@ fn collect_logical_lines(content: &str) -> Vec<String> {
     let mut lines = Vec::new();
     let mut current = String::new();
 
-    for raw_line in content.lines() {
+    for raw_line in content.lines().take(MAX_ITERATION_COUNT) {
         let line = raw_line.trim_end_matches('\r');
         let trimmed = line.trim_end();
         let is_continuation = trimmed.ends_with('\\');
@@ -369,17 +411,17 @@ fn build_dependency(line: &str, scope: &str, is_runtime: bool) -> Option<Depende
     }
 
     let mut is_editable = false;
-    let mut requirement = trimmed.to_string();
-    let mut extracted_requirement = trimmed.to_string();
+    let mut requirement = truncate_field(trimmed.to_string());
+    let mut extracted_requirement = truncate_field(trimmed.to_string());
 
     if let Some(rest) = trimmed.strip_prefix("-e") {
         is_editable = true;
-        requirement = rest.trim().to_string();
-        extracted_requirement = format!("--editable {}", requirement);
+        requirement = truncate_field(rest.trim().to_string());
+        extracted_requirement = truncate_field(format!("--editable {}", requirement));
     } else if let Some(rest) = trimmed.strip_prefix("--editable") {
         is_editable = true;
-        requirement = rest.trim().to_string();
-        extracted_requirement = format!("--editable {}", requirement);
+        requirement = truncate_field(rest.trim().to_string());
+        extracted_requirement = truncate_field(format!("--editable {}", requirement));
     }
 
     let (requirement, hash_options) = split_hash_options(&requirement);
@@ -412,12 +454,17 @@ fn build_dependency(line: &str, scope: &str, is_runtime: bool) -> Option<Depende
         parsed
             .link
             .clone()
-            .map(JsonValue::String)
+            .map(|l| JsonValue::String(truncate_field(l)))
             .unwrap_or(JsonValue::Null),
     );
     extra_data.insert(
         "hash_options".to_string(),
-        JsonValue::Array(hash_options.into_iter().map(JsonValue::String).collect()),
+        JsonValue::Array(
+            hash_options
+                .into_iter()
+                .map(|h| JsonValue::String(truncate_field(h)))
+                .collect(),
+        ),
     );
     extra_data.insert("is_constraint".to_string(), JsonValue::Bool(false));
     extra_data.insert(
@@ -456,12 +503,15 @@ fn build_dependency(line: &str, scope: &str, is_runtime: bool) -> Option<Depende
     );
 
     if let Some(marker) = parsed.marker {
-        extra_data.insert("markers".to_string(), JsonValue::String(marker));
+        extra_data.insert(
+            "markers".to_string(),
+            JsonValue::String(truncate_field(marker)),
+        );
     }
 
     Some(Dependency {
         purl,
-        extracted_requirement: Some(extracted_requirement),
+        extracted_requirement: Some(truncate_field(extracted_requirement)),
         scope: Some(scope.to_string()),
         is_runtime: Some(is_runtime),
         is_optional: Some(false),
@@ -530,8 +580,8 @@ fn parse_requirement(input: &str) -> ParsedRequirement {
             let name = Some(normalize_pypi_name(&parsed.name));
             return ParsedRequirement {
                 name,
-                specifiers: parsed.specifiers,
-                marker: parsed.marker,
+                specifiers: parsed.specifiers.map(truncate_field),
+                marker: parsed.marker.map(truncate_field),
                 link: None,
                 is_url: None,
                 is_vcs_url: None,
@@ -550,7 +600,7 @@ fn parse_requirement(input: &str) -> ParsedRequirement {
             name: Some(normalized_name),
             specifiers: None,
             marker: None,
-            link: Some(link),
+            link: Some(truncate_field(link)),
             is_url: Some(link_info.is_url),
             is_vcs_url: Some(link_info.is_vcs_url),
             is_local_path: Some(link_info.is_local_path),
@@ -565,7 +615,7 @@ fn parse_requirement(input: &str) -> ParsedRequirement {
         name: None,
         specifiers: None,
         marker: None,
-        link: Some(input.to_string()),
+        link: Some(truncate_field(input.to_string())),
         is_url: Some(link_info.is_url),
         is_vcs_url: Some(link_info.is_vcs_url),
         is_local_path: Some(link_info.is_local_path),
@@ -580,9 +630,9 @@ fn parsed_with_link(parsed: Pep508Requirement, link: &str) -> ParsedRequirement 
     let link_info = parse_link_flags(link);
     ParsedRequirement {
         name: Some(name),
-        specifiers: parsed.specifiers,
-        marker: parsed.marker,
-        link: Some(link.to_string()),
+        specifiers: parsed.specifiers.map(truncate_field),
+        marker: parsed.marker.map(truncate_field),
+        link: Some(truncate_field(link.to_string())),
         is_url: Some(link_info.is_url),
         is_vcs_url: Some(link_info.is_vcs_url),
         is_local_path: Some(link_info.is_local_path),

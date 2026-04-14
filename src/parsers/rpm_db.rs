@@ -4,27 +4,28 @@
 //! system package manager, typically located in /var/lib/rpm/.
 //!
 //! # Supported Formats
-//! - /var/lib/rpm/Packages (BerkleyDB format or SQLite - raw database file)
+//! - /var/lib/rpm/Packages (BerkeleyDB format or SQLite - raw database file)
 //! - Other RPM database index files
 //!
 //! # Key Features
 //! - Installed package metadata extraction from system RPM database
-//! - Database format detection (BDB vs SQLite)
+//! - Database format detection (BDB vs NDB vs SQLite)
 //! - Multi-version package support
 //! - Package URL (purl) generation with architecture namespace
 //!
 //! # Implementation Notes
 //! - Database location detection (/var/lib/rpm/Packages or variants)
+//! - Native parsing only (no subprocess execution per ADR 0004)
 //! - Graceful error handling for unreadable or corrupted databases
 //! - Returns package data for each installed package entry
 
 use std::path::Path;
-use std::process::Command;
 
 use crate::parser_warn as warn;
 
 use crate::models::{DatasourceId, PackageData, PackageType};
 use crate::models::{Dependency, FileReference};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, MAX_MANIFEST_SIZE, truncate_field};
 
 use super::PackageParser;
 use super::rpm_db_native::{InstalledRpmDbKind, InstalledRpmPackage, read_installed_rpm_packages};
@@ -32,29 +33,6 @@ use super::rpm_parser::infer_rpm_namespace;
 use super::rpm_parser::infer_rpm_namespace_from_filename;
 
 const PACKAGE_TYPE: PackageType = PackageType::Rpm;
-const RPM_QUERY_FORMAT: &str = concat!(
-    "__PKG__\n",
-    "name:%{NAME}\n",
-    "epoch:%{EPOCH}\n",
-    "version:%{VERSION}\n",
-    "release:%{RELEASE}\n",
-    "vendor:%{VENDOR}\n",
-    "distribution:%{DISTRIBUTION}\n",
-    "arch:%{ARCH}\n",
-    "platform:%{PLATFORM}\n",
-    "license:%{LICENSE}\n",
-    "source_rpm:%{SOURCERPM}\n",
-    "size:%{SIZE}\n",
-    "__REQUIRES__\n",
-    "[%{REQUIRENAME}\n]",
-    "__FILES__\n",
-    "[%{FILENAMES}\n]",
-    "__END__\n"
-);
-const PKG_MARKER: &str = "__PKG__";
-const REQUIRES_MARKER: &str = "__REQUIRES__";
-const FILES_MARKER: &str = "__FILES__";
-const END_MARKER: &str = "__END__";
 const RPM_BDB_PATH_SUFFIXES: &[&str] = &["var/lib/rpm/Packages", "usr/lib/sysimage/rpm/Packages"];
 const RPM_NDB_PATH_SUFFIXES: &[&str] = &[
     "var/lib/rpm/Packages.db",
@@ -166,36 +144,30 @@ fn parse_rpm_database(
     path: &Path,
     datasource_id: DatasourceId,
 ) -> Result<Vec<PackageData>, String> {
+    let metadata = std::fs::metadata(path)
+        .map_err(|e| format!("Cannot stat RPM database file {:?}: {}", path, e))?;
+
+    if metadata.len() > MAX_MANIFEST_SIZE {
+        return Err(format!(
+            "RPM database file {:?} is {} bytes, exceeding the {} byte limit",
+            path,
+            metadata.len(),
+            MAX_MANIFEST_SIZE
+        ));
+    }
+
     let native_kind = native_kind_for_datasource(datasource_id);
     match read_installed_rpm_packages(path, native_kind) {
         Ok(packages) => Ok(packages
             .into_iter()
+            .take(MAX_ITERATION_COUNT)
             .map(native_package_to_query_package)
             .map(|pkg| build_package_data(pkg, datasource_id))
             .collect()),
-        Err(native_error) if !rpm_command_available() => Err(format!(
+        Err(native_error) => Err(format!(
             "native installed RPM reader failed for {:?}: {}",
             path, native_error
         )),
-        Err(native_error) => {
-            let rpmdb_dir = path
-                .parent()
-                .ok_or_else(|| format!("RPM database path {:?} has no parent directory", path))?;
-
-            query_rpm_database(rpmdb_dir)
-                .map(|packages| {
-                    packages
-                        .into_iter()
-                        .map(|pkg| build_package_data(pkg, datasource_id))
-                        .collect()
-                })
-                .map_err(|fallback_error| {
-                    format!(
-                        "native installed RPM reader failed for {:?}: {}; rpm CLI fallback failed: {}",
-                        path, native_error, fallback_error
-                    )
-                })
-        }
     }
 }
 
@@ -220,23 +192,49 @@ fn native_kind_for_datasource(datasource_id: DatasourceId) -> InstalledRpmDbKind
 
 fn native_package_to_query_package(package: InstalledRpmPackage) -> RpmQueryPackage {
     RpmQueryPackage {
-        name: normalize_optional_string(Some(package.name)),
+        name: truncate_optional_string(Some(package.name)),
         epoch: Some(package.epoch.to_string()),
-        version: normalize_optional_string(Some(package.version)),
-        release: normalize_optional_string(Some(package.release)),
-        vendor: normalize_optional_string(Some(package.vendor)),
-        distribution: normalize_optional_string(Some(package.distribution)),
-        arch: normalize_optional_string(Some(package.arch)),
-        platform: normalize_optional_string(Some(package.platform)),
+        version: truncate_optional_string(Some(package.version)),
+        release: truncate_optional_string(Some(package.release)),
+        vendor: truncate_optional_string(Some(package.vendor)),
+        distribution: truncate_optional_string(Some(package.distribution)),
+        arch: truncate_optional_string(Some(package.arch)),
+        platform: truncate_optional_string(Some(package.platform)),
         size: (package.size > 0).then_some(u64::from(package.size)),
-        license: normalize_optional_string(Some(package.license)),
-        source_rpm: normalize_optional_string(Some(package.source_rpm)),
-        requires: package.requires,
-        file_names: package.file_names.into_iter().map(Some).collect(),
+        license: truncate_optional_string(Some(package.license)),
+        source_rpm: truncate_optional_string(Some(package.source_rpm)),
+        requires: package
+            .requires
+            .into_iter()
+            .take(MAX_ITERATION_COUNT)
+            .map(truncate_field)
+            .collect(),
+        file_names: package
+            .file_names
+            .into_iter()
+            .take(MAX_ITERATION_COUNT)
+            .map(|s| Some(truncate_field(s)))
+            .collect(),
         dir_indexes: package.dir_indexes,
-        base_names: package.base_names.into_iter().map(Some).collect(),
-        dir_names: package.dir_names,
+        base_names: package
+            .base_names
+            .into_iter()
+            .take(MAX_ITERATION_COUNT)
+            .map(|s| Some(truncate_field(s)))
+            .collect(),
+        dir_names: package
+            .dir_names
+            .into_iter()
+            .take(MAX_ITERATION_COUNT)
+            .map(truncate_field)
+            .collect(),
     }
+}
+
+fn truncate_optional_string(value: Option<String>) -> Option<String> {
+    value
+        .map(truncate_field)
+        .and_then(|v| normalize_optional_string(Some(v)))
 }
 
 fn build_evr_version(epoch: u32, version: &str, release: &str) -> Option<String> {
@@ -272,6 +270,7 @@ fn build_file_references(
     base_names
         .iter()
         .zip(dir_indexes.iter())
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|(basename, &dir_idx)| {
             let dirname = dir_names.get(dir_idx as usize)?;
             let basename = basename.as_deref().unwrap_or_default();
@@ -295,6 +294,7 @@ fn build_file_references(
 fn build_file_references_from_paths(paths: &[Option<String>]) -> Vec<FileReference> {
     paths
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|path| {
             let path = path.as_deref()?.trim();
             if path.is_empty() || path == "/" {
@@ -314,135 +314,10 @@ fn build_file_references_from_paths(paths: &[Option<String>]) -> Vec<FileReferen
         .collect()
 }
 
-fn query_rpm_database(rpmdb_dir: &Path) -> Result<Vec<RpmQueryPackage>, String> {
-    let rpmdb_dir = rpmdb_dir.canonicalize().map_err(|e| {
-        format!(
-            "Failed to resolve RPM database directory {:?} to an absolute path: {}",
-            rpmdb_dir, e
-        )
-    })?;
-
-    let output = Command::new("rpm")
-        .args(["--dbpath"])
-        .arg(&rpmdb_dir)
-        .args(["--query", "--all", "--queryformat", RPM_QUERY_FORMAT])
-        .output()
-        .map_err(|e| format!("Failed to execute rpm for {:?}: {}", rpmdb_dir, e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let details = if !stderr.trim().is_empty() {
-            stderr.trim().to_string()
-        } else {
-            stdout.trim().to_string()
-        };
-        return Err(format!(
-            "rpm query failed for {:?} (status: {}): {}",
-            rpmdb_dir, output.status, details
-        ));
-    }
-
-    let stdout = String::from_utf8(output.stdout)
-        .map_err(|e| format!("rpm output for {:?} was not valid UTF-8: {}", rpmdb_dir, e))?;
-
-    parse_rpm_query_output(&stdout)
-}
-
-fn rpm_command_available() -> bool {
-    Command::new("rpm").arg("--version").output().is_ok()
-}
-
-fn parse_rpm_query_output(stdout: &str) -> Result<Vec<RpmQueryPackage>, String> {
-    let mut packages = Vec::new();
-
-    for block in stdout
-        .split(PKG_MARKER)
-        .filter(|block| !block.trim().is_empty())
-    {
-        let mut package = RpmQueryPackage {
-            name: None,
-            epoch: None,
-            version: None,
-            release: None,
-            vendor: None,
-            distribution: None,
-            arch: None,
-            platform: None,
-            size: None,
-            license: None,
-            source_rpm: None,
-            requires: Vec::new(),
-            file_names: Vec::new(),
-            dir_indexes: Vec::new(),
-            base_names: Vec::new(),
-            dir_names: Vec::new(),
-        };
-
-        enum Section {
-            Scalars,
-            Requires,
-            Files,
-        }
-
-        let mut section = Section::Scalars;
-
-        for line in block.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            if line == REQUIRES_MARKER {
-                section = Section::Requires;
-                continue;
-            }
-            if line == FILES_MARKER {
-                section = Section::Files;
-                continue;
-            }
-            if line == END_MARKER {
-                break;
-            }
-
-            match section {
-                Section::Scalars => {
-                    let Some((key, value)) = line.split_once(':') else {
-                        return Err(format!(
-                            "Failed to parse rpm queryformat scalar line: {line}"
-                        ));
-                    };
-
-                    match key {
-                        "name" => package.name = Some(value.to_string()),
-                        "epoch" => package.epoch = Some(value.to_string()),
-                        "version" => package.version = Some(value.to_string()),
-                        "release" => package.release = Some(value.to_string()),
-                        "vendor" => package.vendor = Some(value.to_string()),
-                        "distribution" => package.distribution = Some(value.to_string()),
-                        "arch" => package.arch = Some(value.to_string()),
-                        "platform" => package.platform = Some(value.to_string()),
-                        "license" => package.license = Some(value.to_string()),
-                        "source_rpm" => package.source_rpm = Some(value.to_string()),
-                        "size" => package.size = value.parse::<u64>().ok(),
-                        _ => {}
-                    }
-                }
-                Section::Requires => package.requires.push(line.to_string()),
-                Section::Files => package.file_names.push(Some(line.to_string())),
-            }
-        }
-
-        packages.push(package);
-    }
-
-    Ok(packages)
-}
-
 fn build_package_data(pkg: RpmQueryPackage, datasource_id: DatasourceId) -> PackageData {
-    let name = normalize_optional_string(pkg.name);
-    let version_raw = normalize_optional_string(pkg.version);
-    let release = normalize_optional_string(pkg.release);
+    let name = normalize_optional_string(pkg.name).map(truncate_field);
+    let version_raw = normalize_optional_string(pkg.version).map(truncate_field);
+    let release = normalize_optional_string(pkg.release).map(truncate_field);
     let version = build_evr_version(
         parse_epoch(pkg.epoch),
         version_raw.as_deref().unwrap_or_default(),
@@ -450,8 +325,9 @@ fn build_package_data(pkg: RpmQueryPackage, datasource_id: DatasourceId) -> Pack
     );
 
     let vendor = normalize_optional_string(pkg.vendor)
-        .or_else(|| normalize_optional_string(pkg.distribution));
-    let source_rpm = normalize_optional_string(pkg.source_rpm);
+        .map(truncate_field)
+        .or_else(|| normalize_optional_string(pkg.distribution).map(truncate_field));
+    let source_rpm = normalize_optional_string(pkg.source_rpm).map(truncate_field);
     let namespace =
         infer_rpm_namespace(None, vendor.as_deref(), release.as_deref(), None).or_else(|| {
             source_rpm
@@ -460,13 +336,15 @@ fn build_package_data(pkg: RpmQueryPackage, datasource_id: DatasourceId) -> Pack
         });
 
     let architecture = normalize_optional_string(pkg.arch)
+        .map(truncate_field)
         .or_else(|| infer_platform_architecture(pkg.platform.as_deref()));
     let dependencies = pkg
         .requires
         .into_iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|require| build_dependency(&require))
         .collect();
-    let extracted_license_statement = normalize_optional_string(pkg.license);
+    let extracted_license_statement = normalize_optional_string(pkg.license).map(truncate_field);
     let source_packages = source_rpm.clone().into_iter().collect();
     let file_references = {
         let from_dir_components =
@@ -879,61 +757,11 @@ mod tests {
             Some(&"x86_64".to_string())
         );
     }
-
-    #[test]
-    fn test_parse_rpm_query_output_parses_queryformat_blocks() {
-        let stdout = r#"
-__PKG__
-name:libgcc
-epoch:(none)
-version:13.1.1
-release:2.fc38
-vendor:Fedora Project
-distribution:Fedora Project
-arch:x86_64
-platform:x86_64-redhat-linux
-license:GPLv3+
-source_rpm:gcc-13.1.1-2.fc38.src.rpm
-size:235748
-__REQUIRES__
-rpmlib(PayloadIsZstd)
-glibc
-__FILES__
-/usr/share/licenses/libgcc/COPYING
-__END__
-__PKG__
-name:coreutils
-epoch:(none)
-version:9.1
-release:12.fc38
-vendor:Fedora Project
-distribution:Fedora Project
-arch:x86_64
-platform:x86_64-redhat-linux-gnu
-license:GPLv3+
-source_rpm:coreutils-9.1-12.fc38.src.rpm
-size:5828674
-__REQUIRES__
-glibc
-__FILES__
-/usr/bin/cat
-__END__
-        "#;
-
-        let packages = parse_rpm_query_output(stdout).expect("rpm queryformat output should parse");
-
-        assert_eq!(packages.len(), 2);
-        assert_eq!(packages[0].name.as_deref(), Some("libgcc"));
-        assert_eq!(packages[0].file_names.len(), 1);
-        assert_eq!(packages[0].requires.len(), 2);
-        assert_eq!(packages[1].name.as_deref(), Some("coreutils"));
-        assert_eq!(packages[1].requires, vec!["glibc".to_string()]);
-    }
 }
 
 #[cfg(feature = "rpm-sqlite")]
 crate::register_parser!(
-    "RPM installed package database (requires `rpm` CLI at runtime)",
+    "RPM installed package database",
     &[
         "**/var/lib/rpm/Packages",
         "**/usr/lib/sysimage/rpm/Packages",
@@ -949,7 +777,7 @@ crate::register_parser!(
 
 #[cfg(not(feature = "rpm-sqlite"))]
 crate::register_parser!(
-    "RPM installed package database (requires `rpm` CLI at runtime)",
+    "RPM installed package database",
     &[
         "**/var/lib/rpm/Packages",
         "**/usr/lib/sysimage/rpm/Packages",

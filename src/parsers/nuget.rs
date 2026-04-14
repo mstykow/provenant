@@ -23,7 +23,7 @@
 //! - No unwrap/expect in library code
 
 use std::collections::{HashMap, HashSet};
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
@@ -36,6 +36,26 @@ use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 
 use super::PackageParser;
 use super::license_normalization::{empty_declared_license_data, normalize_spdx_declared_license};
+use super::utils::{MAX_ITERATION_COUNT, MAX_MANIFEST_SIZE, read_file_to_string, truncate_field};
+
+const MAX_RECURSION_DEPTH: usize = 50;
+
+fn check_file_size(path: &Path) -> Result<(), String> {
+    match fs::metadata(path) {
+        Ok(metadata) => {
+            if metadata.len() > MAX_MANIFEST_SIZE {
+                return Err(format!(
+                    "File {:?} is {} bytes, exceeding the {} byte limit",
+                    path,
+                    metadata.len(),
+                    MAX_MANIFEST_SIZE
+                ));
+            }
+            Ok(())
+        }
+        Err(e) => Err(format!("Cannot stat file {:?}: {}", path, e)),
+    }
+}
 
 const PROJECT_FILE_EXTENSIONS: [&str; 3] = ["csproj", "vbproj", "fsproj"];
 
@@ -196,6 +216,13 @@ impl PackageParser for PackagesConfigParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
+        if let Err(e) = check_file_size(path) {
+            warn!("{}", e);
+            return vec![default_package_data(Some(
+                DatasourceId::NugetPackagesConfig,
+            ))];
+        }
+
         let file = match File::open(path) {
             Ok(f) => f,
             Err(e) => {
@@ -212,8 +239,17 @@ impl PackageParser for PackagesConfigParser {
 
         let mut dependencies = Vec::new();
         let mut buf = Vec::new();
+        let mut iteration_count: usize = 0;
 
         loop {
+            iteration_count += 1;
+            if iteration_count > MAX_ITERATION_COUNT {
+                warn!(
+                    "Iteration limit exceeded in packages.config at {:?}; stopping at {} items",
+                    path, MAX_ITERATION_COUNT
+                );
+                break;
+            }
             match xml_reader.read_event_into(&mut buf) {
                 Ok(Event::Empty(e)) if e.name().as_ref() == b"package" => {
                     if let Some(dep) = parse_packages_config_package(&e) {
@@ -254,6 +290,11 @@ impl PackageParser for NuspecParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
+        if let Err(e) = check_file_size(path) {
+            warn!("{}", e);
+            return vec![default_package_data(Some(DatasourceId::NugetNuspec))];
+        }
+
         let file = match File::open(path) {
             Ok(f) => f,
             Err(e) => {
@@ -286,8 +327,17 @@ impl PackageParser for NuspecParser {
         let mut in_metadata = false;
         let mut in_dependencies = false;
         let mut current_group_framework = None;
+        let mut iteration_count: usize = 0;
 
         loop {
+            iteration_count += 1;
+            if iteration_count > MAX_ITERATION_COUNT {
+                warn!(
+                    "Iteration limit exceeded in .nuspec at {:?}; stopping at {} items",
+                    path, MAX_ITERATION_COUNT
+                );
+                break;
+            }
             match xml_reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e)) => {
                     let tag_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
@@ -426,20 +476,20 @@ impl PackageParser for NuspecParser {
         vec![PackageData {
             datasource_id: Some(DatasourceId::NugetNuspec),
             package_type: Some(Self::PACKAGE_TYPE),
-            name,
-            version,
+            name: name.map(truncate_field),
+            version: version.map(truncate_field),
             purl,
-            description: final_description,
-            homepage_url,
+            description: final_description.map(truncate_field),
+            homepage_url: homepage_url.map(truncate_field),
             parties,
             dependencies,
             declared_license_expression,
             declared_license_expression_spdx,
             license_detections,
-            extracted_license_statement,
-            copyright,
+            extracted_license_statement: extracted_license_statement.map(truncate_field),
+            copyright: copyright.map(truncate_field),
             holder,
-            vcs_url,
+            vcs_url: vcs_url.map(truncate_field),
             extra_data: if extra_data.is_empty() {
                 None
             } else {
@@ -561,15 +611,15 @@ impl PackageParser for PackagesLockParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let file = match File::open(path) {
-            Ok(f) => f,
+        let content = match read_file_to_string(path, None) {
+            Ok(c) => c,
             Err(e) => {
-                warn!("Failed to open packages.lock.json at {:?}: {}", path, e);
+                warn!("Failed to read packages.lock.json at {:?}: {}", path, e);
                 return vec![default_package_data(Some(DatasourceId::NugetPackagesLock))];
             }
         };
 
-        let parsed: serde_json::Value = match serde_json::from_reader(file) {
+        let parsed: serde_json::Value = match serde_json::from_str(&content) {
             Ok(v) => v,
             Err(e) => {
                 warn!("Failed to parse packages.lock.json at {:?}: {}", path, e);
@@ -578,11 +628,22 @@ impl PackageParser for PackagesLockParser {
         };
 
         let mut dependencies = Vec::new();
+        let mut iteration_count: usize = 0;
 
         if let Some(deps_obj) = parsed.get("dependencies").and_then(|v| v.as_object()) {
-            for (target_framework, packages) in deps_obj {
+            for (target_framework, packages) in deps_obj.iter().take(MAX_ITERATION_COUNT) {
                 if let Some(packages_obj) = packages.as_object() {
-                    for (package_name, package_info) in packages_obj {
+                    for (package_name, package_info) in
+                        packages_obj.iter().take(MAX_ITERATION_COUNT)
+                    {
+                        iteration_count += 1;
+                        if iteration_count > MAX_ITERATION_COUNT {
+                            warn!(
+                                "Iteration limit exceeded in packages.lock.json at {:?}; stopping at {} dependencies",
+                                path, MAX_ITERATION_COUNT
+                            );
+                            break;
+                        }
                         if let Some(info_obj) = package_info.as_object() {
                             let version = info_obj
                                 .get("resolved")
@@ -666,15 +727,15 @@ impl PackageParser for DotNetDepsJsonParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let file = match File::open(path) {
-            Ok(file) => file,
+        let content = match read_file_to_string(path, None) {
+            Ok(c) => c,
             Err(e) => {
-                warn!("Failed to open .deps.json at {:?}: {}", path, e);
+                warn!("Failed to read .deps.json at {:?}: {}", path, e);
                 return vec![default_package_data(Some(DatasourceId::NugetDepsJson))];
             }
         };
 
-        let parsed: serde_json::Value = match serde_json::from_reader(file) {
+        let parsed: serde_json::Value = match serde_json::from_str(&content) {
             Ok(value) => value,
             Err(e) => {
                 warn!("Failed to parse .deps.json at {:?}: {}", path, e);
@@ -705,7 +766,16 @@ fn parse_dotnet_deps_json(parsed: &serde_json::Value, path: &Path) -> PackageDat
         .unwrap_or_default();
 
     let mut dependencies = Vec::new();
-    for (library_key, target_entry) in &selected_target {
+    let mut iteration_count: usize = 0;
+    for (library_key, target_entry) in selected_target.iter().take(MAX_ITERATION_COUNT) {
+        iteration_count += 1;
+        if iteration_count > MAX_ITERATION_COUNT {
+            warn!(
+                "Iteration limit exceeded in .deps.json at {:?}; stopping at {} dependencies",
+                path, MAX_ITERATION_COUNT
+            );
+            break;
+        }
         if root_key.as_deref() == Some(library_key.as_str()) {
             continue;
         }
@@ -966,15 +1036,15 @@ impl PackageParser for ProjectJsonParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let file = match File::open(path) {
-            Ok(file) => file,
+        let content = match read_file_to_string(path, None) {
+            Ok(c) => c,
             Err(e) => {
-                warn!("Failed to open project.json at {:?}: {}", path, e);
+                warn!("Failed to read project.json at {:?}: {}", path, e);
                 return vec![default_package_data(Some(DatasourceId::NugetProjectJson))];
             }
         };
 
-        let parsed: serde_json::Value = match serde_json::from_reader(file) {
+        let parsed: serde_json::Value = match serde_json::from_str(&content) {
             Ok(value) => value,
             Err(e) => {
                 warn!("Failed to parse project.json at {:?}: {}", path, e);
@@ -998,17 +1068,17 @@ impl PackageParser for ProjectLockJsonParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let file = match File::open(path) {
-            Ok(file) => file,
+        let content = match read_file_to_string(path, None) {
+            Ok(c) => c,
             Err(e) => {
-                warn!("Failed to open project.lock.json at {:?}: {}", path, e);
+                warn!("Failed to read project.lock.json at {:?}: {}", path, e);
                 return vec![default_package_data(Some(
                     DatasourceId::NugetProjectLockJson,
                 ))];
             }
         };
 
-        let parsed: serde_json::Value = match serde_json::from_reader(file) {
+        let parsed: serde_json::Value = match serde_json::from_str(&content) {
             Ok(value) => value,
             Err(e) => {
                 warn!("Failed to parse project.lock.json at {:?}: {}", path, e);
@@ -1037,6 +1107,11 @@ impl PackageParser for PackageReferenceProjectParser {
         let Some(datasource_id) = project_file_datasource_id(path) else {
             return vec![default_package_data(None)];
         };
+
+        if let Err(e) = check_file_size(path) {
+            warn!("{}", e);
+            return vec![default_package_data(Some(datasource_id))];
+        }
 
         let file = match File::open(path) {
             Ok(file) => file,
@@ -1077,8 +1152,17 @@ impl PackageParser for PackageReferenceProjectParser {
         let mut current_property_group_condition = None;
         let mut current_item_group_condition = None;
         let mut current_package_reference: Option<ProjectReferenceData> = None;
+        let mut iteration_count: usize = 0;
 
         loop {
+            iteration_count += 1;
+            if iteration_count > MAX_ITERATION_COUNT {
+                warn!(
+                    "Iteration limit exceeded in project file at {:?}; stopping at {} items",
+                    path, MAX_ITERATION_COUNT
+                );
+                break;
+            }
             match xml_reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e)) => {
                     let tag_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
@@ -1312,19 +1396,19 @@ impl PackageParser for PackageReferenceProjectParser {
         vec![PackageData {
             datasource_id: Some(datasource_id),
             package_type: Some(Self::PACKAGE_TYPE),
-            name: name.clone(),
-            version: version.clone(),
+            name: name.clone().map(truncate_field),
+            version: version.clone().map(truncate_field),
             purl: build_nuget_purl(name.as_deref(), version.as_deref()),
-            description,
-            homepage_url,
+            description: description.map(truncate_field),
+            homepage_url: homepage_url.map(truncate_field),
             parties,
             dependencies,
             declared_license_expression,
             declared_license_expression_spdx,
             license_detections,
-            extracted_license_statement,
-            copyright,
-            vcs_url,
+            extracted_license_statement: extracted_license_statement.map(truncate_field),
+            copyright: copyright.map(truncate_field),
+            vcs_url: vcs_url.map(truncate_field),
             extra_data: if extra_data.is_empty() {
                 None
             } else {
@@ -1386,7 +1470,8 @@ fn parse_project_json_manifest(parsed: &serde_json::Value) -> PackageData {
         .get("dependencies")
         .and_then(|value| value.as_object())
     {
-        for (dependency_name, dependency_spec) in root_dependencies {
+        for (dependency_name, dependency_spec) in root_dependencies.iter().take(MAX_ITERATION_COUNT)
+        {
             if let Some(dependency) =
                 parse_project_json_dependency(dependency_name, dependency_spec, None)
             {
@@ -1396,7 +1481,7 @@ fn parse_project_json_manifest(parsed: &serde_json::Value) -> PackageData {
     }
 
     if let Some(frameworks) = parsed.get("frameworks").and_then(|value| value.as_object()) {
-        for (framework, framework_value) in frameworks {
+        for (framework, framework_value) in frameworks.iter().take(MAX_ITERATION_COUNT) {
             let Some(framework_dependencies) = framework_value
                 .get("dependencies")
                 .and_then(|value| value.as_object())
@@ -1404,7 +1489,9 @@ fn parse_project_json_manifest(parsed: &serde_json::Value) -> PackageData {
                 continue;
             };
 
-            for (dependency_name, dependency_spec) in framework_dependencies {
+            for (dependency_name, dependency_spec) in
+                framework_dependencies.iter().take(MAX_ITERATION_COUNT)
+            {
                 if let Some(dependency) = parse_project_json_dependency(
                     dependency_name,
                     dependency_spec,
@@ -1422,14 +1509,14 @@ fn parse_project_json_manifest(parsed: &serde_json::Value) -> PackageData {
     PackageData {
         datasource_id: Some(DatasourceId::NugetProjectJson),
         package_type: Some(PackageType::Nuget),
-        name: name.clone(),
-        version: version.clone(),
+        name: name.clone().map(truncate_field),
+        version: version.clone().map(truncate_field),
         purl: build_nuget_purl(name.as_deref(), version.as_deref()),
-        description,
-        homepage_url,
+        description: description.map(truncate_field),
+        homepage_url: homepage_url.map(truncate_field),
         parties,
         dependencies,
-        extracted_license_statement,
+        extracted_license_statement: extracted_license_statement.map(truncate_field),
         repository_homepage_url,
         repository_download_url,
         api_data_url,
@@ -1504,12 +1591,16 @@ fn parse_project_lock_manifest(parsed: &serde_json::Value) -> PackageData {
         .get("projectFileDependencyGroups")
         .and_then(|value| value.as_object())
     {
-        for (framework, entries) in groups {
+        for (framework, entries) in groups.iter().take(MAX_ITERATION_COUNT) {
             let Some(entries) = entries.as_array() else {
                 continue;
             };
 
-            for entry in entries.iter().filter_map(|value| value.as_str()) {
+            for entry in entries
+                .iter()
+                .take(MAX_ITERATION_COUNT)
+                .filter_map(|value| value.as_str())
+            {
                 if let Some(dependency) = parse_project_lock_dependency(
                     entry,
                     (!framework.is_empty()).then(|| framework.clone()),
@@ -1668,7 +1759,15 @@ fn build_directory_packages_dependency(
 fn resolve_directory_packages_props(
     path: &Path,
     visited: &mut HashSet<PathBuf>,
+    depth: usize,
 ) -> Result<CentralPackagePropsData, String> {
+    if depth > MAX_RECURSION_DEPTH {
+        return Err(format!(
+            "Recursion depth exceeded ({}) resolving Directory.Packages.props at {:?}",
+            depth, path
+        ));
+    }
+
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     if !visited.insert(canonical.clone()) {
         return Ok(CentralPackagePropsData::default());
@@ -1683,7 +1782,7 @@ fn resolve_directory_packages_props(
         else {
             continue;
         };
-        let imported = resolve_directory_packages_props(&import_path, visited)?;
+        let imported = resolve_directory_packages_props(&import_path, visited, depth + 1)?;
         merge_central_package_props(&mut merged, imported);
     }
 
@@ -1732,7 +1831,15 @@ fn resolve_directory_packages_props(
 fn resolve_directory_build_props(
     path: &Path,
     visited: &mut HashSet<PathBuf>,
+    depth: usize,
 ) -> Result<BuildPropsData, String> {
+    if depth > MAX_RECURSION_DEPTH {
+        return Err(format!(
+            "Recursion depth exceeded ({}) resolving Directory.Build.props at {:?}",
+            depth, path
+        ));
+    }
+
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     if !visited.insert(canonical.clone()) {
         return Ok(BuildPropsData::default());
@@ -1747,7 +1854,7 @@ fn resolve_directory_build_props(
         else {
             continue;
         };
-        let imported = resolve_directory_build_props(&import_path, visited)?;
+        let imported = resolve_directory_build_props(&import_path, visited, depth + 1)?;
         merge_build_props_data(&mut merged, imported);
     }
 
@@ -1777,6 +1884,8 @@ fn resolve_directory_build_props(
 }
 
 fn parse_directory_packages_props_file(path: &Path) -> Result<RawCentralPackagePropsData, String> {
+    check_file_size(path)?;
+
     let file = File::open(path).map_err(|e| {
         format!(
             "Failed to open Directory.Packages.props at {:?}: {}",
@@ -1794,8 +1903,16 @@ fn parse_directory_packages_props_file(path: &Path) -> Result<RawCentralPackageP
     let mut current_property_group_condition = None;
     let mut current_item_group_condition = None;
     let mut current_package_version: Option<CentralPackageVersionData> = None;
+    let mut iteration_count: usize = 0;
 
     loop {
+        iteration_count += 1;
+        if iteration_count > MAX_ITERATION_COUNT {
+            return Err(format!(
+                "Iteration limit exceeded in Directory.Packages.props at {:?}; stopping at {} items",
+                path, MAX_ITERATION_COUNT
+            ));
+        }
         match xml_reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
                 let tag_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
@@ -1946,6 +2063,8 @@ fn parse_directory_packages_props_file(path: &Path) -> Result<RawCentralPackageP
 }
 
 fn parse_directory_build_props_file(path: &Path) -> Result<RawBuildPropsData, String> {
+    check_file_size(path)?;
+
     let file = File::open(path)
         .map_err(|e| format!("Failed to open Directory.Build.props at {:?}: {}", path, e))?;
 
@@ -1958,8 +2077,16 @@ fn parse_directory_build_props_file(path: &Path) -> Result<RawBuildPropsData, St
     let mut current_element = String::new();
     let mut in_property_group = false;
     let mut current_property_group_condition = None;
+    let mut iteration_count: usize = 0;
 
     loop {
+        iteration_count += 1;
+        if iteration_count > MAX_ITERATION_COUNT {
+            return Err(format!(
+                "Iteration limit exceeded in Directory.Build.props at {:?}; stopping at {} items",
+                path, MAX_ITERATION_COUNT
+            ));
+        }
         match xml_reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
                 let tag_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
@@ -2417,7 +2544,7 @@ impl PackageParser for DirectoryBuildPropsParser {
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
         vec![match (
-            resolve_directory_build_props(path, &mut HashSet::new()),
+            resolve_directory_build_props(path, &mut HashSet::new(), 0),
             parse_directory_build_props_file(path),
         ) {
             (Ok(data), Ok(raw)) => build_directory_build_props_package_data(data, raw),
@@ -2438,7 +2565,7 @@ impl PackageParser for CentralPackageManagementPropsParser {
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
         vec![match (
-            resolve_directory_packages_props(path, &mut HashSet::new()),
+            resolve_directory_packages_props(path, &mut HashSet::new(), 0),
             parse_directory_packages_props_file(path),
         ) {
             (Ok(data), Ok(raw)) => build_directory_packages_package_data(data, raw),
@@ -2614,8 +2741,16 @@ fn parse_nuspec_content(content: &str) -> Result<PackageData, String> {
     let mut in_metadata = false;
     let mut in_dependencies = false;
     let mut current_group_framework = None;
+    let mut iteration_count: usize = 0;
 
     loop {
+        iteration_count += 1;
+        if iteration_count > MAX_ITERATION_COUNT {
+            return Err(format!(
+                "Iteration limit exceeded parsing .nuspec content; stopping at {} items",
+                MAX_ITERATION_COUNT
+            ));
+        }
         match xml_reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
                 let tag_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
@@ -2740,19 +2875,19 @@ fn parse_nuspec_content(content: &str) -> Result<PackageData, String> {
     Ok(PackageData {
         datasource_id: Some(DatasourceId::NugetNupkg),
         package_type: Some(NupkgParser::PACKAGE_TYPE),
-        name,
-        version,
-        description,
-        homepage_url,
+        name: name.map(truncate_field),
+        version: version.map(truncate_field),
+        description: description.map(truncate_field),
+        homepage_url: homepage_url.map(truncate_field),
         parties,
         dependencies,
         declared_license_expression,
         declared_license_expression_spdx,
         license_detections,
-        extracted_license_statement,
-        copyright,
+        extracted_license_statement: extracted_license_statement.map(truncate_field),
+        copyright: copyright.map(truncate_field),
         holder,
-        vcs_url,
+        vcs_url: vcs_url.map(truncate_field),
         extra_data: if extra_data.is_empty() {
             None
         } else {
