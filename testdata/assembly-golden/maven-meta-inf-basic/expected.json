@@ -53,11 +53,12 @@
               "matched_length": 4,
               "match_coverage": 100.0,
               "rule_relevance": 100,
-              "rule_url": null,
+              "rule_identifier": "apache-2.0_required_phrase_11.RULE",
+              "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/apache-2.0_required_phrase_11.RULE",
               "matched_text": "- license:\n    name: Apache-2.0\n"
             }
           ],
-          "identifier": "apache_2_0-38d5b5b4-7e7c-d58a-f1b5-97251c83146b"
+          "identifier": "apache_2_0-c9592a9d-b153-f7b2-cbba-e67364394224"
         }
       ],
       "extracted_license_statement": "- license:\n    name: Apache-2.0\n",
