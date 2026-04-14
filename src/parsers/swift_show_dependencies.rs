@@ -140,7 +140,7 @@ fn build_dependency(dep: &SwiftDependency, is_direct: bool) -> Option<Dependency
         extracted_requirement: version.clone(),
         scope: Some("dependencies".to_string()),
         is_runtime: None,
-        is_optional: Some(false),
+        is_optional: None,
         is_pinned: Some(version.is_some()),
         is_direct: Some(is_direct),
         resolved_package: Some(Box::new(ResolvedPackage {
