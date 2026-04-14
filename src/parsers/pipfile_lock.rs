@@ -20,7 +20,6 @@
 //! - Integrates with Python parser utilities for PyPI URL building
 
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -31,6 +30,7 @@ use toml::map::Map as TomlMap;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Sha256Digest};
 use crate::parsers::python::read_toml_file;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 use super::PackageParser;
 
@@ -74,7 +74,7 @@ impl PackageParser for PipfileLockParser {
 }
 
 fn extract_from_pipfile_lock(path: &Path) -> PackageData {
-    let content = match fs::read_to_string(path) {
+    let content = match read_file_to_string(path, None) {
         Ok(content) => content,
         Err(e) => {
             warn!("Failed to read Pipfile.lock at {:?}: {}", path, e);
@@ -133,7 +133,7 @@ fn extract_lockfile_dependencies(
         .get(section)
         .and_then(|value| value.as_object())
     {
-        for (name, value) in section_map {
+        for (name, value) in section_map.iter().take(MAX_ITERATION_COUNT) {
             if let Some(dependency) = build_lockfile_dependency(name, value, scope, is_runtime) {
                 dependencies.push(dependency);
             }
@@ -158,7 +158,7 @@ fn build_lockfile_dependency(
 
     Some(Dependency {
         purl,
-        extracted_requirement: Some(requirement),
+        extracted_requirement: Some(truncate_field(requirement)),
         scope: Some(scope.to_string()),
         is_runtime: Some(is_runtime),
         is_optional: Some(false),
@@ -171,11 +171,11 @@ fn build_lockfile_dependency(
 
 fn extract_lockfile_requirement(value: &JsonValue) -> Option<String> {
     match value {
-        JsonValue::String(spec) => Some(spec.to_string()),
+        JsonValue::String(spec) => Some(truncate_field(spec.to_string())),
         JsonValue::Object(map) => map
             .get(FIELD_VERSION)
             .and_then(|version| version.as_str())
-            .map(|version| version.to_string()),
+            .map(|version| truncate_field(version.to_string())),
         _ => None,
     }
 }
@@ -191,7 +191,7 @@ fn extract_lockfile_hashes(value: &JsonValue) -> Vec<String> {
             if let Some(hash) = hash_value.as_str()
                 && let Some(stripped) = hash.strip_prefix("sha256:")
             {
-                hashes.push(stripped.to_string());
+                hashes.push(truncate_field(stripped.to_string()));
             }
         }
     }
@@ -206,7 +206,7 @@ fn strip_pipfile_lock_version(requirement: &str) -> Option<String> {
         if version.is_empty() {
             None
         } else {
-            Some(version.to_string())
+            Some(truncate_field(version.to_string()))
         }
     } else {
         None
@@ -256,7 +256,7 @@ fn extract_pipfile_dependencies(
 ) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
 
-    for (name, value) in packages {
+    for (name, value) in packages.iter().take(MAX_ITERATION_COUNT) {
         if let Some(dependency) = build_pipfile_dependency(name, value, scope, is_runtime) {
             dependencies.push(dependency);
         }
@@ -281,7 +281,7 @@ fn build_pipfile_dependency(
 
     Some(Dependency {
         purl,
-        extracted_requirement: Some(requirement),
+        extracted_requirement: Some(truncate_field(requirement)),
         scope: Some(scope.to_string()),
         is_runtime: Some(is_runtime),
         is_optional: Some(false),
@@ -294,12 +294,12 @@ fn build_pipfile_dependency(
 
 fn extract_pipfile_requirement(value: &TomlValue) -> Option<String> {
     match value {
-        TomlValue::String(spec) => Some(spec.to_string()),
+        TomlValue::String(spec) => Some(truncate_field(spec.to_string())),
         TomlValue::Boolean(true) => Some("*".to_string()),
         TomlValue::Table(table) => table
             .get(FIELD_VERSION)
             .and_then(|version| version.as_str())
-            .map(|version| version.to_string()),
+            .map(|version| truncate_field(version.to_string())),
         _ => None,
     }
 }
@@ -329,7 +329,7 @@ fn build_pipfile_extra_data(
     {
         extra_data.insert(
             FIELD_PYTHON_VERSION.to_string(),
-            serde_json::Value::String(python_version.to_string()),
+            serde_json::Value::String(truncate_field(python_version.to_string())),
         );
     }
 
@@ -356,13 +356,13 @@ fn parse_pipfile_sources(source_value: &TomlValue) -> Option<serde_json::Value> 
                     if let Some(name) = table.get("name").and_then(|value| value.as_str()) {
                         json_map.insert(
                             "name".to_string(),
-                            serde_json::Value::String(name.to_string()),
+                            serde_json::Value::String(truncate_field(name.to_string())),
                         );
                     }
                     if let Some(url) = table.get("url").and_then(|value| value.as_str()) {
                         json_map.insert(
                             "url".to_string(),
-                            serde_json::Value::String(url.to_string()),
+                            serde_json::Value::String(truncate_field(url.to_string())),
                         );
                     }
                     if let Some(verify_ssl) =
@@ -386,7 +386,7 @@ fn parse_pipfile_sources(source_value: &TomlValue) -> Option<serde_json::Value> 
                     TomlValue::String(value) => {
                         json_map.insert(
                             key.to_string(),
-                            serde_json::Value::String(value.to_string()),
+                            serde_json::Value::String(truncate_field(value.to_string())),
                         );
                     }
                     TomlValue::Boolean(value) => {
@@ -402,7 +402,7 @@ fn parse_pipfile_sources(source_value: &TomlValue) -> Option<serde_json::Value> 
 }
 
 fn normalize_pypi_name(name: &str) -> String {
-    name.trim().to_ascii_lowercase()
+    truncate_field(name.trim().to_ascii_lowercase())
 }
 
 fn create_pypi_purl(name: &str, version: Option<&str>) -> Option<String> {
