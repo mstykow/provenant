@@ -21,10 +21,10 @@
 //! - Graceful error handling with `warn!()` logs
 //! - Direct dependency tracking (all in build file are direct)
 
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use packageurl::PackageUrl;
 use serde_json::json;
 
@@ -78,7 +78,7 @@ impl PackageParser for GradleParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read {:?}: {}", path, e);
@@ -178,6 +178,13 @@ fn lex(input: &str) -> Vec<Tok> {
     let mut tokens = Vec::new();
 
     while i < len {
+        if tokens.len() >= MAX_ITERATION_COUNT {
+            warn!(
+                "Lexer exceeded MAX_ITERATION_COUNT ({}) tokens, stopping",
+                MAX_ITERATION_COUNT
+            );
+            break;
+        }
         let c = chars[i];
 
         if c == '/' && i + 1 < len && chars[i + 1] == '/' {
@@ -208,6 +215,7 @@ fn lex(input: &str) -> Vec<Tok> {
                 i += 1;
             }
             let val: String = chars[start..i].iter().collect();
+            let val = truncate_field(val);
             if i < len && chars[i] == '\'' {
                 tokens.push(Tok::Str(val));
                 i += 1;
@@ -228,6 +236,7 @@ fn lex(input: &str) -> Vec<Tok> {
                 }
             }
             let val: String = chars[start..i].iter().collect();
+            let val = truncate_field(val);
             if i < len && chars[i] == '"' {
                 tokens.push(Tok::Str(val));
                 i += 1;
@@ -280,7 +289,7 @@ fn lex(input: &str) -> Vec<Tok> {
                     i += 1;
                 }
                 let val: String = chars[start..i].iter().collect();
-                tokens.push(Tok::Ident(val));
+                tokens.push(Tok::Ident(truncate_field(val)));
             }
             _ => {
                 i += 1;
@@ -357,7 +366,7 @@ fn extract_dependencies(tokens: &[Tok]) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
 
     for block in blocks {
-        for rd in parse_block(&block) {
+        for rd in parse_block(&block).into_iter().take(MAX_ITERATION_COUNT) {
             if rd.name.is_empty() {
                 continue;
             }
@@ -373,8 +382,17 @@ fn extract_dependencies(tokens: &[Tok]) -> Vec<Dependency> {
 fn parse_block(tokens: &[Tok]) -> Vec<RawDep> {
     let mut deps = Vec::new();
     let mut i = 0;
+    let mut iterations = 0;
 
     while i < tokens.len() {
+        iterations += 1;
+        if iterations > MAX_ITERATION_COUNT {
+            warn!(
+                "parse_block exceeded MAX_ITERATION_COUNT ({}) iterations, stopping",
+                MAX_ITERATION_COUNT
+            );
+            break;
+        }
         // Skip nested blocks (closures like `{ transitive = true }`)
         if tokens[i] == Tok::OpenBrace {
             let mut depth = 1;
@@ -518,10 +536,12 @@ fn parse_block(tokens: &[Tok]) -> Vec<RawDep> {
         {
             deps.push(RawDep {
                 namespace: String::new(),
-                name: last_seg.to_string(),
+                name: truncate_field(last_seg.to_string()),
                 version: String::new(),
-                scope: scope_name.clone(),
-                catalog_alias: val.strip_prefix("libs.").map(|alias| alias.to_string()),
+                scope: truncate_field(scope_name.clone()),
+                catalog_alias: val
+                    .strip_prefix("libs.")
+                    .map(|alias| truncate_field(alias.to_string())),
                 project_path: None,
             });
             i = next + 1;
@@ -668,8 +688,8 @@ fn parse_map_entries(tokens: &[Tok]) -> Option<RawDep> {
             && let Tok::Str(ref val) = tokens[i + 2]
         {
             match label.as_str() {
-                "name" => name = val.clone(),
-                "version" => version = val.clone(),
+                "name" => name = truncate_field(val.clone()),
+                "version" => version = truncate_field(val.clone()),
                 _ => {}
             }
             i += 3;
@@ -708,9 +728,9 @@ fn parse_named_params(scope: &str, tokens: &[Tok]) -> Option<(RawDep, usize)> {
             && let Tok::Str(ref val) = tokens[i + 2]
         {
             match label.as_str() {
-                "group" => group = val.clone(),
-                "name" => name = val.clone(),
-                "version" => version = val.clone(),
+                "group" => group = truncate_field(val.clone()),
+                "name" => name = truncate_field(val.clone()),
+                "version" => version = truncate_field(val.clone()),
                 _ => {}
             }
             i += 3;
@@ -754,13 +774,13 @@ fn parse_project_ref(tokens: &[Tok]) -> Option<RawDep> {
             namespace: if segments.is_empty() {
                 String::new()
             } else {
-                segments.join("/")
+                truncate_field(segments.join("/"))
             },
-            name: name.to_string(),
+            name: truncate_field(name.to_string()),
             version: String::new(),
             scope: "project".to_string(),
             catalog_alias: None,
-            project_path: Some(module_name.to_string()),
+            project_path: Some(truncate_field(module_name.to_string())),
         });
     }
     None
@@ -770,24 +790,32 @@ fn parse_colon_string(val: &str, scope: &str) -> RawDep {
     let parts: Vec<&str> = val.split(':').collect();
     let (namespace, name, version) = match parts.len() {
         n if n >= 4 => (
-            parts[0].to_string(),
-            parts[1].to_string(),
-            parts[2].to_string(),
+            truncate_field(parts[0].to_string()),
+            truncate_field(parts[1].to_string()),
+            truncate_field(parts[2].to_string()),
         ),
         3 => (
-            parts[0].to_string(),
-            parts[1].to_string(),
-            parts[2].to_string(),
+            truncate_field(parts[0].to_string()),
+            truncate_field(parts[1].to_string()),
+            truncate_field(parts[2].to_string()),
         ),
-        2 => (parts[0].to_string(), parts[1].to_string(), String::new()),
-        _ => (String::new(), val.to_string(), String::new()),
+        2 => (
+            truncate_field(parts[0].to_string()),
+            truncate_field(parts[1].to_string()),
+            String::new(),
+        ),
+        _ => (
+            String::new(),
+            truncate_field(val.to_string()),
+            String::new(),
+        ),
     };
 
     RawDep {
         namespace,
         name,
         version,
-        scope: scope.to_string(),
+        scope: truncate_field(scope.to_string()),
         catalog_alias: None,
         project_path: None,
     }
@@ -859,19 +887,25 @@ fn create_dependency(raw: &RawDep) -> Option<Dependency> {
     let (is_runtime, is_optional) = classify_scope(scope);
     let is_pinned = !version.is_empty();
 
-    let purl_string = purl.to_string().replace("$", "%24").replace('\'', "%27");
+    let purl_string = truncate_field(purl.to_string().replace("$", "%24").replace('\'', "%27"));
     let mut extra_data = std::collections::HashMap::new();
     if let Some(alias) = &raw.catalog_alias {
-        extra_data.insert("catalog_alias".to_string(), json!(alias));
+        extra_data.insert(
+            "catalog_alias".to_string(),
+            json!(truncate_field(alias.clone())),
+        );
     }
     if let Some(project_path) = &raw.project_path {
-        extra_data.insert("project_path".to_string(), json!(project_path));
+        extra_data.insert(
+            "project_path".to_string(),
+            json!(truncate_field(project_path.clone())),
+        );
     }
 
     Some(Dependency {
         purl: Some(purl_string),
-        extracted_requirement: Some(version.to_string()),
-        scope: Some(scope.to_string()),
+        extracted_requirement: Some(truncate_field(version.to_string())),
+        scope: Some(truncate_field(scope.to_string())),
         is_runtime: Some(is_runtime),
         is_optional: Some(is_optional),
         is_pinned: Some(is_pinned),
@@ -936,8 +970,8 @@ fn resolve_gradle_version_catalog_aliases(path: &Path, dependencies: &mut [Depen
             }
         }
 
-        dep.purl = purl.map(|p| p.to_string());
-        dep.extracted_requirement = entry.version.clone();
+        dep.purl = purl.map(|p| truncate_field(p.to_string()));
+        dep.extracted_requirement = entry.version.as_ref().map(|v| truncate_field(v.clone()));
         dep.is_pinned = Some(entry.version.is_some());
     }
 }
@@ -961,12 +995,12 @@ fn find_gradle_version_catalog(path: &Path) -> Option<std::path::PathBuf> {
 fn parse_gradle_version_catalog(
     path: &Path,
 ) -> Option<std::collections::HashMap<String, GradleCatalogEntry>> {
-    let content = fs::read_to_string(path).ok()?;
+    let content = read_file_to_string(path, None).ok()?;
     let mut section = "";
     let mut versions = std::collections::HashMap::new();
     let mut libraries = std::collections::HashMap::new();
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let trimmed = line.split('#').next().unwrap_or("").trim();
         if trimmed.is_empty() {
             continue;
@@ -985,7 +1019,7 @@ fn parse_gradle_version_catalog(
 
         match section {
             "versions" => {
-                versions.insert(key, strip_quotes(&value).to_string());
+                versions.insert(key, truncate_field(strip_quotes(&value).to_string()));
             }
             "libraries" => {
                 libraries.insert(key, value);
@@ -995,11 +1029,11 @@ fn parse_gradle_version_catalog(
     }
 
     let mut result = std::collections::HashMap::new();
-    for (alias, raw_value) in libraries {
+    for (alias, raw_value) in libraries.into_iter().take(MAX_ITERATION_COUNT) {
         let Some(entry) = parse_gradle_catalog_entry(&raw_value, &versions) else {
             continue;
         };
-        result.insert(alias.replace('-', "."), entry);
+        result.insert(truncate_field(alias.replace('-', ".")), entry);
     }
 
     Some(result)
@@ -1012,9 +1046,9 @@ fn parse_gradle_catalog_entry(
     if raw_value.starts_with('"') && raw_value.ends_with('"') {
         let notation = strip_quotes(raw_value);
         let mut parts = notation.split(':');
-        let namespace = parts.next()?.to_string();
-        let name = parts.next()?.to_string();
-        let version = parts.next().map(|v| v.to_string());
+        let namespace = truncate_field(parts.next()?.to_string());
+        let name = truncate_field(parts.next()?.to_string());
+        let version = parts.next().map(|v| truncate_field(v.to_string()));
         return Some(GradleCatalogEntry {
             namespace,
             name,
@@ -1028,30 +1062,33 @@ fn parse_gradle_catalog_entry(
 
     let inner = &raw_value[1..raw_value.len() - 1];
     let mut fields = std::collections::HashMap::new();
-    for pair in inner.split(',') {
+    for pair in inner.split(',').take(MAX_ITERATION_COUNT) {
         let Some((key, value)) = pair.split_once('=') else {
             continue;
         };
         fields.insert(
-            key.trim().to_string(),
-            strip_quotes(value.trim()).to_string(),
+            truncate_field(key.trim().to_string()),
+            truncate_field(strip_quotes(value.trim()).to_string()),
         );
     }
 
     let (namespace, name) = if let Some(module) = fields.get("module") {
         let (group, artifact) = module.split_once(':')?;
-        (group.to_string(), artifact.to_string())
+        (
+            truncate_field(group.to_string()),
+            truncate_field(artifact.to_string()),
+        )
     } else {
         (
-            fields.get("group")?.to_string(),
-            fields.get("name")?.to_string(),
+            truncate_field(fields.get("group")?.to_string()),
+            truncate_field(fields.get("name")?.to_string()),
         )
     };
 
     let version = if let Some(version) = fields.get("version") {
-        Some(version.to_string())
+        Some(truncate_field(version.to_string()))
     } else if let Some(version_ref) = fields.get("version.ref") {
-        versions.get(version_ref).cloned()
+        versions.get(version_ref).cloned().map(truncate_field)
     } else {
         None
     };
@@ -1101,10 +1138,20 @@ fn extract_gradle_license_metadata(
                         normalized,
                         DeclaredLicenseMatchMetadata::single_line(matched_text),
                     );
-                    return (extracted, declared, declared_spdx, detections);
+                    return (
+                        extracted.map(truncate_field),
+                        declared.map(truncate_field),
+                        declared_spdx.map(truncate_field),
+                        detections,
+                    );
                 }
 
-                return (extracted, None, None, empty_declared_license_data().2);
+                return (
+                    extracted.map(truncate_field),
+                    None,
+                    None,
+                    empty_declared_license_data().2,
+                );
             }
             i = block_end + 1;
             continue;
@@ -1154,8 +1201,8 @@ fn parse_license_block(tokens: &[Tok]) -> Option<(String, Option<String>)> {
 fn next_string_literal(tokens: &[Tok], start: usize) -> Option<String> {
     for token in tokens.iter().skip(start) {
         match token {
-            Tok::Str(value) => return Some(value.clone()),
-            Tok::MalformedStr(value) => return Some(value.clone()),
+            Tok::Str(value) => return Some(truncate_field(value.clone())),
+            Tok::MalformedStr(value) => return Some(truncate_field(value.clone())),
             Tok::Ident(_) | Tok::Colon | Tok::Equals | Tok::OpenParen | Tok::CloseParen => continue,
             _ => break,
         }
@@ -1188,7 +1235,7 @@ fn format_gradle_license_statement(name: &str, url: Option<&str>) -> Option<Stri
     if let Some(url) = url {
         output.push_str(&format!("    url: {url}\n"));
     }
-    Some(output)
+    Some(truncate_field(output))
 }
 
 fn derive_gradle_license_expression(name: &str, url: Option<&str>) -> Option<String> {
@@ -1202,13 +1249,13 @@ fn derive_gradle_license_expression(name: &str, url: Option<&str>) -> Option<Str
             || lower.contains("apache license, version 2.0")
             || lower.contains("apache.org/licenses/license-2.0")
         {
-            return Some("Apache-2.0".to_string());
+            return Some(truncate_field("Apache-2.0".to_string()));
         }
         if trimmed == "MIT" || lower.contains("opensource.org/licenses/mit") {
-            return Some("MIT".to_string());
+            return Some(truncate_field("MIT".to_string()));
         }
         if trimmed == "BSD-2-Clause" || trimmed == "BSD-3-Clause" {
-            return Some(trimmed.to_string());
+            return Some(truncate_field(trimmed.to_string()));
         }
     }
 

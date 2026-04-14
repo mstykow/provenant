@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -12,7 +11,7 @@ use crate::models::{
 };
 
 use super::PackageParser;
-use super::utils::parse_sri;
+use super::utils::{MAX_ITERATION_COUNT, parse_sri, read_file_to_string, truncate_field};
 
 const FIELD_VERSION: &str = "version";
 const FIELD_SPECIFIERS: &str = "specifiers";
@@ -33,7 +32,7 @@ impl PackageParser for DenoLockParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(e) => {
                 warn!("Failed to read deno.lock at {:?}: {}", path, e);
@@ -71,7 +70,7 @@ fn parse_deno_lock(json: &Value) -> PackageData {
     let mut direct_jsr_keys = HashSet::new();
     let mut direct_npm_keys = HashSet::new();
 
-    for specifier in &workspace_direct {
+    for specifier in workspace_direct.iter().take(MAX_ITERATION_COUNT) {
         if let Some(resolved_key) = specifiers.get(specifier).and_then(Value::as_str) {
             if specifier.starts_with("jsr:") {
                 if let Some(full_key) = resolve_jsr_full_key(specifier, resolved_key)
@@ -93,7 +92,7 @@ fn parse_deno_lock(json: &Value) -> PackageData {
     }
 
     if let Some(jsr_map) = json.get(FIELD_JSR).and_then(Value::as_object) {
-        for key in jsr_map.keys() {
+        for key in jsr_map.keys().take(MAX_ITERATION_COUNT) {
             if direct_jsr_keys.contains(key) {
                 continue;
             }
@@ -104,7 +103,7 @@ fn parse_deno_lock(json: &Value) -> PackageData {
     }
 
     if let Some(npm_map) = json.get(FIELD_NPM).and_then(Value::as_object) {
-        for key in npm_map.keys() {
+        for key in npm_map.keys().take(MAX_ITERATION_COUNT) {
             if direct_npm_keys.contains(key) {
                 continue;
             }
@@ -115,7 +114,7 @@ fn parse_deno_lock(json: &Value) -> PackageData {
     }
 
     if let Some(redirects) = json.get(FIELD_REDIRECTS).and_then(Value::as_object) {
-        for (source, target) in redirects {
+        for (source, target) in redirects.iter().take(MAX_ITERATION_COUNT) {
             let Some(target_url) = target.as_str() else {
                 continue;
             };
@@ -126,11 +125,12 @@ fn parse_deno_lock(json: &Value) -> PackageData {
                 .and_then(Value::as_str)
                 .and_then(|value| Sha256Digest::from_hex(value).ok());
 
-            let name = remote_name(target_url).unwrap_or_else(|| source.to_string());
-            let purl = create_remote_purl(target_url);
+            let name =
+                truncate_field(remote_name(target_url).unwrap_or_else(|| source.to_string()));
+            let purl = create_remote_purl(target_url).map(truncate_field);
             let resolved_package = ResolvedPackage {
                 primary_language: Some("TypeScript".to_string()),
-                download_url: Some(target_url.to_string()),
+                download_url: Some(truncate_field(target_url.to_string())),
                 sha1: None,
                 sha256: hash,
                 sha512: None,
@@ -138,7 +138,7 @@ fn parse_deno_lock(json: &Value) -> PackageData {
                 is_virtual: true,
                 extra_data: Some(HashMap::from([(
                     "redirect_source".to_string(),
-                    Value::String(source.to_string()),
+                    Value::String(truncate_field(source.to_string())),
                 )])),
                 dependencies: Vec::new(),
                 repository_homepage_url: None,
@@ -156,7 +156,7 @@ fn parse_deno_lock(json: &Value) -> PackageData {
 
             dependencies.push(Dependency {
                 purl,
-                extracted_requirement: Some(source.to_string()),
+                extracted_requirement: Some(truncate_field(source.to_string())),
                 scope: Some("imports".to_string()),
                 is_runtime: Some(true),
                 is_optional: Some(false),
@@ -201,7 +201,7 @@ fn extract_workspace_dependencies(json: &Value) -> Vec<String> {
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
-        .map(|value| value.to_string())
+        .map(|value| truncate_field(value.to_string()))
         .collect()
 }
 
@@ -214,11 +214,19 @@ fn build_jsr_dependency(
     let jsr_entry = jsr_section.get(resolved_key)?;
     let jsr_object = jsr_entry.as_object()?;
     let (namespace, name, version) = parse_jsr_key(resolved_key)?;
-    let purl = create_generic_purl(Some(&format!("jsr.io/{}", namespace)), &name, Some(version));
+    let namespace = truncate_field(namespace);
+    let name = truncate_field(name);
+    let version_str = truncate_field(version.to_string());
+    let purl = create_generic_purl(
+        Some(&format!("jsr.io/{}", namespace)),
+        &name,
+        Some(&version_str),
+    )
+    .map(truncate_field);
 
     Some(Dependency {
         purl: purl.clone(),
-        extracted_requirement: extracted_requirement.map(|value| value.to_string()),
+        extracted_requirement: extracted_requirement.map(|value| truncate_field(value.to_string())),
         scope: Some("imports".to_string()),
         is_runtime: Some(true),
         is_optional: Some(false),
@@ -249,12 +257,7 @@ fn build_jsr_dependency(
             api_data_url: None,
             datasource_id: Some(DatasourceId::DenoLock),
             purl,
-            ..ResolvedPackage::new(
-                DenoLockParser::PACKAGE_TYPE,
-                namespace,
-                name,
-                version.to_string(),
-            )
+            ..ResolvedPackage::new(DenoLockParser::PACKAGE_TYPE, namespace, name, version_str)
         })),
         extra_data: None,
     })
@@ -269,11 +272,14 @@ fn build_npm_dependency(
     let npm_entry = npm_section.get(resolved_key)?;
     let npm_object = npm_entry.as_object()?;
     let (namespace, name, version) = parse_npm_key(resolved_key)?;
-    let purl = create_npm_purl(namespace.as_deref(), &name, Some(version));
+    let namespace = namespace.map(truncate_field);
+    let name = truncate_field(name);
+    let version_str = truncate_field(version.to_string());
+    let purl = create_npm_purl(namespace.as_deref(), &name, Some(&version_str)).map(truncate_field);
 
     Some(Dependency {
         purl: purl.clone(),
-        extracted_requirement: extracted_requirement.map(|value| value.to_string()),
+        extracted_requirement: extracted_requirement.map(|value| truncate_field(value.to_string())),
         scope: Some("imports".to_string()),
         is_runtime: Some(true),
         is_optional: Some(false),
@@ -284,7 +290,7 @@ fn build_npm_dependency(
             download_url: npm_object
                 .get("tarball")
                 .and_then(Value::as_str)
-                .map(|value| value.to_string()),
+                .map(|value| truncate_field(value.to_string())),
             sha1: None,
             sha256: None,
             sha512: npm_object
@@ -306,11 +312,13 @@ fn build_npm_dependency(
                 .into_iter()
                 .flatten()
                 .filter_map(Value::as_str)
+                .take(MAX_ITERATION_COUNT)
                 .filter_map(|value| {
                     let (namespace, name, version) = parse_npm_key(value)?;
                     Some(Dependency {
-                        purl: create_npm_purl(namespace.as_deref(), &name, Some(version)),
-                        extracted_requirement: Some(value.to_string()),
+                        purl: create_npm_purl(namespace.as_deref(), &name, Some(version))
+                            .map(truncate_field),
+                        extracted_requirement: Some(truncate_field(value.to_string())),
                         scope: Some("dependencies".to_string()),
                         is_runtime: Some(true),
                         is_optional: Some(false),
@@ -330,7 +338,7 @@ fn build_npm_dependency(
                 PackageType::Npm,
                 namespace.unwrap_or_default(),
                 name,
-                version.to_string(),
+                version_str,
             )
         })),
         extra_data: None,
@@ -346,11 +354,13 @@ fn extract_jsr_resolved_dependencies(
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|value| {
             let (namespace, name, version) = parse_jsr_dependency_reference(value)?;
             Some(Dependency {
-                purl: create_generic_purl(Some(&format!("jsr.io/{}", namespace)), &name, version),
-                extracted_requirement: Some(value.to_string()),
+                purl: create_generic_purl(Some(&format!("jsr.io/{}", namespace)), &name, version)
+                    .map(truncate_field),
+                extracted_requirement: Some(truncate_field(value.to_string())),
                 scope: Some("dependencies".to_string()),
                 is_runtime: Some(true),
                 is_optional: Some(false),
