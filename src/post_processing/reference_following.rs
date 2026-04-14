@@ -932,12 +932,8 @@ pub(super) fn resolve_referenced_resource(
     if is_absolute {
         candidates.push(referenced_filename.clone());
     }
-    if let Some(parent) = Path::new(current_path).parent() {
-        let parent = parent.to_string_lossy();
-        candidates.push(join_reference_candidate(
-            parent.as_ref(),
-            &referenced_filename,
-        ));
+    for base in ancestor_reference_bases(current_path) {
+        candidates.push(join_reference_candidate(&base, &referenced_filename));
     }
 
     for package_uid in package_uids {
@@ -952,7 +948,12 @@ pub(super) fn resolve_referenced_resource(
         candidates.push(join_reference_candidate(root, &referenced_filename));
     }
 
+    let mut seen = HashSet::new();
     for candidate in candidates {
+        if !seen.insert(candidate.clone()) {
+            continue;
+        }
+
         if let Some(target) = snapshot.files_by_path.get(&candidate) {
             return Some(target.clone());
         }
@@ -963,6 +964,24 @@ pub(super) fn resolve_referenced_resource(
     }
 
     None
+}
+
+fn ancestor_reference_bases(current_path: &str) -> Vec<String> {
+    let mut bases = Vec::new();
+    let mut current = Path::new(current_path).parent();
+
+    while let Some(path) = current {
+        let normalized = path.to_string_lossy().replace('\\', "/");
+        bases.push(normalized.clone());
+
+        if normalized.is_empty() {
+            break;
+        }
+
+        current = path.parent();
+    }
+
+    bases
 }
 
 fn explicit_reference_root(snapshot: &ReferenceFollowSnapshot) -> Option<&str> {
