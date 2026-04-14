@@ -50,6 +50,7 @@ pub struct CachedLicenseIndex {
     pub rid_by_spdx_key: HashMap<String, usize>,
     pub unknown_spdx_rid: Option<usize>,
     pub rids_by_high_tid: HashMap<TokenId, HashSet<usize>>,
+    pub spdx_license_list_version: Option<String>,
 }
 
 impl From<LicenseIndex> for CachedLicenseIndex {
@@ -74,6 +75,7 @@ impl From<LicenseIndex> for CachedLicenseIndex {
             rid_by_spdx_key: index.rid_by_spdx_key,
             unknown_spdx_rid: index.unknown_spdx_rid,
             rids_by_high_tid: index.rids_by_high_tid,
+            spdx_license_list_version: None,
         }
     }
 }

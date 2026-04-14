@@ -4,7 +4,7 @@ pub mod aho_match;
 pub mod automaton;
 pub(crate) mod detection;
 pub mod embedded;
-mod license_cache;
+pub mod license_cache;
 mod position_set;
 mod token_multiset;
 mod token_set;
@@ -40,12 +40,13 @@ use std::time::Instant;
 use anyhow::Result;
 
 use crate::license_detection::embedded::index::{
-    load_embedded_artifact_metadata_from_bytes, load_embedded_license_index_from_bytes,
+    load_embedded_artifact_metadata_from_bytes, load_loader_snapshot_from_bytes,
 };
 use crate::license_detection::index::CachedLicenseIndex;
 use crate::license_detection::index::build_index_from_loaded;
 use crate::license_detection::license_cache::{
-    LicenseCacheConfig, cache_file_size, load_cached_index, save_cached_index,
+    LicenseCacheConfig, cache_file_size, compute_artifact_fingerprint, compute_rules_fingerprint,
+    delete_cache, load_cached_index, save_cached_index,
 };
 use crate::license_detection::query::Query;
 use crate::license_detection::rules::{
@@ -462,41 +463,62 @@ impl LicenseDetectionEngine {
 
     /// Create a new license detection engine from the embedded license index.
     ///
+    /// Convenience method that uses the default cache directory (next to the
+    /// provenant binary) and does not force a reindex.
+    pub fn from_embedded() -> Result<Self> {
+        let cache_config = LicenseCacheConfig::new(LicenseCacheConfig::default_cache_dir(), false);
+        Self::from_embedded_with_cache(&cache_config)
+    }
+
+    /// Create a new license detection engine from the embedded license index.
+    ///
     /// This method loads the build-time embedded license artifact and constructs
     /// the runtime license index. This eliminates the runtime dependency on the
     /// ScanCode rules directory.
     ///
+    /// If a valid cache exists (matching fingerprint), the index is loaded from
+    /// the rkyv cache file instead of being rebuilt from scratch.
+    ///
+    /// # Arguments
+    /// * `cache_config` - Cache configuration (directory and reindex flag)
+    ///
     /// # Returns
     /// A Result containing the engine or an error
-    pub fn from_embedded() -> Result<Self> {
-        let cache_config = LicenseCacheConfig::from_default_dir();
+    pub fn from_embedded_with_cache(cache_config: &LicenseCacheConfig) -> Result<Self> {
+        let artifact_bytes = include_bytes!("../../resources/license_detection/license_index.zst");
+        let fingerprint = compute_artifact_fingerprint(artifact_bytes);
 
-        if let Some(cached) = load_cached_index(&cache_config)? {
-            let start = Instant::now();
-            let index = index::LicenseIndex::from(cached);
-            eprintln!(
-                "License index loaded from rkyv cache in {:.2}s",
-                start.elapsed().as_secs_f64()
-            );
-            return Self::from_index(index, Self::embedded_spdx_license_list_version().ok());
+        if !cache_config.reindex {
+            if let Some(cached) = load_cached_index(cache_config, &fingerprint)? {
+                let start = Instant::now();
+                let spdx_version = cached.spdx_license_list_version.clone();
+                let index = index::LicenseIndex::from(cached);
+                eprintln!(
+                    "License index loaded from rkyv cache in {:.2}s",
+                    start.elapsed().as_secs_f64()
+                );
+                return Self::from_index(index, spdx_version);
+            }
+        } else {
+            delete_cache(cache_config)?;
         }
 
-        let start = Instant::now();
-        let artifact_bytes = include_bytes!("../../resources/license_detection/license_index.zst");
-        let loaded = load_embedded_license_index_from_bytes(artifact_bytes)
+        let snapshot = load_loader_snapshot_from_bytes(artifact_bytes)
             .map_err(|e| anyhow::anyhow!("Failed to load embedded license index: {}", e))?;
+        let spdx_version = Some(snapshot.metadata.spdx_license_list_version.clone());
+
+        let start = Instant::now();
+        let index = build_index_from_loaded(snapshot.rules, snapshot.licenses, false);
         eprintln!(
             "License index built from embedded artifact in {:.2}s",
             start.elapsed().as_secs_f64()
         );
 
-        let index = loaded.index;
-        let spdx_version = Some(loaded.metadata.spdx_license_list_version);
-
-        let cached = CachedLicenseIndex::from(index.clone());
-        if let Err(e) = save_cached_index(&cache_config, &cached) {
+        let mut cached = CachedLicenseIndex::from(index.clone());
+        cached.spdx_license_list_version = spdx_version.clone();
+        if let Err(e) = save_cached_index(cache_config, &cached, &fingerprint) {
             eprintln!("Warning: failed to save license index cache: {}", e);
-        } else if let Some(size) = cache_file_size(&cache_config) {
+        } else if let Some(size) = cache_file_size(cache_config) {
             eprintln!(
                 "License index cache saved ({:.1} MB)",
                 size as f64 / 1_048_576.0
@@ -508,12 +530,28 @@ impl LicenseDetectionEngine {
 
     /// Create a new license detection engine from a directory of license rules.
     ///
+    /// Convenience method that uses the default cache directory (next to the
+    /// provenant binary) and does not force a reindex.
+    pub fn from_directory(rules_path: &Path) -> Result<Self> {
+        let cache_config = LicenseCacheConfig::new(LicenseCacheConfig::default_cache_dir(), false);
+        Self::from_directory_with_cache(rules_path, &cache_config)
+    }
+
+    /// Create a new license detection engine from a directory of license rules.
+    ///
+    /// If a valid cache exists (matching fingerprint of the rules), the index is
+    /// loaded from the rkyv cache file instead of being rebuilt from scratch.
+    ///
     /// # Arguments
     /// * `rules_path` - Path to directory containing .LICENSE and .RULE files
+    /// * `cache_config` - Cache configuration (directory and reindex flag)
     ///
     /// # Returns
     /// A Result containing the engine or an error
-    pub fn from_directory(rules_path: &Path) -> Result<Self> {
+    pub fn from_directory_with_cache(
+        rules_path: &Path,
+        cache_config: &LicenseCacheConfig,
+    ) -> Result<Self> {
         let (rules_dir, licenses_dir) = if rules_path.ends_with("data") {
             (rules_path.join("rules"), rules_path.join("licenses"))
         } else if rules_path.ends_with("rules") {
@@ -527,8 +565,42 @@ impl LicenseDetectionEngine {
 
         let loaded_rules = load_loaded_rules_from_directory(&rules_dir)?;
         let loaded_licenses = load_loaded_licenses_from_directory(&licenses_dir)?;
+
+        let fingerprint = compute_rules_fingerprint(&loaded_rules, &loaded_licenses);
+
+        if !cache_config.reindex {
+            if let Some(cached) = load_cached_index(cache_config, &fingerprint)? {
+                let start = Instant::now();
+                let index = index::LicenseIndex::from(cached);
+                eprintln!(
+                    "License index loaded from rkyv cache in {:.2}s",
+                    start.elapsed().as_secs_f64()
+                );
+                let spdx_version = detect_scancode_spdx_license_list_version(&rules_dir)?;
+                return Self::from_index(index, spdx_version);
+            }
+        } else {
+            delete_cache(cache_config)?;
+        }
+
+        let start = Instant::now();
         let index = build_index_from_loaded(loaded_rules, loaded_licenses, false);
+        eprintln!(
+            "License index built from rules directory in {:.2}s",
+            start.elapsed().as_secs_f64()
+        );
+
         let spdx_license_list_version = detect_scancode_spdx_license_list_version(&rules_dir)?;
+
+        let cached = CachedLicenseIndex::from(index.clone());
+        if let Err(e) = save_cached_index(cache_config, &cached, &fingerprint) {
+            eprintln!("Warning: failed to save license index cache: {}", e);
+        } else if let Some(size) = cache_file_size(cache_config) {
+            eprintln!(
+                "License index cache saved ({:.1} MB)",
+                size as f64 / 1_048_576.0
+            );
+        }
 
         Self::from_index(index, spdx_license_list_version)
     }

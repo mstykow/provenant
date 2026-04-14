@@ -1,7 +1,9 @@
 use super::schema::{EmbeddedArtifactMetadata, EmbeddedLoaderSnapshot, SCHEMA_VERSION};
-use crate::license_detection::index::{LicenseIndex, build_index_from_loaded};
+use crate::license_detection::index::LicenseIndex;
+use crate::license_detection::index::build_index_from_loaded;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct LoadedEmbeddedLicenseIndex {
     pub index: LicenseIndex,
     pub metadata: EmbeddedArtifactMetadata,
@@ -18,7 +20,7 @@ impl std::fmt::Display for SerializationError {
 
 impl std::error::Error for SerializationError {}
 
-fn load_loader_snapshot_from_bytes(
+pub fn load_loader_snapshot_from_bytes(
     bytes: &[u8],
 ) -> Result<EmbeddedLoaderSnapshot, SerializationError> {
     if bytes.is_empty() {
@@ -45,6 +47,7 @@ fn load_loader_snapshot_from_bytes(
     Ok(snapshot)
 }
 
+#[allow(dead_code)]
 pub fn load_embedded_license_index_from_bytes(
     bytes: &[u8],
 ) -> Result<LoadedEmbeddedLicenseIndex, SerializationError> {

@@ -297,6 +297,15 @@ pub struct Cli {
     #[arg(long, value_name = "PATH", requires = "license")]
     pub license_rules_path: Option<String>,
 
+    /// Force rebuild of the license index cache, ignoring any existing cache.
+    #[arg(long)]
+    pub reindex: bool,
+
+    /// Directory for the license index cache file.
+    /// Defaults to the directory containing the provenant binary.
+    #[arg(long, value_name = "PATH")]
+    pub license_cache_dir: Option<String>,
+
     /// Include matched text in license detection output
     #[arg(long = "license-text", requires = "license")]
     pub license_text: bool,
@@ -612,7 +621,13 @@ impl Cli {
             self.license_diagnostics,
         );
         push_string_option(&mut flags, "--license-policy", self.license_policy.as_ref());
+        push_string_option(
+            &mut flags,
+            "--license-cache-dir",
+            self.license_cache_dir.as_ref(),
+        );
         push_bool_option(&mut flags, "--license-references", self.license_references);
+        push_bool_option(&mut flags, "--reindex", self.reindex);
         push_non_default_u8_option(&mut flags, "--license-score", self.license_score, 0);
         push_bool_option(&mut flags, "--license-text", self.license_text);
         push_bool_option(
