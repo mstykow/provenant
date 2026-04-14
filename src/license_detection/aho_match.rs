@@ -178,7 +178,7 @@ pub fn aho_match_with_extra_matchables(
                 rule_relevance: rule.relevance,
                 rid,
                 rule_identifier: rule.identifier.clone(),
-                rule_url: String::new(),
+                rule_url: rule.rule_url().unwrap_or_default(),
                 matched_text: None,
                 referenced_filenames: rule.referenced_filenames.clone(),
                 rule_kind: rule.kind(),
@@ -339,6 +339,7 @@ mod tests {
         assert_eq!(matches[0].matcher, MATCH_AHO);
         assert_eq!(matches[0].score, MatchScore::MAX);
         assert_eq!(matches[0].match_coverage, 100.0);
+        assert!(!matches[0].rule_url.is_empty());
     }
 
     #[test]
