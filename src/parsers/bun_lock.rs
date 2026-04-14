@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -9,7 +8,7 @@ use crate::models::{
     DatasourceId, Dependency, Md5Digest, PackageData, PackageType, ResolvedPackage, Sha1Digest,
     Sha256Digest, Sha512Digest,
 };
-use crate::parsers::utils::{npm_purl, parse_sri};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, npm_purl, parse_sri, truncate_field};
 
 use super::PackageParser;
 
@@ -40,7 +39,7 @@ impl PackageParser for BunLockParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match crate::parsers::utils::read_file_to_string(path, None) {
             Ok(content) => content,
             Err(e) => {
                 warn!("Failed to read bun.lock at {:?}: {}", path, e);
@@ -63,7 +62,7 @@ impl PackageParser for BunLockParser {
 fn default_package_data() -> PackageData {
     PackageData {
         package_type: Some(BunLockParser::PACKAGE_TYPE),
-        primary_language: Some("JavaScript".to_string()),
+        primary_language: Some(truncate_field("JavaScript".to_string())),
         datasource_id: Some(DatasourceId::BunLock),
         extra_data: Some(HashMap::new()),
         ..Default::default()
@@ -80,9 +79,9 @@ fn parse_bun_lockfile(root: &JsonValue) -> PackageData {
         .map(split_namespace_name)
         .unwrap_or((None, None));
 
-    result.namespace = namespace;
-    result.name = name;
-    result.version = workspace_context.root_version.clone();
+    result.namespace = namespace.map(truncate_field);
+    result.name = name.map(truncate_field);
+    result.version = workspace_context.root_version.clone().map(truncate_field);
     result.purl = result
         .name
         .as_ref()
@@ -112,7 +111,7 @@ fn parse_bun_lockfile(root: &JsonValue) -> PackageData {
     };
 
     let mut dependencies = Vec::new();
-    for (key, value) in packages {
+    for (key, value) in packages.iter().take(MAX_ITERATION_COUNT) {
         if let Some(dependency) = parse_package_entry(
             key,
             value,
@@ -146,27 +145,30 @@ fn extract_workspace_info(root: &JsonValue) -> WorkspaceContext {
     let root_name = root_workspace
         .and_then(|value| value.get("name"))
         .and_then(|value| value.as_str())
-        .map(ToOwned::to_owned);
+        .map(|s| truncate_field(s.to_owned()));
     let root_version = root_workspace
         .and_then(|value| value.get("version"))
         .and_then(|value| value.as_str())
-        .map(ToOwned::to_owned);
+        .map(|s| truncate_field(s.to_owned()));
 
     if let Some(workspaces) = workspaces {
-        for workspace in workspaces.values() {
+        for workspace in workspaces.values().take(MAX_ITERATION_COUNT) {
             if let Some(name) = workspace.get("name").and_then(|value| value.as_str())
                 && let Some(version) = workspace.get("version").and_then(|value| value.as_str())
             {
-                workspace_versions.insert(name.to_string(), version.to_string());
+                workspace_versions.insert(
+                    truncate_field(name.to_string()),
+                    truncate_field(version.to_string()),
+                );
             }
             if let Some(name) = workspace.get("name").and_then(|value| value.as_str()) {
-                workspace_entries.insert(name.to_string(), workspace.clone());
+                workspace_entries.insert(truncate_field(name.to_string()), workspace.clone());
             }
         }
     }
 
     if let Some(workspaces) = workspaces {
-        for workspace in workspaces.values() {
+        for workspace in workspaces.values().take(MAX_ITERATION_COUNT) {
             insert_manifest_dependency_info(
                 workspace.get("dependencies"),
                 "dependencies",
@@ -218,9 +220,9 @@ fn insert_manifest_dependency_info(
         return;
     };
 
-    for name in map.keys() {
+    for name in map.keys().take(MAX_ITERATION_COUNT) {
         out.insert(
-            name.clone(),
+            truncate_field(name.clone()),
             ManifestDependencyInfo {
                 scope,
                 is_runtime,
@@ -240,6 +242,8 @@ fn parse_package_entry(
     let tuple = value.as_array()?;
     let resolution = tuple.first()?.as_str()?;
     let (package_name, locator) = split_locator(resolution)?;
+    let package_name = truncate_field(package_name);
+    let locator = truncate_field(locator);
     let package_version = resolve_locator_version(&package_name, &locator, workspace_versions);
 
     let manifest_info = direct_deps
@@ -248,24 +252,34 @@ fn parse_package_entry(
     let (scope, is_runtime, is_optional, is_direct) = manifest_info
         .map(|info| {
             (
-                info.scope.to_string(),
+                truncate_field(info.scope.to_string()),
                 info.is_runtime,
                 info.is_optional,
                 true,
             )
         })
-        .unwrap_or_else(|| ("dependencies".to_string(), true, false, false));
+        .unwrap_or_else(|| {
+            (
+                truncate_field("dependencies".to_string()),
+                true,
+                false,
+                false,
+            )
+        });
 
-    let purl = npm_purl(&package_name, package_version.as_deref());
+    let purl = npm_purl(&package_name, package_version.as_deref()).map(truncate_field);
     let resolved_download_url =
-        resolved_download_url(&package_name, &locator, tuple, package_version.as_deref());
+        resolved_download_url(&package_name, &locator, tuple, package_version.as_deref())
+            .map(truncate_field);
     let (sha1, sha256, sha512, md5) = parse_integrity_tuple(tuple);
     let nested_dependencies =
         extract_nested_dependencies(&package_name, tuple, workspace_versions, workspace_entries);
 
     let (namespace, name) = split_namespace_name(&package_name);
+    let namespace = namespace.map(truncate_field);
+    let name = name.map(truncate_field);
     let resolved_package = ResolvedPackage {
-        primary_language: Some("JavaScript".to_string()),
+        primary_language: Some(truncate_field("JavaScript".to_string())),
         download_url: resolved_download_url,
         sha1: sha1.and_then(|h| Sha1Digest::from_hex(&h).ok()),
         sha256: sha256.and_then(|h| Sha256Digest::from_hex(&h).ok()),
@@ -283,13 +297,15 @@ fn parse_package_entry(
             BunLockParser::PACKAGE_TYPE,
             namespace.unwrap_or_default(),
             name.unwrap_or_else(|| package_name.clone()),
-            package_version.clone().unwrap_or_default(),
+            truncate_field(package_version.clone().unwrap_or_default()),
         )
     };
 
     Some(Dependency {
         purl,
-        extracted_requirement: Some(package_version.clone().unwrap_or(locator.clone())),
+        extracted_requirement: Some(truncate_field(
+            package_version.clone().unwrap_or(locator.clone()),
+        )),
         scope: Some(scope),
         is_runtime: Some(is_runtime),
         is_optional: Some(is_optional),
@@ -305,7 +321,10 @@ fn split_locator(resolution: &str) -> Option<(String, String)> {
     if name.is_empty() || locator.is_empty() {
         return None;
     }
-    Some((name.to_string(), locator.to_string()))
+    Some((
+        truncate_field(name.to_string()),
+        truncate_field(locator.to_string()),
+    ))
 }
 
 fn resolve_locator_version(
@@ -330,7 +349,7 @@ fn resolve_locator_version(
         return None;
     }
 
-    Some(locator.to_string())
+    Some(truncate_field(locator.to_string()))
 }
 
 fn resolved_download_url(
@@ -342,7 +361,7 @@ fn resolved_download_url(
     if let Some(url) = tuple.get(1).and_then(|value| value.as_str())
         && !url.is_empty()
     {
-        return Some(url.to_string());
+        return Some(truncate_field(url.to_string()));
     }
 
     if locator.starts_with("workspace:")
@@ -357,7 +376,7 @@ fn resolved_download_url(
         || locator.starts_with("git+")
         || locator.starts_with("github:")
     {
-        return Some(locator.to_string());
+        return Some(truncate_field(locator.to_string()));
     }
 
     version.and_then(|version| default_registry_download_url(package_name, version))
@@ -367,10 +386,10 @@ fn default_registry_download_url(package_name: &str, version: &str) -> Option<St
     let (namespace, name) = split_namespace_name(package_name);
     let name = name?;
     let package_path = qualify_name(&namespace, &name);
-    Some(format!(
+    Some(truncate_field(format!(
         "https://registry.npmjs.org/{}/-/{}-{}.tgz",
         package_path, name, version
-    ))
+    )))
 }
 
 fn parse_integrity_tuple(
@@ -460,6 +479,7 @@ fn build_nested_dependencies(
     };
 
     deps.iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|(name, value)| {
             let requirement = value.as_str()?;
             let version = if requirement.starts_with("workspace:") {
@@ -469,9 +489,9 @@ fn build_nested_dependencies(
             };
 
             Some(Dependency {
-                purl: npm_purl(name, version),
-                extracted_requirement: Some(requirement.to_string()),
-                scope: Some(scope.to_string()),
+                purl: npm_purl(name, version).map(truncate_field),
+                extracted_requirement: Some(truncate_field(requirement.to_string())),
+                scope: Some(truncate_field(scope.to_string())),
                 is_runtime: Some(is_runtime),
                 is_optional: Some(is_optional),
                 is_pinned: Some(false),
@@ -486,11 +506,14 @@ fn build_nested_dependencies(
 fn split_namespace_name(full_name: &str) -> (Option<String>, Option<String>) {
     if full_name.starts_with('@') {
         let mut parts = full_name.splitn(2, '/');
-        let namespace = parts.next().map(ToOwned::to_owned);
-        let name = parts.next().map(ToOwned::to_owned);
+        let namespace = parts.next().map(|s| truncate_field(s.to_owned()));
+        let name = parts.next().map(|s| truncate_field(s.to_owned()));
         (namespace, name)
     } else {
-        (Some(String::new()), Some(full_name.to_string()))
+        (
+            Some(String::new()),
+            Some(truncate_field(full_name.to_string())),
+        )
     }
 }
 

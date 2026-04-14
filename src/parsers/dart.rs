@@ -21,10 +21,10 @@
 //! - Supports both pub.dev and Git-hosted packages
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use packageurl::PackageUrl;
 use yaml_serde::{Mapping, Value};
 
@@ -33,6 +33,8 @@ use crate::models::{
 };
 
 use super::PackageParser;
+
+const MAX_RECURSION_DEPTH: usize = 50;
 
 const FIELD_NAME: &str = "name";
 const FIELD_VERSION: &str = "version";
@@ -115,23 +117,24 @@ impl PackageParser for PubspecLockParser {
 }
 
 fn read_yaml_file(path: &Path) -> Result<Value, String> {
-    let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let content =
+        read_file_to_string(path, None).map_err(|e| format!("Failed to read file: {}", e))?;
     yaml_serde::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))
 }
 
 fn parse_pubspec_yaml(yaml_content: &Value) -> PackageData {
-    let name = extract_string_field(yaml_content, FIELD_NAME);
-    let version = extract_string_field(yaml_content, FIELD_VERSION);
-    let description = extract_description_field(yaml_content);
-    let homepage_url = extract_string_field(yaml_content, FIELD_HOMEPAGE);
-    let raw_license = extract_string_field(yaml_content, FIELD_LICENSE);
-    let vcs_url = extract_string_field(yaml_content, FIELD_REPOSITORY);
-    let bug_tracking_url = extract_string_field(yaml_content, FIELD_ISSUE_TRACKER);
-    let archive_url = extract_string_field(yaml_content, FIELD_ARCHIVE_URL);
+    let name = extract_string_field(yaml_content, FIELD_NAME).map(truncate_field);
+    let version = extract_string_field(yaml_content, FIELD_VERSION).map(truncate_field);
+    let description = extract_description_field(yaml_content).map(truncate_field);
+    let homepage_url = extract_string_field(yaml_content, FIELD_HOMEPAGE).map(truncate_field);
+    let raw_license = extract_string_field(yaml_content, FIELD_LICENSE).map(truncate_field);
+    let vcs_url = extract_string_field(yaml_content, FIELD_REPOSITORY).map(truncate_field);
+    let bug_tracking_url =
+        extract_string_field(yaml_content, FIELD_ISSUE_TRACKER).map(truncate_field);
+    let archive_url = extract_string_field(yaml_content, FIELD_ARCHIVE_URL).map(truncate_field);
 
     let parties = extract_authors(yaml_content);
 
-    // Extract license statement only - detection happens in separate engine
     let declared_license_expression = None;
     let declared_license_expression_spdx = None;
     let license_detections = Vec::new();
@@ -173,23 +176,24 @@ fn parse_pubspec_yaml(yaml_content: &Value) -> PackageData {
 
     let purl = name
         .as_ref()
-        .and_then(|name| build_purl(name, version.as_deref()));
+        .and_then(|name| build_purl(name, version.as_deref()))
+        .map(truncate_field);
 
     let (api_data_url, repository_homepage_url, repository_download_url) =
         if let (Some(name_val), Some(version_val)) = (&name, &version) {
             (
-                Some(format!(
+                Some(truncate_field(format!(
                     "https://pub.dev/api/packages/{}/versions/{}",
                     name_val, version_val
-                )),
-                Some(format!(
+                ))),
+                Some(truncate_field(format!(
                     "https://pub.dev/packages/{}/versions/{}",
                     name_val, version_val
-                )),
-                Some(format!(
+                ))),
+                Some(truncate_field(format!(
                     "https://pub.dartlang.org/packages/{}/versions/{}.tar.gz",
                     name_val, version_val
-                )),
+                ))),
             )
         } else {
             (None, None, None)
@@ -259,12 +263,12 @@ fn extract_lock_dependencies(lock_data: &Value) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
 
     if let Some(sdks) = lock_data.get(FIELD_SDKS).and_then(Value::as_mapping) {
-        for (name_value, version_value) in sdks {
+        for (name_value, version_value) in sdks.iter().take(MAX_ITERATION_COUNT) {
             if let (Some(name), Some(version_str)) = (name_value.as_str(), version_value.as_str()) {
-                let purl = build_dependency_purl(name, None);
+                let purl = build_dependency_purl(name, None).map(truncate_field);
                 dependencies.push(Dependency {
                     purl,
-                    extracted_requirement: Some(version_str.to_string()),
+                    extracted_requirement: Some(truncate_field(version_str.to_string())),
                     scope: Some("sdk".to_string()),
                     is_runtime: Some(true),
                     is_optional: Some(false),
@@ -276,10 +280,10 @@ fn extract_lock_dependencies(lock_data: &Value) -> Vec<Dependency> {
             }
         }
     } else if let Some(version_str) = lock_data.get(FIELD_SDK).and_then(Value::as_str) {
-        let purl = build_dependency_purl("dart", None);
+        let purl = build_dependency_purl("dart", None).map(truncate_field);
         dependencies.push(Dependency {
             purl,
-            extracted_requirement: Some(version_str.to_string()),
+            extracted_requirement: Some(truncate_field(version_str.to_string())),
             scope: Some("sdk".to_string()),
             is_runtime: Some(true),
             is_optional: Some(false),
@@ -298,7 +302,7 @@ fn extract_lock_dependencies(lock_data: &Value) -> Vec<Dependency> {
         reachable_lock_packages(packages, &["direct main", "direct overridden"]);
     let dev_only_reachable = reachable_lock_packages(packages, &["direct dev"]);
 
-    for (name_value, details_value) in packages {
+    for (name_value, details_value) in packages.iter().take(MAX_ITERATION_COUNT) {
         let name = match name_value.as_str() {
             Some(value) => value,
             None => continue,
@@ -309,10 +313,10 @@ fn extract_lock_dependencies(lock_data: &Value) -> Vec<Dependency> {
 
         let version = mapping_get(details, FIELD_VERSION)
             .and_then(Value::as_str)
-            .map(|value| value.to_string());
+            .map(|value| truncate_field(value.to_string()));
         let dependency_kind = mapping_get(details, FIELD_DEPENDENCY)
             .and_then(Value::as_str)
-            .map(|value| value.to_string());
+            .map(|value| truncate_field(value.to_string()));
         let (is_runtime, is_optional, is_direct) = classify_lock_dependency(
             name,
             dependency_kind.as_deref(),
@@ -324,7 +328,7 @@ fn extract_lock_dependencies(lock_data: &Value) -> Vec<Dependency> {
             .as_ref()
             .is_some_and(|value| !value.trim().is_empty());
 
-        let purl = build_dependency_purl(name, version.as_deref());
+        let purl = build_dependency_purl(name, version.as_deref()).map(truncate_field);
         let sha256 = extract_sha256(details).and_then(|h| Sha256Digest::from_hex(&h).ok());
         let resolved_dependencies = extract_lock_package_dependencies(details);
         let resolved_package = build_resolved_package(
@@ -337,7 +341,7 @@ fn extract_lock_dependencies(lock_data: &Value) -> Vec<Dependency> {
 
         dependencies.push(Dependency {
             purl,
-            extracted_requirement: version.clone(),
+            extracted_requirement: version.clone().map(truncate_field),
             scope: dependency_kind,
             is_runtime: Some(is_runtime),
             is_optional: Some(is_optional),
@@ -358,7 +362,7 @@ fn extract_lock_package_dependencies(details: &Mapping) -> Vec<Dependency> {
         return dependencies;
     };
 
-    for (name_value, requirement_value) in dep_map {
+    for (name_value, requirement_value) in dep_map.iter().take(MAX_ITERATION_COUNT) {
         let name = match name_value.as_str() {
             Some(value) => value,
             None => continue,
@@ -376,8 +380,8 @@ fn extract_lock_package_dependencies(details: &Mapping) -> Vec<Dependency> {
         };
 
         dependencies.push(Dependency {
-            purl,
-            extracted_requirement: Some(requirement),
+            purl: purl.map(truncate_field),
+            extracted_requirement: Some(truncate_field(requirement)),
             scope: Some(FIELD_DEPENDENCIES.to_string()),
             is_runtime: Some(true),
             is_optional: Some(false),
@@ -432,8 +436,8 @@ fn build_resolved_package(
         ..ResolvedPackage::new(
             PubspecLockParser::PACKAGE_TYPE,
             String::new(),
-            name.to_string(),
-            version.clone().unwrap_or_default(),
+            truncate_field(name.to_string()),
+            truncate_field(version.clone().unwrap_or_default()),
         )
     }
 }
@@ -451,12 +455,12 @@ fn collect_dependencies(
         return dependencies;
     };
 
-    for (name_value, requirement_value) in dep_map {
+    for (name_value, requirement_value) in dep_map.iter().take(MAX_ITERATION_COUNT) {
         let name = match name_value.as_str() {
             Some(value) => value,
             None => continue,
         };
-        let requirement = dependency_requirement_from_value(requirement_value);
+        let requirement = dependency_requirement_from_value(requirement_value).map(truncate_field);
         let is_pinned = requirement
             .as_deref()
             .is_some_and(is_pubspec_version_pinned);
@@ -467,7 +471,7 @@ fn collect_dependencies(
         };
 
         dependencies.push(Dependency {
-            purl,
+            purl: purl.map(truncate_field),
             extracted_requirement: requirement,
             scope: scope.map(|value| value.to_string()),
             is_runtime: Some(is_runtime),
@@ -500,16 +504,21 @@ fn dependency_requirement_from_value(value: &Value) -> Option<String> {
     }
 
     if let Some(map) = value.as_mapping() {
-        return format_dependency_mapping(map);
+        return format_dependency_mapping(map, 0);
     }
 
     None
 }
 
-fn format_dependency_mapping(map: &Mapping) -> Option<String> {
+fn format_dependency_mapping(map: &Mapping, depth: usize) -> Option<String> {
+    if depth >= MAX_RECURSION_DEPTH {
+        warn!("Recursion depth exceeded in format_dependency_mapping");
+        return None;
+    }
+
     let mut parts = Vec::new();
 
-    for (key, value) in map {
+    for (key, value) in map.iter().take(MAX_ITERATION_COUNT) {
         let Some(key_str) = key.as_str() else {
             continue;
         };
@@ -521,7 +530,7 @@ fn format_dependency_mapping(map: &Mapping) -> Option<String> {
         } else if let Some(value) = value.as_f64() {
             value.to_string()
         } else if let Some(nested) = value.as_mapping() {
-            format_dependency_mapping(nested)?
+            format_dependency_mapping(nested, depth + 1)?
         } else {
             continue;
         };
@@ -625,7 +634,7 @@ fn extract_authors(yaml_content: &Value) -> Vec<crate::models::Party> {
     use crate::models::Party;
     let mut parties = Vec::new();
 
-    if let Some(author) = extract_string_field(yaml_content, FIELD_AUTHOR) {
+    if let Some(author) = extract_string_field(yaml_content, FIELD_AUTHOR).map(truncate_field) {
         parties.push(Party {
             r#type: None,
             role: Some("author".to_string()),
@@ -641,12 +650,12 @@ fn extract_authors(yaml_content: &Value) -> Vec<crate::models::Party> {
     if let Some(authors_value) = yaml_content.get(FIELD_AUTHORS)
         && let Some(authors_array) = authors_value.as_sequence()
     {
-        for author_value in authors_array {
+        for author_value in authors_array.iter().take(MAX_ITERATION_COUNT) {
             if let Some(author_str) = author_value.as_str() {
                 parties.push(Party {
                     r#type: None,
                     role: Some("author".to_string()),
-                    name: Some(author_str.to_string()),
+                    name: Some(truncate_field(author_str.to_string())),
                     email: None,
                     url: None,
                     organization: None,
@@ -725,7 +734,7 @@ fn extract_string_list_field(yaml_content: &Value, field: &str) -> Vec<String> {
         .filter_map(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(|value| value.to_string())
+        .map(|value| truncate_field(value.to_string()))
         .collect()
 }
 
@@ -770,8 +779,9 @@ fn extract_lock_descriptor_extra_data(
 fn reachable_lock_packages(packages: &Mapping, roots: &[&str]) -> HashSet<String> {
     let mut reachable = HashSet::new();
     let mut queue = VecDeque::new();
+    let mut iterations = 0usize;
 
-    for (name_value, details_value) in packages {
+    for (name_value, details_value) in packages.iter().take(MAX_ITERATION_COUNT) {
         let Some(name) = name_value.as_str() else {
             continue;
         };
@@ -780,11 +790,17 @@ fn reachable_lock_packages(packages: &Mapping, roots: &[&str]) -> HashSet<String
         };
         let kind = mapping_get(details, FIELD_DEPENDENCY).and_then(Value::as_str);
         if roots.contains(&kind.unwrap_or_default()) {
-            queue.push_back(name.to_string());
+            queue.push_back(truncate_field(name.to_string()));
         }
     }
 
     while let Some(current) = queue.pop_front() {
+        if iterations >= MAX_ITERATION_COUNT {
+            warn!("Iteration count exceeded in reachable_lock_packages BFS");
+            break;
+        }
+        iterations += 1;
+
         if !reachable.insert(current.clone()) {
             continue;
         }
@@ -800,8 +816,12 @@ fn reachable_lock_packages(packages: &Mapping, roots: &[&str]) -> HashSet<String
             continue;
         };
 
-        for dep_name in dep_map.keys().filter_map(Value::as_str) {
-            queue.push_back(dep_name.to_string());
+        for dep_name in dep_map
+            .keys()
+            .filter_map(Value::as_str)
+            .take(MAX_ITERATION_COUNT)
+        {
+            queue.push_back(truncate_field(dep_name.to_string()));
         }
     }
 

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
 use packageurl::PackageUrl;
 use serde_json::Value;
 use url::Url;
@@ -34,7 +34,7 @@ impl PackageParser for DenoParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match crate::parsers::utils::read_file_to_string(path, None) {
             Ok(content) => content,
             Err(e) => {
                 warn!("Failed to read Deno config at {:?}: {}", path, e);
@@ -61,12 +61,12 @@ fn parse_deno_config(json: &Value) -> PackageData {
         .map(split_package_identity)
         .map(|(namespace, name)| {
             (
-                namespace.map(|value| value.to_string()),
-                Some(name.to_string()),
+                namespace.map(|value| truncate_field(value.to_string())),
+                Some(truncate_field(name.to_string())),
             )
         })
         .unwrap_or((None, None));
-    let version = extract_non_empty_string(json, FIELD_VERSION);
+    let version = extract_non_empty_string(json, FIELD_VERSION).map(truncate_field);
     let dependencies = extract_import_dependencies(json);
     let extra_data = extract_extra_data(json);
     let purl = match (namespace.as_deref(), name.as_deref(), version.as_deref()) {
@@ -116,7 +116,7 @@ fn parse_deno_config(json: &Value) -> PackageData {
         repository_download_url: None,
         api_data_url: None,
         datasource_id: Some(DatasourceId::DenoJson),
-        purl,
+        purl: purl.map(truncate_field),
     }
 }
 
@@ -125,6 +125,7 @@ fn extract_import_dependencies(json: &Value) -> Vec<Dependency> {
         .and_then(Value::as_object)
         .into_iter()
         .flatten()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|(alias, value)| {
             value
                 .as_str()
@@ -150,8 +151,8 @@ fn build_import_dependency(alias: &str, specifier: &str) -> Dependency {
     };
 
     Dependency {
-        purl,
-        extracted_requirement: Some(specifier.to_string()),
+        purl: purl.map(truncate_field),
+        extracted_requirement: Some(truncate_field(specifier.to_string())),
         scope: Some("imports".to_string()),
         is_runtime: Some(true),
         is_optional: Some(false),
@@ -159,8 +160,8 @@ fn build_import_dependency(alias: &str, specifier: &str) -> Dependency {
         is_direct: Some(true),
         resolved_package: None,
         extra_data: Some(HashMap::from([(
-            "import_alias".to_string(),
-            Value::String(alias.to_string()),
+            truncate_field("import_alias".to_string()),
+            Value::String(truncate_field(alias.to_string())),
         )])),
     }
 }
