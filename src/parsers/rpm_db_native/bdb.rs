@@ -1,8 +1,11 @@
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 use anyhow::{Result, anyhow};
+
+use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_FIELD_LENGTH, MAX_ITERATION_COUNT, MAX_MANIFEST_SIZE};
 
 use super::BlobReader;
 
@@ -27,6 +30,17 @@ pub(crate) struct BdbDatabase {
 
 impl BdbDatabase {
     pub(crate) fn open(path: &Path) -> Result<Self> {
+        let file_metadata = fs::metadata(path)
+            .map_err(|e| anyhow!("RPM BDB cannot stat file {:?}: {}", path, e))?;
+        if file_metadata.len() > MAX_MANIFEST_SIZE {
+            return Err(anyhow!(
+                "RPM BDB file {:?} is {} bytes, exceeding the {} byte limit",
+                path,
+                file_metadata.len(),
+                MAX_MANIFEST_SIZE
+            ));
+        }
+
         let mut file = File::open(path)?;
         let mut page = [0_u8; 512];
         file.read_exact(&mut page)?;
@@ -53,8 +67,17 @@ impl BdbDatabase {
         let page_size = self.metadata.generic.page_size as usize;
         let mut value = Vec::new();
         let mut current_page = entry.page_number as usize;
+        let mut depth = 0usize;
 
         while current_page != 0 {
+            depth += 1;
+            if depth > MAX_ITERATION_COUNT {
+                return Err(anyhow!(
+                    "RPM BDB overflow page chain exceeded {} pages",
+                    MAX_ITERATION_COUNT
+                ));
+            }
+
             self.file
                 .seek(SeekFrom::Start((page_size * current_page) as u64))?;
             let mut page = vec![0_u8; page_size];
@@ -73,6 +96,14 @@ impl BdbDatabase {
                 &page[PAGE_HEADER_SIZE..]
             };
             value.extend_from_slice(page_bytes);
+
+            if value.len() > MAX_FIELD_LENGTH {
+                return Err(anyhow!(
+                    "RPM BDB overflow value exceeded {} bytes",
+                    MAX_FIELD_LENGTH
+                ));
+            }
+
             current_page = header.next_page_number as usize;
         }
 
@@ -93,7 +124,18 @@ impl BlobReader for BdbDatabase {
         let page_size = self.metadata.generic.page_size as usize;
         let mut values = Vec::new();
 
-        for _ in 0..=self.metadata.generic.last_page_number {
+        let last_page = self.metadata.generic.last_page_number;
+        let effective_last_page = if last_page as usize > MAX_ITERATION_COUNT {
+            warn!(
+                "RPM BDB last_page_number {} exceeds {}, capping iteration",
+                last_page, MAX_ITERATION_COUNT
+            );
+            MAX_ITERATION_COUNT as u32
+        } else {
+            last_page
+        };
+
+        for _ in 0..=effective_last_page {
             let mut page = vec![0_u8; page_size];
             self.file.read_exact(&mut page)?;
             let page_end_offset = self.file.stream_position()?;
@@ -132,19 +174,34 @@ fn hash_page_value_indexes(page: &[u8], entry_count: u16) -> Result<Vec<u16>> {
         ));
     }
 
+    let capped_entry_count = if entry_count as usize > MAX_ITERATION_COUNT {
+        warn!(
+            "RPM BDB hash page entry count {} exceeds {}, capping",
+            entry_count, MAX_ITERATION_COUNT
+        );
+        MAX_ITERATION_COUNT as u16
+    } else {
+        entry_count
+    };
+
     let index_bytes = page
-        .get(PAGE_HEADER_SIZE..PAGE_HEADER_SIZE + entry_count as usize * HASH_INDEX_ENTRY_SIZE)
+        .get(
+            PAGE_HEADER_SIZE
+                ..PAGE_HEADER_SIZE + capped_entry_count as usize * HASH_INDEX_ENTRY_SIZE,
+        )
         .ok_or_else(|| anyhow!("RPM BDB hash index slice is out of bounds"))?;
 
-    Ok(index_bytes
-        .chunks_exact(2 * HASH_INDEX_ENTRY_SIZE)
-        .map(|chunk| {
-            u16::from_le_bytes([
-                chunk[HASH_INDEX_ENTRY_SIZE],
-                chunk[HASH_INDEX_ENTRY_SIZE + 1],
-            ])
-        })
-        .collect())
+    let mut result = Vec::new();
+    for chunk in index_bytes.chunks_exact(2 * HASH_INDEX_ENTRY_SIZE) {
+        if result.len() >= MAX_ITERATION_COUNT {
+            break;
+        }
+        result.push(u16::from_le_bytes([
+            chunk[HASH_INDEX_ENTRY_SIZE],
+            chunk[HASH_INDEX_ENTRY_SIZE + 1],
+        ]));
+    }
+    Ok(result)
 }
 
 #[derive(Debug)]

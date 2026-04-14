@@ -31,6 +31,7 @@ use crate::models::{
     DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha256Digest,
 };
 use crate::parsers::python::{build_pypi_urls, read_toml_file};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
 
 use super::PackageParser;
 
@@ -83,7 +84,7 @@ fn parse_poetry_lock(toml_content: &TomlValue) -> PackageData {
         .and_then(|value| value.as_table());
 
     let mut dependencies = Vec::new();
-    for package in packages {
+    for package in packages.iter().take(MAX_ITERATION_COUNT) {
         if let Some(package_table) = package.as_table()
             && let Some(dependency) = build_dependency_from_package(package_table)
         {
@@ -150,7 +151,7 @@ fn build_metadata_extra_data(
         {
             extra_data.insert(
                 "python_version".to_string(),
-                serde_json::Value::String(python_versions.to_string()),
+                serde_json::Value::String(truncate_field(python_versions.to_string())),
             );
         }
 
@@ -165,7 +166,7 @@ fn build_metadata_extra_data(
             {
                 extra_data.insert(
                     "lock_version".to_string(),
-                    serde_json::Value::String(lock_version),
+                    serde_json::Value::String(truncate_field(lock_version)),
                 );
             }
         }
@@ -182,12 +183,13 @@ fn build_dependency_from_package(package_table: &TomlMap<String, TomlValue>) -> 
     let name = package_table
         .get(FIELD_NAME)
         .and_then(|value| value.as_str())
-        .map(normalize_pypi_name)?;
+        .map(normalize_pypi_name)
+        .map(truncate_field)?;
 
     let version = package_table
         .get(FIELD_VERSION)
         .and_then(|value| value.as_str())
-        .map(|value| value.to_string())?;
+        .map(|value| truncate_field(value.to_string()))?;
 
     let purl = create_pypi_purl(&name, Some(&version));
 
@@ -226,6 +228,11 @@ fn build_resolved_package(
     let (repository_homepage_url, repository_download_url, api_data_url, purl) =
         build_pypi_urls(Some(name), Some(version));
 
+    let repository_homepage_url = repository_homepage_url.map(truncate_field);
+    let repository_download_url = repository_download_url.map(truncate_field);
+    let api_data_url = api_data_url.map(truncate_field);
+    let purl = purl.map(truncate_field);
+
     // Extract sha256 hash from files array (first file's hash)
     let sha256 = extract_sha256_from_files(package_table);
 
@@ -247,8 +254,8 @@ fn build_resolved_package(
         ..ResolvedPackage::new(
             PoetryLockParser::PACKAGE_TYPE,
             String::new(),
-            name.to_string(),
-            version.to_string(),
+            truncate_field(name.to_string()),
+            truncate_field(version.to_string()),
         )
     }
 }
@@ -260,7 +267,7 @@ fn extract_package_dependencies(package_table: &TomlMap<String, TomlValue>) -> V
         .get(FIELD_DEPENDENCIES)
         .and_then(|value| value.as_table())
     {
-        for (dep_name, dep_value) in dep_table {
+        for (dep_name, dep_value) in dep_table.iter().take(MAX_ITERATION_COUNT) {
             if let Some(dependency) = build_dependency_from_table(dep_name, dep_value) {
                 dependencies.push(dependency);
             }
@@ -271,9 +278,9 @@ fn extract_package_dependencies(package_table: &TomlMap<String, TomlValue>) -> V
         .get(FIELD_EXTRAS)
         .and_then(|value| value.as_table())
     {
-        for (extra_name, extra_values) in extras_table {
+        for (extra_name, extra_values) in extras_table.iter().take(MAX_ITERATION_COUNT) {
             if let Some(extra_list) = extra_values.as_array() {
-                for extra in extra_list {
+                for extra in extra_list.iter().take(MAX_ITERATION_COUNT) {
                     if let Some(spec) = extra.as_str()
                         && let Some(dependency) = build_dependency_from_extra(extra_name, spec)
                     {
@@ -289,12 +296,12 @@ fn extract_package_dependencies(package_table: &TomlMap<String, TomlValue>) -> V
 
 fn build_dependency_from_table(dep_name: &str, dep_value: &TomlValue) -> Option<Dependency> {
     let (requirement, is_optional) = match dep_value {
-        TomlValue::String(value) => (Some(value.to_string()), false),
+        TomlValue::String(value) => (Some(truncate_field(value.to_string())), false),
         TomlValue::Table(table) => (
             table
                 .get(FIELD_VERSION)
                 .and_then(|value| value.as_str())
-                .map(|value| value.to_string()),
+                .map(|value| truncate_field(value.to_string())),
             table
                 .get("optional")
                 .and_then(|value| value.as_bool())
@@ -309,7 +316,7 @@ fn build_dependency_from_table(dep_name: &str, dep_value: &TomlValue) -> Option<
     Some(Dependency {
         purl,
         extracted_requirement: requirement,
-        scope: Some(FIELD_DEPENDENCIES.to_string()),
+        scope: Some(truncate_field(FIELD_DEPENDENCIES.to_string())),
         is_runtime: Some(true),
         is_optional: Some(is_optional),
         is_pinned: Some(false),
@@ -326,7 +333,7 @@ fn build_dependency_from_extra(extra_name: &str, spec: &str) -> Option<Dependenc
     Some(Dependency {
         purl,
         extracted_requirement: requirement,
-        scope: Some(extra_name.to_string()),
+        scope: Some(truncate_field(extra_name.to_string())),
         is_runtime: None,
         is_optional: Some(true),
         is_pinned: Some(false),
@@ -349,16 +356,16 @@ fn parse_poetry_dependency_spec(spec: &str) -> Option<(String, Option<String>)> 
         if name_part.is_empty() {
             return None;
         }
-        let normalized_name = normalize_pypi_name(name_part);
+        let normalized_name = truncate_field(normalize_pypi_name(name_part));
         let requirement = if requirement.is_empty() {
             None
         } else {
-            Some(requirement.to_string())
+            Some(truncate_field(requirement.to_string()))
         };
         return Some((normalized_name, requirement));
     }
 
-    Some((normalize_pypi_name(trimmed), None))
+    Some((truncate_field(normalize_pypi_name(trimmed)), None))
 }
 
 fn normalize_pypi_name(name: &str) -> String {
@@ -367,7 +374,7 @@ fn normalize_pypi_name(name: &str) -> String {
 
 fn create_pypi_purl(name: &str, version: Option<&str>) -> Option<String> {
     if name.contains('[') || name.contains(']') {
-        return Some(build_manual_pypi_purl(name, version));
+        return Some(truncate_field(build_manual_pypi_purl(name, version)));
     }
 
     if let Ok(mut purl) = PackageUrl::new(PoetryLockParser::PACKAGE_TYPE.as_str(), name) {
@@ -376,10 +383,10 @@ fn create_pypi_purl(name: &str, version: Option<&str>) -> Option<String> {
         {
             return None;
         }
-        return Some(purl.to_string());
+        return Some(truncate_field(purl.to_string()));
     }
 
-    Some(build_manual_pypi_purl(name, version))
+    Some(truncate_field(build_manual_pypi_purl(name, version)))
 }
 
 fn build_manual_pypi_purl(name: &str, version: Option<&str>) -> String {
@@ -406,7 +413,11 @@ fn extract_sha256_from_files(package_table: &TomlMap<String, TomlValue>) -> Opti
         .and_then(|first_file| first_file.as_table())
         .and_then(|file_table| file_table.get("hash"))
         .and_then(|hash_value| hash_value.as_str())
-        .and_then(|hash_str| hash_str.strip_prefix("sha256:").map(|s| s.to_string()))
+        .and_then(|hash_str| {
+            hash_str
+                .strip_prefix("sha256:")
+                .map(|s| truncate_field(s.to_string()))
+        })
 }
 
 fn default_package_data() -> PackageData {

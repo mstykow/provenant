@@ -24,7 +24,7 @@
 use crate::models::PackageData;
 use crate::models::{DatasourceId, PackageType};
 use crate::parser_warn as warn;
-use crate::parsers::utils::read_file_to_string;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use std::path::Path;
 
 use super::PackageParser;
@@ -64,7 +64,7 @@ impl PackageParser for ReadmeParser {
         let mut pkg = default_package_data();
 
         // Parse key:value pairs
-        for line in content.lines() {
+        for line in content.lines().take(MAX_ITERATION_COUNT) {
             let line = line.trim();
             if line.is_empty() {
                 continue;
@@ -88,22 +88,22 @@ impl PackageParser for ReadmeParser {
             let key_lower = key.to_lowercase();
             match key_lower.as_str() {
                 "name" | "project" => {
-                    pkg.name = Some(value.to_string());
+                    pkg.name = Some(truncate_field(value.to_string()));
                 }
                 "version" => {
-                    pkg.version = Some(value.to_string());
+                    pkg.version = Some(truncate_field(value.to_string()));
                 }
                 "copyright" => {
-                    pkg.copyright = Some(value.to_string());
+                    pkg.copyright = Some(truncate_field(value.to_string()));
                 }
                 "download link" | "downloaded from" => {
-                    pkg.download_url = Some(value.to_string());
+                    pkg.download_url = Some(truncate_field(value.to_string()));
                 }
                 "homepage" | "website" | "repo" | "source" | "upstream" | "url" | "project url" => {
-                    pkg.homepage_url = Some(value.to_string());
+                    pkg.homepage_url = Some(truncate_field(value.to_string()));
                 }
                 "licence" | "license" => {
-                    pkg.extracted_license_statement = Some(value.to_string());
+                    pkg.extracted_license_statement = Some(truncate_field(value.to_string()));
                 }
                 _ => {
                     // Unrecognized field, skip
@@ -116,7 +116,7 @@ impl PackageParser for ReadmeParser {
             && let Some(parent) = path.parent()
             && let Some(parent_name) = parent.file_name()
         {
-            pkg.name = Some(parent_name.to_string_lossy().to_string());
+            pkg.name = Some(truncate_field(parent_name.to_string_lossy().to_string()));
         }
 
         vec![pkg]
