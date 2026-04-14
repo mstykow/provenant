@@ -10,7 +10,9 @@ use toml::map::Map as TomlMap;
 use crate::models::{DatasourceId, Dependency, FileReference, PackageData, PackageType, Party};
 use crate::parsers::conda::build_purl as build_conda_purl;
 use crate::parsers::python::read_toml_file;
-use crate::parsers::utils::{read_file_to_string, split_name_email};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, read_file_to_string, split_name_email, truncate_field,
+};
 
 use super::PackageParser;
 
@@ -102,10 +104,11 @@ fn parse_pixi_toml(toml_content: &TomlValue) -> PackageData {
     let name = identity
         .and_then(|table| table.get(FIELD_NAME))
         .and_then(TomlValue::as_str)
-        .map(ToOwned::to_owned);
+        .map(|v| truncate_field(v.to_string()));
     let version = identity
         .and_then(|table| table.get(FIELD_VERSION))
-        .and_then(toml_value_to_string);
+        .and_then(toml_value_to_string)
+        .map(truncate_field);
 
     let mut package = default_package_data(Some(DatasourceId::PixiToml));
     package.name = name.clone();
@@ -114,24 +117,25 @@ fn parse_pixi_toml(toml_content: &TomlValue) -> PackageData {
     package.description = identity
         .and_then(|table| table.get(FIELD_DESCRIPTION))
         .and_then(TomlValue::as_str)
-        .map(|value| value.trim().to_string());
+        .map(|value| truncate_field(value.trim().to_string()));
     package.homepage_url = identity
         .and_then(|table| table.get(FIELD_HOMEPAGE))
         .and_then(TomlValue::as_str)
-        .map(ToOwned::to_owned);
+        .map(|v| truncate_field(v.to_string()));
     package.vcs_url = identity
         .and_then(|table| table.get(FIELD_REPOSITORY))
         .and_then(TomlValue::as_str)
-        .map(ToOwned::to_owned);
+        .map(|v| truncate_field(v.to_string()));
     package.parties = extract_authors(identity);
     package.extracted_license_statement = identity
         .and_then(|table| table.get(FIELD_LICENSE))
         .and_then(TomlValue::as_str)
-        .map(ToOwned::to_owned);
+        .map(|v| truncate_field(v.to_string()));
     package.file_references = extract_manifest_file_references(identity);
     package.purl = name
         .as_deref()
-        .and_then(|value| build_pixi_purl(value, version.as_deref()));
+        .and_then(|value| build_pixi_purl(value, version.as_deref()))
+        .map(truncate_field);
     package.dependencies = extract_manifest_dependencies(toml_content);
     package.extra_data = build_manifest_extra_data(toml_content, identity);
     package
@@ -185,14 +189,15 @@ fn extract_authors(identity: Option<&TomlMap<String, TomlValue>>) -> Vec<Party> 
         .and_then(TomlValue::as_array)
         .into_iter()
         .flatten()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(TomlValue::as_str)
         .map(|author| {
             let (name, email) = split_name_email(author);
             Party {
                 r#type: None,
                 role: Some("author".to_string()),
-                name,
-                email,
+                name: name.map(truncate_field),
+                email: email.map(truncate_field),
                 url: None,
                 organization: None,
                 organization_url: None,
@@ -215,7 +220,7 @@ fn extract_manifest_file_references(
         let path = path.trim();
         if !path.is_empty() {
             references.push(FileReference {
-                path: path.to_string(),
+                path: truncate_field(path.to_string()),
                 size: None,
                 sha1: None,
                 md5: None,
@@ -232,7 +237,7 @@ fn extract_manifest_file_references(
             let already_present = references.iter().any(|reference| reference.path == path);
             if !already_present {
                 references.push(FileReference {
-                    path: path.to_string(),
+                    path: truncate_field(path.to_string()),
                     size: None,
                     sha1: None,
                     md5: None,
@@ -267,7 +272,7 @@ fn extract_manifest_dependencies(toml_content: &TomlValue) -> Vec<Dependency> {
         .get(FIELD_FEATURE)
         .and_then(TomlValue::as_table)
     {
-        for (feature_name, value) in feature_table {
+        for (feature_name, value) in feature_table.iter().take(MAX_ITERATION_COUNT) {
             let Some(feature) = value.as_table() else {
                 continue;
             };
@@ -296,6 +301,7 @@ fn extract_conda_dependencies(
 ) -> Vec<Dependency> {
     table
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|(name, value)| build_conda_dependency(name, value, scope, optional))
         .collect()
 }
@@ -306,10 +312,13 @@ fn build_conda_dependency(
     scope: Option<&str>,
     optional: bool,
 ) -> Option<Dependency> {
-    let requirement = extract_conda_requirement(value);
+    let requirement = extract_conda_requirement(value).map(truncate_field);
     let exact_requirement = match value {
-        TomlValue::String(value) => Some(value.to_string()),
-        TomlValue::Table(table) => table.get(FIELD_VERSION).and_then(toml_value_to_string),
+        TomlValue::String(value) => Some(truncate_field(value.to_string())),
+        TomlValue::Table(table) => table
+            .get(FIELD_VERSION)
+            .and_then(toml_value_to_string)
+            .map(truncate_field),
         _ => None,
     };
     let pinned = exact_requirement
@@ -319,12 +328,17 @@ fn build_conda_dependency(
         .as_deref()
         .filter(|_| pinned)
         .map(|value| value.trim_start_matches('='));
-    let purl = build_conda_purl("conda", None, name, exact_version, None, None, None);
+    let purl =
+        build_conda_purl("conda", None, name, exact_version, None, None, None).map(truncate_field);
 
     let mut extra_data = HashMap::new();
     if let TomlValue::Table(dep_table) = value {
         for key in ["channel", "build", "path", "url", "git"] {
-            if let Some(val) = dep_table.get(key).and_then(toml_value_to_string) {
+            if let Some(val) = dep_table
+                .get(key)
+                .and_then(toml_value_to_string)
+                .map(truncate_field)
+            {
                 extra_data.insert(key.to_string(), JsonValue::String(val));
             }
         }
@@ -333,7 +347,7 @@ fn build_conda_dependency(
     Some(Dependency {
         purl,
         extracted_requirement: requirement.clone(),
-        scope: scope.map(ToOwned::to_owned),
+        scope: scope.map(|s| truncate_field(s.to_string())),
         is_runtime: Some(true),
         is_optional: Some(optional),
         is_pinned: Some(pinned),
@@ -350,6 +364,7 @@ fn extract_pypi_dependencies(
 ) -> Vec<Dependency> {
     table
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|(name, value)| build_pypi_dependency(name, value, scope, optional))
         .collect()
 }
@@ -361,10 +376,13 @@ fn build_pypi_dependency(
     optional: bool,
 ) -> Option<Dependency> {
     let normalized_name = normalize_pypi_name(name);
-    let requirement = extract_pypi_requirement(value);
+    let requirement = extract_pypi_requirement(value).map(truncate_field);
     let exact_requirement = match value {
-        TomlValue::String(value) => Some(value.to_string()),
-        TomlValue::Table(table) => table.get(FIELD_VERSION).and_then(toml_value_to_string),
+        TomlValue::String(value) => Some(truncate_field(value.to_string())),
+        TomlValue::Table(table) => table
+            .get(FIELD_VERSION)
+            .and_then(toml_value_to_string)
+            .map(truncate_field),
         _ => None,
     };
     let pinned = exact_requirement
@@ -374,7 +392,7 @@ fn build_pypi_dependency(
         .as_deref()
         .filter(|_| pinned)
         .map(|value| value.trim_start_matches('='));
-    let purl = build_pypi_purl(&normalized_name, exact_version);
+    let purl = build_pypi_purl(&normalized_name, exact_version).map(truncate_field);
 
     let mut extra_data = HashMap::new();
     if let TomlValue::Table(dep_table) = value {
@@ -388,7 +406,11 @@ fn build_pypi_dependency(
             "rev",
             "subdirectory",
         ] {
-            if let Some(val) = dep_table.get(key).and_then(toml_value_to_string) {
+            if let Some(val) = dep_table
+                .get(key)
+                .and_then(toml_value_to_string)
+                .map(truncate_field)
+            {
                 extra_data.insert(key.replace('-', "_"), JsonValue::String(val));
             }
         }
@@ -403,7 +425,7 @@ fn build_pypi_dependency(
     Some(Dependency {
         purl,
         extracted_requirement: requirement.clone(),
-        scope: scope.map(ToOwned::to_owned),
+        scope: scope.map(|s| truncate_field(s.to_string())),
         is_runtime: Some(true),
         is_optional: Some(optional),
         is_pinned: Some(pinned),
@@ -467,6 +489,7 @@ fn extract_v6_lock_dependencies(lock_content: &JsonValue) -> Vec<Dependency> {
 
     packages
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(JsonValue::as_object)
         .filter_map(|table| build_v6_lock_dependency(table, &environment_refs))
         .collect()
@@ -481,7 +504,7 @@ fn collect_v6_package_refs(lock_content: &JsonValue) -> HashMap<String, Vec<Json
         return refs;
     };
 
-    for (env_name, env_value) in environments {
+    for (env_name, env_value) in environments.iter().take(MAX_ITERATION_COUNT) {
         let Some(env_table) = env_value.as_object() else {
             continue;
         };
@@ -491,16 +514,16 @@ fn collect_v6_package_refs(lock_content: &JsonValue) -> HashMap<String, Vec<Json
         else {
             continue;
         };
-        for (platform, values) in package_platforms {
+        for (platform, values) in package_platforms.iter().take(MAX_ITERATION_COUNT) {
             let Some(entries) = values.as_array() else {
                 continue;
             };
-            for entry in entries {
+            for entry in entries.iter().take(MAX_ITERATION_COUNT) {
                 let Some(table) = entry.as_object() else {
                     continue;
                 };
                 for (kind, locator_value) in table {
-                    if let Some(locator) = json_value_to_string(locator_value) {
+                    if let Some(locator) = json_value_to_string(locator_value).map(truncate_field) {
                         let mut data = JsonMap::new();
                         data.insert(
                             "environment".to_string(),
@@ -530,12 +553,19 @@ fn build_v6_lock_dependency(
     table: &JsonMap<String, JsonValue>,
     refs: &HashMap<String, Vec<JsonValue>>,
 ) -> Option<Dependency> {
-    if let Some(locator) = table.get("pypi").and_then(json_value_to_string) {
+    if let Some(locator) = table
+        .get("pypi")
+        .and_then(json_value_to_string)
+        .map(truncate_field)
+    {
         let name = table
             .get(FIELD_NAME)
             .and_then(JsonValue::as_str)
             .map(normalize_pypi_name)?;
-        let version = table.get(FIELD_VERSION).and_then(json_value_to_string)?;
+        let version = table
+            .get(FIELD_VERSION)
+            .and_then(json_value_to_string)
+            .map(truncate_field)?;
         let mut extra = HashMap::new();
         extra.insert("source".to_string(), JsonValue::String(locator.clone()));
         if let Some(val) = table.get("requires_dist").cloned() {
@@ -558,8 +588,8 @@ fn build_v6_lock_dependency(
             );
         }
         return Some(Dependency {
-            purl: build_pypi_purl(&name, Some(&version)),
-            extracted_requirement: Some(version),
+            purl: build_pypi_purl(&name, Some(&version)).map(truncate_field),
+            extracted_requirement: Some(version.clone()),
             scope: None,
             is_runtime: None,
             is_optional: None,
@@ -570,9 +600,16 @@ fn build_v6_lock_dependency(
         });
     }
 
-    if let Some(locator) = table.get("conda").and_then(json_value_to_string) {
+    if let Some(locator) = table
+        .get("conda")
+        .and_then(json_value_to_string)
+        .map(truncate_field)
+    {
         let name = conda_name_from_locator(&locator)?;
-        let version = table.get(FIELD_VERSION).and_then(json_value_to_string);
+        let version = table
+            .get(FIELD_VERSION)
+            .and_then(json_value_to_string)
+            .map(truncate_field);
         let mut extra = HashMap::new();
         extra.insert("source".to_string(), JsonValue::String(locator.clone()));
         for key in [
@@ -597,7 +634,8 @@ fn build_v6_lock_dependency(
             );
         }
         return Some(Dependency {
-            purl: build_conda_purl("conda", None, &name, version.as_deref(), None, None, None),
+            purl: build_conda_purl("conda", None, &name, version.as_deref(), None, None, None)
+                .map(truncate_field),
             extracted_requirement: version,
             scope: None,
             is_runtime: None,
@@ -619,6 +657,7 @@ fn extract_v4_lock_dependencies(lock_content: &JsonValue) -> Vec<Dependency> {
 
     packages
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(JsonValue::as_object)
         .filter_map(build_v4_lock_dependency)
         .collect()
@@ -626,8 +665,14 @@ fn extract_v4_lock_dependencies(lock_content: &JsonValue) -> Vec<Dependency> {
 
 fn build_v4_lock_dependency(table: &JsonMap<String, JsonValue>) -> Option<Dependency> {
     let kind = table.get("kind").and_then(JsonValue::as_str)?;
-    let name = table.get(FIELD_NAME).and_then(json_value_to_string)?;
-    let version = table.get(FIELD_VERSION).and_then(json_value_to_string);
+    let name = table
+        .get(FIELD_NAME)
+        .and_then(json_value_to_string)
+        .map(truncate_field)?;
+    let version = table
+        .get(FIELD_VERSION)
+        .and_then(json_value_to_string)
+        .map(truncate_field);
     let mut extra = HashMap::new();
     for key in [
         "url",
@@ -649,8 +694,11 @@ fn build_v4_lock_dependency(table: &JsonMap<String, JsonValue>) -> Option<Depend
 
     Some(Dependency {
         purl: match kind {
-            "pypi" => build_pypi_purl(&normalize_pypi_name(&name), version.as_deref()),
-            "conda" => build_conda_purl("conda", None, &name, version.as_deref(), None, None, None),
+            "pypi" => {
+                build_pypi_purl(&normalize_pypi_name(&name), version.as_deref()).map(truncate_field)
+            }
+            "conda" => build_conda_purl("conda", None, &name, version.as_deref(), None, None, None)
+                .map(truncate_field),
             _ => None,
         },
         extracted_requirement: version,
@@ -712,7 +760,7 @@ fn json_value_to_string(value: &JsonValue) -> Option<String> {
 }
 
 fn normalize_pypi_name(name: &str) -> String {
-    name.trim().replace('_', "-").to_ascii_lowercase()
+    truncate_field(name.trim().replace('_', "-").to_ascii_lowercase())
 }
 
 fn build_pypi_purl(name: &str, version: Option<&str>) -> Option<String> {
@@ -720,7 +768,7 @@ fn build_pypi_purl(name: &str, version: Option<&str>) -> Option<String> {
     if let Some(version) = version {
         purl.with_version(version).ok()?;
     }
-    Some(purl.to_string())
+    Some(truncate_field(purl.to_string()))
 }
 
 fn build_pixi_purl(name: &str, version: Option<&str>) -> Option<String> {
@@ -728,7 +776,7 @@ fn build_pixi_purl(name: &str, version: Option<&str>) -> Option<String> {
     if let Some(version) = version {
         purl.with_version(version).ok()?;
     }
-    Some(purl.to_string())
+    Some(truncate_field(purl.to_string()))
 }
 
 fn is_exact_constraint(value: &str) -> bool {
@@ -755,7 +803,7 @@ fn conda_name_from_locator(locator: &str) -> Option<String> {
     let mut parts = stem.rsplitn(3, '-');
     let _ = parts.next()?;
     let _ = parts.next()?;
-    Some(parts.next()?.to_string())
+    Some(truncate_field(parts.next()?.to_string()))
 }
 
 fn default_package_data(datasource_id: Option<DatasourceId>) -> PackageData {

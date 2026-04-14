@@ -30,6 +30,7 @@ use crate::models::{
     Sha512Digest,
 };
 use crate::parsers::PackageParser;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 use super::license_normalization::{
     DeclaredLicenseMatchMetadata, build_declared_license_data_from_pair,
@@ -52,7 +53,7 @@ impl PackageParser for OpamParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        vec![match std::fs::read_to_string(path) {
+        vec![match read_file_to_string(path, None) {
             Ok(text) => parse_opam(&text),
             Err(e) => {
                 warn!("Failed to read OPAM file {:?}: {}", path, e);
@@ -212,8 +213,14 @@ fn parse_opam_data(text: &str) -> OpamData {
     let mut data = OpamData::default();
     let lines: Vec<&str> = text.lines().collect();
     let mut i = 0;
+    let mut iteration_count: usize = 0;
 
     while i < lines.len() {
+        iteration_count += 1;
+        if iteration_count > MAX_ITERATION_COUNT {
+            warn!("parse_opam_data: exceeded MAX_ITERATION_COUNT, breaking");
+            break;
+        }
         let line = lines[i];
 
         // Parse key: value format
@@ -287,21 +294,26 @@ fn clean_value(value: &str) -> Option<String> {
     if cleaned.is_empty() {
         None
     } else {
-        Some(cleaned.to_string())
+        Some(truncate_field(cleaned.to_string()))
     }
 }
 
 /// Parse a multiline string enclosed in triple quotes
 fn parse_multiline_string(lines: &[&str], i: &mut usize) -> Option<String> {
     let mut result = String::new();
+    let mut iteration_count: usize = 0;
 
-    // First line might contain opening """ and some content
     if let Some((_, value)) = parse_key_value(lines[*i]) {
         result.push_str(value.trim_matches('"').trim());
     }
 
     *i += 1;
     while *i < lines.len() {
+        iteration_count += 1;
+        if iteration_count > MAX_ITERATION_COUNT {
+            warn!("parse_multiline_string: exceeded MAX_ITERATION_COUNT, breaking");
+            break;
+        }
         let line = lines[*i];
         result.push(' ');
         result.push_str(line.trim_matches('"').trim());
@@ -316,20 +328,25 @@ fn parse_multiline_string(lines: &[&str], i: &mut usize) -> Option<String> {
     if cleaned.is_empty() {
         None
     } else {
-        Some(cleaned)
+        Some(truncate_field(cleaned))
     }
 }
 
 /// Parse a string array (single-line or multiline)
 fn parse_string_array(lines: &[&str], i: &mut usize, first_value: &str) -> Vec<String> {
     let mut result = Vec::new();
+    let mut iteration_count: usize = 0;
 
     let mut content = first_value.to_string();
 
-    // If it's a multiline array (starts with [ but no matching ])
     if content.contains('[') && !content.contains(']') {
         *i += 1;
         while *i < lines.len() {
+            iteration_count += 1;
+            if iteration_count > MAX_ITERATION_COUNT {
+                warn!("parse_string_array: exceeded MAX_ITERATION_COUNT, breaking");
+                break;
+            }
             let line = lines[*i];
             content.push(' ');
             content.push_str(line);
@@ -341,14 +358,12 @@ fn parse_string_array(lines: &[&str], i: &mut usize, first_value: &str) -> Vec<S
         }
     }
 
-    // Parse the content
     let cleaned = content.trim_matches('[').trim_matches(']').trim();
 
-    // Split by quote-delimited strings
     for part in split_quoted_strings(cleaned) {
         let p = part.trim_matches('"').trim();
         if !p.is_empty() {
-            result.push(p.to_string());
+            result.push(truncate_field(p.to_string()));
         }
     }
 
@@ -358,9 +373,15 @@ fn parse_string_array(lines: &[&str], i: &mut usize, first_value: &str) -> Vec<S
 /// Parse dependency array
 fn parse_dependency_array(lines: &[&str], i: &mut usize) -> Vec<(String, String)> {
     let mut result = Vec::new();
+    let mut iteration_count: usize = 0;
 
     *i += 1;
     while *i < lines.len() {
+        iteration_count += 1;
+        if iteration_count > MAX_ITERATION_COUNT {
+            warn!("parse_dependency_array: exceeded MAX_ITERATION_COUNT, breaking");
+            break;
+        }
         let line = lines[*i];
 
         if line.trim().contains(']') {
@@ -388,14 +409,14 @@ fn parse_dependency_line(line: &str) -> Option<(String, String)> {
     let regex = Regex::new(r#""([^"]+)"\s*(.*)$"#).ok()?;
     let caps = regex.captures(line)?;
 
-    let name = caps.get(1)?.as_str().to_string();
+    let name = truncate_field(caps.get(1)?.as_str().to_string());
     let version_part = caps.get(2)?.as_str().trim();
 
     // Extract the operator and version constraint
     let constraint = if version_part.is_empty() {
         String::new()
     } else {
-        extract_version_constraint(version_part)
+        truncate_field(extract_version_constraint(version_part))
     };
 
     Some((name, constraint))
@@ -442,8 +463,14 @@ fn parse_checksums(lines: &[&str], i: &mut usize, data: &mut OpamData) {
         }
     }
 
+    let mut iteration_count: usize = 0;
     *i += 1;
     while *i < lines.len() {
+        iteration_count += 1;
+        if iteration_count > MAX_ITERATION_COUNT {
+            warn!("parse_checksums: exceeded MAX_ITERATION_COUNT, breaking");
+            break;
+        }
         let line = lines[*i];
 
         if line.trim().contains(']') {
@@ -527,7 +554,7 @@ fn extract_parties(authors: &[String], maintainers: &[String]) -> Vec<Party> {
         parties.push(Party {
             r#type: Some("person".to_string()),
             role: Some("author".to_string()),
-            name: Some(author.clone()),
+            name: Some(truncate_field(author.clone())),
             email: None,
             url: None,
             organization: None,
@@ -542,7 +569,7 @@ fn extract_parties(authors: &[String], maintainers: &[String]) -> Vec<Party> {
             r#type: Some("person".to_string()),
             role: Some("maintainer".to_string()),
             name: None,
-            email: Some(maintainer.clone()),
+            email: Some(truncate_field(maintainer.clone())),
             url: None,
             organization: None,
             organization_url: None,
@@ -557,8 +584,8 @@ fn extract_parties(authors: &[String], maintainers: &[String]) -> Vec<Party> {
 fn extract_dependencies(deps: &[(String, String)]) -> Vec<Dependency> {
     deps.iter()
         .map(|(name, version_constraint)| Dependency {
-            purl: Some(format!("pkg:opam/{}", name)),
-            extracted_requirement: Some(version_constraint.clone()),
+            purl: Some(truncate_field(format!("pkg:opam/{}", name))),
+            extracted_requirement: Some(truncate_field(version_constraint.clone())),
             scope: Some("dependency".to_string()),
             is_runtime: Some(true),
             is_optional: Some(false),
