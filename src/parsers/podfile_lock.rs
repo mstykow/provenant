@@ -20,7 +20,6 @@
 //! - Graceful error handling with `warn!()` logs
 
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -29,6 +28,7 @@ use yaml_serde::Value;
 use crate::models::{
     DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha1Digest,
 };
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 use super::PackageParser;
 
@@ -60,7 +60,7 @@ impl PackageParser for PodfileLockParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read Podfile.lock at {:?}: {}", path, e);
@@ -99,7 +99,7 @@ impl DependencyDataByPurl {
         };
 
         if let Some(pods) = data.get("PODS").and_then(|v| v.as_sequence()) {
-            for pod in pods {
+            for pod in pods.iter().take(MAX_ITERATION_COUNT) {
                 let main_pod_str = match pod {
                     Value::String(s) => Some(s.as_str()),
                     Value::Mapping(m) => m.keys().next().and_then(|k| k.as_str()),
@@ -115,7 +115,7 @@ impl DependencyDataByPurl {
         }
 
         if let Some(deps) = data.get("DEPENDENCIES").and_then(|v| v.as_sequence()) {
-            for dep in deps {
+            for dep in deps.iter().take(MAX_ITERATION_COUNT) {
                 if let Some(dep_str) = dep.as_str() {
                     let (base_purl, _) = parse_dep_to_base_purl_and_version(dep_str);
                     dep_data.direct_dependency_purls.push(base_purl);
@@ -124,13 +124,13 @@ impl DependencyDataByPurl {
         }
 
         if let Some(spec_repos) = data.get("SPEC REPOS").and_then(|v| v.as_mapping()) {
-            for (repo_key, packages) in spec_repos {
+            for (repo_key, packages) in spec_repos.iter().take(MAX_ITERATION_COUNT) {
                 let repo_name = match repo_key.as_str() {
-                    Some(s) => s.to_string(),
+                    Some(s) => truncate_field(s.to_string()),
                     None => continue,
                 };
                 if let Some(packages) = packages.as_sequence() {
-                    for package in packages {
+                    for package in packages.iter().take(MAX_ITERATION_COUNT) {
                         if let Some(pkg_str) = package.as_str() {
                             let (base_purl, _) = parse_dep_to_base_purl_and_version(pkg_str);
                             dep_data
@@ -143,21 +143,21 @@ impl DependencyDataByPurl {
         }
 
         if let Some(checksums) = data.get("SPEC CHECKSUMS").and_then(|v| v.as_mapping()) {
-            for (name_key, checksum_val) in checksums {
+            for (name_key, checksum_val) in checksums.iter().take(MAX_ITERATION_COUNT) {
                 if let (Some(name), Some(checksum)) = (name_key.as_str(), checksum_val.as_str()) {
                     let (base_purl, _) = parse_dep_to_base_purl_and_version(name);
                     dep_data
                         .checksum_by_base_purl
-                        .insert(base_purl, checksum.to_string());
+                        .insert(base_purl, truncate_field(checksum.to_string()));
                 }
             }
         }
 
         if let Some(checkout_opts) = data.get("CHECKOUT OPTIONS").and_then(|v| v.as_mapping()) {
-            for (name_key, source) in checkout_opts {
+            for (name_key, source) in checkout_opts.iter().take(MAX_ITERATION_COUNT) {
                 if let (Some(name), Some(mapping)) = (name_key.as_str(), source.as_mapping()) {
                     let base_purl = make_base_purl(name);
-                    let processed = process_external_source(mapping);
+                    let processed = truncate_field(process_external_source(mapping));
                     dep_data
                         .external_sources_by_base_purl
                         .insert(base_purl, processed);
@@ -166,7 +166,7 @@ impl DependencyDataByPurl {
         }
 
         if let Some(ext_sources) = data.get("EXTERNAL SOURCES").and_then(|v| v.as_mapping()) {
-            for (name_key, source) in ext_sources {
+            for (name_key, source) in ext_sources.iter().take(MAX_ITERATION_COUNT) {
                 if let (Some(name), Some(mapping)) = (name_key.as_str(), source.as_mapping()) {
                     let base_purl = make_base_purl(name);
                     if dep_data
@@ -175,7 +175,7 @@ impl DependencyDataByPurl {
                     {
                         continue;
                     }
-                    let processed = process_external_source(mapping);
+                    let processed = truncate_field(process_external_source(mapping));
                     dep_data
                         .external_sources_by_base_purl
                         .insert(base_purl, processed);
@@ -192,10 +192,10 @@ fn parse_podfile_lock(data: &Value) -> PackageData {
     let mut dependencies = Vec::new();
 
     if let Some(pods) = data.get("PODS").and_then(|v| v.as_sequence()) {
-        for pod in pods {
+        for pod in pods.iter().take(MAX_ITERATION_COUNT) {
             match pod {
                 Value::Mapping(m) => {
-                    for (main_pod_key, dep_pods_val) in m {
+                    for (main_pod_key, dep_pods_val) in m.iter().take(MAX_ITERATION_COUNT) {
                         if let Some(main_pod_str) = main_pod_key.as_str() {
                             let dep_pods: Vec<&str> = dep_pods_val
                                 .as_sequence()
@@ -220,11 +220,11 @@ fn parse_podfile_lock(data: &Value) -> PackageData {
     let cocoapods_version = data
         .get("COCOAPODS")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .map(|s| truncate_field(s.to_string()));
     let podfile_checksum = data
         .get("PODFILE CHECKSUM")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .map(|s| truncate_field(s.to_string()));
 
     let mut extra_data = HashMap::new();
     if let Some(v) = cocoapods_version {
@@ -353,7 +353,7 @@ pub(crate) fn parse_dep_requirements(
     let (name_part, version, requirement) = if let Some(paren_idx) = dep.find('(') {
         let name_part = dep[..paren_idx].trim();
         let version_part = dep[paren_idx..].trim_matches(|c| c == '(' || c == ')' || c == ' ');
-        let requirement = version_part.to_string();
+        let requirement = truncate_field(version_part.to_string());
         let version = version_part.trim_start_matches(|c: char| !c.is_ascii_digit() && c != '.');
         let version = version.trim();
         (
@@ -361,7 +361,7 @@ pub(crate) fn parse_dep_requirements(
             if version.is_empty() {
                 None
             } else {
-                Some(version.to_string())
+                Some(truncate_field(version.to_string()))
             },
             Some(requirement),
         )
@@ -371,9 +371,12 @@ pub(crate) fn parse_dep_requirements(
 
     let (namespace, name) = if name_part.contains('/') {
         let (ns, n) = name_part.split_once('/').unwrap_or(("", &name_part));
-        (Some(ns.trim().to_string()), n.trim().to_string())
+        (
+            Some(truncate_field(ns.trim().to_string())),
+            truncate_field(n.trim().to_string()),
+        )
     } else {
-        (None, name_part.trim().to_string())
+        (None, truncate_field(name_part.trim().to_string()))
     };
 
     (namespace, name, version, requirement)

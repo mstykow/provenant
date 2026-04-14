@@ -19,16 +19,16 @@
 //! - Local path dependencies (`:path =>`) are tracked as dependencies
 //! - Graceful error handling with `warn!()` logs
 
-use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use crate::parser_warn as warn;
-use lazy_static::lazy_static;
 use packageurl::PackageUrl;
 use regex::Regex;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 use crate::parsers::PackageParser;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 /// Parses CocoaPods Podfile dependency files.
 ///
@@ -51,7 +51,7 @@ impl PackageParser for PodfileParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read {:?}: {}", path, e);
@@ -117,23 +117,23 @@ fn default_package_data() -> PackageData {
     }
 }
 
-lazy_static! {
-    static ref POD_PATTERN: Regex = Regex::new(
+static POD_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
         r#"pod\s+['"]([^'"]+)['"](?:\s*,\s*['"]([^'"]+)['"])?(?:\s*,\s*:git\s*=>\s*['"]([^'"]+)['"])?(?:\s*,\s*:path\s*=>\s*['"]([^'"]+)['"])?"#
-    ).unwrap();
-}
+    ).expect("valid regex")
+});
 
 /// Extract dependencies from Podfile
 fn extract_dependencies(content: &str) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let cleaned_line = pre_process(line);
         if let Some(caps) = POD_PATTERN.captures(&cleaned_line) {
-            let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-            let version_req = caps.get(2).map(|m| m.as_str().to_string());
-            let git_url = caps.get(3).map(|m| m.as_str().to_string());
-            let local_path = caps.get(4).map(|m| m.as_str().to_string());
+            let name = truncate_field(caps.get(1).map(|m| m.as_str()).unwrap_or("").to_string());
+            let version_req = caps.get(2).map(|m| truncate_field(m.as_str().to_string()));
+            let git_url = caps.get(3).map(|m| truncate_field(m.as_str().to_string()));
+            let local_path = caps.get(4).map(|m| truncate_field(m.as_str().to_string()));
 
             if let Some(dep) = create_dependency(name, version_req, git_url, local_path) {
                 dependencies.push(dep);
@@ -146,7 +146,7 @@ fn extract_dependencies(content: &str) -> Vec<Dependency> {
 
 /// Create a Dependency from parsed components
 fn create_dependency(
-    name: &str,
+    name: String,
     version_req: Option<String>,
     _git_url: Option<String>,
     _local_path: Option<String>,
@@ -155,7 +155,7 @@ fn create_dependency(
         return None;
     }
 
-    let purl = PackageUrl::new("cocoapods", name).ok()?;
+    let purl = PackageUrl::new("cocoapods", &name).ok()?;
 
     let is_pinned = version_req
         .as_ref()
@@ -163,8 +163,8 @@ fn create_dependency(
         .unwrap_or(false);
 
     Some(Dependency {
-        purl: Some(purl.to_string()),
-        extracted_requirement: version_req,
+        purl: Some(truncate_field(purl.to_string())),
+        extracted_requirement: version_req.map(truncate_field),
         scope: Some("dependencies".to_string()),
         is_runtime: None,
         is_optional: None,
