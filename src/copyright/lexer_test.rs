@@ -56,6 +56,18 @@ fn test_strips_trailing_quote_comma() {
 }
 
 #[test]
+fn test_strips_dangling_quote_after_colon_trim() {
+    let lines = vec![(
+        1,
+        "'attributionText': 'Data provided by Marvel.'".to_string(),
+    )];
+    let tokens = get_tokens(&lines);
+    let values: Vec<&str> = tokens.iter().map(|t| t.value.as_str()).collect();
+    assert!(values.contains(&"attributionText"), "tokens: {tokens:?}");
+    assert!(!values.contains(&"attributionText'"), "tokens: {tokens:?}");
+}
+
+#[test]
 fn test_splits_trailing_commas_into_cc_token() {
     let lines = vec![(1, "Stearns, Michael".to_string())];
     let tokens = get_tokens(&lines);
@@ -180,4 +192,26 @@ fn test_does_not_retag_all_caps_token_before_company_suffix() {
         PosTag::Nnp,
         "All-caps AS token should not be retagged as a name"
     );
+}
+
+#[test]
+fn test_quoted_lower_camel_key_remains_junk_after_trimming() {
+    let lines = vec![(1, "'attributionText': value".to_string())];
+    let tokens = get_tokens(&lines);
+    let token = tokens
+        .iter()
+        .find(|t| t.value == "attributionText")
+        .expect("attributionText token should exist");
+    assert_eq!(token.tag, PosTag::Junk, "tokens: {tokens:?}");
+}
+
+#[test]
+fn test_quoted_plain_key_is_junk_for_structured_literals() {
+    let lines = vec![(1, "'data': {}".to_string())];
+    let tokens = get_tokens(&lines);
+    let token = tokens
+        .iter()
+        .find(|t| t.value == "data")
+        .expect("data token should exist");
+    assert_eq!(token.tag, PosTag::Junk, "tokens: {tokens:?}");
 }

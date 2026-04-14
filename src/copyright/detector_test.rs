@@ -1953,6 +1953,45 @@ fn test_generated_annotation_line_is_not_absorbed_into_copyright() {
 }
 
 #[test]
+fn test_dart_structured_literal_keys_are_not_absorbed_into_marvel_copyright() {
+    let input = "'copyright': '© 2020 MARVEL',\n'attributionText': 'Data provided by Marvel. © 2020 MARVEL',\n'etag': 'eba58984956be48bdfd28818fa4fad1ff5f5cf81',\n'data': {}";
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        copyrights
+            .iter()
+            .any(|entry| entry.copyright == "(c) 2020 MARVEL"),
+        "copyrights: {copyrights:#?}"
+    );
+    assert!(
+        copyrights
+            .iter()
+            .any(|entry| entry.copyright == "Marvel. (c) 2020 MARVEL"),
+        "copyrights: {copyrights:#?}"
+    );
+    assert!(
+        !copyrights.iter().any(|entry| {
+            entry.copyright.contains("attributionText") || entry.copyright.contains("etag")
+        }),
+        "copyrights: {copyrights:#?}"
+    );
+    assert!(
+        holders.iter().any(|entry| entry.holder == "MARVEL"),
+        "holders: {holders:#?}"
+    );
+    assert!(
+        holders.iter().any(|entry| entry.holder == "Marvel. MARVEL"),
+        "holders: {holders:#?}"
+    );
+    assert!(
+        !holders
+            .iter()
+            .any(|entry| entry.holder.contains("attributionText") || entry.holder.contains("etag")),
+        "holders: {holders:#?}"
+    );
+}
+
+#[test]
 fn test_author_colon_multiline_keeps_emails() {
     let input = "/*\n * Authors: Jorge Cwik, <jorge@laser.satlink.net>\n *\t\tArnt Gulbrandsen, <agulbra@nvg.unit.no>\n */\n";
 

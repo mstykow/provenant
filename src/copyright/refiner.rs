@@ -1306,6 +1306,7 @@ static COPYRIGHTS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^copyright\s+and\s+related\s+or\s+neighboring\s+rights$",
         r"(?i)^copyright\s+was\s+owned\s+solely\s+by\s+fsf$",
         r"(?i)^copyright\s+years\s+may\s+be\s+listed$",
+        r"(?i)^\(c\)\s+final\s+[a-z_][a-zA-Z0-9_]*$",
     ];
     patterns.iter().filter_map(|p| Regex::new(p).ok()).collect()
 });
@@ -1409,8 +1410,10 @@ static HOLDERS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^the coordinator$",
         r"(?i)^provided\b",
         r"(?i)^provides the work\b",
+        r"(?i)^final\s+[a-z_][a-zA-Z0-9_]*$",
         r"(?i)\bthis\.[a-zA-Z]",
         r"(?i):function\b",
+        r"(?i)^(?:[a-z_][a-zA-Z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*\([^)]*\)|[a-z_][a-zA-Z0-9_]*\.[A-Za-z_]*[A-Z][A-Za-z0-9_]*)$",
         r"(?i)\bm\. y\. name\b",
         r"(?i)^version of nameif\b",
         r"(?i)\bunless explicitly identified\b",
