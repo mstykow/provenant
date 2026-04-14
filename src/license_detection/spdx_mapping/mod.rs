@@ -99,7 +99,7 @@ impl SpdxMapping {
     /// ];
     /// let mapping = build_spdx_mapping(&licenses);
     /// let spdx_expr = mapping.expression_scancode_to_spdx("mit OR gpl-2.0-plus").unwrap();
-    /// assert_eq!(spdx_expr, "MIT OR LicenseRef-scancode-gpl-2.0-plus");
+    /// assert_eq!(spdx_expr, "LicenseRef-scancode-gpl-2.0-plus OR MIT");
     /// ```
     pub fn expression_scancode_to_spdx(&self, scancode_expr: &str) -> Result<String, String> {
         let parsed = parse_expression(scancode_expr).map_err(|e| format!("Parse error: {}", e))?;

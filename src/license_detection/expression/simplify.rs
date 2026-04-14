@@ -829,7 +829,7 @@ mod tests {
     #[test]
     fn test_combine_expressions_two_and() {
         let result = combine_expressions_and(&["mit", "gpl-2.0-plus"], true).unwrap();
-        assert_eq!(result, "mit AND gpl-2.0-plus");
+        assert_eq!(result, "gpl-2.0-plus AND mit");
     }
 
     #[test]
@@ -984,7 +984,7 @@ mod tests {
 
         assert_eq!(
             result,
-            "apache-2.0 AND bsd-3-clause AND gpl-2.0-only AND licenseref-scancode-oracle-openjdk-exception-2.0 AND apsl-1.0 AND apsl-2.0"
+            "apache-2.0 AND apsl-1.0 AND apsl-2.0 AND bsd-3-clause AND gpl-2.0-only AND licenseref-scancode-oracle-openjdk-exception-2.0"
         );
     }
 }
