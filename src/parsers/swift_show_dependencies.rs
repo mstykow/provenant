@@ -111,10 +111,10 @@ pub(crate) fn parse_swift_show_dependencies(content: &str) -> PackageData {
 
 fn flatten_dependencies(deps: &[SwiftDependency]) -> Vec<Dependency> {
     let mut result = Vec::new();
-    let mut visited = HashSet::new();
 
     for dep in deps {
-        flatten_dependency(dep, true, &mut result, &mut visited, 0);
+        let mut path = HashSet::new();
+        flatten_dependency(dep, true, &mut result, &mut path, 0);
     }
 
     result
@@ -124,7 +124,7 @@ fn flatten_dependency(
     dep: &SwiftDependency,
     is_direct: bool,
     result: &mut Vec<Dependency>,
-    visited: &mut HashSet<String>,
+    path: &mut HashSet<String>,
     depth: usize,
 ) {
     if depth >= MAX_RECURSION_DEPTH {
@@ -145,8 +145,7 @@ fn flatten_dependency(
         .or(dep.name.as_deref())
         .unwrap_or("")
         .to_string();
-    if !dep_key.is_empty() && !visited.insert(dep_key.clone()) {
-        warn!("Circular dependency detected for '{}', skipping", dep_key);
+    if !dep_key.is_empty() && !path.insert(dep_key.clone()) {
         return;
     }
 
@@ -155,7 +154,11 @@ fn flatten_dependency(
     }
 
     for child in &dep.dependencies {
-        flatten_dependency(child, false, result, visited, depth + 1);
+        flatten_dependency(child, false, result, path, depth + 1);
+    }
+
+    if !dep_key.is_empty() {
+        path.remove(&dep_key);
     }
 }
 
