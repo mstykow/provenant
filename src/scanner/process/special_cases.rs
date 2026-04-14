@@ -118,5 +118,5 @@ pub(super) fn process_directory(
 }
 
 #[cfg(test)]
-#[path = "tests/special_cases.rs"]
+#[path = "special_cases_test.rs"]
 mod tests;

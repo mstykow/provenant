@@ -355,5 +355,5 @@ fn normalize_binary_url_path(path: &str) -> String {
 }
 
 #[cfg(test)]
-#[path = "tests/binary_text.rs"]
+#[path = "binary_text_test.rs"]
 mod tests;

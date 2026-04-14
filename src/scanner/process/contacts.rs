@@ -69,5 +69,5 @@ pub(super) fn extract_email_url_information(
 }
 
 #[cfg(test)]
-#[path = "tests/contacts.rs"]
+#[path = "contacts_test.rs"]
 mod tests;

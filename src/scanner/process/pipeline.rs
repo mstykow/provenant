@@ -418,5 +418,5 @@ fn is_compiled_datasource(datasource_id: &DatasourceId) -> bool {
 }
 
 #[cfg(test)]
-#[path = "tests/pipeline.rs"]
+#[path = "pipeline_test.rs"]
 mod tests;
