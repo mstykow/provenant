@@ -78,15 +78,15 @@ The cache root is resolved in this order:
 
 Supported CLI behavior:
 
-| Flag                  | Role                                               | Final decision  |
-| --------------------- | -------------------------------------------------- | --------------- |
-| `--cache-dir`         | Chooses shared incremental cache root              | Keep            |
-| `--cache-clear`       | Clears selected incremental cache root before scan | Keep            |
-| `--incremental`       | Enables unchanged-file reuse                       | Keep            |
-| `--max-in-memory`     | Controls in-run spill behavior                     | Keep for parity |
-| `--no-cache`          | Redundant with opt-in incremental reuse            | Not planned     |
-| `--reindex`           | Forces rebuild of license index cache              | Keep            |
-| `--license-cache-dir` | Overrides license index cache directory            | Keep            |
+| Flag                       | Role                                               | Final decision  |
+| -------------------------- | -------------------------------------------------- | --------------- |
+| `--cache-dir`              | Chooses shared persistent cache root               | Keep            |
+| `--cache-clear`            | Clears selected incremental cache root before scan | Keep            |
+| `--incremental`            | Enables unchanged-file reuse                       | Keep            |
+| `--max-in-memory`          | Controls in-run spill behavior                     | Keep for parity |
+| `--no-cache`               | Redundant with opt-in incremental reuse            | Not planned     |
+| `--reindex`                | Forces rebuild of license index cache              | Keep            |
+| `--no-license-index-cache` | Disables persistent license index cache I/O        | Keep            |
 
 Custom `--license-rules-path` scans now participate in the license index cache
 (see License Index Cache section below) in addition to the normal incremental
@@ -97,8 +97,8 @@ manifest workflow.
 - Incremental manifests live under
   `incremental/<input-fingerprint>/manifest.json`.
 - Manifests are stored as JSON for readability and operational inspection.
-- License index cache lives as a single `license_cache.rkyv` file next to the
-  provenant binary by default (overridable with `--license-cache-dir`).
+- License index cache lives under `license-index/embedded/<fingerprint>.rkyv`
+  or `license-index/custom/<fingerprint>.rkyv` inside the shared cache root.
 
 ### Invalidation Model
 
@@ -149,8 +149,12 @@ every run. Building the index takes ~12s (release); loading from cache takes
   licenses (sorted by `identifier` / `key`). Sorting ensures deterministic
   output regardless of filesystem iteration order.
 
-**Cache location**: `license_cache.rkyv` next to the provenant binary by
-default. Override with `--license-cache-dir`.
+**Cache location**: fingerprinted license-index entries under the shared cache
+root. The current implementation stores
+`license-index/embedded/<fingerprint>.rkyv` and
+`license-index/custom/<fingerprint>.rkyv`
+entries under the shared cache root selected by `--cache-dir` /
+`PROVENANT_CACHE` / platform-native defaults.
 
 **Invalidation**: The cache is automatically invalidated when the source rules
 change (fingerprint mismatch) or when `--reindex` is passed. A new provenant
@@ -203,8 +207,8 @@ artifact bytes differ.
 - [x] License index cache uses rkyv serialization with SHA-256 content fingerprinting
 - [x] Custom `--license-rules-path` scans participate in the license index cache
 - [x] `--reindex` forces a license index cache rebuild
-- [x] `--license-cache-dir` overrides the license index cache location
-- [x] Cache file lives next to the provenant binary by default
+- [x] `--no-license-index-cache` disables persistent license index cache reads/writes
+- [x] License index cache lives under the shared cache root by default
 
 ## Dependencies
 
