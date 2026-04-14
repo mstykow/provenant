@@ -117,6 +117,7 @@
               "matched_length": 1,
               "match_coverage": 100.0,
               "rule_relevance": 100,
+              "rule_identifier": "parser-declared-license",
               "rule_url": null,
               "matched_text": "MIT"
             }
@@ -168,6 +169,7 @@
               "matched_length": 1,
               "match_coverage": 100.0,
               "rule_relevance": 100,
+              "rule_identifier": "parser-declared-license",
               "rule_url": null,
               "matched_text": "MIT"
             }
