@@ -125,11 +125,52 @@ fn parse_metadata_bzl(path: &Path) -> Result<PackageData, String> {
 }
 
 fn parse_starlark_module(filename: &str, content: String) -> Result<AstModule, String> {
+    let content = preprocess_starlark_content(&content);
     let dialect = Dialect {
         enable_top_level_stmt: true,
         ..Dialect::Standard
     };
     AstModule::parse(filename, content, &dialect).map_err(|error| error.to_string())
+}
+
+fn preprocess_starlark_content(content: &str) -> String {
+    let mut normalized = String::with_capacity(content.len());
+    let mut pending_oss_disable_indent: Option<String> = None;
+
+    for raw_line in content.lines() {
+        let trimmed_start = raw_line.trim_start();
+        let indent_len = raw_line.len() - trimmed_start.len();
+        let indent = &raw_line[..indent_len];
+
+        if trimmed_start.starts_with('#') && trimmed_start.contains("@oss-disable") {
+            pending_oss_disable_indent = Some(indent.to_string());
+            continue;
+        }
+
+        if let Some(marker_index) = raw_line.find("# @oss-enable") {
+            let code = raw_line[..marker_index].trim_end();
+            if !code.is_empty() {
+                if let Some(disabled_indent) = pending_oss_disable_indent.take() {
+                    normalized.push_str(&disabled_indent);
+                    normalized.push_str(code.trim_start());
+                } else {
+                    normalized.push_str(code);
+                }
+                normalized.push('\n');
+            }
+            continue;
+        }
+
+        pending_oss_disable_indent = None;
+        normalized.push_str(raw_line);
+        normalized.push('\n');
+    }
+
+    if !content.ends_with('\n') && normalized.ends_with('\n') {
+        normalized.pop();
+    }
+
+    normalized
 }
 
 fn top_level_statements(module: &AstModule) -> &[ast::AstStmt] {
@@ -581,6 +622,58 @@ mod tests {
         assert!(check_rule_name_ending("android_library"));
         assert!(check_rule_name_ending("java_binary"));
         assert!(!check_rule_name_ending("filegroup"));
+    }
+
+    #[test]
+    fn test_preprocess_starlark_content_handles_oss_guarded_alternatives() {
+        let content = r#"# @oss-disable[end= ]: load("@fbsource//tools/build_defs:rust_unittest.bzl", "rust_unittest")
+prelude = native
+
+# @oss-disable: rust_unittest(
+    rust_test( # @oss-enable
+        name = "test",
+    )
+
+platform_utils = None # @oss-enable
+"#;
+
+        let normalized = preprocess_starlark_content(content);
+
+        assert!(!normalized.contains("@oss-disable"));
+        assert!(!normalized.contains("@oss-enable"));
+        assert!(normalized.contains("rust_test("));
+        assert!(normalized.contains("platform_utils = None"));
+        assert!(!normalized.contains("    rust_test("));
+    }
+
+    #[test]
+    fn test_parse_buck_build_with_oss_guarded_rule() {
+        let content = r#"# @oss-disable[end= ]: load("@fbsource//tools/build_defs:rust_library.bzl", "rust_library")
+# @oss-disable[end= ]: load("@fbsource//tools/build_defs:rust_unittest.bzl", "rust_unittest")
+
+oncall("build_infra")
+
+rust_library(
+    name = "library",
+    srcs = ["src/lib.rs"],
+)
+
+# @oss-disable: rust_unittest(
+    rust_test( # @oss-enable
+    name = "test",
+    srcs = ["tests/test.rs"],
+)
+"#;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let buck_path = temp_dir.path().join("BUCK");
+        std::fs::write(&buck_path, content).unwrap();
+
+        let packages = parse_buck_build(&buck_path).expect("BUCK file should parse");
+
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].package_type, Some(PackageType::Buck));
+        assert_eq!(packages[0].name.as_deref(), Some("library"));
     }
 }
 
