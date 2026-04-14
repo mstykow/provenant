@@ -259,32 +259,33 @@ pub(crate) fn extract_text_for_detection_with_diagnostics(
     }
 
     let windows_executable_metadata_text = extract_windows_executable_metadata_text(bytes);
+    let large_opaque_binary = windows_executable_metadata_text.is_none()
+        && is_large_opaque_binary_candidate(bytes, detected_format);
 
     if should_skip_large_opaque_binary_text_extraction(path, bytes, detected_format) {
-        return (String::new(), ExtractedTextKind::None, None);
+        return windows_metadata_or_empty_result(windows_executable_metadata_text);
     }
 
     if should_skip_binary_string_extraction(path, bytes, detected_format) {
         return (String::new(), ExtractedTextKind::None, None);
     }
 
-    let decoded = decode_bytes_to_string(bytes);
-    if !decoded.is_empty() {
-        let combined = combine_extracted_text_fragments(windows_executable_metadata_text, decoded);
-        return (combined, ExtractedTextKind::Decoded, None);
+    if !large_opaque_binary {
+        let decoded = decode_bytes_to_string(bytes);
+        if !decoded.is_empty() {
+            let combined =
+                combine_extracted_text_fragments(windows_executable_metadata_text, decoded);
+            return (combined, ExtractedTextKind::Decoded, None);
+        }
     }
 
-    let text = extract_printable_strings(bytes);
+    let text = if large_opaque_binary {
+        extract_sampled_printable_strings(bytes)
+    } else {
+        extract_printable_strings(bytes)
+    };
     if text.is_empty() {
-        if let Some(metadata_text) = windows_executable_metadata_text {
-            (
-                metadata_text,
-                ExtractedTextKind::WindowsExecutableMetadata,
-                None,
-            )
-        } else {
-            (String::new(), ExtractedTextKind::None, None)
-        }
+        windows_metadata_or_empty_result(windows_executable_metadata_text)
     } else {
         (
             combine_extracted_text_fragments(windows_executable_metadata_text, text),
@@ -299,6 +300,20 @@ fn combine_extracted_text_fragments(prefix: Option<String>, suffix: String) -> S
         Some(prefix) if !prefix.is_empty() && !suffix.is_empty() => format!("{prefix}\n{suffix}"),
         Some(prefix) if !prefix.is_empty() => prefix,
         _ => suffix,
+    }
+}
+
+fn windows_metadata_or_empty_result(
+    windows_executable_metadata_text: Option<String>,
+) -> (String, ExtractedTextKind, Option<String>) {
+    if let Some(metadata_text) = windows_executable_metadata_text {
+        (
+            metadata_text,
+            ExtractedTextKind::WindowsExecutableMetadata,
+            None,
+        )
+    } else {
+        (String::new(), ExtractedTextKind::None, None)
     }
 }
 
@@ -1192,47 +1207,93 @@ fn should_skip_large_opaque_binary_text_extraction(
     bytes: &[u8],
     detected_format: FileFormat,
 ) -> bool {
-    if bytes.len() < LARGE_OPAQUE_BINARY_SKIP_BYTES {
-        return false;
-    }
-
-    if !matches!(detected_format, FileFormat::ArbitraryBinaryData) {
-        return false;
-    }
-
-    if !has_binary_control_chars(bytes) {
-        return false;
-    }
-
-    !sample_has_promising_printable_strings(bytes)
+    is_large_opaque_binary_candidate(bytes, detected_format)
+        && !sample_has_promising_printable_strings(bytes)
 }
 
-fn sample_has_promising_printable_strings(bytes: &[u8]) -> bool {
-    const SAMPLE_WINDOW_BYTES: usize = 64 * 1024;
-    const MIN_PROMISING_RUN: usize = 16;
-    const MIN_PROMISING_WINDOWS: usize = 2;
+fn is_large_opaque_binary_candidate(bytes: &[u8], detected_format: FileFormat) -> bool {
+    bytes.len() >= LARGE_OPAQUE_BINARY_SKIP_BYTES
+        && !is_textual_format(detected_format)
+        && !matches!(
+            detected_format.kind(),
+            FileFormatKind::Archive
+                | FileFormatKind::Compressed
+                | FileFormatKind::Package
+                | FileFormatKind::Audio
+                | FileFormatKind::Image
+                | FileFormatKind::Video
+        )
+}
 
-    let len = bytes.len();
-    let mut windows = Vec::new();
-    windows.push(&bytes[..bytes.len().min(SAMPLE_WINDOW_BYTES)]);
+fn sampled_printable_window_ranges(len: usize) -> Vec<(usize, usize)> {
+    const SAMPLE_WINDOW_BYTES: usize = 64 * 1024;
+
+    let mut ranges = Vec::new();
+    let mut push_range = |start: usize, end: usize| {
+        if start < end && !ranges.contains(&(start, end)) {
+            ranges.push((start, end));
+        }
+    };
+
+    push_range(0, len.min(SAMPLE_WINDOW_BYTES));
     if len > SAMPLE_WINDOW_BYTES * 2 {
         let mid_start = len / 2 - SAMPLE_WINDOW_BYTES / 2;
         let mid_end = (mid_start + SAMPLE_WINDOW_BYTES).min(len);
-        windows.push(&bytes[mid_start..mid_end]);
+        push_range(mid_start, mid_end);
     }
     if len > SAMPLE_WINDOW_BYTES {
-        windows.push(&bytes[len - SAMPLE_WINDOW_BYTES..]);
+        push_range(len - SAMPLE_WINDOW_BYTES, len);
     }
 
-    let promising_windows = windows
-        .iter()
-        .filter(|window| has_promising_printable_run(window, MIN_PROMISING_RUN))
-        .count();
+    ranges
+}
 
-    promising_windows >= MIN_PROMISING_WINDOWS
-        || windows
-            .iter()
-            .any(|window| has_strong_structured_text_signal(window))
+fn sample_has_promising_printable_strings(bytes: &[u8]) -> bool {
+    sampled_printable_window_ranges(bytes.len())
+        .into_iter()
+        .filter(|&(start, end)| {
+            let window = &bytes[start..end];
+            has_license_or_notice_signal(window) || has_strong_structured_text_signal(window)
+        })
+        .count()
+        >= 2
+}
+
+fn extract_sampled_printable_strings(bytes: &[u8]) -> String {
+    let mut combined_lines = BTreeSet::new();
+
+    for (start, end) in sampled_printable_window_ranges(bytes.len()) {
+        let window_text = extract_printable_strings(&bytes[start..end]);
+        for line in window_text
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+        {
+            combined_lines.insert(line.to_string());
+        }
+    }
+
+    combined_lines.into_iter().collect::<Vec<_>>().join("\n")
+}
+
+fn has_license_or_notice_signal(bytes: &[u8]) -> bool {
+    let strings = extract_printable_strings(bytes);
+    if strings.is_empty() {
+        return false;
+    }
+
+    let lower = strings.to_ascii_lowercase();
+    [
+        "copyright",
+        "license",
+        "licensed under",
+        "all rights reserved",
+        "permission is hereby granted",
+        "redistribution and use",
+        "spdx-license-identifier",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker))
 }
 
 fn has_strong_structured_text_signal(bytes: &[u8]) -> bool {
@@ -1245,56 +1306,6 @@ fn has_strong_structured_text_signal(bytes: &[u8]) -> bool {
     let url_markers = strings.matches("http://").count() + strings.matches("https://").count();
 
     email_markers + url_markers >= 3
-}
-
-fn has_promising_printable_run(bytes: &[u8], min_run: usize) -> bool {
-    longest_printable_ascii_run(bytes) >= min_run
-        || longest_utf16le_printable_ascii_run(bytes) >= min_run
-        || longest_utf16be_printable_ascii_run(bytes) >= min_run
-}
-
-fn longest_printable_ascii_run(bytes: &[u8]) -> usize {
-    bytes
-        .iter()
-        .fold((0, 0), |(best, current), &byte| {
-            if matches!(byte, 0x20..=0x7E) {
-                let next = current + 1;
-                (best.max(next), next)
-            } else {
-                (best, 0)
-            }
-        })
-        .0
-}
-
-fn longest_utf16le_printable_ascii_run(bytes: &[u8]) -> usize {
-    longest_utf16_printable_ascii_run(bytes, true)
-}
-
-fn longest_utf16be_printable_ascii_run(bytes: &[u8]) -> usize {
-    longest_utf16_printable_ascii_run(bytes, false)
-}
-
-fn longest_utf16_printable_ascii_run(bytes: &[u8], little_endian: bool) -> usize {
-    let mut best = 0;
-    let mut current = 0;
-    let start = usize::from(!little_endian);
-    let mut index = start;
-    while index + 1 < bytes.len() {
-        let (ch, zero) = if little_endian {
-            (bytes[index], bytes[index + 1])
-        } else {
-            (bytes[index + 1], bytes[index])
-        };
-        if matches!(ch, 0x20..=0x7E) && zero == 0 {
-            current += 1;
-            best = best.max(current);
-        } else {
-            current = 0;
-        }
-        index += 2;
-    }
-    best
 }
 
 fn is_supported_image_container(bytes: &[u8], format: ImageFormat) -> bool {
@@ -1845,6 +1856,7 @@ mod tests {
         extract_printable_strings, extract_text_for_detection,
         extract_text_for_detection_with_diagnostics, is_non_actionable_pdf_failure,
         normalize_mime_type, normalize_pdf_heading_comparison_text,
+        windows_metadata_or_empty_result,
     };
 
     #[test]
@@ -1949,6 +1961,20 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_text_for_detection_skips_large_binary_with_unstructured_runs() {
+        let mut bytes = vec![0_u8; LARGE_OPAQUE_BINARY_SKIP_BYTES + 8];
+        let noise = b"(c) $1234567890ABCDEF[]{}--==++";
+        bytes[..noise.len()].copy_from_slice(noise);
+        let second_offset = LARGE_OPAQUE_BINARY_SKIP_BYTES / 2;
+        bytes[second_offset..second_offset + noise.len()].copy_from_slice(noise);
+
+        let (text, kind) = extract_text_for_detection(Path::new("tensor.bin"), &bytes);
+
+        assert!(text.is_empty());
+        assert_eq!(kind, ExtractedTextKind::None);
+    }
+
+    #[test]
     fn test_extract_text_for_detection_uses_windows_executable_metadata() {
         let path = Path::new("testdata/compiled-binary-golden/win_pe/libiconv2.dll");
         let bytes = std::fs::read(path).expect("read PE fixture");
@@ -1958,6 +1984,29 @@ mod tests {
         assert_eq!(kind, ExtractedTextKind::BinaryStrings);
         assert!(text.contains("License: This program is free software"));
         assert!(text.contains("LegalCopyright:"));
+    }
+
+    #[test]
+    fn test_extract_text_for_detection_keeps_windows_metadata_for_large_pe_without_sampled_signal()
+    {
+        let path = Path::new("testdata/compiled-binary-golden/win_pe/libiconv2.dll");
+        let mut bytes = std::fs::read(path).expect("read PE fixture");
+        bytes.resize(LARGE_OPAQUE_BINARY_SKIP_BYTES + 8, 0);
+
+        let (text, kind) = extract_text_for_detection(path, &bytes);
+
+        assert_ne!(kind, ExtractedTextKind::None);
+        assert!(!text.trim().is_empty());
+    }
+
+    #[test]
+    fn test_windows_metadata_or_empty_result_preserves_metadata() {
+        let (text, kind, scan_error) =
+            windows_metadata_or_empty_result(Some("LegalCopyright: Example Corp".to_string()));
+
+        assert_eq!(kind, ExtractedTextKind::WindowsExecutableMetadata);
+        assert_eq!(text, "LegalCopyright: Example Corp");
+        assert!(scan_error.is_none());
     }
 
     #[test]
