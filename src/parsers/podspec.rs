@@ -21,11 +21,10 @@
 //! - Dependency version constraints are parsed from DSL
 //! - Graceful error handling with `warn!()` logs on parse failures
 
-use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use crate::parser_warn as warn;
-use lazy_static::lazy_static;
 use md5::{Digest, Md5};
 use packageurl::PackageUrl;
 use regex::Regex;
@@ -33,6 +32,7 @@ use regex::Regex;
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 use crate::parsers::PackageParser;
 use crate::parsers::license_normalization::normalize_spdx_declared_license;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 /// Parses CocoaPods specification files (.podspec).
 ///
@@ -61,7 +61,7 @@ impl PackageParser for PodspecParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read {:?}: {}", path, e);
@@ -69,24 +69,25 @@ impl PackageParser for PodspecParser {
             }
         };
 
-        let name = extract_field(&content, &NAME_PATTERN);
-        let version = extract_field(&content, &VERSION_PATTERN);
-        let summary = extract_field(&content, &SUMMARY_PATTERN);
+        let name = extract_field(&content, &NAME_PATTERN).map(truncate_field);
+        let version = extract_field(&content, &VERSION_PATTERN).map(truncate_field);
+        let summary = extract_field(&content, &SUMMARY_PATTERN).map(truncate_field);
         let description =
-            merge_summary_and_description(summary.as_deref(), extract_description(&content));
-        let homepage_url = extract_field(&content, &HOMEPAGE_PATTERN);
-        let license = extract_license_statement(&content);
+            merge_summary_and_description(summary.as_deref(), extract_description(&content))
+                .map(truncate_field);
+        let homepage_url = extract_field(&content, &HOMEPAGE_PATTERN).map(truncate_field);
+        let license = extract_license_statement(&content).map(truncate_field);
         let (declared_license_expression, declared_license_expression_spdx, license_detections) =
             normalize_podspec_declared_license(&content, license.as_deref());
-        let source = extract_source_url(&content);
+        let source = extract_source_url(&content).map(truncate_field);
         let authors = extract_authors(&content);
 
         let parties = authors
             .into_iter()
             .map(|(name, email)| Party {
                 r#type: Some("person".to_string()),
-                name: Some(name),
-                email,
+                name: Some(truncate_field(name)),
+                email: email.map(truncate_field),
                 url: None,
                 role: Some("author".to_string()),
                 organization: None,
@@ -133,12 +134,17 @@ impl PackageParser for PodspecParser {
             _ => None,
         };
         let purl = if let Some(name_str) = &name {
-            let mut purl = PackageUrl::new(Self::PACKAGE_TYPE.as_str(), name_str)
-                .unwrap_or_else(|_| PackageUrl::new("generic", name_str).unwrap());
-            if let Some(version_str) = &version {
-                let _ = purl.with_version(version_str);
+            let purl_result = PackageUrl::new(Self::PACKAGE_TYPE.as_str(), name_str)
+                .or_else(|_| PackageUrl::new("generic", name_str));
+            match purl_result {
+                Ok(mut purl) => {
+                    if let Some(version_str) = &version {
+                        let _ = purl.with_version(version_str);
+                    }
+                    Some(truncate_field(purl.to_string()))
+                }
+                Err(_) => None,
             }
-            Some(purl.to_string())
         } else {
             None
         };
@@ -199,24 +205,32 @@ fn default_package_data() -> PackageData {
     }
 }
 
-lazy_static! {
-    // Regex patterns matching Python reference implementation
-    static ref NAME_PATTERN: Regex = Regex::new(r"\.name\s*=\s*(.+)").unwrap();
-    static ref VERSION_PATTERN: Regex = Regex::new(r"\.version\s*=\s*(.+)").unwrap();
-    static ref SUMMARY_PATTERN: Regex = Regex::new(r"\.summary\s*=\s*(.+)").unwrap();
-    static ref DESCRIPTION_PATTERN: Regex = Regex::new(r"\.description\s*=\s*(.+)").unwrap();
-    static ref HOMEPAGE_PATTERN: Regex = Regex::new(r"\.homepage\s*=\s*(.+)").unwrap();
-    static ref LICENSE_PATTERN: Regex = Regex::new(r"\.license\s*=\s*(.+)").unwrap();
-    static ref SOURCE_PATTERN: Regex = Regex::new(r"\.source\s*=\s*(.+)").unwrap();
-    static ref AUTHOR_PATTERN: Regex = Regex::new(r"\.authors?\s*=\s*(.+)").unwrap();
-    static ref SOURCE_GIT_PATTERN: Regex = Regex::new(r#":git\s*=>\s*['\"]([^'\"]+)['\"]"#).unwrap();
-    static ref SOURCE_HTTP_PATTERN: Regex = Regex::new(r#":http\s*=>\s*['\"]([^'\"]+)['\"]"#).unwrap();
+static NAME_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\.name\s*=\s*(.+)").expect("valid regex"));
+static VERSION_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\.version\s*=\s*(.+)").expect("valid regex"));
+static SUMMARY_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\.summary\s*=\s*(.+)").expect("valid regex"));
+static DESCRIPTION_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\.description\s*=\s*(.+)").expect("valid regex"));
+static HOMEPAGE_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\.homepage\s*=\s*(.+)").expect("valid regex"));
+static LICENSE_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\.license\s*=\s*(.+)").expect("valid regex"));
+static SOURCE_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\.source\s*=\s*(.+)").expect("valid regex"));
+static AUTHOR_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\.authors?\s*=\s*(.+)").expect("valid regex"));
+static SOURCE_GIT_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#":git\s*=>\s*['\"]([^'\"]+)['\"]"#).expect("valid regex"));
+static SOURCE_HTTP_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#":http\s*=>\s*['\"]([^'\"]+)['\"]"#).expect("valid regex"));
 
-    // Dependency patterns (using pod/dependency method calls)
-    static ref DEPENDENCY_PATTERN: Regex = Regex::new(
-        r#"(?:s\.)?(?:dependency|add_dependency|add_(?:runtime|development)_dependency)\s+['"]([^'"]+)['"](?:\s*,\s*(.+))?"#
-    ).unwrap();
-}
+static DEPENDENCY_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+    r#"(?:s\.)?(?:dependency|add_dependency|add_(?:runtime|development)_dependency)\s+['"]([^'"]+)['"](?:\s*,\s*(.+))?"#
+).expect("valid regex")
+});
 
 fn extract_license_statement(content: &str) -> Option<String> {
     extract_field(content, &LICENSE_PATTERN).map(|value| normalize_ruby_hash_literal(&value))
@@ -285,7 +299,7 @@ fn normalize_ruby_hash_literal(value: &str) -> String {
 
 /// Extract a single field using a regex pattern
 fn extract_field(content: &str, pattern: &Regex) -> Option<String> {
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let cleaned_line = pre_process(line);
         if let Some(value) = pattern.captures(&cleaned_line).and_then(|caps| caps.get(1)) {
             return Some(clean_string(value.as_str()));
@@ -296,7 +310,7 @@ fn extract_field(content: &str, pattern: &Regex) -> Option<String> {
 
 /// Extract description, handling multiline heredoc format
 fn extract_description(content: &str) -> Option<String> {
-    let lines: Vec<&str> = content.lines().collect();
+    let lines: Vec<&str> = content.lines().take(MAX_ITERATION_COUNT).collect();
 
     for (i, line) in lines.iter().enumerate() {
         let cleaned = pre_process(line);
@@ -345,7 +359,7 @@ fn extract_multiline_description(lines: &[&str], start_index: usize) -> Option<S
     let mut description_lines = Vec::new();
     let mut found_start = false;
 
-    for line in lines.iter().skip(start_index) {
+    for line in lines.iter().take(MAX_ITERATION_COUNT).skip(start_index) {
         if !found_start && line.contains("<<-") {
             found_start = true;
             continue;
@@ -371,7 +385,7 @@ fn extract_multiline_description(lines: &[&str], start_index: usize) -> Option<S
 fn extract_authors(content: &str) -> Vec<(String, Option<String>)> {
     let mut authors = Vec::new();
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let cleaned_line = pre_process(line);
         if let Some(value) = AUTHOR_PATTERN
             .captures(&cleaned_line)
@@ -397,7 +411,7 @@ fn extract_authors(content: &str) -> Vec<(String, Option<String>)> {
 }
 
 fn extract_source_url(content: &str) -> Option<String> {
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let cleaned_line = pre_process(line);
         let Some(value) = SOURCE_PATTERN
             .captures(&cleaned_line)
@@ -459,7 +473,7 @@ fn parse_author_string(author: &str) -> (String, Option<String>) {
 fn extract_dependencies(content: &str) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let cleaned_line = pre_process(line);
         if let Some(caps) = DEPENDENCY_PATTERN.captures(&cleaned_line) {
             let method = caps.get(0).map(|m| m.as_str()).unwrap_or("");
@@ -492,8 +506,8 @@ fn create_dependency(name: &str, version_req: Option<String>, method: &str) -> O
     let is_development = method.contains("add_development_dependency");
 
     Some(Dependency {
-        purl: Some(purl.to_string()),
-        extracted_requirement: version_req,
+        purl: Some(truncate_field(purl.to_string())),
+        extracted_requirement: version_req.map(truncate_field),
         scope: Some(
             if is_development {
                 "development"

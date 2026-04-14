@@ -1,6 +1,7 @@
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
+
+use super::utils::{MAX_ITERATION_COUNT, truncate_field};
 
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
@@ -50,7 +51,8 @@ impl PackageParser for SwiftManifestJsonParser {
 }
 
 fn read_swift_manifest_json(path: &Path) -> Result<Value, String> {
-    let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = crate::parsers::utils::read_file_to_string(path, None)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
 
     serde_json::from_str(&content).map_err(|e| format!("Failed to parse JSON: {}", e))
 }
@@ -59,7 +61,7 @@ fn parse_swift_manifest(manifest: &Value) -> PackageData {
     let name = manifest
         .get("name")
         .and_then(|v| v.as_str())
-        .map(String::from);
+        .map(|s| truncate_field(s.to_string()));
 
     let dependencies = get_dependencies(manifest.get("dependencies"));
     let platforms = manifest.get("platforms").cloned();
@@ -68,7 +70,7 @@ fn parse_swift_manifest(manifest: &Value) -> PackageData {
         .get("toolsVersion")
         .and_then(|tv| tv.get("_version"))
         .and_then(|v| v.as_str())
-        .map(String::from);
+        .map(|s| truncate_field(s.to_string()));
 
     let mut extra_data = HashMap::new();
     if let Some(platforms_val) = platforms {
@@ -81,7 +83,7 @@ fn parse_swift_manifest(manifest: &Value) -> PackageData {
         );
     }
 
-    let purl = create_package_url(&name, &None);
+    let purl = create_package_url(&name, &None).map(truncate_field);
 
     PackageData {
         package_type: Some(SwiftManifestJsonParser::PACKAGE_TYPE),
@@ -140,7 +142,7 @@ fn get_dependencies(dependencies: Option<&Value>) -> Vec<Dependency> {
 
     let mut dependent_packages = Vec::new();
 
-    for dependency in deps_array {
+    for dependency in deps_array.iter().take(MAX_ITERATION_COUNT) {
         if let Some(dep) = parse_manifest_dependency(dependency) {
             dependent_packages.push(dep);
         }
@@ -158,9 +160,14 @@ fn parse_manifest_dependency(dependency: &Value) -> Option<Dependency> {
             .and_then(|v| v.as_str())
             .unwrap_or_default();
 
-        let (namespace, dep_name) = extract_namespace_and_name(source, identity);
+        let (mut namespace, mut dep_name) = extract_namespace_and_name(source, identity);
+        namespace = namespace.map(truncate_field);
+        dep_name = truncate_field(dep_name);
         let (version, is_pinned, requirement_kind) = extract_version_requirement(source);
-        let purl = create_dependency_purl(&namespace, &dep_name, &version, is_pinned);
+        let version = version.map(truncate_field);
+        let purl = truncate_field(create_dependency_purl(
+            &namespace, &dep_name, &version, is_pinned,
+        ));
         let mut extra_data = HashMap::from([
             (
                 "dependency_kind".to_string(),
@@ -210,8 +217,8 @@ fn parse_manifest_dependency(dependency: &Value) -> Option<Dependency> {
             return None;
         }
 
-        let dep_name = identity.to_string();
-        let purl = create_dependency_purl(&None, &dep_name, &None, false);
+        let dep_name = truncate_field(identity.to_string());
+        let purl = truncate_field(create_dependency_purl(&None, &dep_name, &None, false));
         let mut extra_data = HashMap::from([(
             "dependency_kind".to_string(),
             serde_json::Value::String("fileSystem".to_string()),
