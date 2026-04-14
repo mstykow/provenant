@@ -1303,6 +1303,8 @@ impl PackageParser for DebianCopyrightParser {
             }
             let path_str = path.to_string_lossy();
             path_str.contains("/debian/")
+                || path_str.contains("/ports/")
+                || path_str.starts_with("ports/")
                 || path_str.contains("/packages/deb/")
                 || path_str.contains("/usr/share/doc/")
                 || path_str.ends_with("debian/copyright")
@@ -1321,7 +1323,8 @@ impl PackageParser for DebianCopyrightParser {
             }
         };
 
-        let package_name = extract_package_name_from_path(path);
+        let package_name = extract_package_name_from_path(path)
+            .or_else(|| extract_standalone_package_name_from_path(path, datasource_id));
         let mut package_data = parse_copyright_file(&content, package_name.as_deref());
         package_data.datasource_id = Some(datasource_id);
         vec![package_data]
@@ -1332,6 +1335,7 @@ crate::register_parser!(
     "Debian machine-readable copyright file",
     &[
         "**/debian/copyright",
+        "**/ports/*/copyright",
         "**/packages/deb/copyright",
         "**/usr/share/doc/*/copyright",
         "**/*_copyright"
@@ -1365,6 +1369,24 @@ fn extract_package_name_from_path(path: &Path) -> Option<String> {
         }
     }
     None
+}
+
+fn extract_standalone_package_name_from_path(
+    path: &Path,
+    datasource_id: DatasourceId,
+) -> Option<String> {
+    if datasource_id != DatasourceId::DebianCopyrightStandalone {
+        return None;
+    }
+
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| *name == "copyright")?;
+
+    path.parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|name| name.to_str())
+        .map(str::to_string)
 }
 
 fn parse_copyright_file(content: &str, package_name: Option<&str>) -> PackageData {
@@ -3173,6 +3195,9 @@ f55e3a16959b0bb8915cb5f219521c80  usr/share/doc/bash/COMPAT.gz
         assert!(DebianCopyrightParser::is_match(&PathBuf::from(
             "src/third_party/gperftools/dist/packages/deb/copyright"
         )));
+        assert!(DebianCopyrightParser::is_match(&PathBuf::from(
+            "ports/zlib/copyright"
+        )));
         assert!(!DebianCopyrightParser::is_match(&PathBuf::from(
             "copyright.txt"
         )));
@@ -3194,6 +3219,10 @@ f55e3a16959b0bb8915cb5f219521c80  usr/share/doc/bash/COMPAT.gz
             detect_debian_copyright_datasource(&PathBuf::from(
                 "src/third_party/gperftools/dist/packages/deb/copyright"
             )),
+            DatasourceId::DebianCopyrightStandalone
+        );
+        assert_eq!(
+            detect_debian_copyright_datasource(&PathBuf::from("ports/zlib/copyright")),
             DatasourceId::DebianCopyrightStandalone
         );
         assert_eq!(
@@ -3219,6 +3248,13 @@ f55e3a16959b0bb8915cb5f219521c80  usr/share/doc/bash/COMPAT.gz
         assert_eq!(
             extract_package_name_from_path(&PathBuf::from("debian/copyright")),
             None
+        );
+        assert_eq!(
+            extract_standalone_package_name_from_path(
+                &PathBuf::from("ports/zlib/copyright"),
+                DatasourceId::DebianCopyrightStandalone,
+            ),
+            Some("zlib".to_string())
         );
     }
 

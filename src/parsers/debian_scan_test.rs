@@ -162,4 +162,32 @@ mod tests {
         assert!(binary_file.for_packages.contains(&package.package_uid));
         assert!(copyright_file.for_packages.contains(&package.package_uid));
     }
+
+    #[test]
+    fn test_debian_standalone_copyright_scan_keeps_vcpkg_port_package() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        let port_dir = temp_dir.path().join("ports/zlib");
+        std::fs::create_dir_all(&port_dir).unwrap();
+
+        std::fs::write(
+            port_dir.join("copyright"),
+            "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\n\nFiles: *\nCopyright: 2024 Example Maintainer\nLicense: Zlib\n",
+        )
+        .unwrap();
+
+        let (files, _result) = scan_and_assemble(temp_dir.path());
+
+        let copyright_file = files
+            .iter()
+            .find(|file| file.path.ends_with("/ports/zlib/copyright"))
+            .unwrap();
+        let package_data = copyright_file
+            .package_data
+            .iter()
+            .find(|pkg_data| {
+                pkg_data.datasource_id == Some(DatasourceId::DebianCopyrightStandalone)
+            })
+            .expect("standalone Debian copyright package data should be present");
+        assert_eq!(package_data.name.as_deref(), Some("zlib"));
+    }
 }
