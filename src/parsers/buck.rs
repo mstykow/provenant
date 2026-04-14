@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use packageurl::PackageUrl;
 use starlark_syntax::syntax::ast;
 use starlark_syntax::syntax::module::AstModuleFields;
@@ -88,13 +89,15 @@ impl PackageParser for BuckMetadataBzlParser {
 
 /// Parse a Buck BUCK file (same logic as Bazel BUILD)
 fn parse_buck_build(path: &Path) -> Result<Vec<PackageData>, String> {
-    let content =
-        std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = read_file_to_string(path, None).map_err(|e| e.to_string())?;
     let module = parse_starlark_module("<BUCK>", content)?;
 
     let mut packages = Vec::new();
 
-    for statement in top_level_statements(&module) {
+    for statement in top_level_statements(&module)
+        .iter()
+        .take(MAX_ITERATION_COUNT)
+    {
         if let Some(package_data) = extract_build_package_from_statement(statement) {
             packages.push(package_data);
         }
@@ -105,12 +108,13 @@ fn parse_buck_build(path: &Path) -> Result<Vec<PackageData>, String> {
 
 /// Parse a Buck METADATA.bzl file
 fn parse_metadata_bzl(path: &Path) -> Result<PackageData, String> {
-    let content =
-        std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = read_file_to_string(path, None).map_err(|e| e.to_string())?;
     let module = parse_starlark_module("<METADATA.bzl>", content)?;
 
-    // Look for METADATA = {...} assignment
-    for statement in top_level_statements(&module) {
+    for statement in top_level_statements(&module)
+        .iter()
+        .take(MAX_ITERATION_COUNT)
+    {
         if let Some(dict) = extract_metadata_assignment_dict(statement) {
             return Ok(extract_metadata_dict(dict));
         }
@@ -202,7 +206,7 @@ fn extract_metadata_assignment_dict(
 fn extract_metadata_dict(dict: &[(ast::AstExpr, ast::AstExpr)]) -> PackageData {
     let mut fields: HashMap<String, MetadataValue> = HashMap::new();
 
-    for (key, value) in dict {
+    for (key, value) in dict.iter().take(MAX_ITERATION_COUNT) {
         let Some(key_name) = expr_as_string(key) else {
             continue;
         };
@@ -312,17 +316,17 @@ fn build_package_from_metadata(fields: HashMap<String, MetadataValue>) -> Packag
 
     // Extract name
     if let Some(name) = get_metadata_string(&fields, &["name"]) {
-        pkg.name = Some(name);
+        pkg.name = Some(truncate_field(name));
     }
 
     // Extract version
     if let Some(version) = get_metadata_string(&fields, &["version"]) {
-        pkg.version = Some(version);
+        pkg.version = Some(truncate_field(version));
     }
 
     // Extract namespace from explicit metadata when present.
     if let Some(namespace) = get_metadata_string(&fields, &["namespace"]) {
-        pkg.namespace = Some(namespace);
+        pkg.namespace = Some(truncate_field(namespace));
     }
 
     // Extract package type from canonical or legacy ecosystem fields.
@@ -344,17 +348,17 @@ fn build_package_from_metadata(fields: HashMap<String, MetadataValue>) -> Packag
         } else {
             None
         };
-        pkg.extracted_license_statement = extracted_license_statement;
+        pkg.extracted_license_statement = extracted_license_statement.map(truncate_field);
     } else if let Some(license_expression) = get_metadata_string(&fields, &["license_expression"]) {
-        pkg.extracted_license_statement = Some(license_expression);
+        pkg.extracted_license_statement = Some(truncate_field(license_expression));
     }
 
     if let Some(copyright) = get_metadata_list(&fields, &["copyrights"]) {
         if !copyright.is_empty() {
-            pkg.copyright = Some(copyright.join("\n"));
+            pkg.copyright = Some(truncate_field(copyright.join("\n")));
         }
     } else if let Some(copyright) = get_metadata_string(&fields, &["copyright"]) {
-        pkg.copyright = Some(copyright);
+        pkg.copyright = Some(truncate_field(copyright));
     }
 
     // Extract homepage (upstream_address, upstream_url, or homepage_url)
@@ -362,17 +366,17 @@ fn build_package_from_metadata(fields: HashMap<String, MetadataValue>) -> Packag
         &fields,
         &["upstream_address", "upstream_url", "homepage_url"],
     ) {
-        pkg.homepage_url = Some(homepage_url);
+        pkg.homepage_url = Some(truncate_field(homepage_url));
     }
 
     // Extract download_url
     if let Some(download_url) = get_metadata_string(&fields, &["download_url"]) {
-        pkg.download_url = Some(download_url);
+        pkg.download_url = Some(truncate_field(download_url));
     }
 
     // Extract vcs_url
     if let Some(vcs_url) = get_metadata_string(&fields, &["vcs_url"]) {
-        pkg.vcs_url = Some(vcs_url);
+        pkg.vcs_url = Some(truncate_field(vcs_url));
     }
 
     // Extract sha1 (download_archive_sha1)
@@ -438,18 +442,17 @@ fn build_package_from_metadata(fields: HashMap<String, MetadataValue>) -> Packag
     if let Some(purl_str) = get_metadata_string(&fields, &["package_url"])
         && let Ok(purl) = purl_str.parse::<PackageUrl>()
     {
-        pkg.purl = Some(purl.to_string());
+        pkg.purl = Some(truncate_field(purl.to_string()));
 
-        // Override package fields with purl data
         if let Ok(package_type) = purl.ty().parse::<PackageType>() {
             pkg.package_type = Some(package_type);
         }
         if let Some(ns) = purl.namespace() {
-            pkg.namespace = Some(ns.to_string());
+            pkg.namespace = Some(truncate_field(ns.to_string()));
         }
-        pkg.name = Some(purl.name().to_string());
+        pkg.name = Some(truncate_field(purl.name().to_string()));
         if let Some(ver) = purl.version() {
-            pkg.version = Some(ver.to_string());
+            pkg.version = Some(truncate_field(ver.to_string()));
         }
         // Qualifiers
         if !purl.qualifiers().is_empty() {
@@ -478,7 +481,11 @@ fn metadata_value_from_expr(expr: &ast::AstExpr) -> Option<MetadataValue> {
         ast::ExprP::List(items) | ast::ExprP::Tuple(items) => items,
         _ => return None,
     };
-    let values: Vec<_> = items.iter().filter_map(expr_as_string).collect();
+    let values: Vec<_> = items
+        .iter()
+        .take(MAX_ITERATION_COUNT)
+        .filter_map(expr_as_string)
+        .collect();
     (!values.is_empty()).then_some(MetadataValue::List(values))
 }
 
@@ -503,9 +510,9 @@ fn extract_build_package_from_statement(statement: &ast::AstStmt) -> Option<Pack
         .map(split_buck_license_values)
         .unwrap_or_default();
     let extracted_license_statement = if !license_statements.is_empty() {
-        Some(license_statements.join(", "))
+        Some(truncate_field(license_statements.join(", ")))
     } else if !license_references.is_empty() {
-        Some(license_references.join(", "))
+        Some(truncate_field(license_references.join(", ")))
     } else {
         None
     };
@@ -514,7 +521,7 @@ fn extract_build_package_from_statement(statement: &ast::AstStmt) -> Option<Pack
 
     Some(PackageData {
         package_type: Some(BuckBuildParser::PACKAGE_TYPE),
-        name: Some(package_name),
+        name: Some(truncate_field(package_name)),
         extracted_license_statement,
         extra_data: (!extra_data.is_empty()).then_some(extra_data),
         datasource_id: Some(DatasourceId::BuckFile),
@@ -557,7 +564,11 @@ fn extract_named_kwarg_string_list(call: &StarlarkCall<'_>, key: &str) -> Option
         ast::ExprP::List(items) | ast::ExprP::Tuple(items) => items,
         _ => return None,
     };
-    let values: Vec<_> = items.iter().filter_map(expr_as_string).collect();
+    let values: Vec<_> = items
+        .iter()
+        .take(MAX_ITERATION_COUNT)
+        .filter_map(expr_as_string)
+        .collect();
     (!values.is_empty()).then_some(values)
 }
 
