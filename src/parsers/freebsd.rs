@@ -27,6 +27,7 @@ use serde::Deserialize;
 
 use crate::models::{DatasourceId, PackageData, PackageType, Party};
 use crate::parsers::utils::read_file_to_string;
+use crate::utils::spdx::{ExpressionRelation, combine_license_expressions_with_relation};
 
 use super::PackageParser;
 use super::license_normalization::{
@@ -296,8 +297,10 @@ pub(crate) fn build_license_statement(
 
     match logic {
         "single" => Some(filtered_licenses[0].clone()),
-        "or" | "dual" => Some(filtered_licenses.join(" OR ")),
-        _ => Some(filtered_licenses.join(" AND ")), // "and" or unknown defaults to AND
+        "or" | "dual" => {
+            combine_license_expressions_with_relation(filtered_licenses, ExpressionRelation::Or)
+        }
+        _ => combine_license_expressions_with_relation(filtered_licenses, ExpressionRelation::And),
     }
 }
 
@@ -338,7 +341,7 @@ mod tests {
         let licenses = Some(vec!["MIT".to_string(), "BSD-2-Clause".to_string()]);
         let logic = Some("and".to_string());
         let result = build_license_statement(&licenses, &logic);
-        assert_eq!(result, Some("MIT AND BSD-2-Clause".to_string()));
+        assert_eq!(result, Some("BSD-2-Clause AND MIT".to_string()));
     }
 
     #[test]
@@ -346,7 +349,7 @@ mod tests {
         let licenses = Some(vec!["MIT".to_string(), "Apache-2.0".to_string()]);
         let logic = Some("or".to_string());
         let result = build_license_statement(&licenses, &logic);
-        assert_eq!(result, Some("MIT OR Apache-2.0".to_string()));
+        assert_eq!(result, Some("Apache-2.0 OR MIT".to_string()));
     }
 
     #[test]
@@ -354,7 +357,7 @@ mod tests {
         let licenses = Some(vec!["MIT".to_string(), "Apache-2.0".to_string()]);
         let logic = Some("dual".to_string());
         let result = build_license_statement(&licenses, &logic);
-        assert_eq!(result, Some("MIT OR Apache-2.0".to_string()));
+        assert_eq!(result, Some("Apache-2.0 OR MIT".to_string()));
     }
 
     #[test]
@@ -362,7 +365,7 @@ mod tests {
         let licenses = Some(vec!["MIT".to_string(), "BSD".to_string()]);
         let logic = None;
         let result = build_license_statement(&licenses, &logic);
-        assert_eq!(result, Some("MIT AND BSD".to_string()));
+        assert_eq!(result, Some("BSD AND MIT".to_string()));
     }
 
     #[test]
@@ -370,7 +373,7 @@ mod tests {
         let licenses = Some(vec!["MIT".to_string(), "BSD".to_string()]);
         let logic = Some("unknown".to_string());
         let result = build_license_statement(&licenses, &logic);
-        assert_eq!(result, Some("MIT AND BSD".to_string()));
+        assert_eq!(result, Some("BSD AND MIT".to_string()));
     }
 
     #[test]
@@ -402,7 +405,7 @@ mod tests {
         let licenses = Some(vec!["  MIT  ".to_string(), " Apache-2.0 ".to_string()]);
         let logic = Some("or".to_string());
         let result = build_license_statement(&licenses, &logic);
-        assert_eq!(result, Some("MIT OR Apache-2.0".to_string()));
+        assert_eq!(result, Some("Apache-2.0 OR MIT".to_string()));
     }
 }
 

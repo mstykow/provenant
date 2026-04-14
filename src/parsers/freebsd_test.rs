@@ -248,7 +248,7 @@ fn test_build_license_statement_multiple_or() {
     ]);
     let logic = Some("or".to_string());
     let result = build_license_statement(&licenses, &logic);
-    assert_eq!(result, Some("GPLv3 OR RUBY OR GPLv2".to_string()));
+    assert_eq!(result, Some("GPLv2 OR GPLv3 OR RUBY".to_string()));
 }
 
 #[test]
