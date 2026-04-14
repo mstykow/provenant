@@ -1,8 +1,11 @@
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
 use anyhow::{Context, Result, anyhow};
+
+use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_FIELD_LENGTH, MAX_ITERATION_COUNT, MAX_MANIFEST_SIZE};
 
 use super::BlobReader;
 
@@ -85,6 +88,17 @@ pub(crate) struct NdbDatabase {
 
 impl NdbDatabase {
     pub(crate) fn open(path: &Path) -> Result<Self> {
+        let file_size = fs::metadata(path)
+            .with_context(|| format!("RPM NDB metadata check failed for {:?}", path))?
+            .len();
+        if file_size > MAX_MANIFEST_SIZE {
+            return Err(anyhow!(
+                "RPM NDB file exceeds safety limit: {} bytes (max {} bytes)",
+                file_size,
+                MAX_MANIFEST_SIZE
+            ));
+        }
+
         let mut reader = BufReader::new(File::open(path)?);
         let header = NdbHeader::read(&mut reader)?;
         if header.header_magic != HEADER_MAGIC {
@@ -103,8 +117,17 @@ impl NdbDatabase {
         }
 
         let slot_count = header.slot_page_count * SLOT_ENTRIES_PER_PAGE - 2;
-        let mut slots = Vec::with_capacity(slot_count as usize);
-        for _ in 0..slot_count {
+        let effective_slot_count = if slot_count as usize > MAX_ITERATION_COUNT {
+            warn!(
+                "RPM NDB slot count {} exceeds iteration cap {}, capping",
+                slot_count, MAX_ITERATION_COUNT
+            );
+            MAX_ITERATION_COUNT as u32
+        } else {
+            slot_count
+        };
+        let mut slots = Vec::with_capacity(effective_slot_count as usize);
+        for _ in 0..effective_slot_count {
             slots.push(NdbSlotEntry::read(&mut reader)?);
         }
 
@@ -139,6 +162,14 @@ impl BlobReader for NdbDatabase {
                     slot.package_index,
                     blob_header.package_index
                 ));
+            }
+
+            if blob_header.blob_length as usize > MAX_FIELD_LENGTH {
+                warn!(
+                    "RPM NDB blob length {} exceeds safety cap for package {}, skipping",
+                    blob_header.blob_length, slot.package_index
+                );
+                continue;
             }
 
             let mut blob = vec![0_u8; blob_header.blob_length as usize];

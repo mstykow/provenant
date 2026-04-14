@@ -20,7 +20,6 @@
 
 use crate::models::{DatasourceId, PackageType, Sha256Digest};
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -28,6 +27,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::models::PackageData;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 use super::PackageParser;
 
@@ -86,7 +86,7 @@ impl PackageParser for ConanDataParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read conandata.yml file {:?}: {}", path, e);
@@ -113,12 +113,14 @@ pub(crate) fn parse_conandata_yml(content: &str) -> Vec<PackageData> {
 
     let mut packages = Vec::new();
 
-    for (version, source_info) in sources {
+    for (version, source_info) in sources.into_iter().take(MAX_ITERATION_COUNT) {
         let mut extra_data = HashMap::new();
 
         let download_url = match &source_info.url {
-            Some(UrlValue::Single(url)) => Some(url.clone()),
-            Some(UrlValue::Multiple(urls)) if !urls.is_empty() => Some(urls[0].clone()),
+            Some(UrlValue::Single(url)) => Some(truncate_field(url.clone())),
+            Some(UrlValue::Multiple(urls)) if !urls.is_empty() => {
+                Some(truncate_field(urls[0].clone()))
+            }
             _ => None,
         };
 
@@ -153,7 +155,7 @@ pub(crate) fn parse_conandata_yml(content: &str) -> Vec<PackageData> {
         packages.push(PackageData {
             package_type: Some(PACKAGE_TYPE),
             primary_language: Some("C++".to_string()),
-            version: Some(version),
+            version: Some(truncate_field(version)),
             download_url,
             sha256: source_info
                 .sha256

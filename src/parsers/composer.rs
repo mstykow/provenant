@@ -17,11 +17,10 @@
 //! - Package URL (purl) generation via packageurl
 //!
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use packageurl::PackageUrl;
 use serde_json::Value;
 
@@ -87,18 +86,18 @@ impl PackageParser for ComposerJsonParser {
         let version = json_content
             .get(FIELD_VERSION)
             .and_then(|value| value.as_str())
-            .map(|value| value.trim().to_string());
+            .map(|value| truncate_field(value.trim().to_string()));
 
         let description = json_content
             .get(FIELD_DESCRIPTION)
             .and_then(|value| value.as_str())
-            .map(|value| value.trim().to_string())
+            .map(|value| truncate_field(value.trim().to_string()))
             .filter(|value| !value.is_empty());
 
         let homepage_url = json_content
             .get(FIELD_HOMEPAGE)
             .and_then(|value| value.as_str())
-            .map(|value| value.trim().to_string())
+            .map(|value| truncate_field(value.trim().to_string()))
             .filter(|value| !value.is_empty());
 
         let keywords = extract_keywords(&json_content);
@@ -232,10 +231,7 @@ fn is_composer_lock_filename(name: &str) -> bool {
 }
 
 fn read_json_file(path: &Path) -> Result<Value, String> {
-    let mut file = File::open(path).map_err(|e| format!("Failed to open file: {}", e))?;
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = read_file_to_string(path, None).map_err(|e| e.to_string())?;
     serde_json::from_str(&content).map_err(|e| format!("Failed to parse JSON: {}", e))
 }
 
@@ -251,6 +247,7 @@ fn extract_dependencies(
         .and_then(|value| value.as_object())
         .map_or_else(Vec::new, |deps| {
             deps.iter()
+                .take(MAX_ITERATION_COUNT)
                 .filter_map(|(name, requirement)| {
                     let requirement_str = requirement.as_str()?;
                     let (namespace, package_name) = split_namespace_name(name);
@@ -269,8 +266,8 @@ fn extract_dependencies(
 
                     Some(Dependency {
                         purl,
-                        extracted_requirement: Some(requirement_str.to_string()),
-                        scope: Some(scope.to_string()),
+                        extracted_requirement: Some(truncate_field(requirement_str.to_string())),
+                        scope: Some(truncate_field(scope.to_string())),
                         is_runtime: Some(is_runtime),
                         is_optional: Some(is_optional),
                         is_pinned: Some(is_pinned),
@@ -317,7 +314,7 @@ fn extract_lock_package_list(
 ) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
 
-    for package in packages {
+    for package in packages.iter().take(MAX_ITERATION_COUNT) {
         if let Some(dependency) = build_lock_dependency(package, scope, is_runtime, is_optional) {
             dependencies.push(dependency);
         }
@@ -364,7 +361,7 @@ fn build_lock_dependency(
     let dist_url = dist
         .and_then(|map| map.get("url"))
         .and_then(|value| value.as_str())
-        .map(|value| value.to_string());
+        .map(|value| truncate_field(value.to_string()));
 
     let mut extra_data = HashMap::new();
 
@@ -452,7 +449,7 @@ fn build_lock_dependency(
     Some(Dependency {
         purl,
         extracted_requirement: None,
-        scope: Some(scope.to_string()),
+        scope: Some(truncate_field(scope.to_string())),
         is_runtime: Some(is_runtime),
         is_optional: Some(is_optional),
         is_pinned: Some(true),
@@ -555,9 +552,9 @@ fn extract_license_statement(json_content: &Value) -> Option<String> {
     }
 
     if licenses.len() == 1 {
-        Some(licenses[0].clone())
+        Some(truncate_field(licenses[0].clone()))
     } else {
-        Some(licenses.join(" OR "))
+        Some(truncate_field(licenses.join(" OR ")))
     }
 }
 
@@ -619,7 +616,12 @@ fn extract_keywords(json_content: &Value) -> Vec<String> {
         .map(|values| {
             values
                 .iter()
-                .filter_map(|value| value.as_str().map(|value| value.to_string()))
+                .take(MAX_ITERATION_COUNT)
+                .filter_map(|value| {
+                    value
+                        .as_str()
+                        .map(|value| truncate_field(value.to_string()))
+                })
                 .collect()
         })
         .unwrap_or_default()
@@ -632,25 +634,25 @@ fn extract_parties(json_content: &Value, namespace: &Option<String>) -> Vec<Part
         .get(FIELD_AUTHORS)
         .and_then(|value| value.as_array())
     {
-        for author in authors {
+        for author in authors.iter().take(MAX_ITERATION_COUNT) {
             if let Some(author) = author.as_object() {
                 let name = author
                     .get("name")
                     .and_then(|value| value.as_str())
-                    .map(|value| value.to_string());
+                    .map(|value| truncate_field(value.to_string()));
                 let role = author
                     .get("role")
                     .and_then(|value| value.as_str())
-                    .map(|value| value.to_string())
+                    .map(|value| truncate_field(value.to_string()))
                     .or(Some("author".to_string()));
                 let email = author
                     .get("email")
                     .and_then(|value| value.as_str())
-                    .map(|value| value.to_string());
+                    .map(|value| truncate_field(value.to_string()));
                 let url = author
                     .get("homepage")
                     .and_then(|value| value.as_str())
-                    .map(|value| value.to_string());
+                    .map(|value| truncate_field(value.to_string()));
 
                 if name.is_some() || email.is_some() || url.is_some() {
                     parties.push(Party {
@@ -676,7 +678,7 @@ fn extract_parties(json_content: &Value, namespace: &Option<String>) -> Vec<Part
         parties.push(Party {
             r#type: Some("person".to_string()),
             role: Some("vendor".to_string()),
-            name: Some(vendor.to_string()),
+            name: Some(truncate_field(vendor.to_string())),
             email: None,
             url: None,
             organization: None,
@@ -695,12 +697,12 @@ fn extract_support(json_content: &Value) -> (Option<String>, Option<String>) {
         let bug_tracking_url = support_obj
             .get("issues")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+            .map(|s| truncate_field(s.to_string()));
 
         let code_view_url = support_obj
             .get("source")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+            .map(|s| truncate_field(s.to_string()));
 
         (bug_tracking_url, code_view_url)
     } else {
@@ -751,10 +753,10 @@ fn extract_source_vcs_url(json_content: &Value) -> Option<String> {
         return None;
     }
 
-    Some(match source_reference {
+    Some(truncate_field(match source_reference {
         Some(reference) => format!("{}+{}@{}", source_type, source_url, reference),
         None => format!("{}+{}", source_type, source_url),
-    })
+    }))
 }
 
 fn extract_dist_download_url(json_content: &Value) -> Option<String> {
@@ -763,7 +765,7 @@ fn extract_dist_download_url(json_content: &Value) -> Option<String> {
         .and_then(|value| value.as_object())
         .and_then(|dist| dist.get("url"))
         .and_then(|value| value.as_str())
-        .map(|value| value.trim().to_string())
+        .map(|value| truncate_field(value.trim().to_string()))
         .filter(|value| !value.is_empty())
 }
 
@@ -888,9 +890,12 @@ fn split_namespace_name(full_name: &str) -> (Option<String>, String) {
     let second = iter.next();
 
     if let Some(name) = second {
-        (Some(first.to_string()), name.to_string())
+        (
+            Some(truncate_field(first.to_string())),
+            truncate_field(name.to_string()),
+        )
     } else {
-        (None, first.to_string())
+        (None, truncate_field(first.to_string()))
     }
 }
 

@@ -4,6 +4,9 @@ use std::io::Cursor;
 
 use anyhow::{Context, Result, anyhow};
 
+use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, MAX_MANIFEST_SIZE, truncate_field};
+
 use super::tags::{
     HEADER_I18NTABLE, RPMTAG_HEADERI18NTABLE, RPMTAG_HEADERIMAGE, RPMTAG_HEADERIMMUTABLE,
     RPMTAG_HEADERSIGNATURES, TagType,
@@ -11,7 +14,7 @@ use super::tags::{
 
 const ENTRY_INFO_DISK_SIZE: u32 = 16;
 const REGION_TAG_COUNT: u32 = ENTRY_INFO_DISK_SIZE;
-const HEADER_MAX_BYTES: usize = 256 * 1024 * 1024;
+const HEADER_MAX_BYTES: usize = MAX_MANIFEST_SIZE as usize;
 
 #[derive(Clone, Debug)]
 struct RawEntryInfo {
@@ -58,14 +61,23 @@ impl IndexEntry {
     }
 
     pub(crate) fn read_string(&self) -> Result<String> {
-        Ok(String::from_utf8_lossy(&self.data)
-            .trim_end_matches('\0')
-            .to_string())
+        Ok(truncate_field(
+            String::from_utf8_lossy(&self.data)
+                .trim_end_matches('\0')
+                .to_string(),
+        ))
     }
 
     pub(crate) fn read_u32_array(&self) -> Result<Vec<u32>> {
-        let mut values = Vec::new();
-        for chunk in self.data.chunks_exact(4).take(self.info.count as usize) {
+        if self.info.count as usize > MAX_ITERATION_COUNT {
+            warn!(
+                "RPM u32 array count {} exceeds MAX_ITERATION_COUNT {}; truncating",
+                self.info.count, MAX_ITERATION_COUNT
+            );
+        }
+        let cap = (self.info.count as usize).min(MAX_ITERATION_COUNT);
+        let mut values = Vec::with_capacity(cap);
+        for chunk in self.data.chunks_exact(4).take(cap) {
             values.push(u32::from_be_bytes(
                 chunk
                     .try_into()
@@ -76,11 +88,23 @@ impl IndexEntry {
     }
 
     pub(crate) fn read_string_array(&self) -> Result<Vec<String>> {
+        let count = self
+            .data
+            .split(|&byte| byte == 0)
+            .filter(|slice| !slice.is_empty())
+            .count();
+        if count > MAX_ITERATION_COUNT {
+            warn!(
+                "RPM string array count {} exceeds MAX_ITERATION_COUNT {}; truncating",
+                count, MAX_ITERATION_COUNT
+            );
+        }
         Ok(self
             .data
             .split(|&byte| byte == 0)
             .filter(|slice| !slice.is_empty())
-            .map(|slice| String::from_utf8_lossy(slice).into_owned())
+            .take(MAX_ITERATION_COUNT)
+            .map(|slice| truncate_field(String::from_utf8_lossy(slice).into_owned()))
             .collect())
     }
 }
@@ -127,6 +151,14 @@ impl HeaderBlob {
                 total_length,
                 index_length,
                 data_length
+            ));
+        }
+
+        if index_length as usize > MAX_ITERATION_COUNT {
+            return Err(anyhow!(
+                "RPM header index_length {} exceeds MAX_ITERATION_COUNT {}",
+                index_length,
+                MAX_ITERATION_COUNT
             ));
         }
 
@@ -275,7 +307,10 @@ impl HeaderBlob {
     fn verify_entries(&self, data: &[u8]) -> Result<()> {
         let mut end: u32 = 0;
         let entry_offset = usize::from(self.region_tag != 0);
-        for entry in &self.entry_infos[entry_offset..] {
+        for entry in self.entry_infos[entry_offset..]
+            .iter()
+            .take(MAX_ITERATION_COUNT)
+        {
             let info = entry.to_native()?;
             let kind = info.kind;
             let offset_u32 = positive_offset(info.offset)
@@ -325,7 +360,7 @@ fn swab_region(
     data_end: u32,
 ) -> Result<(Vec<IndexEntry>, u32)> {
     let mut entries = Vec::new();
-    for (index, entry_info) in entry_infos.iter().enumerate() {
+    for (index, entry_info) in entry_infos.iter().enumerate().take(MAX_ITERATION_COUNT) {
         let info = entry_info.to_native()?;
         let kind = info.kind;
         let start = data_start + positive_offset(info.offset)?;
