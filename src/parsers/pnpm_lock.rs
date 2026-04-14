@@ -24,8 +24,9 @@ use crate::models::{
     DatasourceId, Dependency, Md5Digest, PackageData, PackageType, ResolvedPackage, Sha1Digest,
     Sha256Digest, Sha512Digest,
 };
-use crate::parsers::utils::{npm_purl, parse_sri};
-use std::fs;
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, npm_purl, parse_sri, read_file_to_string, truncate_field,
+};
 use std::path::Path;
 use yaml_serde::Value;
 
@@ -48,7 +49,7 @@ impl PackageParser for PnpmLockParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path) {
             Ok(content) => content,
             Err(e) => {
                 crate::parser_warn!("Failed to read pnpm lockfile at {:?}: {}", path, e);
@@ -93,13 +94,12 @@ fn compute_dev_only_packages_v9(lock_data: &Value) -> std::collections::HashSet<
 
     // Step 1: Parse importers section to identify direct dependencies
     if let Some(importers) = lock_data.get("importers").and_then(|v| v.as_mapping()) {
-        for (_importer_path, importer_data) in importers {
-            // Get production dependencies
+        for (_importer_path, importer_data) in importers.iter().take(MAX_ITERATION_COUNT) {
             if let Some(deps) = importer_data
                 .get("dependencies")
                 .and_then(|v| v.as_mapping())
             {
-                for (name, version_data) in deps {
+                for (name, version_data) in deps.iter().take(MAX_ITERATION_COUNT) {
                     if let Some(version) = version_data.get("version").and_then(|v| v.as_str()) {
                         let pkg_key = format_package_key_v9(name.as_str().unwrap_or(""), version);
                         prod_roots.insert(pkg_key);
@@ -107,12 +107,11 @@ fn compute_dev_only_packages_v9(lock_data: &Value) -> std::collections::HashSet<
                 }
             }
 
-            // Get dev dependencies
             if let Some(dev_deps) = importer_data
                 .get("devDependencies")
                 .and_then(|v| v.as_mapping())
             {
-                for (name, version_data) in dev_deps {
+                for (name, version_data) in dev_deps.iter().take(MAX_ITERATION_COUNT) {
                     if let Some(version) = version_data.get("version").and_then(|v| v.as_str()) {
                         let pkg_key = format_package_key_v9(name.as_str().unwrap_or(""), version);
                         dev_roots.insert(pkg_key);
@@ -126,12 +125,12 @@ fn compute_dev_only_packages_v9(lock_data: &Value) -> std::collections::HashSet<
     let mut graph: HashMap<String, Vec<String>> = HashMap::new();
 
     if let Some(snapshots) = lock_data.get("snapshots").and_then(|v| v.as_mapping()) {
-        for (pkg_key, pkg_data) in snapshots {
+        for (pkg_key, pkg_data) in snapshots.iter().take(MAX_ITERATION_COUNT) {
             let pkg_key_str = pkg_key.as_str().unwrap_or("").to_string();
             let mut children = Vec::new();
 
             if let Some(deps) = pkg_data.get("dependencies").and_then(|v| v.as_mapping()) {
-                for (dep_name, dep_version) in deps {
+                for (dep_name, dep_version) in deps.iter().take(MAX_ITERATION_COUNT) {
                     let dep_name_str = dep_name.as_str().unwrap_or("");
                     let dep_version_str = dep_version.as_str().unwrap_or("");
                     let child_key = format!("{}@{}", dep_name_str, dep_version_str);
@@ -143,7 +142,7 @@ fn compute_dev_only_packages_v9(lock_data: &Value) -> std::collections::HashSet<
                 .get("optionalDependencies")
                 .and_then(|v| v.as_mapping())
             {
-                for (dep_name, dep_version) in opt_deps {
+                for (dep_name, dep_version) in opt_deps.iter().take(MAX_ITERATION_COUNT) {
                     let dep_name_str = dep_name.as_str().unwrap_or("");
                     let dep_version_str = dep_version.as_str().unwrap_or("");
                     let child_key = format!("{}@{}", dep_name_str, dep_version_str);
@@ -164,7 +163,12 @@ fn compute_dev_only_packages_v9(lock_data: &Value) -> std::collections::HashSet<
         prod_reachable.insert(root.clone());
     }
 
+    let mut bfs_iterations: usize = 0;
     while let Some(current) = queue.pop_front() {
+        bfs_iterations += 1;
+        if bfs_iterations > MAX_ITERATION_COUNT {
+            break;
+        }
         if let Some(children) = graph.get(&current) {
             for child in children {
                 if prod_reachable.insert(child.clone()) {
@@ -187,10 +191,8 @@ fn compute_dev_only_packages_v9(lock_data: &Value) -> std::collections::HashSet<
 
 /// Format package key for v9 (name@version format)
 fn format_package_key_v9(name: &str, version: &str) -> String {
-    // Handle scoped packages and peer dependencies
-    // Version might contain peer dep info like "8.28.2(vue@2.7.16)"
     let clean_version = version.split('(').next().unwrap_or(version);
-    format!("{}@{}", name, clean_version)
+    truncate_field(format!("{}@{}", name, clean_version))
 }
 
 /// Parse pnpm lockfile and extract package data
@@ -210,7 +212,7 @@ fn parse_pnpm_lockfile(lock_data: &Value) -> PackageData {
 
     // Extract packages based on version
     if let Some(packages_map) = lock_data.get("packages").and_then(|v| v.as_mapping()) {
-        for (purl_fields, data) in packages_map {
+        for (purl_fields, data) in packages_map.iter().take(MAX_ITERATION_COUNT) {
             let purl_fields_str = match purl_fields.as_str() {
                 Some(s) => s,
                 None => continue,
@@ -376,7 +378,7 @@ fn parse_nested_dependencies(data: &Value) -> Vec<Dependency> {
     let mut all_dependencies = Vec::new();
 
     if let Some(deps) = data.get("dependencies").and_then(|v| v.as_mapping()) {
-        for (name, version) in deps {
+        for (name, version) in deps.iter().take(MAX_ITERATION_COUNT) {
             if let Some(dep) = create_simple_dependency(name.as_str(), version.as_str(), None) {
                 all_dependencies.push(dep);
             }
@@ -384,7 +386,7 @@ fn parse_nested_dependencies(data: &Value) -> Vec<Dependency> {
     }
 
     if let Some(dev_deps) = data.get("devDependencies").and_then(|v| v.as_mapping()) {
-        for (name, version) in dev_deps {
+        for (name, version) in dev_deps.iter().take(MAX_ITERATION_COUNT) {
             if let Some(dep) =
                 create_simple_dependency(name.as_str(), version.as_str(), Some("dev".to_string()))
             {
@@ -394,7 +396,7 @@ fn parse_nested_dependencies(data: &Value) -> Vec<Dependency> {
     }
 
     if let Some(peer_deps) = data.get("peerDependencies").and_then(|v| v.as_mapping()) {
-        for (name, version) in peer_deps {
+        for (name, version) in peer_deps.iter().take(MAX_ITERATION_COUNT) {
             if let Some(dep) =
                 create_simple_dependency(name.as_str(), version.as_str(), Some("peer".to_string()))
             {
@@ -407,7 +409,7 @@ fn parse_nested_dependencies(data: &Value) -> Vec<Dependency> {
         .get("optionalDependencies")
         .and_then(|v| v.as_mapping())
     {
-        for (name, version) in opt_deps {
+        for (name, version) in opt_deps.iter().take(MAX_ITERATION_COUNT) {
             if let Some(dep) = create_simple_dependency(
                 name.as_str(),
                 version.as_str(),
@@ -431,18 +433,20 @@ fn create_simple_dependency(
 
     let (namespace_str, pkg_name) = extract_namespace_and_name(name);
     let namespace = if !namespace_str.is_empty() {
-        Some(namespace_str)
+        Some(truncate_field(namespace_str))
     } else {
         None
     };
-    let purl = create_purl(&namespace, &pkg_name, version);
+    let pkg_name = truncate_field(pkg_name.to_string());
+    let version = truncate_field(version.to_string());
+    let purl = create_purl(&namespace, &pkg_name, &version);
 
     let is_runtime = scope.as_deref() != Some("dev");
     let is_optional = scope.as_deref() == Some("optional");
 
     Some(Dependency {
         purl: Some(purl),
-        extracted_requirement: Some(version.to_string()),
+        extracted_requirement: Some(version),
         scope,
         is_runtime: Some(is_runtime),
         is_optional: Some(is_optional),
@@ -461,6 +465,9 @@ pub fn extract_dependency(
     is_dev_only_v9: bool,
 ) -> Option<Dependency> {
     let (namespace, name, version) = parse_purl_fields(clean_purl_fields, lockfile_version)?;
+    let namespace = namespace.map(truncate_field);
+    let name = truncate_field(name);
+    let version = truncate_field(version);
 
     // Create PURL
     let purl = create_purl(&namespace, &name, &version);

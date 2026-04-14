@@ -201,6 +201,23 @@ pub fn split_name_email(s: &str) -> (Option<String>, Option<String>) {
     }
 }
 
+pub const MAX_ITERATION_COUNT: usize = 100_000;
+
+pub const MAX_FIELD_LENGTH: usize = 10 * 1024 * 1024;
+
+pub fn truncate_field(value: String) -> String {
+    if value.len() <= MAX_FIELD_LENGTH {
+        return value;
+    }
+    let truncated: String = value.chars().take(MAX_FIELD_LENGTH).collect();
+    crate::parser_warn!(
+        "Field value truncated from {} to {} bytes",
+        value.len(),
+        MAX_FIELD_LENGTH
+    );
+    truncated
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
