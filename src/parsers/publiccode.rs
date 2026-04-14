@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::Path;
 
 use crate::models::{DatasourceId, PackageData, PackageType, Party};
@@ -6,6 +5,7 @@ use crate::parser_warn as warn;
 
 use super::PackageParser;
 use super::license_normalization::normalize_spdx_declared_license;
+use super::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 pub struct PubliccodeParser;
 
@@ -20,7 +20,7 @@ impl PackageParser for PubliccodeParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(error) => {
                 warn!(
@@ -67,19 +67,19 @@ fn parse_publiccode(yaml: &yaml_serde::Value) -> PackageData {
     package.name = yaml
         .get("name")
         .and_then(extract_localized_string)
-        .map(str::to_string);
+        .map(|s| truncate_field(s.to_string()));
     package.version = yaml
         .get("softwareVersion")
         .and_then(yaml_value_as_string)
-        .map(str::to_string);
+        .map(|s| truncate_field(s.to_string()));
     package.vcs_url = yaml
         .get("url")
         .and_then(yaml_value_as_string)
-        .map(str::to_string);
+        .map(|s| truncate_field(s.to_string()));
     package.homepage_url = yaml
         .get("landingURL")
         .and_then(yaml_value_as_string)
-        .map(str::to_string);
+        .map(|s| truncate_field(s.to_string()));
     package.description = yaml
         .get("longDescription")
         .and_then(extract_localized_string)
@@ -87,13 +87,13 @@ fn parse_publiccode(yaml: &yaml_serde::Value) -> PackageData {
             yaml.get("shortDescription")
                 .and_then(extract_localized_string)
         })
-        .map(str::to_string);
+        .map(|s| truncate_field(s.to_string()));
     package.copyright = yaml
         .get("legal")
         .and_then(|legal| legal.get("mainCopyrightOwner"))
         .and_then(yaml_value_as_string)
         .or_else(|| yaml.get("repoOwner").and_then(yaml_value_as_string))
-        .map(str::to_string);
+        .map(|s| truncate_field(s.to_string()));
     package.parties = extract_contact_parties(yaml.get("maintenance"));
 
     if let Some(license) = yaml
@@ -101,7 +101,7 @@ fn parse_publiccode(yaml: &yaml_serde::Value) -> PackageData {
         .and_then(|legal| legal.get("license"))
         .and_then(yaml_value_as_string)
     {
-        let license = license.to_string();
+        let license = truncate_field(license.to_string());
         package.extracted_license_statement = Some(license.clone());
         let (declared, declared_spdx, detections) = normalize_spdx_declared_license(Some(&license));
         package.declared_license_expression = declared;
@@ -132,19 +132,20 @@ fn extract_contact_parties(maintenance: Option<&yaml_serde::Value>) -> Vec<Party
         .and_then(yaml_serde::Value::as_sequence)
         .into_iter()
         .flatten()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|contact| {
             let name = contact
                 .get("name")
                 .and_then(yaml_value_as_string)
-                .map(str::to_string);
+                .map(|s| truncate_field(s.to_string()));
             let email = contact
                 .get("email")
                 .and_then(yaml_value_as_string)
-                .map(str::to_string);
+                .map(|s| truncate_field(s.to_string()));
             let url = contact
                 .get("url")
                 .and_then(yaml_value_as_string)
-                .map(str::to_string);
+                .map(|s| truncate_field(s.to_string()));
 
             if name.is_none() && email.is_none() && url.is_none() {
                 return None;
