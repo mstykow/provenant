@@ -6,7 +6,9 @@ use packageurl::PackageUrl;
 use serde_json::Value as JsonValue;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
-use crate::parsers::utils::{read_file_to_string, split_name_email};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, read_file_to_string, split_name_email, truncate_field,
+};
 
 use super::PackageParser;
 
@@ -79,7 +81,7 @@ type MultiMap = HashMap<String, Vec<String>>;
 fn parse_key_value_lines(content: &str) -> MultiMap {
     let mut fields: MultiMap = HashMap::new();
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
@@ -92,7 +94,7 @@ fn parse_key_value_lines(content: &str) -> MultiMap {
                 fields
                     .entry(key.to_string())
                     .or_default()
-                    .push(value.to_string());
+                    .push(truncate_field(value.to_string()));
             }
         }
     }
@@ -105,7 +107,7 @@ fn parse_srcinfo_like(content: &str, datasource_id: DatasourceId) -> Vec<Package
     let mut packages: Vec<MultiMap> = Vec::new();
     let mut current_is_pkgbase = true;
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
@@ -122,13 +124,16 @@ fn parse_srcinfo_like(content: &str, datasource_id: DatasourceId) -> Vec<Package
             pkgbase
                 .entry(key.to_string())
                 .or_default()
-                .push(value.to_string());
+                .push(truncate_field(value.to_string()));
             current_is_pkgbase = true;
             continue;
         }
 
         if key == "pkgname" {
-            packages.push(HashMap::from([(key.to_string(), vec![value.to_string()])]));
+            packages.push(HashMap::from([(
+                key.to_string(),
+                vec![truncate_field(value.to_string())],
+            )]));
             current_is_pkgbase = false;
             continue;
         }
@@ -142,7 +147,7 @@ fn parse_srcinfo_like(content: &str, datasource_id: DatasourceId) -> Vec<Package
         target
             .entry(key.to_string())
             .or_default()
-            .push(value.to_string());
+            .push(truncate_field(value.to_string()));
     }
 
     if packages.is_empty() {
@@ -272,29 +277,29 @@ fn build_package_from_arch_metadata(
     let purl_arch = (arch_values.len() == 1).then(|| arch_values[0].as_str());
 
     let mut package = default_package_data(datasource_id);
-    package.name = name.clone();
-    package.version = version.clone();
-    package.description = description;
-    package.homepage_url = homepage_url;
-    package.extracted_license_statement = extracted_license_statement;
+    package.name = name.map(truncate_field);
+    package.version = version.map(truncate_field);
+    package.description = description.map(truncate_field);
+    package.homepage_url = homepage_url.map(truncate_field);
+    package.extracted_license_statement = extracted_license_statement.map(truncate_field);
     package.primary_language = None;
-    package.purl = name
+    package.purl = package
+        .name
         .as_deref()
-        .and_then(|name| build_alpm_purl(name, version.as_deref(), purl_arch));
+        .and_then(|name| build_alpm_purl(name, package.version.as_deref(), purl_arch));
     package.source_packages = pkgbase
-        .as_deref()
-        .and_then(|base| build_alpm_purl(base, version.as_deref(), purl_arch))
+        .and_then(|base| build_alpm_purl(&base, package.version.as_deref(), purl_arch))
         .into_iter()
         .collect();
 
     if !is_srcinfo_like {
         if let Some(packager) = get_first(fields, "packager") {
-            let (name, email) = split_name_email(&packager);
+            let (packager_name, packager_email) = split_name_email(&packager);
             package.parties.push(Party {
                 r#type: Some("person".to_string()),
                 role: Some("packager".to_string()),
-                name,
-                email,
+                name: packager_name.map(truncate_field),
+                email: packager_email.map(truncate_field),
                 url: None,
                 organization: None,
                 organization_url: None,
@@ -348,16 +353,16 @@ fn build_dependencies(fields: &MultiMap) -> Vec<Dependency> {
     let mut keys: Vec<_> = fields.keys().cloned().collect();
     keys.sort();
 
-    for key in keys {
-        let Some((scope, is_runtime, is_optional)) = dependency_semantics(&key) else {
+    for key in keys.iter().take(MAX_ITERATION_COUNT) {
+        let Some((scope, is_runtime, is_optional)) = dependency_semantics(key) else {
             continue;
         };
 
-        for value in get_all(fields, &key) {
+        for value in get_all(fields, key) {
             if let Some(dep_name) = extract_arch_dependency_name(&value) {
                 dependencies.push(Dependency {
                     purl: build_alpm_purl(&dep_name, None, None),
-                    extracted_requirement: Some(value.clone()),
+                    extracted_requirement: Some(truncate_field(value.clone())),
                     scope: Some(scope.to_string()),
                     is_runtime: Some(is_runtime),
                     is_optional: Some(is_optional),
@@ -390,7 +395,7 @@ fn extract_arch_dependency_name(value: &str) -> Option<String> {
     let dep = value.split(':').next()?.trim();
     let end = dep.find(['<', '>', '=']).unwrap_or(dep.len());
     let name = dep[..end].trim();
-    (!name.is_empty()).then(|| name.to_string())
+    (!name.is_empty()).then(|| truncate_field(name.to_string()))
 }
 
 fn build_extra_data(
@@ -405,24 +410,36 @@ fn build_extra_data(
 
     let mut extra = HashMap::new();
 
-    for (key, values) in fields {
+    for (key, values) in fields.iter().take(MAX_ITERATION_COUNT) {
         if consumed.contains(key.as_str()) {
             continue;
         }
 
         let value = if should_force_array_extra_value(key) {
-            JsonValue::Array(values.iter().cloned().map(JsonValue::String).collect())
+            JsonValue::Array(
+                values
+                    .iter()
+                    .cloned()
+                    .map(|v| JsonValue::String(truncate_field(v)))
+                    .collect(),
+            )
         } else if values.len() == 1 {
             if key == "builddate" {
                 values[0]
                     .parse::<u64>()
                     .map(JsonValue::from)
-                    .unwrap_or_else(|_| JsonValue::String(values[0].clone()))
+                    .unwrap_or_else(|_| JsonValue::String(truncate_field(values[0].clone())))
             } else {
-                JsonValue::String(values[0].clone())
+                JsonValue::String(truncate_field(values[0].clone()))
             }
         } else {
-            JsonValue::Array(values.iter().cloned().map(JsonValue::String).collect())
+            JsonValue::Array(
+                values
+                    .iter()
+                    .cloned()
+                    .map(|v| JsonValue::String(truncate_field(v)))
+                    .collect(),
+            )
         };
         extra.insert(key.clone(), value);
     }
@@ -436,7 +453,10 @@ fn build_extra_data(
         && !extra.contains_key("arch")
         && let Some(arch) = purl_arch
     {
-        extra.insert("arch".to_string(), JsonValue::String(arch.to_string()));
+        extra.insert(
+            "arch".to_string(),
+            JsonValue::String(truncate_field(arch.to_string())),
+        );
     }
 
     (!extra.is_empty()).then_some(extra)

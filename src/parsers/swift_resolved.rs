@@ -4,8 +4,6 @@
 //! - **v1**: Pins under `object.pins[]`, uses `package` and `repositoryURL` fields
 //! - **v2/v3**: Pins under `pins[]`, uses `identity`, `location`, and `kind` fields
 
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -15,6 +13,7 @@ use url::Url;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 use crate::parsers::PackageParser;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 /// Parses Swift Package Manager lockfiles (Package.resolved).
 ///
@@ -174,15 +173,21 @@ fn parse_resolved(path: &Path) -> Result<PackageData, String> {
 }
 
 fn parse_v2_v3_pins(pins: &[PinV2]) -> Vec<Dependency> {
-    pins.iter().filter_map(pin_v2_to_dependency).collect()
+    pins.iter()
+        .take(MAX_ITERATION_COUNT)
+        .filter_map(pin_v2_to_dependency)
+        .collect()
 }
 
 fn parse_v1_pins(pins: &[PinV1]) -> Vec<Dependency> {
-    pins.iter().filter_map(pin_v1_to_dependency).collect()
+    pins.iter()
+        .take(MAX_ITERATION_COUNT)
+        .filter_map(pin_v1_to_dependency)
+        .collect()
 }
 
 fn pin_v2_to_dependency(pin: &PinV2) -> Option<Dependency> {
-    let mut name = pin.identity.clone();
+    let mut name = pin.identity.clone().map(truncate_field);
     let mut namespace: Option<String> = None;
 
     if let Some(location) = &pin.location
@@ -199,12 +204,13 @@ fn pin_v2_to_dependency(pin: &PinV2) -> Option<Dependency> {
         .state
         .version
         .clone()
-        .or_else(|| pin.state.revision.clone());
+        .or_else(|| pin.state.revision.clone())
+        .map(truncate_field);
 
     let purl = build_purl(&name, namespace.as_deref(), version.as_deref());
 
     Some(Dependency {
-        purl,
+        purl: purl.map(truncate_field),
         extracted_requirement: version,
         scope: Some("dependencies".to_string()),
         is_runtime: None,
@@ -217,7 +223,7 @@ fn pin_v2_to_dependency(pin: &PinV2) -> Option<Dependency> {
 }
 
 fn pin_v1_to_dependency(pin: &PinV1) -> Option<Dependency> {
-    let mut name = pin.package.clone();
+    let mut name = pin.package.clone().map(truncate_field);
     let mut namespace: Option<String> = None;
 
     if let Some(url) = &pin.repository_url
@@ -233,12 +239,13 @@ fn pin_v1_to_dependency(pin: &PinV1) -> Option<Dependency> {
         .state
         .version
         .clone()
-        .or_else(|| pin.state.revision.clone());
+        .or_else(|| pin.state.revision.clone())
+        .map(truncate_field);
 
     let purl = build_purl(&name, namespace.as_deref(), version.as_deref());
 
     Some(Dependency {
-        purl,
+        purl: purl.map(truncate_field),
         extracted_requirement: version,
         scope: Some("dependencies".to_string()),
         is_runtime: None,
@@ -268,7 +275,10 @@ fn get_namespace_and_name(url: &str) -> Option<(String, String)> {
         return None;
     }
 
-    Some((ns.to_string(), name.to_string()))
+    Some((
+        truncate_field(ns.to_string()),
+        truncate_field(name.to_string()),
+    ))
 }
 
 fn build_purl(name: &str, namespace: Option<&str>, version: Option<&str>) -> Option<String> {
@@ -283,11 +293,7 @@ fn build_purl(name: &str, namespace: Option<&str>, version: Option<&str>) -> Opt
 }
 
 fn read_file(path: &Path) -> Result<String, String> {
-    let mut file = File::open(path).map_err(|e| format!("Failed to open file: {}", e))?;
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
-    Ok(content)
+    read_file_to_string(path, None).map_err(|e| format!("Failed to read file: {}", e))
 }
 
 fn default_package_data() -> PackageData {

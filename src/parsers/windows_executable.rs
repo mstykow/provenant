@@ -9,12 +9,14 @@ use object::read::FileKind;
 use packageurl::PackageUrl;
 
 use crate::models::{DatasourceId, PackageData, PackageType, Party};
+use crate::parser_warn as warn;
 use crate::register_parser;
 
 use super::ParsePackagesResult;
 use super::license_normalization::{
     detect_declared_license_from_text, normalize_spdx_declared_license,
 };
+use super::utils::{MAX_ITERATION_COUNT, truncate_field};
 
 register_parser!(
     "Windows PE executable with VERSIONINFO package metadata",
@@ -346,8 +348,17 @@ fn find_utf16_version_value(text: &str, key: &str) -> Option<String> {
 }
 
 fn iter_version_blocks(mut bytes: &[u8]) -> impl Iterator<Item = Option<VersionBlock<'_>>> + '_ {
+    let mut count = 0usize;
     std::iter::from_fn(move || {
         if bytes.is_empty() {
+            return None;
+        }
+
+        count += 1;
+        if count > MAX_ITERATION_COUNT {
+            warn!(
+                "iter_version_blocks exceeded MAX_ITERATION_COUNT ({MAX_ITERATION_COUNT}), stopping iteration"
+            );
             return None;
         }
 
@@ -428,7 +439,17 @@ fn decode_utf16_bytes(bytes: &[u8]) -> Option<String> {
         .chunks_exact(2)
         .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
         .collect::<Vec<_>>();
-    String::from_utf16(&units).ok()
+    match String::from_utf16(&units) {
+        Ok(s) => Some(s),
+        Err(e) => {
+            warn!("decode_utf16_bytes: invalid UTF-16 sequence, using lossy conversion: {e}");
+            Some(
+                char::decode_utf16(units)
+                    .map(|r| r.unwrap_or('\u{FFFD}'))
+                    .collect(),
+            )
+        }
+    }
 }
 
 fn align_to_4(offset: usize) -> usize {
@@ -448,7 +469,7 @@ fn build_windows_executable_package(
         fallback,
         &["ProductName", "OriginalFilename", "InternalName"],
     )
-    .map(trim_windows_executable_name);
+    .map(|v| truncate_field(trim_windows_executable_name(v)));
     let version = preferred_string_with_fallback(
         strings,
         fallback,
@@ -464,11 +485,12 @@ fn build_windows_executable_package(
             .fixed
             .as_ref()
             .and_then(|fixed| fixed.product_version.clone())
-    });
+    })
+    .map(truncate_field);
 
     let name = name
         .filter(|value| !value.is_empty())
-        .or_else(|| fallback_windows_executable_name(path))?;
+        .or_else(|| fallback_windows_executable_name(path).map(truncate_field))?;
 
     let mut package = PackageData {
         package_type: Some(PackageType::Winexe),
@@ -479,14 +501,17 @@ fn build_windows_executable_package(
             strings,
             fallback,
             &["FileDescription", "Comments"],
-        ),
-        homepage_url: preferred_string_with_fallback(strings, fallback, &["URL", "WWW"]),
-        purl: create_winexe_purl(&name, version.as_deref()),
+        )
+        .map(truncate_field),
+        homepage_url: preferred_string_with_fallback(strings, fallback, &["URL", "WWW"])
+            .map(truncate_field),
+        purl: create_winexe_purl(&name, version.as_deref()).map(truncate_field),
         ..Default::default()
     };
 
     if let Some(company_name) =
         preferred_string_with_fallback(strings, fallback, &["CompanyName", "Company"])
+            .map(truncate_field)
     {
         package.parties.push(Party {
             r#type: Some("organization".to_string()),
@@ -500,7 +525,8 @@ fn build_windows_executable_package(
         });
     }
 
-    let license_statement = windows_license_statement_with_fallback(strings, fallback);
+    let license_statement =
+        windows_license_statement_with_fallback(strings, fallback).map(truncate_field);
     let normalizable_license = windows_normalizable_license_text_with_fallback(strings, fallback);
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         normalize_spdx_declared_license(normalizable_license.as_deref());
@@ -508,12 +534,14 @@ fn build_windows_executable_package(
     package.declared_license_expression = declared_license_expression;
     package.declared_license_expression_spdx = declared_license_expression_spdx;
     package.license_detections = license_detections;
-    package.copyright = preferred_string_with_fallback(strings, fallback, &["LegalCopyright"]);
+    package.copyright =
+        preferred_string_with_fallback(strings, fallback, &["LegalCopyright"]).map(truncate_field);
     package.holder = package
         .copyright
         .as_deref()
         .map(extract_windows_holder)
-        .filter(|value| !value.is_empty());
+        .filter(|value| !value.is_empty())
+        .map(truncate_field);
 
     merge_sibling_license_text(path, &mut package);
 
@@ -527,7 +555,7 @@ fn build_windows_executable_fallback(path: &Path) -> Option<PackageData> {
         package_type: Some(PackageType::Winexe),
         datasource_id: Some(DatasourceId::WindowsExecutable),
         name: Some(name.clone()),
-        purl: create_winexe_purl(&name, None),
+        purl: create_winexe_purl(&name, None).map(truncate_field),
         ..Default::default()
     })
 }
