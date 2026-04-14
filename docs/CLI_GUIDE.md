@@ -158,21 +158,22 @@ higher-severity dependency logs).
 #### License index cache
 
 On first use with `--license`, Provenant builds a license index from the embedded rules and saves
-it as a cache file next to the binary (`license_cache.rkyv`, ~340 MB). Subsequent runs load the
-cache instead of rebuilding the index, reducing startup from ~12s to ~0.8s.
+it under the shared cache root (`license-index/embedded/<fingerprint>.rkyv`, ~340 MB). Subsequent
+runs load the cache instead of rebuilding the index, reducing startup from ~12s to ~0.8s.
 
 The cache is automatically invalidated when:
 
 - a new provenant binary ships with different embedded rules (detected via SHA-256 fingerprint)
 - custom rules loaded with `--license-rules-path` change between runs
 
-Two CLI flags control cache behavior:
+Three CLI flags control cache behavior:
 
 - `--reindex` — force a cache rebuild, ignoring any existing cache
-- `--license-cache-dir <DIR>` — override the cache directory (default: next to the provenant binary)
+- `--no-license-index-cache` — build the license index in memory for this run without reading or writing persistent license-cache files
+- `--cache-dir <DIR>` — choose the shared cache root for both incremental manifests and license-index cache files
 
 ```sh
-provenant --json-pp scan.json --license --reindex /path/to/project
+provenant --json-pp scan.json --license --cache-dir .cache/provenant --reindex /path/to/project
 ```
 
 ### 3. "I want file metadata such as checksums and type hints"
@@ -408,8 +409,9 @@ Good use cases:
 Important details:
 
 - `--incremental` enables this behavior.
-- `--cache-dir PATH` and `PROVENANT_CACHE` choose where the incremental manifest lives.
-- `--cache-clear` clears that manifest state before the run.
+- `--cache-dir PATH` and `PROVENANT_CACHE` choose the shared cache root.
+- that root stores both incremental manifests and reusable license-index cache files.
+- `--cache-clear` clears that shared cache state before the run.
 - if the previous manifest is missing, unreadable, or incompatible, Provenant falls back to a full rescan and rewrites it.
 - incremental reuse applies to native scans, not `--from-json` reshaping.
 
@@ -479,8 +481,8 @@ These are worth learning early because they change what the output means:
 - `--tallies-key-files` requires `--tallies` and `--classify`
 - `--tallies-by-facet` requires `--facet` and `--tallies`
 - `--debian <FILE>` requires `--license`, `--copyright`, and `--license-text`
-- `--reindex` requires `--license`
-- `--license-cache-dir` requires `--license`
+- `--reindex` only matters when the license engine is initialized (`--license` and some `--from-json` reference-recompute flows)
+- `--no-license-index-cache` only matters when the license engine is initialized
 
 ## A Simple Decision Guide
 
