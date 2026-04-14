@@ -168,8 +168,10 @@ When using `--from-json`, you can pass multiple JSON inputs. Native directory sc
 Use `--incremental` for repeated scans of the same tree. After a completed scan, Provenant keeps
 an incremental manifest and uses it on the next run to skip unchanged files. That is useful for
 local iteration, CI-style reruns, and retrying after a later failed or interrupted scan. The
-incremental cache root can be controlled with `PROVENANT_CACHE` or `--cache-dir`, and `--cache-clear`
-resets it before a run.
+shared cache root can be controlled with `PROVENANT_CACHE` or `--cache-dir`, and `--cache-clear`
+resets it before a run. That root stores both incremental manifests and the reusable license-index
+cache. Use `--no-license-index-cache` when you want license scans to rebuild the index in memory
+without reading or writing persistent license-cache files.
 
 For the generated package-format support matrix, see [Supported Formats](docs/SUPPORTED_FORMATS.md).
 
