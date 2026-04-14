@@ -1288,6 +1288,20 @@ fn test_refine_holder_drops_compare_triage_code_fragments() {
 }
 
 #[test]
+fn test_refine_holder_keeps_plain_dotted_org_names() {
+    assert_eq!(refine_holder("abc.org"), Some("abc.org".to_string()));
+    assert_eq!(refine_holder("ibm.com"), Some("ibm.com".to_string()));
+}
+
+#[test]
+fn test_refine_holder_strips_trailing_placeholder_dollar() {
+    assert_eq!(
+        refine_holder("Markus Franz Xaver Johannes Oberhumer $"),
+        Some("Markus Franz Xaver Johannes Oberhumer".to_string())
+    );
+}
+
+#[test]
 fn test_refine_copyright_strips_see_authors_suffix() {
     let result = refine_copyright(
         "Copyright (c) 2000 Carsten Haitzler and various contributors (see AUTHORS)",

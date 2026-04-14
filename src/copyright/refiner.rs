@@ -342,6 +342,7 @@ static HOLDERS_SUFFIXES: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
         "distributed",
         "information",
         "credited",
+        "$",
     ]
     .into_iter()
     .collect()
@@ -1413,7 +1414,7 @@ static HOLDERS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^final\s+[a-z_][a-zA-Z0-9_]*$",
         r"(?i)\bthis\.[a-zA-Z]",
         r"(?i):function\b",
-        r"(?i)^(?:[a-z_][a-zA-Z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*\([^)]*\)|[a-z_][a-zA-Z0-9_]*\.[A-Za-z_]*[A-Z][A-Za-z0-9_]*)$",
+        r"^(?:[a-z_][a-zA-Z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*\([^)]*\)|[a-z_][a-zA-Z0-9_]*\.[A-Za-z_]*[A-Z][A-Za-z0-9_]*)$",
         r"(?i)\bm\. y\. name\b",
         r"(?i)^version of nameif\b",
         r"(?i)\bunless explicitly identified\b",
