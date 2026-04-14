@@ -69,7 +69,7 @@ impl PackageParser for PixiLockParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(error) => {
                 warn!("Failed to read pixi.lock at {:?}: {}", path, error);

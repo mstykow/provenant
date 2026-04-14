@@ -20,10 +20,10 @@
 
 use crate::models::{DatasourceId, Dependency, FileReference, PackageData, PackageType, Party};
 use crate::parser_warn as warn;
-use crate::parsers::utils::split_name_email;
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, read_file_to_string, split_name_email, truncate_field,
+};
 use packageurl::PackageUrl;
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
 use toml::Value;
 
@@ -74,17 +74,17 @@ impl PackageParser for CargoParser {
         let name = package
             .and_then(|p| p.get(FIELD_NAME))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let version = package
             .and_then(|p| p.get(FIELD_VERSION))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let raw_license = package
             .and_then(|p| p.get(FIELD_LICENSE))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
         let file_references = extract_file_references(&toml_content);
         let (declared_license_expression, declared_license_expression_spdx, license_detections) =
             raw_license
@@ -117,7 +117,7 @@ impl PackageParser for CargoParser {
         let homepage_url = package
             .and_then(|p| p.get(FIELD_HOMEPAGE))
             .and_then(|v| v.as_str())
-            .map(String::from)
+            .map(|s| truncate_field(s.to_string()))
             .or_else(|| {
                 name.as_ref()
                     .map(|n| format!("https://crates.io/crates/{}", n))
@@ -126,7 +126,7 @@ impl PackageParser for CargoParser {
         let repository_url = package
             .and_then(|p| p.get(FIELD_REPOSITORY))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
         let download_url = None;
 
         let api_data_url = generate_cargo_api_url(&name, &version);
@@ -146,7 +146,7 @@ impl PackageParser for CargoParser {
         let description = package
             .and_then(|p| p.get(FIELD_DESCRIPTION))
             .and_then(|v| v.as_str())
-            .map(|s| s.trim().to_string());
+            .map(|s| truncate_field(s.trim().to_string()));
 
         let keywords = extract_keywords_and_categories(&toml_content);
 
@@ -209,10 +209,8 @@ impl PackageParser for CargoParser {
 
 /// Reads and parses a TOML file
 fn read_cargo_toml(path: &Path) -> Result<Value, String> {
-    let mut file = File::open(path).map_err(|e| format!("Failed to open file: {}", e))?;
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .map_err(|e| format!("Error reading file: {}", e))?;
+    let content =
+        read_file_to_string(path, None).map_err(|e| format!("Failed to read file: {}", e))?;
 
     toml::from_str(&content).map_err(|e| format!("Failed to parse TOML: {}", e))
 }
@@ -256,7 +254,7 @@ fn extract_parties(toml_content: &Value) -> Vec<Party> {
     if let Some(package) = toml_content.get(FIELD_PACKAGE).and_then(|v| v.as_table())
         && let Some(authors) = package.get(FIELD_AUTHORS).and_then(|v| v.as_array())
     {
-        for author in authors {
+        for author in authors.iter().take(MAX_ITERATION_COUNT) {
             if let Some(author_str) = author.as_str() {
                 let (name, email) = split_name_email(author_str);
                 parties.push(Party {
@@ -270,6 +268,13 @@ fn extract_parties(toml_content: &Value) -> Vec<Party> {
                     timezone: None,
                 });
             }
+        }
+        if authors.len() > MAX_ITERATION_COUNT {
+            warn!(
+                "Authors array has {} entries, capping at MAX_ITERATION_COUNT ({})",
+                authors.len(),
+                MAX_ITERATION_COUNT
+            );
         }
     }
 
@@ -316,7 +321,15 @@ fn extract_dependencies(toml_content: &Value, scope: &str) -> Vec<Dependency> {
     let is_runtime = !scope.ends_with("dev-dependencies") && !scope.ends_with("build-dependencies");
 
     if let Some(deps_table) = toml_content.get(scope).and_then(|v| v.as_table()) {
-        for (name, value) in deps_table {
+        if deps_table.len() > MAX_ITERATION_COUNT {
+            warn!(
+                "Dependency table '{}' has {} entries, capping at MAX_ITERATION_COUNT ({})",
+                scope,
+                deps_table.len(),
+                MAX_ITERATION_COUNT
+            );
+        }
+        for (name, value) in deps_table.iter().take(MAX_ITERATION_COUNT) {
             let (extracted_requirement, is_optional, extra_data_map, is_pinned) = match value {
                 Value::String(version_str) => {
                     // Simple string version: "1.0"
@@ -434,20 +447,32 @@ fn extract_keywords_and_categories(toml_content: &Value) -> Vec<String> {
     let mut keywords = Vec::new();
 
     if let Some(package) = toml_content.get(FIELD_PACKAGE).and_then(|v| v.as_table()) {
-        // Extract keywords array
         if let Some(kw_array) = package.get(FIELD_KEYWORDS).and_then(|v| v.as_array()) {
-            for kw in kw_array {
+            if kw_array.len() > MAX_ITERATION_COUNT {
+                warn!(
+                    "Keywords array has {} entries, capping at MAX_ITERATION_COUNT ({})",
+                    kw_array.len(),
+                    MAX_ITERATION_COUNT
+                );
+            }
+            for kw in kw_array.iter().take(MAX_ITERATION_COUNT) {
                 if let Some(kw_str) = kw.as_str() {
-                    keywords.push(kw_str.to_string());
+                    keywords.push(truncate_field(kw_str.to_string()));
                 }
             }
         }
 
-        // Extract categories array and merge with keywords
         if let Some(cat_array) = package.get(FIELD_CATEGORIES).and_then(|v| v.as_array()) {
-            for cat in cat_array {
+            if cat_array.len() > MAX_ITERATION_COUNT {
+                warn!(
+                    "Categories array has {} entries, capping at MAX_ITERATION_COUNT ({})",
+                    cat_array.len(),
+                    MAX_ITERATION_COUNT
+                );
+            }
+            for cat in cat_array.iter().take(MAX_ITERATION_COUNT) {
                 if let Some(cat_str) = cat.as_str() {
-                    keywords.push(cat_str.to_string());
+                    keywords.push(truncate_field(cat_str.to_string()));
                 }
             }
         }
@@ -494,18 +519,28 @@ fn extract_file_references(toml_content: &Value) -> Vec<FileReference> {
     file_references
 }
 
-/// Converts toml::Value to serde_json::Value recursively
-fn toml_to_json(value: &toml::Value) -> serde_json::Value {
+const MAX_TOML_DEPTH: usize = 50;
+
+fn toml_to_json(value: &toml::Value, depth: usize) -> serde_json::Value {
+    if depth > MAX_TOML_DEPTH {
+        warn!(
+            "TOML nesting depth exceeded {}, returning Null",
+            MAX_TOML_DEPTH
+        );
+        return serde_json::Value::Null;
+    }
     match value {
         toml::Value::String(s) => serde_json::json!(s),
         toml::Value::Integer(i) => serde_json::json!(i),
         toml::Value::Float(f) => serde_json::json!(f),
         toml::Value::Boolean(b) => serde_json::json!(b),
-        toml::Value::Array(a) => serde_json::Value::Array(a.iter().map(toml_to_json).collect()),
+        toml::Value::Array(a) => {
+            serde_json::Value::Array(a.iter().map(|v| toml_to_json(v, depth + 1)).collect())
+        }
         toml::Value::Table(t) => {
             let map: serde_json::Map<String, serde_json::Value> = t
                 .iter()
-                .map(|(k, v)| (k.clone(), toml_to_json(v)))
+                .map(|(k, v)| (k.clone(), toml_to_json(v, depth + 1)))
                 .collect();
             serde_json::Value::Object(map)
         }
@@ -521,7 +556,13 @@ fn extract_extra_data(
     let mut extra_data = std::collections::HashMap::new();
 
     if let Some(package) = toml_content.get(FIELD_PACKAGE).and_then(|v| v.as_table()) {
-        // Extract rust-version (or detect workspace inheritance)
+        if package.len() > MAX_ITERATION_COUNT {
+            warn!(
+                "Package table has {} entries, exceeding MAX_ITERATION_COUNT ({})",
+                package.len(),
+                MAX_ITERATION_COUNT
+            );
+        }
         if let Some(rust_version_value) = package.get(FIELD_RUST_VERSION) {
             if let Some(rust_version_str) = rust_version_value.as_str() {
                 extra_data.insert("rust_version".to_string(), json!(rust_version_str));
@@ -569,7 +610,7 @@ fn extract_extra_data(
         }
 
         if let Some(publish_value) = package.get(FIELD_PUBLISH) {
-            extra_data.insert("publish".to_string(), toml_to_json(publish_value));
+            extra_data.insert("publish".to_string(), toml_to_json(publish_value, 0));
         }
 
         // Check for workspace inheritance markers for other fields
@@ -630,7 +671,7 @@ fn extract_extra_data(
 
     // Extract workspace table if it exists
     if let Some(workspace_value) = toml_content.get("workspace") {
-        extra_data.insert("workspace".to_string(), toml_to_json(workspace_value));
+        extra_data.insert("workspace".to_string(), toml_to_json(workspace_value, 0));
     }
 
     if extra_data.is_empty() {

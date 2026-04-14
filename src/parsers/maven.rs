@@ -776,7 +776,7 @@ impl PackageParser for MavenParser {
             }
         }
 
-        let content = match read_file_to_string(path).map_err(|e| e.to_string()) {
+        let content = match read_file_to_string(path, None).map_err(|e| e.to_string()) {
             Ok(content) => content,
             Err(e) => {
                 warn!("Failed to open pom.xml at {:?}: {}", path, e);
@@ -2050,7 +2050,7 @@ fn normalize_maven_license_name(name: &str) -> Option<NormalizedDeclaredLicense>
 
 /// Parse pom.properties file (Java properties format)
 fn parse_pom_properties(path: &Path) -> PackageData {
-    let content = match read_file_to_string(path).map_err(|e| e.to_string()) {
+    let content = match read_file_to_string(path, None).map_err(|e| e.to_string()) {
         Ok(content) => content,
         Err(e) => {
             warn!("Failed to read pom.properties at {:?}: {}", path, e);
@@ -2135,7 +2135,7 @@ fn parse_pom_properties(path: &Path) -> PackageData {
 /// and extracts OSGi-specific metadata including Import-Package and Require-Bundle
 /// dependencies.
 fn parse_manifest_mf(path: &Path) -> PackageData {
-    let content = match read_file_to_string(path).map_err(|e| e.to_string()) {
+    let content = match read_file_to_string(path, None).map_err(|e| e.to_string()) {
         Ok(content) => content,
         Err(e) => {
             warn!("Failed to read MANIFEST.MF at {:?}: {}", path, e);

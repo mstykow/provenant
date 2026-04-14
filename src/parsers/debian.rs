@@ -173,7 +173,7 @@ impl PackageParser for DebianControlParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read debian/control at {:?}: {}", path, e);
@@ -205,7 +205,7 @@ impl PackageParser for DebianInstalledParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read dpkg/status at {:?}: {}", path, e);
@@ -233,7 +233,7 @@ impl PackageParser for DebianDistrolessInstalledParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read distroless status file at {:?}: {}", path, e);
@@ -881,7 +881,7 @@ impl PackageParser for DebianDscParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read .dsc file {:?}: {}", path, e);
@@ -1155,7 +1155,7 @@ impl PackageParser for DebianInstalledListParser {
             }
         };
 
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read .list file {:?}: {}", path, e);
@@ -1201,7 +1201,7 @@ impl PackageParser for DebianInstalledMd5sumsParser {
             }
         };
 
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read .md5sums file {:?}: {}", path, e);
@@ -1313,7 +1313,7 @@ impl PackageParser for DebianCopyrightParser {
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
         let datasource_id = detect_debian_copyright_datasource(path);
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read copyright file {:?}: {}", path, e);
@@ -1933,7 +1933,7 @@ impl PackageParser for DebianControlInExtractedDebParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!(
@@ -1989,7 +1989,7 @@ impl PackageParser for DebianMd5sumInPackageParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read md5sums file {:?}: {}", path, e);

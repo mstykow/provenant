@@ -28,7 +28,13 @@ use crate::models::{
     DatasourceId, Dependency, FileReference, LicenseDetection, PackageData, PackageType, Party,
     Sha1Digest,
 };
-use crate::parsers::utils::{read_file_to_string, split_name_email};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, read_file_to_string, split_name_email, truncate_field,
+};
+
+const MAX_ARCHIVE_SIZE: u64 = 1024 * 1024 * 1024; // 1GB uncompressed
+const MAX_FILE_SIZE: u64 = 50 * 1024 * 1024; // 50MB per entry
+const MAX_COMPRESSION_RATIO: f64 = 100.0; // 100:1 ratio
 
 use super::PackageParser;
 use super::license_normalization::{
@@ -62,7 +68,7 @@ impl PackageParser for AlpineInstalledParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read Alpine installed db {:?}: {}", path, e);
@@ -82,7 +88,7 @@ impl PackageParser for AlpineApkbuildParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read APKBUILD {:?}: {}", path, e);
@@ -102,7 +108,7 @@ fn parse_alpine_installed_db(content: &str) -> Vec<PackageData> {
 
     let mut all_packages = Vec::new();
 
-    for raw_text in &raw_paragraphs {
+    for raw_text in raw_paragraphs.iter().take(MAX_ITERATION_COUNT) {
         let headers = parse_alpine_headers(raw_text);
         let pkg = parse_alpine_package_paragraph(&headers, raw_text);
         if pkg.name.is_some() {
@@ -125,7 +131,7 @@ fn parse_alpine_installed_db(content: &str) -> Vec<PackageData> {
 fn parse_alpine_headers(content: &str) -> HashMap<String, Vec<String>> {
     let mut headers: HashMap<String, Vec<String>> = HashMap::new();
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         if line.is_empty() {
             continue;
         }
@@ -149,7 +155,7 @@ fn get_first(headers: &HashMap<String, Vec<String>>, key: &str) -> Option<String
     headers
         .get(key)
         .and_then(|values| values.first())
-        .map(|v| v.trim().to_string())
+        .map(|v| truncate_field(v.trim().to_string()))
 }
 
 fn get_all(headers: &HashMap<String, Vec<String>>, key: &str) -> Vec<String> {
@@ -202,14 +208,24 @@ fn parse_alpine_package_paragraph(
     } else {
         Vec::new()
     };
-    let vcs_url = get_first(headers, "c")
-        .map(|commit| format!("git+https://git.alpinelinux.org/aports/commit/?id={commit}"));
+    let vcs_url = get_first(headers, "c").map(|commit| {
+        truncate_field(format!(
+            "git+https://git.alpinelinux.org/aports/commit/?id={commit}"
+        ))
+    });
 
     let mut dependencies = Vec::new();
-    for dep in get_all(headers, "D") {
+    let mut dep_count = 0;
+    'dep_loop: for dep in get_all(headers, "D") {
         for dep_str in dep.split_whitespace() {
             if dep_str.starts_with("so:") || dep_str.starts_with("cmd:") {
                 continue;
+            }
+
+            dep_count += 1;
+            if dep_count > MAX_ITERATION_COUNT {
+                warn!("Exceeded MAX_ITERATION_COUNT in dependency parsing, truncating");
+                break 'dep_loop;
             }
 
             dependencies.push(Dependency {
@@ -293,15 +309,15 @@ fn parse_alpine_package_paragraph(
 fn parse_apkbuild(content: &str) -> PackageData {
     let variables = parse_apkbuild_variables(content);
 
-    let name = variables.get("pkgname").cloned();
+    let name = variables.get("pkgname").cloned().map(truncate_field);
     let version = match (variables.get("pkgver"), variables.get("pkgrel")) {
-        (Some(ver), Some(rel)) => Some(format!("{}-r{}", ver, rel)),
-        (Some(ver), None) => Some(ver.clone()),
+        (Some(ver), Some(rel)) => Some(truncate_field(format!("{}-r{}", ver, rel))),
+        (Some(ver), None) => Some(truncate_field(ver.clone())),
         _ => None,
     };
-    let description = variables.get("pkgdesc").cloned();
-    let homepage_url = variables.get("url").cloned();
-    let extracted_license_statement = variables.get("license").cloned();
+    let description = variables.get("pkgdesc").cloned().map(truncate_field);
+    let homepage_url = variables.get("url").cloned().map(truncate_field);
+    let extracted_license_statement = variables.get("license").cloned().map(truncate_field);
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         build_alpine_license_data(extracted_license_statement.as_deref());
 
@@ -369,8 +385,14 @@ fn parse_apkbuild_variables(content: &str) -> HashMap<String, String> {
     let mut raw = HashMap::new();
     let mut lines = content.lines().peekable();
     let mut brace_depth = 0usize;
+    let mut line_count = 0usize;
 
     while let Some(line) = lines.next() {
+        line_count += 1;
+        if line_count > MAX_ITERATION_COUNT {
+            warn!("Exceeded MAX_ITERATION_COUNT in parse_apkbuild_variables, truncating");
+            break;
+        }
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
@@ -392,7 +414,10 @@ fn parse_apkbuild_variables(content: &str) -> HashMap<String, String> {
             while let Some(next) = lines.peek() {
                 value.push('\n');
                 value.push_str(next);
-                let current = lines.next().unwrap();
+                let current = match lines.next() {
+                    Some(l) => l,
+                    None => break,
+                };
                 if current.trim_end().ends_with('"') {
                     break;
                 }
@@ -564,6 +589,7 @@ fn normalize_alpine_license_token(token: &str) -> Option<NormalizedDeclaredLicen
 
 fn parse_apkbuild_dependencies(variables: &HashMap<String, String>) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
+    let mut dep_count = 0;
 
     for (field, scope, is_runtime, is_optional) in [
         ("depends", "depends", true, false),
@@ -581,6 +607,12 @@ fn parse_apkbuild_dependencies(variables: &HashMap<String, String>) -> Vec<Depen
             let dep_str = dep_str.trim();
             if dep_str.is_empty() {
                 continue;
+            }
+
+            dep_count += 1;
+            if dep_count > MAX_ITERATION_COUNT {
+                warn!("Exceeded MAX_ITERATION_COUNT in parse_apkbuild_dependencies, truncating");
+                return dependencies;
             }
 
             let dep_name = dep_str
@@ -614,7 +646,7 @@ fn extract_file_references(raw_text: &str) -> Vec<FileReference> {
     let mut current_dir = String::new();
     let mut current_file: Option<FileReference> = None;
 
-    for line in raw_text.lines() {
+    for line in raw_text.lines().take(MAX_ITERATION_COUNT) {
         if line.is_empty() {
             continue;
         }
@@ -692,7 +724,7 @@ fn extract_file_references(raw_text: &str) -> Vec<FileReference> {
 fn extract_providers(raw_text: &str) -> Vec<String> {
     let mut providers = Vec::new();
 
-    for line in raw_text.lines() {
+    for line in raw_text.lines().take(MAX_ITERATION_COUNT) {
         if line.is_empty() {
             continue;
         }
@@ -761,12 +793,27 @@ fn apk_contains_pkginfo(path: &Path) -> bool {
         Err(_) => return false,
     };
 
+    let archive_size = match std::fs::metadata(path) {
+        Ok(m) => m.len(),
+        Err(_) => return false,
+    };
+
+    if archive_size > MAX_ARCHIVE_SIZE {
+        warn!(
+            "Archive {:?} exceeds MAX_ARCHIVE_SIZE ({} bytes)",
+            path, archive_size
+        );
+        return false;
+    }
+
     let decoder = GzDecoder::new(file);
     let mut archive = tar::Archive::new(decoder);
     let entries = match archive.entries() {
         Ok(entries) => entries,
         Err(_) => return false,
     };
+
+    let mut total_extracted: u64 = 0;
 
     for entry_result in entries {
         let entry = match entry_result {
@@ -777,6 +824,35 @@ fn apk_contains_pkginfo(path: &Path) -> bool {
             Ok(path) => path,
             Err(_) => return false,
         };
+
+        let entry_str = entry_path.to_string_lossy();
+        if entry_str.contains("..") {
+            warn!("Skipping tar entry with path traversal: {}", entry_str);
+            continue;
+        }
+
+        let uncompressed_size = entry.size();
+        if uncompressed_size > MAX_FILE_SIZE {
+            warn!(
+                "Entry {:?} in {:?} exceeds MAX_FILE_SIZE ({} bytes)",
+                entry_path, path, uncompressed_size
+            );
+            continue;
+        }
+
+        if archive_size > 0 {
+            let ratio = uncompressed_size as f64 / archive_size as f64;
+            if ratio > MAX_COMPRESSION_RATIO {
+                warn!("Suspicious compression ratio in {:?}: {:.2}:1", path, ratio);
+                continue;
+            }
+        }
+
+        total_extracted += uncompressed_size;
+        if total_extracted > MAX_ARCHIVE_SIZE {
+            warn!("Total extracted size exceeds limit for {:?}", path);
+            return false;
+        }
 
         if entry_path.ends_with(".PKGINFO") {
             return true;
@@ -792,8 +868,21 @@ fn extract_apk_archive(path: &Path) -> Result<PackageData, String> {
 
     let file = std::fs::File::open(path).map_err(|e| format!("Failed to open .apk file: {}", e))?;
 
+    let archive_size = std::fs::metadata(path)
+        .map_err(|e| format!("Failed to stat .apk file: {}", e))?
+        .len();
+
+    if archive_size > MAX_ARCHIVE_SIZE {
+        return Err(format!(
+            "Archive {:?} is {} bytes, exceeding MAX_ARCHIVE_SIZE ({} bytes)",
+            path, archive_size, MAX_ARCHIVE_SIZE
+        ));
+    }
+
     let decoder = GzDecoder::new(file);
     let mut archive = tar::Archive::new(decoder);
+
+    let mut total_extracted: u64 = 0;
 
     for entry_result in archive
         .entries()
@@ -804,6 +893,34 @@ fn extract_apk_archive(path: &Path) -> Result<PackageData, String> {
         let entry_path = entry
             .path()
             .map_err(|e| format!("Failed to get entry path: {}", e))?;
+
+        let entry_str = entry_path.to_string_lossy();
+        if entry_str.contains("..") {
+            warn!("Skipping tar entry with path traversal: {}", entry_str);
+            continue;
+        }
+
+        let uncompressed_size = entry.size();
+        if uncompressed_size > MAX_FILE_SIZE {
+            warn!(
+                "Entry {:?} in {:?} exceeds MAX_FILE_SIZE ({} bytes)",
+                entry_path, path, uncompressed_size
+            );
+            continue;
+        }
+
+        if archive_size > 0 {
+            let ratio = uncompressed_size as f64 / archive_size as f64;
+            if ratio > MAX_COMPRESSION_RATIO {
+                warn!("Suspicious compression ratio in {:?}: {:.2}:1", path, ratio);
+                continue;
+            }
+        }
+
+        total_extracted += uncompressed_size;
+        if total_extracted > MAX_ARCHIVE_SIZE {
+            return Err(format!("Total extracted size exceeds limit for {:?}", path));
+        }
 
         if entry_path.ends_with(".PKGINFO") {
             let mut content = String::new();
@@ -821,7 +938,7 @@ fn extract_apk_archive(path: &Path) -> Result<PackageData, String> {
 fn parse_pkginfo(content: &str) -> PackageData {
     let mut fields: HashMap<&str, Vec<&str>> = HashMap::new();
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
@@ -835,31 +952,31 @@ fn parse_pkginfo(content: &str) -> PackageData {
     let name = fields
         .get("pkgname")
         .and_then(|v| v.first())
-        .map(|s| s.to_string());
+        .map(|s| truncate_field(s.to_string()));
     let pkgver = fields.get("pkgver").and_then(|v| v.first());
-    let version = pkgver.map(|s| s.to_string());
+    let version = pkgver.map(|s| truncate_field(s.to_string()));
     let arch = fields
         .get("arch")
         .and_then(|v| v.first())
-        .map(|s| s.to_string());
+        .map(|s| truncate_field(s.to_string()));
     let license = fields
         .get("license")
         .and_then(|v| v.first())
-        .map(|s| s.to_string());
+        .map(|s| truncate_field(s.to_string()));
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         build_alpine_license_data(license.as_deref());
     let description = fields
         .get("pkgdesc")
         .and_then(|v| v.first())
-        .map(|s| s.to_string());
+        .map(|s| truncate_field(s.to_string()));
     let homepage = fields
         .get("url")
         .and_then(|v| v.first())
-        .map(|s| s.to_string());
+        .map(|s| truncate_field(s.to_string()));
     let origin = fields
         .get("origin")
         .and_then(|v| v.first())
-        .map(|s| s.to_string());
+        .map(|s| truncate_field(s.to_string()));
     let maintainer_str = fields.get("maintainer").and_then(|v| v.first());
 
     let mut parties = Vec::new();
@@ -883,7 +1000,11 @@ fn parse_pkginfo(content: &str) -> PackageData {
 
     let mut dependencies = Vec::new();
     if let Some(depends_list) = fields.get("depend") {
-        for dep_str in depends_list {
+        for (i, dep_str) in depends_list.iter().enumerate() {
+            if i >= MAX_ITERATION_COUNT {
+                warn!("Exceeded MAX_ITERATION_COUNT in parse_pkginfo dependencies, truncating");
+                break;
+            }
             let dep_name = dep_str.split_whitespace().next().unwrap_or(dep_str);
             dependencies.push(Dependency {
                 purl: Some(format!("pkg:alpine/{}", dep_name)),

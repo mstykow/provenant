@@ -53,7 +53,7 @@ impl PackageParser for ReadmeParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(e) => {
                 warn!("Failed to read README file at {:?}: {}", path, e);
