@@ -8,8 +8,8 @@ mod tests {
     };
     use crate::license_detection::position_set::PositionSet;
     use crate::models::LineNumber;
-    use crate::models::Match as OutputMatch;
     use crate::models::MatchScore;
+    use crate::output_schema::{OutputLicenseDetection, OutputMatch};
     use std::collections::HashMap;
 
     fn create_test_index() -> LicenseIndex {
@@ -597,8 +597,8 @@ mod tests {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: None,
-            start_line: LineNumber::ONE,
-            end_line: LineNumber::ONE,
+            start_line: 1,
+            end_line: 1,
             matcher: Some("1-hash".to_string()),
             score: MatchScore::MAX,
             matched_length: Some(3),
@@ -615,6 +615,48 @@ mod tests {
 
         assert!(json.get("rule_url").is_some());
         assert!(json["rule_url"].is_null());
+    }
+
+    #[test]
+    fn test_output_match_serializes_null_from_file() {
+        let output_match = OutputMatch {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: None,
+            start_line: 1,
+            end_line: 1,
+            matcher: Some("1-hash".to_string()),
+            score: MatchScore::MAX,
+            matched_length: Some(3),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("mit.LICENSE".to_string()),
+            rule_url: None,
+            matched_text: Some("MIT".to_string()),
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        };
+
+        let json = serde_json::to_value(&output_match).unwrap();
+
+        assert!(json.get("from_file").is_some());
+        assert!(json["from_file"].is_null());
+    }
+
+    #[test]
+    fn test_output_license_detection_serializes_null_identifier() {
+        let output_detection = OutputLicenseDetection {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            matches: vec![],
+            detection_log: vec![],
+            identifier: None,
+        };
+
+        let json = serde_json::to_value(&output_detection).unwrap();
+
+        assert!(json.get("identifier").is_some());
+        assert!(json["identifier"].is_null());
     }
 
     #[test]

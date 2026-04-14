@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 pub struct OutputMatch {
     pub license_expression: String,
     pub license_expression_spdx: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub from_file: Option<String>,
     pub start_line: u64,
     pub end_line: u64,
