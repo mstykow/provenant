@@ -26,10 +26,10 @@
 //! - <https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html>
 
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use regex::Regex;
 use yaml_serde::Value;
 
@@ -89,9 +89,9 @@ fn build_conda_package_purl(name: Option<&str>, version: Option<&str>) -> Option
 
 fn yaml_value_to_string(value: &Value) -> Option<String> {
     match value {
-        Value::String(s) => Some(s.clone()),
-        Value::Number(n) => Some(n.to_string()),
-        Value::Bool(b) => Some(b.to_string()),
+        Value::String(s) => Some(truncate_field(s.clone())),
+        Value::Number(n) => Some(truncate_field(n.to_string())),
+        Value::Bool(b) => Some(truncate_field(b.to_string())),
         _ => None,
     }
 }
@@ -125,7 +125,7 @@ fn extract_conda_requirement_name(req: &str) -> Option<String> {
     if name.is_empty() {
         None
     } else {
-        Some(name.to_string())
+        Some(truncate_field(name.to_string()))
     }
 }
 
@@ -146,7 +146,7 @@ impl PackageParser for CondaMetaYamlParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let contents = match fs::read_to_string(path) {
+        let contents = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read {}: {}", path.display(), e);
@@ -180,7 +180,7 @@ impl PackageParser for CondaMetaYamlParser {
         let download_url = source
             .and_then(|s| s.get("url"))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let sha256 = source
             .and_then(|s| s.get("sha256"))
@@ -191,30 +191,30 @@ impl PackageParser for CondaMetaYamlParser {
         let homepage_url = about
             .and_then(|a| a.get("home"))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let extracted_license_statement = about
             .and_then(|a| a.get("license"))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
         let (declared_license_expression, declared_license_expression_spdx, license_detections) =
             normalize_conda_declared_license(extracted_license_statement.as_deref());
 
         let description = about
             .and_then(|a| a.get("summary"))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let vcs_url = about
             .and_then(|a| a.get("dev_url"))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
         let license_file = about
             .and_then(|a| a.get("license_file"))
             .and_then(|v| v.as_str())
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         // Extract dependencies from requirements sections
         let mut dependencies = Vec::new();
@@ -224,7 +224,7 @@ impl PackageParser for CondaMetaYamlParser {
             for (scope_key, reqs_value) in requirements {
                 let scope = scope_key.as_str().unwrap_or("unknown");
                 if let Some(reqs) = reqs_value.as_sequence() {
-                    for req in reqs {
+                    for req in reqs.iter().take(MAX_ITERATION_COUNT) {
                         if let Some(req_str) = req.as_str()
                             && let Some(dep) = parse_conda_requirement(req_str, scope)
                         {
@@ -237,7 +237,9 @@ impl PackageParser for CondaMetaYamlParser {
                                     .or_insert_with(|| serde_json::Value::Array(vec![]))
                                     .as_array_mut()
                                 {
-                                    arr.push(serde_json::Value::String(req_str.to_string()))
+                                    arr.push(serde_json::Value::String(truncate_field(
+                                        req_str.to_string(),
+                                    )))
                                 }
                             } else {
                                 dependencies.push(dep);
@@ -256,10 +258,10 @@ impl PackageParser for CondaMetaYamlParser {
         pkg.purl = build_conda_package_purl(pkg.name.as_deref(), pkg.version.as_deref());
         pkg.download_url = download_url;
         pkg.homepage_url = homepage_url;
-        pkg.declared_license_expression = declared_license_expression;
-        pkg.declared_license_expression_spdx = declared_license_expression_spdx;
+        pkg.declared_license_expression = declared_license_expression.map(truncate_field);
+        pkg.declared_license_expression_spdx = declared_license_expression_spdx.map(truncate_field);
         pkg.license_detections = license_detections;
-        pkg.extracted_license_statement = extracted_license_statement;
+        pkg.extracted_license_statement = extracted_license_statement.map(truncate_field);
         pkg.description = description;
         pkg.vcs_url = vcs_url;
         pkg.sha256 = sha256;
@@ -320,7 +322,7 @@ impl PackageParser for CondaEnvironmentYmlParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let contents = match fs::read_to_string(path) {
+        let contents = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read {}: {}", path.display(), e);
@@ -340,7 +342,10 @@ impl PackageParser for CondaEnvironmentYmlParser {
             return Vec::new();
         }
 
-        let name = yaml.get("name").and_then(|v| v.as_str()).map(String::from);
+        let name = yaml
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(|s| truncate_field(s.to_string()));
 
         let dependencies = extract_environment_dependencies(&yaml);
 
@@ -348,7 +353,7 @@ impl PackageParser for CondaEnvironmentYmlParser {
         if let Some(channels) = yaml.get("channels").and_then(|v| v.as_sequence()) {
             let channels_vec: Vec<String> = channels
                 .iter()
-                .filter_map(|c| c.as_str().map(String::from))
+                .filter_map(|c| c.as_str().map(|s| truncate_field(s.to_string())))
                 .collect();
             if !channels_vec.is_empty() {
                 extra_data.insert("channels".to_string(), serde_json::json!(channels_vec));
@@ -361,7 +366,7 @@ impl PackageParser for CondaEnvironmentYmlParser {
         pkg.datasource_id = Some(DatasourceId::CondaYaml);
         pkg.name = name;
         pkg.purl = build_conda_package_purl(pkg.name.as_deref(), pkg.version.as_deref());
-        pkg.primary_language = Some("Python".to_string());
+        pkg.primary_language = Some(truncate_field("Python".to_string()));
         pkg.dependencies = dependencies;
         pkg.is_private = true;
         if !extra_data.is_empty() {
@@ -398,7 +403,7 @@ fn looks_like_conda_environment_yaml(yaml: &Value) -> bool {
 pub fn extract_jinja2_variables(content: &str) -> HashMap<String, String> {
     let mut variables = HashMap::new();
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let trimmed = line.trim();
         if let Some(inner) = extract_jinja_statement(trimmed)
             && let Some(inner) = inner.strip_prefix("set").map(str::trim)
@@ -406,7 +411,10 @@ pub fn extract_jinja2_variables(content: &str) -> HashMap<String, String> {
         {
             let key = key.trim();
             let value = value.trim().trim_matches('"').trim_matches('\'');
-            variables.insert(key.to_string(), value.to_string());
+            variables.insert(
+                truncate_field(key.to_string()),
+                truncate_field(value.to_string()),
+            );
         }
     }
 
@@ -487,7 +495,7 @@ pub fn parse_conda_requirement(req: &str, scope: &str) -> Option<Dependency> {
             if parsed.is_empty() {
                 None
             } else {
-                Some(parsed.to_string())
+                Some(truncate_field(parsed.to_string()))
             }
         } else {
             None
@@ -496,11 +504,12 @@ pub fn parse_conda_requirement(req: &str, scope: &str) -> Option<Dependency> {
             .as_ref()
             .map(|ver| format!("={}", ver))
             .unwrap_or_default();
-        (n, v, true, Some(req))
+        (n, v, true, Some(truncate_field(req)))
     } else if let Some(constraint) = version_constraint {
-        // Handle space-separated constraints: package >=3.6, package ==1.0
         let version_opt = if constraint.starts_with("==") {
-            Some(constraint.trim_start_matches("==").trim().to_string())
+            Some(truncate_field(
+                constraint.trim_start_matches("==").trim().to_string(),
+            ))
         } else {
             None
         };
@@ -508,7 +517,7 @@ pub fn parse_conda_requirement(req: &str, scope: &str) -> Option<Dependency> {
             name_part.trim(),
             version_opt,
             false,
-            Some(constraint.to_string()),
+            Some(truncate_field(constraint.to_string())),
         )
     } else {
         (name_part.trim(), None, false, Some(String::new()))
@@ -533,16 +542,22 @@ pub fn parse_conda_requirement(req: &str, scope: &str) -> Option<Dependency> {
 
     let mut extra_data = HashMap::new();
     if let Some(namespace) = namespace {
-        extra_data.insert("channel".to_string(), serde_json::json!(namespace));
+        extra_data.insert(
+            "channel".to_string(),
+            serde_json::json!(truncate_field(namespace.to_string())),
+        );
     }
     if let Some(channel_url) = channel_url {
-        extra_data.insert("channel_url".to_string(), serde_json::json!(channel_url));
+        extra_data.insert(
+            "channel_url".to_string(),
+            serde_json::json!(truncate_field(channel_url.to_string())),
+        );
     }
 
     Some(Dependency {
         purl,
         extracted_requirement,
-        scope: Some(scope.to_string()),
+        scope: Some(truncate_field(scope.to_string())),
         is_runtime: Some(is_runtime),
         is_optional: Some(is_optional),
         is_pinned: Some(is_pinned),
@@ -559,7 +574,7 @@ fn extract_environment_dependencies(yaml: &Value) -> Vec<Dependency> {
     };
 
     let mut deps = Vec::new();
-    for dep_value in dependencies {
+    for dep_value in dependencies.iter().take(MAX_ITERATION_COUNT) {
         if let Some(dep_str) = dep_value.as_str() {
             if let Some(dep) = parse_environment_string_dependency(dep_str) {
                 deps.push(dep);
@@ -611,17 +626,21 @@ fn create_conda_dependency(
         let req_no_space = rest.replace(' ', "");
         let is_exact = req_no_space.starts_with("=") || req_no_space.starts_with("==");
         let parsed_version = if is_exact {
-            Some(
+            Some(truncate_field(
                 req_no_space
                     .trim_start_matches('=')
                     .trim_start_matches('=')
                     .to_string(),
-            )
+            ))
         } else {
             None
         };
 
-        (parsed_version, is_exact, Some(rest.to_string()))
+        (
+            parsed_version,
+            is_exact,
+            Some(truncate_field(rest.to_string())),
+        )
     };
 
     if name == "pip" || name == "python" {
@@ -639,16 +658,22 @@ fn create_conda_dependency(
     );
     let mut extra_data = HashMap::new();
     if let Some(namespace) = namespace {
-        extra_data.insert("channel".to_string(), serde_json::json!(namespace));
+        extra_data.insert(
+            "channel".to_string(),
+            serde_json::json!(truncate_field(namespace.to_string())),
+        );
     }
     if let Some(channel_url) = channel_url {
-        extra_data.insert("channel_url".to_string(), serde_json::json!(channel_url));
+        extra_data.insert(
+            "channel_url".to_string(),
+            serde_json::json!(truncate_field(channel_url.to_string())),
+        );
     }
 
     Some(Dependency {
         purl,
         extracted_requirement,
-        scope: Some(scope.to_string()),
+        scope: Some(truncate_field(scope.to_string())),
         is_runtime: Some(true),
         is_optional: Some(false),
         is_pinned: Some(is_pinned),
@@ -678,28 +703,30 @@ fn create_pip_dependency(
     scope: &str,
     raw_requirement: Option<&str>,
 ) -> Option<Dependency> {
-    let name = parsed_req.name.to_string();
+    let name = truncate_field(parsed_req.name.to_string());
 
     if name == "pip" || name == "python" {
         return None;
     }
 
     let specs = parsed_req.version_or_url.as_ref().map(|v| match v {
-        pep508_rs::VersionOrUrl::VersionSpecifier(spec) => spec.to_string(),
-        pep508_rs::VersionOrUrl::Url(url) => url.to_string(),
+        pep508_rs::VersionOrUrl::VersionSpecifier(spec) => truncate_field(spec.to_string()),
+        pep508_rs::VersionOrUrl::Url(url) => truncate_field(url.to_string()),
     });
 
     let extracted_requirement = if let Some(raw) = raw_requirement {
         let raw = raw.trim();
         let suffix = raw.strip_prefix(&name).unwrap_or(raw).trim().to_string();
-        Some(suffix)
+        Some(truncate_field(suffix))
     } else {
-        Some(specs.clone().unwrap_or_default())
+        Some(truncate_field(specs.clone().unwrap_or_default()))
     };
 
     let version = specs.as_ref().and_then(|spec_str| {
         if spec_str.starts_with("==") {
-            Some(spec_str.trim_start_matches("==").to_string())
+            Some(truncate_field(
+                spec_str.trim_start_matches("==").to_string(),
+            ))
         } else {
             None
         }
@@ -711,7 +738,7 @@ fn create_pip_dependency(
     Some(Dependency {
         purl,
         extracted_requirement,
-        scope: Some(scope.to_string()),
+        scope: Some(truncate_field(scope.to_string())),
         is_runtime: Some(true),
         is_optional: Some(false),
         is_pinned: Some(is_pinned),

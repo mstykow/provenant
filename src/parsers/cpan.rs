@@ -21,7 +21,6 @@
 //! - Python reference has stub-only handlers with no parse() method
 //! - This is a BEYOND PARITY implementation - we extract complete metadata
 
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -30,6 +29,7 @@ use serde_json::Value as JsonValue;
 use yaml_serde::Value as YamlValue;
 
 use crate::models::{DatasourceId, Dependency, FileReference, PackageData, PackageType, Party};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 use super::PackageParser;
 use super::license_normalization::{
@@ -76,14 +76,14 @@ impl PackageParser for CpanMetaJsonParser {
         let name = json
             .get(FIELD_NAME)
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let version = extract_version_from_json(&json);
 
         let description = json
             .get(FIELD_ABSTRACT)
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let extracted_license_statement = extract_license_from_json(&json);
         let (declared_license_expression, declared_license_expression_spdx, license_detections) =
@@ -91,6 +91,8 @@ impl PackageParser for CpanMetaJsonParser {
                 json.get(FIELD_LICENSE),
                 extracted_license_statement.as_deref(),
             );
+        let declared_license_expression = declared_license_expression.map(truncate_field);
+        let declared_license_expression_spdx = declared_license_expression_spdx.map(truncate_field);
         let parties = extract_parties_from_json(&json);
         let dependencies = extract_dependencies_from_json(&json);
         let (homepage_url, vcs_url, code_view_url, bug_tracking_url) =
@@ -142,7 +144,7 @@ impl PackageParser for CpanMetaYmlParser {
         let name = yaml
             .get(FIELD_NAME)
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let version = extract_version_from_yaml(&yaml);
 
@@ -150,7 +152,7 @@ impl PackageParser for CpanMetaYmlParser {
             .get(FIELD_ABSTRACT)
             .or_else(|| yaml.get(FIELD_DESCRIPTION))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|s| truncate_field(s.to_string()));
 
         let extracted_license_statement = extract_license_from_yaml(&yaml);
         let (declared_license_expression, declared_license_expression_spdx, license_detections) =
@@ -158,6 +160,8 @@ impl PackageParser for CpanMetaYmlParser {
                 yaml.get(YamlValue::String(FIELD_LICENSE.to_string())),
                 extracted_license_statement.as_deref(),
             );
+        let declared_license_expression = declared_license_expression.map(truncate_field);
+        let declared_license_expression_spdx = declared_license_expression_spdx.map(truncate_field);
         let parties = extract_parties_from_yaml(&yaml);
         let dependencies = extract_dependencies_from_yaml(&yaml);
         let (homepage_url, vcs_url, bug_tracking_url) = extract_resources_from_yaml(&yaml);
@@ -196,7 +200,7 @@ impl PackageParser for CpanManifestParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(e) => {
                 warn!("Failed to read MANIFEST at {:?}: {}", path, e);
@@ -206,13 +210,13 @@ impl PackageParser for CpanManifestParser {
 
         let file_references = content
             .lines()
+            .take(MAX_ITERATION_COUNT)
             .filter(|line| !line.trim().is_empty())
             .filter(|line| !line.trim().starts_with('#'))
             .map(|line| {
-                // MANIFEST can have comments after whitespace
                 let path = line.split_whitespace().next().unwrap_or(line);
                 FileReference {
-                    path: path.to_string(),
+                    path: truncate_field(path.to_string()),
                     size: None,
                     sha1: None,
                     md5: None,
@@ -243,7 +247,8 @@ fn default_package_data(datasource_id: DatasourceId) -> PackageData {
 }
 
 fn read_and_parse_json(path: &Path) -> Result<serde_json::Map<String, JsonValue>, String> {
-    let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let content =
+        read_file_to_string(path, None).map_err(|e| format!("Failed to read file: {}", e))?;
     let json: JsonValue =
         serde_json::from_str(&content).map_err(|e| format!("Failed to parse JSON: {}", e))?;
     json.as_object()
@@ -252,7 +257,8 @@ fn read_and_parse_json(path: &Path) -> Result<serde_json::Map<String, JsonValue>
 }
 
 fn read_and_parse_yaml(path: &Path) -> Result<yaml_serde::Mapping, String> {
-    let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let content =
+        read_file_to_string(path, None).map_err(|e| format!("Failed to read file: {}", e))?;
     let yaml: YamlValue =
         yaml_serde::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
     yaml.as_mapping()
@@ -262,8 +268,8 @@ fn read_and_parse_yaml(path: &Path) -> Result<yaml_serde::Mapping, String> {
 
 fn extract_version_from_json(json: &serde_json::Map<String, JsonValue>) -> Option<String> {
     json.get(FIELD_VERSION).and_then(|v| match v {
-        JsonValue::String(s) => Some(s.clone()),
-        JsonValue::Number(n) => Some(n.to_string()),
+        JsonValue::String(s) => Some(truncate_field(s.clone())),
+        JsonValue::Number(n) => Some(truncate_field(n.to_string())),
         _ => None,
     })
 }
@@ -271,24 +277,25 @@ fn extract_version_from_json(json: &serde_json::Map<String, JsonValue>) -> Optio
 fn extract_version_from_yaml(yaml: &yaml_serde::Mapping) -> Option<String> {
     yaml.get(YamlValue::String(FIELD_VERSION.to_string()))
         .and_then(|v| match v {
-            YamlValue::String(s) => Some(s.clone()),
-            YamlValue::Number(n) => Some(n.to_string()),
+            YamlValue::String(s) => Some(truncate_field(s.clone())),
+            YamlValue::Number(n) => Some(truncate_field(n.to_string())),
             _ => None,
         })
 }
 
 fn extract_license_from_json(json: &serde_json::Map<String, JsonValue>) -> Option<String> {
     json.get(FIELD_LICENSE).and_then(|v| match v {
-        JsonValue::String(s) => Some(s.clone()),
+        JsonValue::String(s) => Some(truncate_field(s.clone())),
         JsonValue::Array(arr) => {
             let licenses: Vec<String> = arr
                 .iter()
-                .filter_map(|item| item.as_str().map(String::from))
+                .take(MAX_ITERATION_COUNT)
+                .filter_map(|item| item.as_str().map(|s| truncate_field(s.to_string())))
                 .collect();
             if licenses.is_empty() {
                 None
             } else {
-                Some(licenses.join(" AND "))
+                Some(truncate_field(licenses.join(" AND ")))
             }
         }
         _ => None,
@@ -298,16 +305,17 @@ fn extract_license_from_json(json: &serde_json::Map<String, JsonValue>) -> Optio
 fn extract_license_from_yaml(yaml: &yaml_serde::Mapping) -> Option<String> {
     yaml.get(YamlValue::String(FIELD_LICENSE.to_string()))
         .and_then(|v| match v {
-            YamlValue::String(s) => Some(s.clone()),
+            YamlValue::String(s) => Some(truncate_field(s.clone())),
             YamlValue::Sequence(arr) => {
                 let licenses: Vec<String> = arr
                     .iter()
-                    .filter_map(|item| item.as_str().map(String::from))
+                    .take(MAX_ITERATION_COUNT)
+                    .filter_map(|item| item.as_str().map(|s| truncate_field(s.to_string())))
                     .collect();
                 if licenses.is_empty() {
                     None
                 } else {
-                    Some(licenses.join(" AND "))
+                    Some(truncate_field(licenses.join(" AND ")))
                 }
             }
             _ => None,
@@ -352,13 +360,14 @@ trait LicenseValueAdapter {
 impl LicenseValueAdapter for JsonValue {
     fn license_values(&self) -> Vec<String> {
         match self {
-            JsonValue::String(value) => vec![value.trim().to_string()],
+            JsonValue::String(value) => vec![truncate_field(value.trim().to_string())],
             JsonValue::Array(values) => values
                 .iter()
+                .take(MAX_ITERATION_COUNT)
                 .filter_map(|value| value.as_str())
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
-                .map(ToOwned::to_owned)
+                .map(|s| truncate_field(s.to_string()))
                 .collect(),
             _ => Vec::new(),
         }
@@ -368,13 +377,14 @@ impl LicenseValueAdapter for JsonValue {
 impl LicenseValueAdapter for YamlValue {
     fn license_values(&self) -> Vec<String> {
         match self {
-            YamlValue::String(value) => vec![value.trim().to_string()],
+            YamlValue::String(value) => vec![truncate_field(value.trim().to_string())],
             YamlValue::Sequence(values) => values
                 .iter()
+                .take(MAX_ITERATION_COUNT)
                 .filter_map(|value| value.as_str())
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
-                .map(ToOwned::to_owned)
+                .map(|s| truncate_field(s.to_string()))
                 .collect(),
             _ => Vec::new(),
         }
@@ -402,6 +412,7 @@ fn extract_parties_from_json(json: &serde_json::Map<String, JsonValue>) -> Vec<P
         .map_or_else(Vec::new, |authors| {
             authors
                 .iter()
+                .take(MAX_ITERATION_COUNT)
                 .filter_map(|author| {
                     author.as_str().map(|s| {
                         let (name, email) = parse_author_string(s);
@@ -427,6 +438,7 @@ fn extract_parties_from_yaml(yaml: &yaml_serde::Mapping) -> Vec<Party> {
         .map_or_else(Vec::new, |authors| {
             authors
                 .iter()
+                .take(MAX_ITERATION_COUNT)
                 .filter_map(|author| {
                     author.as_str().map(|s| {
                         let (name, email) = parse_author_string(s);
@@ -447,7 +459,6 @@ fn extract_parties_from_yaml(yaml: &yaml_serde::Mapping) -> Vec<Party> {
 }
 
 fn parse_author_string(author_str: &str) -> (Option<String>, Option<String>) {
-    // Parse "Name <email@example.com>" format
     if let Some(email_start) = author_str.find('<')
         && let Some(email_end) = author_str.find('>')
         && email_start < email_end
@@ -458,17 +469,24 @@ fn parse_author_string(author_str: &str) -> (Option<String>, Option<String>) {
             if name.is_empty() {
                 None
             } else {
-                Some(name.to_string())
+                Some(truncate_field(name.to_string()))
             },
             if email.is_empty() {
                 None
             } else {
-                Some(email.to_string())
+                Some(truncate_field(email.to_string()))
             },
         );
     }
-    // No email found, treat entire string as name
-    (Some(author_str.trim().to_string()), None)
+    let trimmed = author_str.trim();
+    (
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(truncate_field(trimmed.to_string()))
+        },
+        None,
+    )
 }
 
 fn extract_resources_from_json(
@@ -487,22 +505,32 @@ fn extract_resources_from_json(
     let homepage_url = resources
         .get("homepage")
         .and_then(|v| v.as_str())
-        .map(String::from);
+        .map(|s| truncate_field(s.to_string()));
 
     let vcs_url = resources.get("repository").and_then(|v| match v {
-        JsonValue::String(s) => Some(s.clone()),
-        JsonValue::Object(obj) => obj.get("url").and_then(|u| u.as_str()).map(String::from),
+        JsonValue::String(s) => Some(truncate_field(s.clone())),
+        JsonValue::Object(obj) => obj
+            .get("url")
+            .and_then(|u| u.as_str())
+            .map(|s| truncate_field(s.to_string())),
         _ => None,
     });
 
     let code_view_url = resources
         .get("repository")
         .and_then(|v| v.as_object())
-        .and_then(|obj| obj.get("web").and_then(|u| u.as_str()).map(String::from));
+        .and_then(|obj| {
+            obj.get("web")
+                .and_then(|u| u.as_str())
+                .map(|s| truncate_field(s.to_string()))
+        });
 
     let bug_tracking_url = resources.get("bugtracker").and_then(|v| match v {
-        JsonValue::String(s) => Some(s.clone()),
-        JsonValue::Object(obj) => obj.get("web").and_then(|u| u.as_str()).map(String::from),
+        JsonValue::String(s) => Some(truncate_field(s.clone())),
+        JsonValue::Object(obj) => obj
+            .get("web")
+            .and_then(|u| u.as_str())
+            .map(|s| truncate_field(s.to_string())),
         _ => None,
     });
 
@@ -523,17 +551,17 @@ fn extract_resources_from_yaml(
     let homepage_url = resources
         .get(YamlValue::String("homepage".to_string()))
         .and_then(|v| v.as_str())
-        .map(String::from);
+        .map(|s| truncate_field(s.to_string()));
 
     let vcs_url = resources
         .get(YamlValue::String("repository".to_string()))
         .and_then(|v| v.as_str())
-        .map(String::from);
+        .map(|s| truncate_field(s.to_string()));
 
     let bug_tracking_url = resources
         .get(YamlValue::String("bugtracker".to_string()))
         .and_then(|v| v.as_str())
-        .map(String::from);
+        .map(|s| truncate_field(s.to_string()));
 
     (homepage_url, vcs_url, bug_tracking_url)
 }
@@ -641,24 +669,25 @@ fn extract_dependency_group(
     is_optional: bool,
 ) -> Vec<Dependency> {
     deps.iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|(name, version)| {
-            // Skip perl itself as it's not a CPAN module
             if name == "perl" {
                 return None;
             }
 
             let purl = PackageUrl::new("cpan", name).ok().map(|p| p.to_string());
+            let purl = purl.map(truncate_field);
 
             let extracted_requirement = match version {
-                JsonValue::String(s) => Some(s.clone()),
-                JsonValue::Number(n) => Some(n.to_string()),
+                JsonValue::String(s) => Some(truncate_field(s.clone())),
+                JsonValue::Number(n) => Some(truncate_field(n.to_string())),
                 _ => None,
             };
 
             Some(Dependency {
                 purl,
                 extracted_requirement,
-                scope: Some(scope.to_string()),
+                scope: Some(truncate_field(scope.to_string())),
                 is_runtime: Some(is_runtime),
                 is_optional: Some(is_optional),
                 is_pinned: None,
@@ -677,26 +706,27 @@ fn extract_yaml_dependency_group(
     is_optional: bool,
 ) -> Vec<Dependency> {
     deps.iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|(key, value)| {
             let name = key.as_str()?;
 
-            // Skip perl itself as it's not a CPAN module
             if name == "perl" {
                 return None;
             }
 
             let purl = PackageUrl::new("cpan", name).ok().map(|p| p.to_string());
+            let purl = purl.map(truncate_field);
 
             let extracted_requirement = match value {
-                YamlValue::String(s) => Some(s.clone()),
-                YamlValue::Number(n) => Some(n.to_string()),
+                YamlValue::String(s) => Some(truncate_field(s.clone())),
+                YamlValue::Number(n) => Some(truncate_field(n.to_string())),
                 _ => None,
             };
 
             Some(Dependency {
                 purl,
                 extracted_requirement,
-                scope: Some(scope.to_string()),
+                scope: Some(truncate_field(scope.to_string())),
                 is_runtime: Some(is_runtime),
                 is_optional: Some(is_optional),
                 is_pinned: None,

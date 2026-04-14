@@ -2,7 +2,7 @@
 
 **File**: `src/parsers/gitmodules.rs`
 **Date**: 2026-04-14
-**Status**: PARTIAL
+**Status**: DONE
 
 ## Principle 1: No Code Execution
 
@@ -97,3 +97,12 @@ No subprocess calls found.
 
 1. Add `fs::metadata().len()` check before reading, reject >100MB
 2. Add iteration cap (100K) on line parsing
+
+## Remediation
+
+| #   | Finding           | Fix                                                                             |
+| --- | ----------------- | ------------------------------------------------------------------------------- |
+| 1   | P2: File Size     | Already covered by `read_file_to_string` which enforces 100MB size limit        |
+| 2   | P2: Iteration     | Added `MAX_ITERATION_COUNT` caps on 2 sites (line parsing, submodule iteration) |
+| 3   | P2: String Length | Applied `truncate_field` on all output strings                                  |
+| 4   | P4: UTF-8         | Already covered by `read_file_to_string` which provides lossy UTF-8 fallback    |
