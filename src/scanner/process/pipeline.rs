@@ -361,6 +361,7 @@ fn cap_non_source_json_license_text<'a>(
 ) -> Cow<'a, str> {
     if classification.is_source
         || crate::utils::sourcemap::is_sourcemap(path)
+        || is_npm_lockfile(path)
         || !is_json_like_text(classification, path)
         || text.len() <= LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES
     {
@@ -380,6 +381,20 @@ fn is_json_like_text(classification: &FileInfoClassification, path: &Path) -> bo
             .extension()
             .and_then(|ext| ext.to_str())
             .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
+}
+
+fn is_npm_lockfile(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            matches!(
+                name,
+                "package-lock.json"
+                    | ".package-lock.json"
+                    | "npm-shrinkwrap.json"
+                    | ".npm-shrinkwrap.json"
+            )
+        })
 }
 
 fn truncate_at_char_boundary(text: &str, max_bytes: usize) -> &str {
