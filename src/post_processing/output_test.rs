@@ -1331,6 +1331,161 @@ fn apply_package_reference_following_falls_back_to_root_when_package_missing() {
 }
 
 #[test]
+fn apply_package_reference_following_prefers_nearest_ancestor_license_file() {
+    let mut repo_root_license = file("project/LICENSE");
+    repo_root_license.license_expression = Some("mit".to_string());
+    repo_root_license.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: Some("project/LICENSE".to_string()),
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(10).unwrap(),
+            matcher: Some("1-hash".to_string()),
+            score: MatchScore::MAX,
+            matched_length: Some(50),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("mit.LICENSE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("mit-root".to_string()),
+    }];
+
+    let mut nested_license = file("project/java/LICENSE");
+    nested_license.license_expression = Some("apache-2.0".to_string());
+    nested_license.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "apache-2.0".to_string(),
+        license_expression_spdx: "Apache-2.0".to_string(),
+        matches: vec![Match {
+            license_expression: "apache-2.0".to_string(),
+            license_expression_spdx: "Apache-2.0".to_string(),
+            from_file: Some("project/java/LICENSE".to_string()),
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(17).unwrap(),
+            matcher: Some("1-hash".to_string()),
+            score: MatchScore::MAX,
+            matched_length: Some(120),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("apache-2.0.LICENSE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("apache-java".to_string()),
+    }];
+
+    let mut source = file("project/java/src/com/example/Callback.java");
+    source.license_expression = Some("mit".to_string());
+    source.license_detections = vec![
+        crate::models::LicenseDetection {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            matches: vec![Match {
+                license_expression: "mit".to_string(),
+                license_expression_spdx: "MIT".to_string(),
+                from_file: Some("project/java/src/com/example/Callback.java".to_string()),
+                start_line: LineNumber::new(4).unwrap(),
+                end_line: LineNumber::new(5).unwrap(),
+                matcher: Some("2-aho".to_string()),
+                score: MatchScore::MAX,
+                matched_length: Some(22),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: Some("mit_101.RULE".to_string()),
+                rule_url: None,
+                matched_text: Some("licensed under the MIT license".to_string()),
+                referenced_filenames: Some(vec!["LICENSE".to_string()]),
+                matched_text_diagnostics: None,
+            }],
+            detection_log: vec![],
+            identifier: Some("source-mit".to_string()),
+        },
+        crate::models::LicenseDetection {
+            license_expression: "apache-2.0".to_string(),
+            license_expression_spdx: "Apache-2.0".to_string(),
+            matches: vec![Match {
+                license_expression: "apache-2.0".to_string(),
+                license_expression_spdx: "Apache-2.0".to_string(),
+                from_file: Some("project/java/src/com/example/Callback.java".to_string()),
+                start_line: LineNumber::new(12).unwrap(),
+                end_line: LineNumber::new(22).unwrap(),
+                matcher: Some("2-aho".to_string()),
+                score: MatchScore::MAX,
+                matched_length: Some(85),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: Some("apache-2.0_7.RULE".to_string()),
+                rule_url: None,
+                matched_text: None,
+                referenced_filenames: None,
+                matched_text_diagnostics: None,
+            }],
+            detection_log: vec![],
+            identifier: Some("source-apache".to_string()),
+        },
+    ];
+
+    let mut files = vec![
+        dir("project"),
+        dir("project/java"),
+        dir("project/java/src"),
+        dir("project/java/src/com"),
+        dir("project/java/src/com/example"),
+        repo_root_license,
+        nested_license,
+        source,
+    ];
+    let mut packages = Vec::new();
+
+    let snapshot = super::build_reference_follow_snapshot(&files, &packages);
+    let resolved = super::resolve_referenced_resource(
+        "LICENSE",
+        "project/java/src/com/example/Callback.java",
+        &[],
+        &snapshot,
+    )
+    .expect("nearest ancestor LICENSE should resolve");
+    assert_eq!(resolved.path, "project/java/LICENSE");
+
+    apply_package_reference_following(&mut files, &mut packages);
+
+    let source = files
+        .iter()
+        .find(|file| file.path == "project/java/src/com/example/Callback.java")
+        .expect("source file should exist");
+    assert_eq!(
+        source.license_expression.as_deref(),
+        Some("mit AND apache-2.0")
+    );
+    assert_eq!(source.license_detections.len(), 2);
+    let combined = source
+        .license_detections
+        .iter()
+        .find(|detection| detection.license_expression_spdx == "MIT AND Apache-2.0")
+        .expect("combined followed detection should exist");
+    assert_eq!(combined.detection_log, ["unknown-reference-to-local-file"]);
+    assert!(
+        source
+            .license_detections
+            .iter()
+            .any(|detection| detection.license_expression_spdx == "Apache-2.0")
+    );
+    assert!(combined.matches.iter().any(|detection_match| {
+        detection_match.from_file.as_deref() == Some("project/java/LICENSE")
+    }));
+}
+
+#[test]
 fn apply_package_reference_following_falls_back_past_nested_root_to_repo_root() {
     let mut root_license = file("LICENSE");
     root_license.license_expression = Some("mit".to_string());
