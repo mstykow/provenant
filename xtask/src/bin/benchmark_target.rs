@@ -407,12 +407,7 @@ fn run_case(
     args.push(output_file.display().to_string());
     args.push("--no-license-index-cache".to_string());
     args.extend(context.scan_args.clone());
-    args.extend([
-        "--exclude".to_string(),
-        "*.git*".to_string(),
-        "--exclude".to_string(),
-        "target/*".to_string(),
-    ]);
+    args.extend(["--exclude".to_string(), "target/*".to_string()]);
     args.extend(extra_args.iter().map(|value| value.to_string()));
     args.push(".".to_string());
     let combined = run_and_capture(
