@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
+use rkyv::Archive;
 use serde::{Deserialize, Serialize};
 
 use crate::license_detection::index::dictionary::TokenId;
@@ -62,8 +63,22 @@ mod stopwords_serde {
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Default,
+    Serialize,
+    Deserialize,
+    Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
+#[rkyv(derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord))]
 pub enum RuleKind {
     #[default]
     None,
@@ -132,7 +147,9 @@ impl RuleKind {
 }
 
 /// Rule metadata loaded from .LICENSE and .RULE files.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub struct Rule {
     /// Unique identifier for this rule (e.g., "mit.LICENSE", "gpl-2.0_12.RULE")
     /// Used for sorting to match Python's attr.s field order.

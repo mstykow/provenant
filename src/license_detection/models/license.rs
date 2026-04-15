@@ -1,9 +1,20 @@
 //! License metadata loaded from .LICENSE files.
 
+use rkyv::Archive;
 use serde::{Deserialize, Serialize};
 
 /// License metadata loaded from .LICENSE files.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Default,
+    Serialize,
+    Deserialize,
+    Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub struct License {
     pub key: String,
     pub short_name: Option<String>,
