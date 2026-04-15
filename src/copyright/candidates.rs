@@ -277,6 +277,18 @@ fn is_tabular_noise_line(line: &str) -> bool {
     false
 }
 
+fn is_noncopyright_at_directive_line(prepared: &str) -> bool {
+    let trimmed = prepared.trim_start();
+    let mut chars = trimmed.chars();
+    let starts_with_lowercase_directive =
+        matches!(chars.next(), Some('@')) && chars.next().is_some_and(|c| c.is_ascii_lowercase());
+
+    starts_with_lowercase_directive
+        && !hints::has_year(trimmed)
+        && !trimmed.contains("://")
+        && !has_copyright_indicators(trimmed)
+}
+
 /// A numbered line: (1-based line number, prepared text).
 pub type NumberedLine = (usize, String);
 
@@ -405,6 +417,16 @@ where
             }
 
             let prepared = prepare_text_line(line);
+            if is_noncopyright_at_directive_line(&prepared) {
+                if !candidates.is_empty() {
+                    groups.push(std::mem::take(&mut candidates));
+                }
+                in_copyright = 0;
+                previous_chars = None;
+                prev_prepared_is_copy_start_with_year = false;
+                continue;
+            }
+
             let prepared_chars = chars_only(&prepared);
 
             let prepared_is_copy_start_with_year = is_copy_marker_start(prepared.trim_start());
@@ -477,6 +499,16 @@ where
             let prepared = prepare_text_line(line);
             let trimmed = prepared.trim_start();
             let lower = trimmed.to_ascii_lowercase();
+
+            if is_noncopyright_at_directive_line(trimmed) {
+                if !candidates.is_empty() {
+                    groups.push(std::mem::take(&mut candidates));
+                }
+                in_copyright = 0;
+                previous_chars = None;
+                prev_prepared_is_copy_start_with_year = false;
+                continue;
+            }
 
             let is_author_header = (lower == "authors"
                 || lower.starts_with("authors:")
@@ -928,6 +960,41 @@ mod tests {
         // line 3 is end-of-statement → yields group.
         assert_eq!(groups.len(), 1, "groups: {groups:?}");
         assert_eq!(groups[0].len(), 3);
+    }
+
+    #[test]
+    fn test_noncopyright_at_directive_line_detection() {
+        assert!(is_noncopyright_at_directive_line(
+            "@lint-ignore-every FBOBJCIMPORTORDER1 METHOD_BRACKETSMETHOD_BRACKETS"
+        ));
+        assert!(!is_noncopyright_at_directive_line("@author Jane Doe"));
+        assert!(!is_noncopyright_at_directive_line(
+            "@copyright 2024 Example Corp."
+        ));
+        assert!(!is_noncopyright_at_directive_line("@History:"));
+    }
+
+    #[test]
+    fn test_collect_breaks_before_noncopyright_at_directive_line() {
+        let lines = vec![
+            (
+                1,
+                "// (c) Example Corp. and affiliates. Confidential and proprietary.".to_string(),
+            ),
+            (
+                2,
+                "// @lint-ignore-every FBOBJCIMPORTORDER1 METHOD_BRACKETSMETHOD_BRACKETS"
+                    .to_string(),
+            ),
+        ];
+
+        let groups = collect_candidate_lines(lines);
+        assert_eq!(groups.len(), 1, "groups: {groups:?}");
+        assert_eq!(groups[0].len(), 1, "groups: {groups:?}");
+        assert_eq!(
+            groups[0][0].1,
+            "(c) Example Corp. and affiliates. Confidential and proprietary."
+        );
     }
 
     #[test]
