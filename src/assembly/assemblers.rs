@@ -6,15 +6,16 @@ use strum::EnumIter;
 
 use super::{
     AssemblerConfig, AssemblyMode, DirectoryMergeOutput, bazel_merge, bazel_prune,
-    cargo_resource_assign, composer_resource_assign, conda_rootfs_merge, file_ref_resolve,
-    hackage_merge, nix_flake_compat_merge, npm_resource_assign, nuget_cpm_resolve,
-    python_requirements_assign, ruby_resource_assign, swift_merge, topology,
+    cargo_resource_assign, composer_resource_assign, conda_rootfs_merge, debian_source_merge,
+    file_ref_resolve, hackage_merge, nix_flake_compat_merge, npm_resource_assign,
+    nuget_cpm_resolve, python_requirements_assign, ruby_resource_assign, swift_merge, topology,
 };
 
 #[derive(Clone, Copy)]
 pub(super) enum SpecialDirectoryMergerKind {
     Skip,
     Bazel,
+    DebianSource,
     Hackage,
 }
 
@@ -41,6 +42,7 @@ pub(super) fn special_directory_merger_for(
 ) -> Option<SpecialDirectoryMergerKind> {
     match config_key {
         DatasourceId::BazelBuild => Some(SpecialDirectoryMergerKind::Bazel),
+        DatasourceId::DebianControlInSource => Some(SpecialDirectoryMergerKind::DebianSource),
         DatasourceId::HackageCabal => Some(SpecialDirectoryMergerKind::Hackage),
         DatasourceId::SwiftPackageManifestJson => Some(SpecialDirectoryMergerKind::Skip),
         _ => None,
@@ -188,6 +190,9 @@ impl SpecialDirectoryMergerKind {
         match self {
             Self::Skip => Vec::new(),
             Self::Bazel => bazel_merge::assemble_bazel_packages(config, files, file_indices),
+            Self::DebianSource => {
+                debian_source_merge::assemble_debian_source_packages(config, files, file_indices)
+            }
             Self::Hackage => hackage_merge::assemble_hackage_packages(files, file_indices),
         }
     }
@@ -578,7 +583,7 @@ pub static ASSEMBLERS: &[AssemblerConfig] = &[
             DatasourceId::DebianControlInSource,
             DatasourceId::DebianCopyrightInSource,
         ],
-        sibling_file_patterns: &["**/debian/control", "**/debian/copyright"],
+        sibling_file_patterns: &["control", "copyright"],
         mode: AssemblyMode::SiblingMerge,
     },
     // Gradle/Android ecosystem
@@ -791,6 +796,11 @@ pub static ASSEMBLERS: &[AssemblerConfig] = &[
         mode: AssemblyMode::SiblingMerge,
     },
     AssemblerConfig {
+        datasource_ids: &[DatasourceId::DebianSourceControlDsc],
+        sibling_file_patterns: &["*.dsc"],
+        mode: AssemblyMode::OnePerPackageData,
+    },
+    AssemblerConfig {
         datasource_ids: &[DatasourceId::AboutFile],
         sibling_file_patterns: &["*.ABOUT"],
         mode: AssemblyMode::OnePerPackageData,
@@ -843,7 +853,6 @@ pub static UNASSEMBLED_DATASOURCE_IDS: &[DatasourceId] = &[
     DatasourceId::DebianCopyrightStandalone,
     DatasourceId::GoBinary,
     DatasourceId::WindowsExecutable,
-    DatasourceId::DebianSourceControlDsc,
     DatasourceId::Dockerfile,
     DatasourceId::HexMixLock,
     DatasourceId::JavaEarApplicationXml,

@@ -103,6 +103,111 @@ mod tests {
     }
 
     #[test]
+    fn test_debian_source_scan_promotes_each_binary_paragraph_to_top_level_package() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        let debian_dir = temp_dir.path().join("debian");
+        std::fs::create_dir_all(&debian_dir).unwrap();
+
+        std::fs::write(
+            debian_dir.join("control"),
+            "Source: samplepkg\nSection: utils\nPriority: optional\nMaintainer: Example Maintainer <maintainer@example.com>\nHomepage: https://example.test/samplepkg\n\nPackage: samplepkg\nArchitecture: amd64\nDepends: libc6 (>= 2.31)\nDescription: sample Debian package\n sample package\n\nPackage: samplepkg-data\nArchitecture: all\nDepends: samplepkg\nDescription: sample Debian data package\n data package\n",
+        )
+        .unwrap();
+        std::fs::write(
+            debian_dir.join("copyright"),
+            "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\n\nFiles: *\nCopyright: 2024 Example Maintainer\nLicense: MIT\n",
+        )
+        .unwrap();
+
+        let (files, result) = scan_and_assemble(temp_dir.path());
+
+        let samplepkg = result
+            .packages
+            .iter()
+            .find(|package| package.name.as_deref() == Some("samplepkg"))
+            .expect("binary stanza package should be promoted");
+        let samplepkg_data = result
+            .packages
+            .iter()
+            .find(|package| package.name.as_deref() == Some("samplepkg-data"))
+            .expect("second binary stanza package should be promoted");
+
+        assert!(
+            samplepkg
+                .datasource_ids
+                .contains(&DatasourceId::DebianControlInSource)
+        );
+        assert!(
+            samplepkg
+                .datasource_ids
+                .contains(&DatasourceId::DebianCopyrightInSource)
+        );
+        assert!(
+            samplepkg_data
+                .datasource_ids
+                .contains(&DatasourceId::DebianControlInSource)
+        );
+        assert!(
+            samplepkg_data
+                .datasource_ids
+                .contains(&DatasourceId::DebianCopyrightInSource)
+        );
+
+        let control_file = files
+            .iter()
+            .find(|file| file.path.ends_with("/debian/control"))
+            .unwrap();
+        let copyright_file = files
+            .iter()
+            .find(|file| file.path.ends_with("/debian/copyright"))
+            .unwrap();
+
+        assert!(control_file.for_packages.contains(&samplepkg.package_uid));
+        assert!(
+            control_file
+                .for_packages
+                .contains(&samplepkg_data.package_uid)
+        );
+        assert!(copyright_file.for_packages.contains(&samplepkg.package_uid));
+        assert!(
+            copyright_file
+                .for_packages
+                .contains(&samplepkg_data.package_uid)
+        );
+    }
+
+    #[test]
+    fn test_debian_dsc_scan_promotes_top_level_package() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        let dsc_path = temp_dir.path().join("samplepkg_1.0-1.dsc");
+
+        std::fs::write(
+            &dsc_path,
+            "Format: 3.0 (quilt)\nSource: samplepkg\nBinary: samplepkg\nArchitecture: all\nVersion: 1.0-1\nMaintainer: Example Maintainer <maintainer@example.com>\nDescription: sample Debian source package\nHomepage: https://example.test/samplepkg\n",
+        )
+        .unwrap();
+
+        let (_files, result) = scan_and_assemble(temp_dir.path());
+
+        let package = result
+            .packages
+            .iter()
+            .find(|package| package.name.as_deref() == Some("samplepkg"))
+            .expect(".dsc package should be promoted to top-level package");
+
+        assert!(
+            package
+                .datasource_ids
+                .contains(&DatasourceId::DebianSourceControlDsc)
+        );
+        assert_eq!(package.version.as_deref(), Some("1.0-1"));
+        assert_eq!(
+            package.purl.as_deref(),
+            Some("pkg:deb/debian/samplepkg@1.0-1?arch=all")
+        );
+    }
+
+    #[test]
     fn test_debian_extracted_deb_scan_assigns_md5sum_file_references() {
         let temp_dir = tempfile::TempDir::new().expect("create temp dir");
         let control_dir = temp_dir
