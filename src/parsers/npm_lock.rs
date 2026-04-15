@@ -24,7 +24,8 @@ use crate::models::{
 };
 use crate::parser_warn as warn;
 use crate::parsers::utils::{
-    MAX_ITERATION_COUNT, npm_purl, parse_sri, read_file_to_string, truncate_field,
+    MAX_ITERATION_COUNT, MAX_RECURSION_DEPTH, RecursionGuard, npm_purl, parse_sri,
+    read_file_to_string, truncate_field,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -44,7 +45,6 @@ const FIELD_DEV: &str = "dev";
 const FIELD_OPTIONAL: &str = "optional";
 const FIELD_DEV_OPTIONAL: &str = "devOptional";
 const FIELD_LINK: &str = "link";
-const MAX_RECURSION_DEPTH: usize = 50;
 
 /// npm lockfile parser supporting package-lock.json v1, v2, and v3 formats.
 ///
@@ -365,15 +365,16 @@ fn parse_lockfile_v1(
 /// For v1 lockfiles, root dependencies are at nesting level 0 (direct children of the root
 /// "dependencies" object). Transitive dependencies are nested within parent dependencies.
 fn parse_dependencies_v1(dependencies_obj: &serde_json::Map<String, Value>) -> Vec<Dependency> {
-    parse_dependencies_v1_with_depth(dependencies_obj, 0)
+    let mut guard = RecursionGuard::<()>::depth_only();
+    parse_dependencies_v1_with_depth(dependencies_obj, &mut guard)
 }
 
 /// Recursively parse v1 dependencies with depth tracking
 fn parse_dependencies_v1_with_depth(
     dependencies_obj: &serde_json::Map<String, Value>,
-    depth: usize,
+    guard: &mut RecursionGuard<()>,
 ) -> Vec<Dependency> {
-    if depth >= MAX_RECURSION_DEPTH {
+    if guard.descend() {
         warn!(
             "Max recursion depth {} exceeded in v1 dependency parsing",
             MAX_RECURSION_DEPTH
@@ -412,10 +413,10 @@ fn parse_dependencies_v1_with_depth(
         let nested_deps = dep_data
             .get(FIELD_DEPENDENCIES)
             .and_then(|v| v.as_object())
-            .map(|nested| parse_dependencies_v1_with_depth(nested, depth + 1))
+            .map(|nested| parse_dependencies_v1_with_depth(nested, guard))
             .unwrap_or_default();
 
-        let is_direct = depth == 0;
+        let is_direct = guard.depth() == 1;
 
         let dependency = build_npm_dependency(
             package_name,
@@ -434,6 +435,7 @@ fn parse_dependencies_v1_with_depth(
         dependencies.push(dependency);
     }
 
+    guard.ascend();
     dependencies
 }
 

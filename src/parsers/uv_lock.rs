@@ -11,11 +11,9 @@ use crate::models::{
     DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha256Digest,
 };
 use crate::parsers::python::read_toml_file;
-use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, RecursionGuard, truncate_field};
 
 use super::PackageParser;
-
-const MAX_RECURSION_DEPTH: usize = 50;
 
 const FIELD_PACKAGE: &str = "package";
 const FIELD_NAME: &str = "name";
@@ -930,19 +928,16 @@ fn build_manual_pypi_purl(name: &str, version: Option<&str>) -> String {
 }
 
 fn toml_value_to_json(value: &TomlValue) -> JsonValue {
-    toml_value_to_json_recursive(value, 0)
+    toml_value_to_json_recursive(value, &mut RecursionGuard::depth_only())
 }
 
-fn toml_value_to_json_recursive(value: &TomlValue, depth: usize) -> JsonValue {
-    if depth > MAX_RECURSION_DEPTH {
-        warn!(
-            "toml_value_to_json exceeded MAX_RECURSION_DEPTH ({})",
-            MAX_RECURSION_DEPTH
-        );
+fn toml_value_to_json_recursive(value: &TomlValue, guard: &mut RecursionGuard<()>) -> JsonValue {
+    if guard.descend() {
+        warn!("toml_value_to_json exceeded recursion depth limit");
         return JsonValue::Null;
     }
 
-    match value {
+    let result = match value {
         TomlValue::String(value) => JsonValue::String(value.clone()),
         TomlValue::Integer(value) => JsonValue::String(value.to_string()),
         TomlValue::Float(value) => JsonValue::String(value.to_string()),
@@ -951,16 +946,18 @@ fn toml_value_to_json_recursive(value: &TomlValue, depth: usize) -> JsonValue {
         TomlValue::Array(values) => JsonValue::Array(
             values
                 .iter()
-                .map(|v| toml_value_to_json_recursive(v, depth + 1))
+                .map(|v| toml_value_to_json_recursive(v, guard))
                 .collect(),
         ),
         TomlValue::Table(values) => JsonValue::Object(
             values
                 .iter()
-                .map(|(key, value)| (key.clone(), toml_value_to_json_recursive(value, depth + 1)))
+                .map(|(key, value)| (key.clone(), toml_value_to_json_recursive(value, guard)))
                 .collect(),
         ),
-    }
+    };
+    guard.ascend();
+    result
 }
 
 fn default_package_data() -> PackageData {

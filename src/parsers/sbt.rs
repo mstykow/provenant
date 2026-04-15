@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -8,9 +8,7 @@ use serde_json::json;
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 
 use super::PackageParser;
-use super::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
-
-const MAX_RECURSION_DEPTH: usize = 50;
+use super::utils::{MAX_ITERATION_COUNT, RecursionGuard, read_file_to_string, truncate_field};
 
 pub struct SbtParser;
 
@@ -410,10 +408,8 @@ fn resolve_string_aliases(statements: &[String]) -> HashMap<String, String> {
 
     let mut resolved = HashMap::new();
     for name in raw_aliases.keys() {
-        let mut visiting = HashSet::new();
-        if let Some(value) =
-            resolve_alias_value(name, &raw_aliases, &mut resolved, &mut visiting, 0)
-        {
+        let mut guard: RecursionGuard<String> = RecursionGuard::new();
+        if let Some(value) = resolve_alias_value(name, &raw_aliases, &mut resolved, &mut guard) {
             resolved.insert(name.clone(), value);
         }
     }
@@ -445,10 +441,9 @@ fn resolve_alias_value(
     name: &str,
     raw_aliases: &HashMap<String, AliasExpr>,
     resolved: &mut HashMap<String, String>,
-    visiting: &mut HashSet<String>,
-    depth: usize,
+    guard: &mut RecursionGuard<String>,
 ) -> Option<String> {
-    if depth >= MAX_RECURSION_DEPTH {
+    if guard.exceeded() {
         warn!(
             "Recursion depth exceeded in alias resolution for '{}'",
             name
@@ -460,18 +455,18 @@ fn resolve_alias_value(
         return Some(value.clone());
     }
 
-    if !visiting.insert(name.to_string()) {
+    if guard.enter(name.to_string()) {
         return None;
     }
 
     let value = match raw_aliases.get(name)? {
         AliasExpr::Literal(value) => Some(value.clone()),
         AliasExpr::Reference(reference) => {
-            resolve_alias_value(reference, raw_aliases, resolved, visiting, depth + 1)
+            resolve_alias_value(reference, raw_aliases, resolved, guard)
         }
     };
 
-    visiting.remove(name);
+    guard.leave(name.to_string());
     value
 }
 

@@ -21,7 +21,7 @@
 use crate::models::{DatasourceId, Dependency, FileReference, PackageData, PackageType, Party};
 use crate::parser_warn as warn;
 use crate::parsers::utils::{
-    MAX_ITERATION_COUNT, read_file_to_string, split_name_email, truncate_field,
+    MAX_ITERATION_COUNT, RecursionGuard, read_file_to_string, split_name_email, truncate_field,
 };
 use packageurl::PackageUrl;
 use std::path::Path;
@@ -519,33 +519,30 @@ fn extract_file_references(toml_content: &Value) -> Vec<FileReference> {
     file_references
 }
 
-const MAX_TOML_DEPTH: usize = 50;
-
-fn toml_to_json(value: &toml::Value, depth: usize) -> serde_json::Value {
-    if depth > MAX_TOML_DEPTH {
-        warn!(
-            "TOML nesting depth exceeded {}, returning Null",
-            MAX_TOML_DEPTH
-        );
+fn toml_to_json(value: &toml::Value, guard: &mut RecursionGuard<()>) -> serde_json::Value {
+    if guard.descend() {
+        warn!("TOML nesting depth exceeded, returning Null");
         return serde_json::Value::Null;
     }
-    match value {
+    let result = match value {
         toml::Value::String(s) => serde_json::json!(s),
         toml::Value::Integer(i) => serde_json::json!(i),
         toml::Value::Float(f) => serde_json::json!(f),
         toml::Value::Boolean(b) => serde_json::json!(b),
         toml::Value::Array(a) => {
-            serde_json::Value::Array(a.iter().map(|v| toml_to_json(v, depth + 1)).collect())
+            serde_json::Value::Array(a.iter().map(|v| toml_to_json(v, guard)).collect())
         }
         toml::Value::Table(t) => {
             let map: serde_json::Map<String, serde_json::Value> = t
                 .iter()
-                .map(|(k, v)| (k.clone(), toml_to_json(v, depth + 1)))
+                .map(|(k, v)| (k.clone(), toml_to_json(v, guard)))
                 .collect();
             serde_json::Value::Object(map)
         }
         toml::Value::Datetime(d) => serde_json::json!(d.to_string()),
-    }
+    };
+    guard.ascend();
+    result
 }
 
 /// Extracts extra_data fields (rust-version, edition, documentation, license-file, workspace)
@@ -610,7 +607,10 @@ fn extract_extra_data(
         }
 
         if let Some(publish_value) = package.get(FIELD_PUBLISH) {
-            extra_data.insert("publish".to_string(), toml_to_json(publish_value, 0));
+            extra_data.insert(
+                "publish".to_string(),
+                toml_to_json(publish_value, &mut RecursionGuard::depth_only()),
+            );
         }
 
         // Check for workspace inheritance markers for other fields
@@ -671,7 +671,10 @@ fn extract_extra_data(
 
     // Extract workspace table if it exists
     if let Some(workspace_value) = toml_content.get("workspace") {
-        extra_data.insert("workspace".to_string(), toml_to_json(workspace_value, 0));
+        extra_data.insert(
+            "workspace".to_string(),
+            toml_to_json(workspace_value, &mut RecursionGuard::depth_only()),
+        );
     }
 
     if extra_data.is_empty() {

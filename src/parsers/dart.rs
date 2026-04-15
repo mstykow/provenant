@@ -24,7 +24,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
 
 use crate::parser_warn as warn;
-use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, RecursionGuard, read_file_to_string, truncate_field,
+};
 use packageurl::PackageUrl;
 use yaml_serde::{Mapping, Value};
 
@@ -33,8 +35,6 @@ use crate::models::{
 };
 
 use super::PackageParser;
-
-const MAX_RECURSION_DEPTH: usize = 50;
 
 const FIELD_NAME: &str = "name";
 const FIELD_VERSION: &str = "version";
@@ -504,14 +504,14 @@ fn dependency_requirement_from_value(value: &Value) -> Option<String> {
     }
 
     if let Some(map) = value.as_mapping() {
-        return format_dependency_mapping(map, 0);
+        return format_dependency_mapping(map, &mut RecursionGuard::depth_only());
     }
 
     None
 }
 
-fn format_dependency_mapping(map: &Mapping, depth: usize) -> Option<String> {
-    if depth >= MAX_RECURSION_DEPTH {
+fn format_dependency_mapping(map: &Mapping, guard: &mut RecursionGuard<()>) -> Option<String> {
+    if guard.descend() {
         warn!("Recursion depth exceeded in format_dependency_mapping");
         return None;
     }
@@ -530,13 +530,15 @@ fn format_dependency_mapping(map: &Mapping, depth: usize) -> Option<String> {
         } else if let Some(value) = value.as_f64() {
             value.to_string()
         } else if let Some(nested) = value.as_mapping() {
-            format_dependency_mapping(nested, depth + 1)?
+            format_dependency_mapping(nested, guard)?
         } else {
             continue;
         };
 
         parts.push(format!("{}: {}", key_str, value_str));
     }
+
+    guard.ascend();
 
     if parts.is_empty() {
         None

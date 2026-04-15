@@ -17,7 +17,7 @@
 //! Python implementation: `reference/scancode-toolkit/src/packagedcode/build.py` (BazelBuildHandler)
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
-use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, RecursionGuard, truncate_field};
 use packageurl::PackageUrl;
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use std::path::Path;
@@ -31,7 +31,6 @@ use super::PackageParser;
 
 type StarlarkCallArgs = ast::CallArgsP<ast::AstNoPayload>;
 const SCANCODE_SIMPLE_TOP_LEVEL_KEY: &str = "scancode_simple_top_level";
-const MAX_RECURSION_DEPTH: usize = 50;
 
 struct StarlarkCall<'a> {
     func: &'a ast::AstExpr,
@@ -403,7 +402,8 @@ fn extract_int_kwarg(call: &StarlarkCall<'_>, key: &str) -> Option<i64> {
 }
 
 fn extract_kwarg_json(call: &StarlarkCall<'_>, key: &str) -> Option<JsonValue> {
-    extract_named_kwarg(call, key).and_then(|expr| expr_to_json(expr, 0))
+    extract_named_kwarg(call, key)
+        .and_then(|expr| expr_to_json(expr, &mut RecursionGuard::depth_only()))
 }
 
 fn extract_bazel_dependency(call: &StarlarkCall<'_>) -> Option<Dependency> {
@@ -439,7 +439,7 @@ fn extract_override(kind: &str, call: &StarlarkCall<'_>) -> JsonValue {
     override_map.insert("kind".to_string(), JsonValue::String(kind.to_string()));
     for argument in call.args.args.iter().take(MAX_ITERATION_COUNT) {
         if let ast::ArgumentP::Named(name, value) = &argument.node
-            && let Some(value) = expr_to_json(value, 0)
+            && let Some(value) = expr_to_json(value, &mut RecursionGuard::depth_only())
         {
             override_map.insert(name.node.clone(), value);
         }
@@ -472,11 +472,11 @@ fn expr_as_i64(expr: &ast::AstExpr) -> Option<i64> {
     }
 }
 
-fn expr_to_json(expr: &ast::AstExpr, depth: usize) -> Option<JsonValue> {
-    if depth > MAX_RECURSION_DEPTH {
+fn expr_to_json(expr: &ast::AstExpr, guard: &mut RecursionGuard<()>) -> Option<JsonValue> {
+    if guard.descend() {
         return None;
     }
-    match &expr.node {
+    let result = match &expr.node {
         ast::ExprP::Literal(ast::AstLiteral::String(value)) => {
             Some(JsonValue::String(value.node.clone()))
         }
@@ -499,7 +499,7 @@ fn expr_to_json(expr: &ast::AstExpr, depth: usize) -> Option<JsonValue> {
         ast::ExprP::List(elts) | ast::ExprP::Tuple(elts) => Some(JsonValue::Array(
             elts.iter()
                 .take(MAX_ITERATION_COUNT)
-                .filter_map(|e| expr_to_json(e, depth + 1))
+                .filter_map(|e| expr_to_json(e, guard))
                 .collect(),
         )),
         ast::ExprP::Dict(items) => {
@@ -508,14 +508,16 @@ fn expr_to_json(expr: &ast::AstExpr, depth: usize) -> Option<JsonValue> {
                 let Some(key) = expr_as_string(key) else {
                     continue;
                 };
-                if let Some(value) = expr_to_json(value, depth + 1) {
+                if let Some(value) = expr_to_json(value, guard) {
                     map.insert(key, value);
                 }
             }
             Some(JsonValue::Object(map))
         }
         _ => None,
-    }
+    };
+    guard.ascend();
+    result
 }
 
 fn build_bazel_purl(name: &str, version: Option<&str>) -> Option<String> {

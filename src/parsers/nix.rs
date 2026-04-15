@@ -6,11 +6,11 @@ use packageurl::PackageUrl;
 use serde_json::Value as JsonValue;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
-use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, RecursionGuard, read_file_to_string, truncate_field,
+};
 
 use super::PackageParser;
-
-const MAX_RECURSION_DEPTH: usize = 50;
 
 pub struct NixFlakeLockParser;
 
@@ -439,7 +439,7 @@ impl Lexer {
 struct Parser {
     tokens: Vec<Token>,
     index: usize,
-    depth: usize,
+    guard: RecursionGuard<()>,
 }
 
 impl Parser {
@@ -447,7 +447,7 @@ impl Parser {
         Self {
             tokens,
             index: 0,
-            depth: 0,
+            guard: RecursionGuard::depth_only(),
         }
     }
 
@@ -460,16 +460,15 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, String> {
-        if self.depth > MAX_RECURSION_DEPTH {
+        if self.guard.descend() {
             return Err("recursion depth exceeded".to_string());
         }
 
         if self.peek() == Some(&Token::LBrace) && self.looks_like_lambda_binder_set()? {
             self.skip_lambda_binder_set()?;
             self.expect(&Token::Colon)?;
-            self.depth += 1;
             let result = self.parse_expr();
-            self.depth -= 1;
+            self.guard.ascend();
             return result;
         }
 
@@ -477,17 +476,15 @@ impl Parser {
             self.index += 1;
             self.skip_lambda_binder_set()?;
             self.expect(&Token::Colon)?;
-            self.depth += 1;
             let result = self.parse_expr();
-            self.depth -= 1;
+            self.guard.ascend();
             return result;
         }
 
         let first = self.parse_term()?;
         if self.consume(&Token::Colon) {
-            self.depth += 1;
             let result = self.parse_expr();
-            self.depth -= 1;
+            self.guard.ascend();
             return result;
         }
 
@@ -505,7 +502,9 @@ impl Parser {
             Expr::Application(terms)
         };
 
-        self.parse_postfix(expr)
+        let result = self.parse_postfix(expr);
+        self.guard.ascend();
+        result
     }
 
     fn parse_postfix(&mut self, mut expr: Expr) -> Result<Expr, String> {
@@ -528,14 +527,9 @@ impl Parser {
             Some(Token::Ident(keyword)) if keyword == "let" => self.parse_let_in_expr(),
             Some(Token::Ident(keyword)) if keyword == "with" => {
                 self.index += 1;
-                self.depth += 1;
                 let _ = self.parse_expr()?;
-                self.depth -= 1;
                 self.expect(&Token::Semicolon)?;
-                self.depth += 1;
-                let result = self.parse_expr();
-                self.depth -= 1;
-                result
+                self.parse_expr()
             }
             Some(Token::Ident(keyword)) if keyword == "rec" => {
                 if matches!(self.peek_n(1), Some(Token::LBrace)) {
@@ -549,9 +543,7 @@ impl Parser {
             Some(Token::LBracket) => self.parse_list(),
             Some(Token::LParen) => {
                 self.index += 1;
-                self.depth += 1;
                 let expr = self.parse_expr()?;
-                self.depth -= 1;
                 self.expect(&Token::RParen)?;
                 Ok(expr)
             }
@@ -582,17 +574,13 @@ impl Parser {
 
             let key = self.parse_attr_path()?;
             self.expect(&Token::Equals)?;
-            self.depth += 1;
             let value = self.parse_expr()?;
-            self.depth -= 1;
             self.expect(&Token::Semicolon)?;
             bindings.push((key, value));
         }
 
         self.take_exact_ident("in")?;
-        self.depth += 1;
         let body = self.parse_expr()?;
-        self.depth -= 1;
         Ok(Expr::Let {
             bindings,
             body: Box::new(body),
@@ -624,9 +612,7 @@ impl Parser {
 
             let key = self.parse_attr_path()?;
             self.expect(&Token::Equals)?;
-            self.depth += 1;
             let value = self.parse_expr()?;
-            self.depth -= 1;
             self.expect(&Token::Semicolon)?;
             entries.push((key, value));
         }
@@ -646,9 +632,7 @@ impl Parser {
         self.take_exact_ident("inherit")?;
 
         let inherit_from = if self.consume(&Token::LParen) {
-            self.depth += 1;
             let expr = self.parse_expr()?;
-            self.depth -= 1;
             self.expect(&Token::RParen)?;
             Some(expr)
         } else {
@@ -693,9 +677,7 @@ impl Parser {
                 break;
             }
 
-            self.depth += 1;
             items.push(self.parse_expr()?);
-            self.depth -= 1;
         }
         Ok(Expr::List(items))
     }
@@ -844,8 +826,9 @@ impl Parser {
 fn parse_flake_nix(path: &Path, content: &str) -> Result<PackageData, String> {
     let expr = parse_nix_expr(content)?;
     let scopes = Vec::new();
-    let (root, scopes) = root_attrset_with_scopes(&expr, &scopes, 0)
-        .ok_or_else(|| "flake.nix root was not an attribute set".to_string())?;
+    let (root, scopes) =
+        root_attrset_with_scopes(&expr, &scopes, &mut RecursionGuard::depth_only())
+            .ok_or_else(|| "flake.nix root was not an attribute set".to_string())?;
 
     let mut package = default_flake_package_data();
     package.name = fallback_name(path).map(truncate_field);
@@ -1113,7 +1096,11 @@ fn collect_input_path(
             }
             Expr::Symbol(value) => {
                 inputs.entry(input_name.clone()).or_default().requirement =
-                    expr_as_string_with_scopes(&Expr::Symbol(value.clone()), scopes, 0)
+                    expr_as_string_with_scopes(
+                        &Expr::Symbol(value.clone()),
+                        scopes,
+                        &mut RecursionGuard::depth_only(),
+                    )
             }
             _ => {}
         }
@@ -1135,19 +1122,21 @@ fn apply_input_field(
     scopes: &[&[(Vec<String>, Expr)]],
 ) {
     if path == ["url"] {
-        info.requirement = expr_as_string_with_scopes(expr, scopes, 0);
+        info.requirement =
+            expr_as_string_with_scopes(expr, scopes, &mut RecursionGuard::depth_only());
         return;
     }
 
     if path == ["flake"] {
-        info.flake = expr_as_bool_with_scopes(expr, scopes, 0);
+        info.flake = expr_as_bool_with_scopes(expr, scopes, &mut RecursionGuard::depth_only());
         return;
     }
 
     if path.len() == 3
         && path[0] == "inputs"
         && path[2] == "follows"
-        && let Some(value) = expr_as_string_with_scopes(expr, scopes, 0)
+        && let Some(value) =
+            expr_as_string_with_scopes(expr, scopes, &mut RecursionGuard::depth_only())
     {
         info.follows.push(value);
     }
@@ -1159,17 +1148,20 @@ fn build_list_dependencies(
     runtime: bool,
     scopes: &[&[(Vec<String>, Expr)]],
 ) -> Vec<Dependency> {
-    let Some(expr) = find_attr(entries, &[field_name], 0) else {
+    let Some(expr) = find_attr(entries, &[field_name], &mut RecursionGuard::depth_only()) else {
         return Vec::new();
     };
-    let Some(items) = list_items_with_scopes(expr, scopes, 0) else {
+    let Some(items) = list_items_with_scopes(expr, scopes, &mut RecursionGuard::depth_only())
+    else {
         return Vec::new();
     };
 
     items
         .iter()
         .take(MAX_ITERATION_COUNT)
-        .flat_map(|expr| expr_to_dependency_symbols_with_scopes(expr, scopes, 0))
+        .flat_map(|expr| {
+            expr_to_dependency_symbols_with_scopes(expr, scopes, &mut RecursionGuard::depth_only())
+        })
         .filter_map(|symbol| {
             let name = symbol.rsplit('.').next()?.to_string();
             Some(Dependency {
@@ -1190,30 +1182,36 @@ fn build_list_dependencies(
 fn expr_to_dependency_symbols_with_scopes(
     expr: &Expr,
     scopes: &[&[(Vec<String>, Expr)]],
-    depth: usize,
+    guard: &mut RecursionGuard<()>,
 ) -> Vec<String> {
-    if depth > MAX_RECURSION_DEPTH {
+    if guard.descend() {
         warn!("expr_to_dependency_symbols_with_scopes exceeded MAX_RECURSION_DEPTH");
         return Vec::new();
     }
 
-    match expr {
-        Expr::Symbol(symbol) => resolve_symbol(symbol, scopes, 0)
-            .map(|resolved| expr_to_dependency_symbols_with_scopes(resolved, scopes, depth + 1))
+    let result = match expr {
+        Expr::Symbol(symbol) => resolve_symbol(symbol, scopes, &mut RecursionGuard::depth_only())
+            .map(|resolved| expr_to_dependency_symbols_with_scopes(resolved, scopes, guard))
             .unwrap_or_else(|| vec![symbol.clone()]),
         Expr::Application(parts) => parts
             .iter()
-            .filter_map(|expr| expr_as_symbol_with_scopes(expr, scopes, 0))
+            .filter_map(|expr| {
+                expr_as_symbol_with_scopes(expr, scopes, &mut RecursionGuard::depth_only())
+            })
             .collect(),
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
-            expr_to_dependency_symbols_with_scopes(body, &scopes, depth + 1)
+            expr_to_dependency_symbols_with_scopes(body, &scopes, guard)
         }
-        Expr::Select { .. } => expr_as_symbol_with_scopes(expr, scopes, 0)
-            .into_iter()
-            .collect(),
+        Expr::Select { .. } => {
+            expr_as_symbol_with_scopes(expr, scopes, &mut RecursionGuard::depth_only())
+                .into_iter()
+                .collect()
+        }
         _ => Vec::new(),
-    }
+    };
+    guard.ascend();
+    result
 }
 
 fn fallback_name(path: &Path) -> Option<String> {
@@ -1246,25 +1244,29 @@ fn attrset_entries(expr: &Expr) -> Option<&[(Vec<String>, Expr)]> {
 fn list_items_with_scopes<'a>(
     expr: &'a Expr,
     scopes: &[&'a [(Vec<String>, Expr)]],
-    depth: usize,
+    guard: &mut RecursionGuard<()>,
 ) -> Option<&'a [Expr]> {
-    if depth > MAX_RECURSION_DEPTH {
+    if guard.descend() {
         warn!("list_items_with_scopes exceeded MAX_RECURSION_DEPTH");
         return None;
     }
 
-    match expr {
-        Expr::List(items) => Some(items),
+    let result = match expr {
+        Expr::List(items) => Some(items.as_slice()),
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
-            list_items_with_scopes(body, &scopes, depth + 1)
+            list_items_with_scopes(body, &scopes, guard)
         }
-        Expr::Symbol(symbol) => resolve_symbol(symbol, scopes, 0)
-            .and_then(|resolved| list_items_with_scopes(resolved, scopes, depth + 1)),
-        Expr::Select { target, path } => resolve_select(target, path, scopes, 0)
-            .and_then(|resolved| list_items_with_scopes(resolved, scopes, depth + 1)),
+        Expr::Symbol(symbol) => resolve_symbol(symbol, scopes, &mut RecursionGuard::depth_only())
+            .and_then(|resolved| list_items_with_scopes(resolved, scopes, guard)),
+        Expr::Select { target, path } => {
+            resolve_select(target, path, scopes, &mut RecursionGuard::depth_only())
+                .and_then(|resolved| list_items_with_scopes(resolved, scopes, guard))
+        }
         _ => None,
-    }
+    };
+    guard.ascend();
+    result
 }
 
 fn expr_as_symbol(expr: &Expr) -> Option<String> {
@@ -1277,25 +1279,29 @@ fn expr_as_symbol(expr: &Expr) -> Option<String> {
 fn expr_as_symbol_with_scopes(
     expr: &Expr,
     scopes: &[&[(Vec<String>, Expr)]],
-    depth: usize,
+    guard: &mut RecursionGuard<()>,
 ) -> Option<String> {
-    if depth > MAX_RECURSION_DEPTH {
+    if guard.descend() {
         warn!("expr_as_symbol_with_scopes exceeded MAX_RECURSION_DEPTH");
         return None;
     }
 
-    match expr {
-        Expr::Symbol(value) => resolve_symbol(value, scopes, 0)
-            .and_then(|resolved| expr_as_symbol_with_scopes(resolved, scopes, depth + 1))
+    let result = match expr {
+        Expr::Symbol(value) => resolve_symbol(value, scopes, &mut RecursionGuard::depth_only())
+            .and_then(|resolved| expr_as_symbol_with_scopes(resolved, scopes, guard))
             .or_else(|| Some(value.clone())),
-        Expr::Select { target, path } => resolve_select(target, path, scopes, 0)
-            .and_then(|resolved| expr_as_symbol_with_scopes(resolved, scopes, depth + 1)),
+        Expr::Select { target, path } => {
+            resolve_select(target, path, scopes, &mut RecursionGuard::depth_only())
+                .and_then(|resolved| expr_as_symbol_with_scopes(resolved, scopes, guard))
+        }
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
-            expr_as_symbol_with_scopes(body, &scopes, depth + 1)
+            expr_as_symbol_with_scopes(body, &scopes, guard)
         }
         _ => expr_as_symbol(expr),
-    }
+    };
+    guard.ascend();
+    result
 }
 
 fn expr_as_bool(expr: &Expr) -> Option<bool> {
@@ -1309,84 +1315,94 @@ fn expr_as_bool(expr: &Expr) -> Option<bool> {
 fn expr_as_bool_with_scopes(
     expr: &Expr,
     scopes: &[&[(Vec<String>, Expr)]],
-    depth: usize,
+    guard: &mut RecursionGuard<()>,
 ) -> Option<bool> {
-    if depth > MAX_RECURSION_DEPTH {
+    if guard.descend() {
         warn!("expr_as_bool_with_scopes exceeded MAX_RECURSION_DEPTH");
         return None;
     }
 
-    match expr {
+    let result = match expr {
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
-            expr_as_bool_with_scopes(body, &scopes, depth + 1)
+            expr_as_bool_with_scopes(body, &scopes, guard)
         }
-        Expr::Symbol(value) => resolve_symbol(value, scopes, 0)
-            .and_then(|resolved| expr_as_bool_with_scopes(resolved, scopes, depth + 1))
+        Expr::Symbol(value) => resolve_symbol(value, scopes, &mut RecursionGuard::depth_only())
+            .and_then(|resolved| expr_as_bool_with_scopes(resolved, scopes, guard))
             .or_else(|| expr_as_bool(expr)),
-        Expr::Select { target, path } => resolve_select(target, path, scopes, 0)
-            .and_then(|resolved| expr_as_bool_with_scopes(resolved, scopes, depth + 1)),
+        Expr::Select { target, path } => {
+            resolve_select(target, path, scopes, &mut RecursionGuard::depth_only())
+                .and_then(|resolved| expr_as_bool_with_scopes(resolved, scopes, guard))
+        }
         _ => expr_as_bool(expr),
-    }
+    };
+    guard.ascend();
+    result
 }
 
 fn expr_as_string_with_scopes(
     expr: &Expr,
     scopes: &[&[(Vec<String>, Expr)]],
-    depth: usize,
+    guard: &mut RecursionGuard<()>,
 ) -> Option<String> {
-    if depth > MAX_RECURSION_DEPTH {
+    if guard.descend() {
         warn!("expr_as_string_with_scopes exceeded MAX_RECURSION_DEPTH");
         return None;
     }
 
-    match expr {
+    let result = match expr {
         Expr::String(value) => Some(interpolate_string(value, scopes)),
-        Expr::Symbol(value) => resolve_symbol(value, scopes, 0)
-            .and_then(|resolved| expr_as_string_with_scopes(resolved, scopes, depth + 1))
+        Expr::Symbol(value) => resolve_symbol(value, scopes, &mut RecursionGuard::depth_only())
+            .and_then(|resolved| expr_as_string_with_scopes(resolved, scopes, guard))
             .or_else(|| Some(value.clone())),
         Expr::Application(parts) => parts
             .last()
-            .and_then(|expr| expr_as_string_with_scopes(expr, scopes, depth + 1)),
+            .and_then(|expr| expr_as_string_with_scopes(expr, scopes, guard)),
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
-            expr_as_string_with_scopes(body, &scopes, depth + 1)
+            expr_as_string_with_scopes(body, &scopes, guard)
         }
-        Expr::Select { target, path } => resolve_select(target, path, scopes, 0)
-            .and_then(|resolved| expr_as_string_with_scopes(resolved, scopes, depth + 1)),
+        Expr::Select { target, path } => {
+            resolve_select(target, path, scopes, &mut RecursionGuard::depth_only())
+                .and_then(|resolved| expr_as_string_with_scopes(resolved, scopes, guard))
+        }
         _ => None,
-    }
+    };
+    guard.ascend();
+    result
 }
 
 fn expr_to_scalar_string_with_scopes(
     expr: &Expr,
     scopes: &[&[(Vec<String>, Expr)]],
-    depth: usize,
+    guard: &mut RecursionGuard<()>,
 ) -> Option<String> {
-    if depth > MAX_RECURSION_DEPTH {
+    if guard.descend() {
         warn!("expr_to_scalar_string_with_scopes exceeded MAX_RECURSION_DEPTH");
         return None;
     }
 
-    match expr {
+    let result = match expr {
         Expr::Application(parts) => parts
             .last()
-            .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes, depth + 1)),
-        _ => expr_as_string_with_scopes(expr, scopes, depth),
-    }
+            .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes, guard)),
+        _ => expr_as_string_with_scopes(expr, scopes, guard),
+    };
+    guard.ascend();
+    result
 }
 
 fn find_attr<'a>(
     entries: &'a [(Vec<String>, Expr)],
     path: &[&str],
-    depth: usize,
+    guard: &mut RecursionGuard<()>,
 ) -> Option<&'a Expr> {
-    if depth > MAX_RECURSION_DEPTH {
+    if guard.descend() {
         warn!("find_attr exceeded MAX_RECURSION_DEPTH");
         return None;
     }
 
-    for (key, value) in entries {
+    let result = entries.iter().find_map(|(key, value)| {
         if key.iter().map(String::as_str).eq(path.iter().copied()) {
             return Some(value);
         }
@@ -1397,13 +1413,16 @@ fn find_attr<'a>(
                 .map(String::as_str)
                 .eq(path[..key.len()].iter().copied())
             && let Expr::AttrSet(child_entries) = value
-            && let Some(found) = find_attr(child_entries, &path[key.len()..], depth + 1)
+            && let Some(found) = find_attr(child_entries, &path[key.len()..], guard)
         {
             return Some(found);
         }
-    }
 
-    None
+        None
+    });
+
+    guard.ascend();
+    result
 }
 
 fn find_string_attr_with_scopes(
@@ -1411,8 +1430,10 @@ fn find_string_attr_with_scopes(
     path: &[&str],
     scopes: &[&[(Vec<String>, Expr)]],
 ) -> Option<String> {
-    find_attr(entries, path, 0)
-        .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes, 0))
+    find_attr(entries, path, &mut RecursionGuard::depth_only())
+        .and_then(|expr| {
+            expr_to_scalar_string_with_scopes(expr, scopes, &mut RecursionGuard::depth_only())
+        })
         .map(truncate_field)
 }
 
@@ -1444,36 +1465,38 @@ fn extend_scopes<'a>(
 fn root_attrset_with_scopes<'a>(
     expr: &'a Expr,
     scopes: &[NixAttrEntriesRef<'a>],
-    depth: usize,
+    guard: &mut RecursionGuard<()>,
 ) -> Option<(NixAttrEntriesRef<'a>, NixScopeStack<'a>)> {
-    if depth > MAX_RECURSION_DEPTH {
+    if guard.descend() {
         warn!("root_attrset_with_scopes exceeded MAX_RECURSION_DEPTH");
         return None;
     }
 
-    match expr {
-        Expr::AttrSet(entries) => Some((entries, scopes.to_vec())),
+    let result = match expr {
+        Expr::AttrSet(entries) => Some((entries.as_slice(), scopes.to_vec())),
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
-            root_attrset_with_scopes(body, &scopes, depth + 1)
+            root_attrset_with_scopes(body, &scopes, guard)
         }
         _ => None,
-    }
+    };
+    guard.ascend();
+    result
 }
 
 fn lookup_binding<'a>(scopes: &[NixAttrEntriesRef<'a>], name: &str) -> Option<&'a Expr> {
     scopes
         .iter()
         .rev()
-        .find_map(|bindings| find_attr(bindings, &[name], 0))
+        .find_map(|bindings| find_attr(bindings, &[name], &mut RecursionGuard::depth_only()))
 }
 
 fn resolve_symbol<'a>(
     symbol: &str,
     scopes: &[NixAttrEntriesRef<'a>],
-    depth: usize,
+    guard: &mut RecursionGuard<()>,
 ) -> Option<&'a Expr> {
-    if depth > MAX_RECURSION_DEPTH {
+    if guard.descend() {
         return None;
     }
 
@@ -1482,13 +1505,15 @@ fn resolve_symbol<'a>(
     let mut expr = lookup_binding(scopes, head)?;
     let rest = parts.collect::<Vec<_>>();
     if rest.is_empty() {
+        guard.ascend();
         return Some(expr);
     }
 
     for segment in rest {
-        expr = resolve_select(expr, &[segment.to_string()], scopes, depth + 1)?;
+        expr = resolve_select(expr, &[segment.to_string()], scopes, guard)?;
     }
 
+    guard.ascend();
     Some(expr)
 }
 
@@ -1496,31 +1521,33 @@ fn resolve_select<'a>(
     target: &'a Expr,
     path: &[String],
     scopes: &[NixAttrEntriesRef<'a>],
-    depth: usize,
+    guard: &mut RecursionGuard<()>,
 ) -> Option<&'a Expr> {
-    if depth > MAX_RECURSION_DEPTH {
+    if guard.descend() {
         return None;
     }
 
-    match target {
+    let result = match target {
         Expr::AttrSet(entries) => find_attr(
             entries,
             &path.iter().map(String::as_str).collect::<Vec<_>>(),
-            0,
+            guard,
         ),
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
-            resolve_select(body, path, &scopes, depth + 1)
+            resolve_select(body, path, &scopes, guard)
         }
-        Expr::Symbol(symbol) => resolve_symbol(symbol, scopes, depth + 1)
-            .and_then(|resolved| resolve_select(resolved, path, scopes, depth + 1)),
+        Expr::Symbol(symbol) => resolve_symbol(symbol, scopes, guard)
+            .and_then(|resolved| resolve_select(resolved, path, scopes, guard)),
         Expr::Select {
             target: inner_target,
             path: inner_path,
-        } => resolve_select(inner_target, inner_path, scopes, depth + 1)
-            .and_then(|resolved| resolve_select(resolved, path, scopes, depth + 1)),
+        } => resolve_select(inner_target, inner_path, scopes, guard)
+            .and_then(|resolved| resolve_select(resolved, path, scopes, guard)),
         _ => None,
-    }
+    };
+    guard.ascend();
+    result
 }
 
 fn interpolate_string(value: &str, scopes: &[&[(Vec<String>, Expr)]]) -> String {
@@ -1542,8 +1569,10 @@ fn interpolate_string(value: &str, scopes: &[&[(Vec<String>, Expr)]]) -> String 
             && placeholder
                 .chars()
                 .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
-            && let Some(resolved) = resolve_symbol(placeholder, scopes, 0)
-            && let Some(replacement) = expr_as_string_with_scopes(resolved, scopes, 0)
+            && let Some(resolved) =
+                resolve_symbol(placeholder, scopes, &mut RecursionGuard::depth_only())
+            && let Some(replacement) =
+                expr_as_string_with_scopes(resolved, scopes, &mut RecursionGuard::depth_only())
         {
             result.push_str(&replacement);
         } else {
@@ -1618,7 +1647,12 @@ fn extract_default_nix_package(
                 );
             }
 
-            if let Some(resolved) = resolve_select(target, select_path, scopes, 0) {
+            if let Some(resolved) = resolve_select(
+                target,
+                select_path,
+                scopes,
+                &mut RecursionGuard::depth_only(),
+            ) {
                 return extract_default_nix_package(path, resolved, scopes, depth);
             }
 
@@ -1650,12 +1684,19 @@ fn build_default_package_from_attrset(
             .or_else(|| find_string_attr_with_scopes(derivation, &["description"], scopes));
     package.homepage_url = find_string_attr_with_scopes(derivation, &["meta", "homepage"], scopes)
         .or_else(|| find_string_attr_with_scopes(derivation, &["homepage"], scopes));
-    package.extracted_license_statement = find_attr(derivation, &["meta", "license"], 0)
-        .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes, 0))
-        .or_else(|| {
-            find_attr(derivation, &["license"], 0)
-                .and_then(|expr| expr_to_scalar_string_with_scopes(expr, scopes, 0))
-        });
+    package.extracted_license_statement = find_attr(
+        derivation,
+        &["meta", "license"],
+        &mut RecursionGuard::depth_only(),
+    )
+    .and_then(|expr| {
+        expr_to_scalar_string_with_scopes(expr, scopes, &mut RecursionGuard::depth_only())
+    })
+    .or_else(|| {
+        find_attr(derivation, &["license"], &mut RecursionGuard::depth_only()).and_then(|expr| {
+            expr_to_scalar_string_with_scopes(expr, scopes, &mut RecursionGuard::depth_only())
+        })
+    });
     package.dependencies = [
         build_list_dependencies(derivation, "nativeBuildInputs", false, scopes),
         build_list_dependencies(derivation, "buildInputs", true, scopes),
@@ -1685,9 +1726,9 @@ fn try_follow_local_nix_application(
         return None;
     }
 
-    let local_path = parts
-        .get(1)
-        .and_then(|expr| expr_as_symbol_with_scopes(expr, scopes, 0))?;
+    let local_path = parts.get(1).and_then(|expr| {
+        expr_as_symbol_with_scopes(expr, scopes, &mut RecursionGuard::depth_only())
+    })?;
     if !is_local_nix_path(&local_path) {
         return None;
     }
@@ -1713,7 +1754,7 @@ fn try_follow_selected_local_import(
         find_attr(
             entries,
             &select_path.iter().map(String::as_str).collect::<Vec<_>>(),
-            0,
+            &mut RecursionGuard::depth_only(),
         )
     })?;
     Some((selected.clone(), imported_path))
@@ -1741,7 +1782,7 @@ fn extract_flake_compat_package_from_expr(
         Expr::Symbol(symbol) => {
             if let Some((head, rest)) = symbol.split_once('.') {
                 let select_path = rest.split('.').map(ToOwned::to_owned).collect::<Vec<_>>();
-                resolve_symbol(head, scopes, 0)
+                resolve_symbol(head, scopes, &mut RecursionGuard::depth_only())
                     .and_then(|resolved| {
                         extract_flake_compat_package_from_select(
                             path,
@@ -1762,14 +1803,20 @@ fn extract_flake_compat_package_from_expr(
                         )
                     })
                     .or_else(|| {
-                        resolve_symbol(symbol, scopes, 0).and_then(|resolved| {
-                            extract_flake_compat_package_from_expr(path, resolved, scopes, depth)
-                        })
+                        resolve_symbol(symbol, scopes, &mut RecursionGuard::depth_only()).and_then(
+                            |resolved| {
+                                extract_flake_compat_package_from_expr(
+                                    path, resolved, scopes, depth,
+                                )
+                            },
+                        )
                     })
             } else {
-                resolve_symbol(symbol, scopes, 0).and_then(|resolved| {
-                    extract_flake_compat_package_from_expr(path, resolved, scopes, depth)
-                })
+                resolve_symbol(symbol, scopes, &mut RecursionGuard::depth_only()).and_then(
+                    |resolved| {
+                        extract_flake_compat_package_from_expr(path, resolved, scopes, depth)
+                    },
+                )
             }
         }
         _ => None,
@@ -1815,9 +1862,10 @@ fn resolve_flake_compat_source_root(
 
     match target {
         Expr::Application(parts) => source_root_from_flake_compat_application(path, parts, scopes),
-        Expr::Symbol(symbol) => resolve_symbol(symbol, scopes, depth + 1).and_then(|resolved| {
-            resolve_flake_compat_source_root(path, resolved, scopes, depth + 1)
-        }),
+        Expr::Symbol(symbol) => resolve_symbol(symbol, scopes, &mut RecursionGuard::depth_only())
+            .and_then(|resolved| {
+                resolve_flake_compat_source_root(path, resolved, scopes, depth + 1)
+            }),
         Expr::Let { bindings, body } => {
             let scopes = extend_scopes(scopes, bindings);
             resolve_flake_compat_source_root(path, body, &scopes, depth + 1)
@@ -1825,9 +1873,13 @@ fn resolve_flake_compat_source_root(
         Expr::Select {
             target: inner_target,
             path: inner_path,
-        } => resolve_select(inner_target, inner_path, scopes, depth + 1).and_then(|resolved| {
-            resolve_flake_compat_source_root(path, resolved, scopes, depth + 1)
-        }),
+        } => resolve_select(
+            inner_target,
+            inner_path,
+            scopes,
+            &mut RecursionGuard::depth_only(),
+        )
+        .and_then(|resolved| resolve_flake_compat_source_root(path, resolved, scopes, depth + 1)),
         _ => None,
     }
 }
@@ -1842,16 +1894,18 @@ fn source_root_from_flake_compat_application(
         return None;
     }
 
-    let import_path = parts
-        .get(1)
-        .and_then(|expr| expr_as_symbol_with_scopes(expr, scopes, 0))?;
+    let import_path = parts.get(1).and_then(|expr| {
+        expr_as_symbol_with_scopes(expr, scopes, &mut RecursionGuard::depth_only())
+    })?;
     if !is_local_nix_path(&import_path) {
         return None;
     }
 
     let args = parts.iter().find_map(attrset_entries)?;
-    let src_value = find_attr(args, &["src"], 0)
-        .and_then(|expr| expr_as_symbol_with_scopes(expr, scopes, 0))?;
+    let src_value =
+        find_attr(args, &["src"], &mut RecursionGuard::depth_only()).and_then(|expr| {
+            expr_as_symbol_with_scopes(expr, scopes, &mut RecursionGuard::depth_only())
+        })?;
     if !is_local_path(&src_value) {
         return None;
     }

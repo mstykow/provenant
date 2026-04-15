@@ -2,7 +2,9 @@
 ///
 /// This module provides common file I/O and parsing utilities
 /// used across multiple parser implementations.
+use std::collections::HashSet;
 use std::fs::{self, File};
+use std::hash::Hash;
 use std::io::Read;
 use std::path::Path;
 
@@ -18,6 +20,95 @@ pub const MAX_FIELD_LENGTH: usize = 10 * 1024 * 1024;
 
 /// Default maximum iteration count for loops processing items (100,000).
 pub const MAX_ITERATION_COUNT: usize = 100_000;
+
+/// Default maximum recursion depth for recursive parsing functions (50 levels).
+pub const MAX_RECURSION_DEPTH: usize = 50;
+
+/// A reusable guard that tracks recursion depth and detects cycles.
+///
+/// Use this in any recursive parser function to enforce the ADR 0004
+/// recursion depth limit (50 levels) and optionally detect circular
+/// references via a visited set keyed by `K`.
+///
+/// For depth-only tracking (no cycle detection), use `RecursionGuard<()>`
+/// — the unit type implements `Hash + Eq` as a singleton, so the visited
+/// set never grows and `enter`/`leave` are cheap no-ops.
+///
+/// # Type Parameters
+///
+/// * `K` — The key type for cycle detection (e.g., `usize` for package
+///   indices, `String` for dependency names, `PathBuf` for file paths,
+///   or `()` for depth-only tracking).
+///
+/// # Examples
+///
+/// ```no_run
+/// use provenant::parsers::utils::RecursionGuard;
+///
+/// fn walk_tree(idx: usize, guard: &mut RecursionGuard<usize>) {
+///     if guard.exceeded() { return; }
+///     if guard.enter(idx) { return; } // cycle detected
+///     // ... recurse into children ...
+///     walk_tree(idx + 1, guard);
+///     guard.leave(idx);
+/// }
+/// ```
+pub struct RecursionGuard<K: Hash + Eq> {
+    depth: usize,
+    visited: HashSet<K>,
+}
+
+impl<K: Hash + Eq> RecursionGuard<K> {
+    pub fn new() -> Self {
+        Self {
+            depth: 0,
+            visited: HashSet::new(),
+        }
+    }
+
+    pub fn exceeded(&self) -> bool {
+        self.depth > MAX_RECURSION_DEPTH
+    }
+
+    pub fn depth(&self) -> usize {
+        self.depth
+    }
+
+    pub fn enter(&mut self, key: K) -> bool {
+        if self.visited.contains(&key) {
+            return true;
+        }
+        self.visited.insert(key);
+        self.depth += 1;
+        false
+    }
+
+    pub fn leave(&mut self, key: K) {
+        self.visited.remove(&key);
+        self.depth -= 1;
+    }
+}
+
+impl RecursionGuard<()> {
+    pub fn depth_only() -> Self {
+        Self::new()
+    }
+
+    pub fn descend(&mut self) -> bool {
+        self.depth += 1;
+        self.exceeded()
+    }
+
+    pub fn ascend(&mut self) {
+        self.depth -= 1;
+    }
+}
+
+impl<K: Hash + Eq> Default for RecursionGuard<K> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Truncates a string field value to [`MAX_FIELD_LENGTH`] bytes if it exceeds
 /// the limit, returning the truncated string. Returns the original string if
