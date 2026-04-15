@@ -210,7 +210,7 @@
       "is_key_file": false,
       "is_manifest": false,
       "detected_license_expression": null,
-      "detected_license_expression_spdx": "mit",
+      "detected_license_expression_spdx": "MIT",
       "license_detections": [
         {
           "license_expression": "mit",
