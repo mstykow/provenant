@@ -1,5 +1,8 @@
 use anyhow::{Result, anyhow};
 
+use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
+
 use super::entry::IndexEntry;
 use super::tags::{
     RPMTAG_ARCH, RPMTAG_BASENAMES, RPMTAG_DIRINDEXES, RPMTAG_DIRNAMES, RPMTAG_DISTRIBUTION,
@@ -31,7 +34,14 @@ pub(crate) struct InstalledRpmPackage {
 
 pub(crate) fn parse_installed_rpm_package(entries: Vec<IndexEntry>) -> Result<InstalledRpmPackage> {
     let mut package = InstalledRpmPackage::default();
-    for entry in entries {
+    for (i, entry) in entries.into_iter().enumerate() {
+        if i >= MAX_ITERATION_COUNT {
+            warn!(
+                "RPM entry iteration exceeded MAX_ITERATION_COUNT ({}), stopping",
+                MAX_ITERATION_COUNT
+            );
+            break;
+        }
         match entry.info.tag {
             RPMTAG_DIRINDEXES => {
                 ensure_kind(&entry, TagType::Int32, "dir indexes")?;
@@ -39,19 +49,31 @@ pub(crate) fn parse_installed_rpm_package(entries: Vec<IndexEntry>) -> Result<In
             }
             RPMTAG_DIRNAMES => {
                 ensure_kind(&entry, TagType::StringArray, "dir names")?;
-                package.dir_names = entry.read_string_array()?;
+                package.dir_names = entry
+                    .read_string_array()?
+                    .into_iter()
+                    .map(truncate_field)
+                    .collect();
             }
             RPMTAG_BASENAMES => {
                 ensure_kind(&entry, TagType::StringArray, "base names")?;
-                package.base_names = entry.read_string_array()?;
+                package.base_names = entry
+                    .read_string_array()?
+                    .into_iter()
+                    .map(truncate_field)
+                    .collect();
             }
             RPMTAG_FILENAMES => {
                 ensure_kind(&entry, TagType::StringArray, "file names")?;
-                package.file_names = entry.read_string_array()?;
+                package.file_names = entry
+                    .read_string_array()?
+                    .into_iter()
+                    .map(truncate_field)
+                    .collect();
             }
             RPMTAG_NAME => {
                 ensure_kind(&entry, TagType::String, "name")?;
-                package.name = entry.read_string()?;
+                package.name = truncate_field(entry.read_string()?);
             }
             RPMTAG_EPOCH => {
                 ensure_kind(&entry, TagType::Int32, "epoch")?;
@@ -59,31 +81,31 @@ pub(crate) fn parse_installed_rpm_package(entries: Vec<IndexEntry>) -> Result<In
             }
             RPMTAG_VERSION => {
                 ensure_kind(&entry, TagType::String, "version")?;
-                package.version = entry.read_string()?;
+                package.version = truncate_field(entry.read_string()?);
             }
             RPMTAG_RELEASE => {
                 ensure_kind(&entry, TagType::String, "release")?;
-                package.release = entry.read_string()?;
+                package.release = truncate_field(entry.read_string()?);
             }
             RPMTAG_ARCH => {
                 ensure_kind(&entry, TagType::String, "arch")?;
-                package.arch = entry.read_string()?;
+                package.arch = truncate_field(entry.read_string()?);
             }
             RPMTAG_SOURCERPM => {
                 ensure_kind(&entry, TagType::String, "source rpm")?;
-                package.source_rpm = normalize_none(entry.read_string()?);
+                package.source_rpm = normalize_none(truncate_field(entry.read_string()?));
             }
             RPMTAG_LICENSE => {
                 ensure_kind(&entry, TagType::String, "license")?;
-                package.license = normalize_none(entry.read_string()?);
+                package.license = normalize_none(truncate_field(entry.read_string()?));
             }
             RPMTAG_VENDOR => {
                 ensure_kind(&entry, TagType::String, "vendor")?;
-                package.vendor = normalize_none(entry.read_string()?);
+                package.vendor = normalize_none(truncate_field(entry.read_string()?));
             }
             RPMTAG_DISTRIBUTION => {
                 ensure_kind(&entry, TagType::String, "distribution")?;
-                package.distribution = normalize_none(entry.read_string()?);
+                package.distribution = normalize_none(truncate_field(entry.read_string()?));
             }
             RPMTAG_PLATFORM => {
                 ensure_kind(&entry, TagType::String, "platform")?;

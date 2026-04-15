@@ -25,6 +25,9 @@
 
 use std::collections::HashMap;
 
+use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
+
 /// Parsed RFC822 metadata containing headers and an optional body.
 ///
 /// Headers are stored as `HashMap<String, Vec<String>>` to support duplicate
@@ -72,10 +75,18 @@ pub fn parse_rfc822_content(content: &str) -> Rfc822Metadata {
     let mut body_lines: Vec<String> = Vec::new();
     let mut in_headers = true;
 
-    for line in content.lines() {
+    for (i, line) in content.lines().enumerate() {
+        if i >= MAX_ITERATION_COUNT {
+            warn!(
+                "RFC822 parser iteration limit reached ({MAX_ITERATION_COUNT}), truncating input"
+            );
+            break;
+        }
+
         if in_headers {
             if line.is_empty() {
                 if let Some(name) = current_name.take() {
+                    current_value = truncate_field(current_value);
                     add_header_value(&mut headers, &name, &current_value);
                     current_value.clear();
                 }
@@ -92,6 +103,7 @@ pub fn parse_rfc822_content(content: &str) -> Rfc822Metadata {
             }
 
             if let Some(name) = current_name.take() {
+                current_value = truncate_field(current_value);
                 add_header_value(&mut headers, &name, &current_value);
                 current_value.clear();
             }
@@ -107,6 +119,7 @@ pub fn parse_rfc822_content(content: &str) -> Rfc822Metadata {
 
     // Flush last header if still open (no trailing blank line)
     if let Some(name) = current_name.take() {
+        current_value = truncate_field(current_value);
         add_header_value(&mut headers, &name, &current_value);
     }
 
@@ -133,7 +146,14 @@ pub fn parse_rfc822_paragraphs(content: &str) -> Vec<Rfc822Metadata> {
     let mut paragraphs = Vec::new();
     let mut current_paragraph = String::new();
 
-    for line in content.lines() {
+    for (i, line) in content.lines().enumerate() {
+        if i >= MAX_ITERATION_COUNT {
+            warn!(
+                "RFC822 paragraph parser iteration limit reached ({MAX_ITERATION_COUNT}), truncating input"
+            );
+            break;
+        }
+
         if line.is_empty() {
             if !current_paragraph.is_empty() {
                 // Parse the accumulated paragraph as a single-paragraph RFC822
@@ -168,7 +188,14 @@ fn parse_paragraph_headers(content: &str) -> Rfc822Metadata {
     let mut current_name: Option<String> = None;
     let mut current_value = String::new();
 
-    for line in content.lines() {
+    for (i, line) in content.lines().enumerate() {
+        if i >= MAX_ITERATION_COUNT {
+            warn!(
+                "RFC822 paragraph headers parser iteration limit reached ({MAX_ITERATION_COUNT}), truncating input"
+            );
+            break;
+        }
+
         // Continuation line
         if line.starts_with(' ') || line.starts_with('\t') {
             if current_name.is_some() {
@@ -181,6 +208,7 @@ fn parse_paragraph_headers(content: &str) -> Rfc822Metadata {
 
         // Flush previous header
         if let Some(name) = current_name.take() {
+            current_value = truncate_field(current_value);
             add_header_value(&mut headers, &name, &current_value);
             current_value.clear();
         }
@@ -194,6 +222,7 @@ fn parse_paragraph_headers(content: &str) -> Rfc822Metadata {
 
     // Flush last header
     if let Some(name) = current_name.take() {
+        current_value = truncate_field(current_value);
         add_header_value(&mut headers, &name, &current_value);
     }
 
