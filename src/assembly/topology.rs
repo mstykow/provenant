@@ -247,7 +247,9 @@ impl TopologyPlan {
                         go_assembler_config(),
                         files,
                         &domain.root_dir_file_indices,
-                    ) else {
+                    )
+                    .into_iter()
+                    .next() else {
                         continue;
                     };
 
@@ -267,7 +269,9 @@ impl TopologyPlan {
                         pixi_assembler_config(),
                         files,
                         &domain.root_dir_file_indices,
-                    ) else {
+                    )
+                    .into_iter()
+                    .next() else {
                         continue;
                     };
 

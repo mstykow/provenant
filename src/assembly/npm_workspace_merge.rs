@@ -531,7 +531,9 @@ fn create_root_package(
     root_file_indices: &[usize],
 ) -> Option<(Package, Vec<TopLevelDependency>)> {
     let (package, dependencies, _) =
-        sibling_merge::assemble_siblings(npm_family_assembler_config(), files, root_file_indices)?;
+        sibling_merge::assemble_siblings(npm_family_assembler_config(), files, root_file_indices)
+            .into_iter()
+            .next()?;
 
     package.map(|package| (package, dependencies))
 }

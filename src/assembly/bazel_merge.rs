@@ -46,8 +46,6 @@ pub(super) fn assemble_bazel_packages(
         results
     } else {
         sibling_merge::assemble_siblings(config, files, file_indices)
-            .into_iter()
-            .collect()
     }
 }
 
