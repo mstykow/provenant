@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -21,6 +21,39 @@ const FIELD_COUNT_WITH_SCRIPTS: usize = 8;
 const PACKAGE_FIELD_LENGTHS: [usize; 8] = [8, 8, 64, 8, 8, 88, 20, 48];
 const DEPENDENCY_ENTRY_SIZE: usize = 26;
 const MAX_MANIFEST_SIZE: u64 = 100 * 1024 * 1024;
+const MAX_RECURSION_DEPTH: usize = 50;
+
+struct RecursionGuard {
+    depth: usize,
+    visited: HashSet<usize>,
+}
+
+impl RecursionGuard {
+    fn new() -> Self {
+        Self {
+            depth: 0,
+            visited: HashSet::new(),
+        }
+    }
+
+    fn exceeded(&self) -> bool {
+        self.depth > MAX_RECURSION_DEPTH
+    }
+
+    fn enter(&mut self, pkg_idx: usize) -> bool {
+        if self.visited.contains(&pkg_idx) {
+            return true;
+        }
+        self.visited.insert(pkg_idx);
+        self.depth += 1;
+        false
+    }
+
+    fn leave(&mut self, pkg_idx: usize) {
+        self.visited.remove(&pkg_idx);
+        self.depth -= 1;
+    }
+}
 
 #[derive(Clone, Copy)]
 struct SliceRef {
@@ -337,6 +370,7 @@ fn build_package_data_from_lockb(
         &resolution_ids,
         buffers.string_bytes,
         true,
+        &mut RecursionGuard::new(),
     )?;
 
     Ok(package_data)
@@ -387,7 +421,16 @@ fn build_dependencies_for_package(
     resolution_ids: &[u32],
     string_bytes: &[u8],
     is_direct: bool,
+    guard: &mut RecursionGuard,
 ) -> Result<Vec<Dependency>, String> {
+    if guard.exceeded() {
+        warn!(
+            "bun.lockb build_dependencies_for_package exceeded MAX_RECURSION_DEPTH ({})",
+            MAX_RECURSION_DEPTH
+        );
+        return Ok(vec![]);
+    }
+
     let dep_slice = dependency_entries
         .get(package.dependencies.off..package.dependencies.off + package.dependencies.len)
         .ok_or_else(|| "bun.lockb dependency slice is out of bounds".to_string())?;
@@ -402,14 +445,26 @@ fn build_dependencies_for_package(
         .map(|(entry, package_id)| {
             let manifest = behavior_to_manifest(entry.behavior);
             let resolved_package = if (*package_id as usize) < packages.len() {
-                let resolved = &packages[*package_id as usize];
-                Some(Box::new(build_resolved_package(
-                    resolved,
-                    packages,
-                    dependency_entries,
-                    resolution_ids,
-                    string_bytes,
-                )?))
+                let pkg_idx = *package_id as usize;
+                if guard.enter(pkg_idx) {
+                    warn!(
+                        "bun.lockb circular dependency detected for package index {}",
+                        pkg_idx
+                    );
+                    None
+                } else {
+                    let resolved = &packages[pkg_idx];
+                    let result = build_resolved_package(
+                        resolved,
+                        packages,
+                        dependency_entries,
+                        resolution_ids,
+                        string_bytes,
+                        guard,
+                    )?;
+                    guard.leave(pkg_idx);
+                    Some(Box::new(result))
+                }
             } else {
                 None
             };
@@ -439,7 +494,49 @@ fn build_resolved_package(
     dependency_entries: &[BunLockbDependencyEntry],
     resolution_ids: &[u32],
     string_bytes: &[u8],
+    guard: &mut RecursionGuard,
 ) -> Result<ResolvedPackage, String> {
+    if guard.exceeded() {
+        warn!(
+            "bun.lockb build_resolved_package exceeded MAX_RECURSION_DEPTH ({})",
+            MAX_RECURSION_DEPTH
+        );
+        let (namespace, name) = split_namespace_name(&package.name);
+        return Ok(ResolvedPackage {
+            primary_language: Some("JavaScript".to_string()),
+            download_url: package
+                .resolution
+                .resolved
+                .as_ref()
+                .map(|s| truncate_field(s.clone())),
+            sha1: None,
+            sha256: None,
+            sha512: package
+                .integrity
+                .as_ref()
+                .and_then(|s| {
+                    parse_sri(s).and_then(|(alg, hash)| (alg == "sha512").then_some(hash))
+                })
+                .and_then(|h| Sha512Digest::from_hex(&h).ok()),
+            md5: None,
+            is_virtual: true,
+            extra_data: None,
+            dependencies: vec![],
+            repository_homepage_url: None,
+            repository_download_url: None,
+            api_data_url: None,
+            datasource_id: Some(DatasourceId::BunLockb),
+            purl: None,
+            ..ResolvedPackage::new(
+                PackageType::Npm,
+                namespace.map(truncate_field).unwrap_or_default(),
+                name.map(truncate_field)
+                    .unwrap_or_else(|| truncate_field(package.name.clone())),
+                truncate_field(package.resolution.version.clone().unwrap_or_default()),
+            )
+        });
+    }
+
     let (namespace, name) = split_namespace_name(&package.name);
 
     Ok(ResolvedPackage {
@@ -466,6 +563,7 @@ fn build_resolved_package(
             resolution_ids,
             string_bytes,
             false,
+            guard,
         )?,
         repository_homepage_url: None,
         repository_download_url: None,

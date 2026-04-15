@@ -1727,6 +1727,7 @@ pub fn parse_record_csv(content: &str) -> Vec<FileReference> {
 pub fn parse_installed_files_txt(content: &str) -> Vec<FileReference> {
     content
         .lines()
+        .take(MAX_ITERATION_COUNT)
         .map(|line| line.trim())
         .filter(|line| !line.is_empty())
         .map(|path| FileReference {
@@ -1744,6 +1745,7 @@ pub fn parse_installed_files_txt(content: &str) -> Vec<FileReference> {
 pub fn parse_sources_txt(content: &str) -> Vec<FileReference> {
     content
         .lines()
+        .take(MAX_ITERATION_COUNT)
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .map(|path| FileReference {

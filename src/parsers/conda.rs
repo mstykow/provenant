@@ -686,6 +686,7 @@ fn create_conda_dependency(
 fn extract_pip_dependencies(pip_deps: &[Value]) -> Vec<Dependency> {
     pip_deps
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|pip_dep| {
             if let Some(pip_req_str) = pip_dep.as_str()
                 && let Ok(parsed_req) = pip_req_str.parse::<pep508_rs::Requirement>()

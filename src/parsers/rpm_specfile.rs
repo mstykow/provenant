@@ -40,8 +40,9 @@ use crate::parsers::utils::{
 
 use super::PackageParser;
 
-static RE_CONDITIONAL_MACRO: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"%\{\?[^}]+\}").unwrap());
+static RE_CONDITIONAL_MACRO: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"%\{\?[^}]+\}").expect("valid regex: %{?...} pattern is a compile-time constant")
+});
 
 const PACKAGE_TYPE: PackageType = PackageType::Rpm;
 

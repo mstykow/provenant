@@ -30,26 +30,31 @@ use super::license_normalization::{
     empty_declared_license_data, normalize_declared_license_key, normalize_spdx_expression,
 };
 
-static RE_WRITEMAKEFILE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"WriteMakefile1?\s*\(").unwrap());
+static RE_WRITEMAKEFILE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"WriteMakefile1?\s*\(").expect("valid regex: WriteMakefile call pattern")
+});
 static RE_SIMPLE_KV: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?m)^\s*([A-Z_]+)\s*=>\s*(?:'([^']*)'|"([^"]*)"|q\{([^}]*)\}|q\(([^)]*)\))"#)
-        .unwrap()
+        .expect("valid regex: simple key=>value pattern")
 });
-static RE_HASH_BLOCK: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"([A-Z_]+)\s*=>\s*\{([^}]*)\}").unwrap());
-static RE_AUTHOR_ARRAY: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"AUTHOR\s*=>\s*\[([^\]]*)\]").unwrap());
-static RE_QUOTED_STRING: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"['"]([^'"]*)['"']"#).unwrap());
+static RE_HASH_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"([A-Z_]+)\s*=>\s*\{([^}]*)\}").expect("valid regex: hash block pattern")
+});
+static RE_AUTHOR_ARRAY: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"AUTHOR\s*=>\s*\[([^\]]*)\]").expect("valid regex: AUTHOR array pattern")
+});
+static RE_QUOTED_STRING: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"['"]([^'"]*)['"']"#).expect("valid regex: quoted string pattern")
+});
 static RE_DEP_PAIR: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"['"]([^'"]+)['"]\s*=>\s*(?:'([^']*)'|"([^"]*)"|(\d+))"#).unwrap()
+    Regex::new(r#"['"]([^'"]+)['"]\s*=>\s*(?:'([^']*)'|"([^"]*)"|(\d+))"#)
+        .expect("valid regex: dependency pair pattern")
 });
 static RE_VERSION_ASSIGNMENT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?m)^\s*(?:our\s+)?\$(?:[A-Za-z_][\w:]*::)?VERSION\s*=\s*(?:'([^']+)'|"([^"]+)")"#,
     )
-    .unwrap()
+    .expect("valid regex: VERSION assignment pattern")
 });
 
 const PACKAGE_TYPE: PackageType = PackageType::Cpan;
