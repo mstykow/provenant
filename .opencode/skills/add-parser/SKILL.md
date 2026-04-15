@@ -117,11 +117,21 @@ crate::register_parser!(
 
 **Multi-format ecosystems**: When an ecosystem has both a manifest and a lockfile, put all `PackageParser` impls in a single `src/parsers/<ecosystem>.rs` file with separate `register_parser!` invocations for each. Example: `src/parsers/julia.rs` contains both `JuliaProjectTomlParser` and `JuliaManifestTomlParser`.
 
+**Security utilities** (`src/parsers/utils.rs`):
+
+Every parser should use these shared helpers rather than reimplementing ADR 0004 bounds checks:
+
+- `read_file_to_string(path, max_size)` — stat-before-read size check (default 100 MB), UTF-8 with lossy fallback and warning
+- `truncate_field(value)` — caps individual string fields to 10 MB (`MAX_FIELD_LENGTH`), warns on truncation
+- `MAX_ITERATION_COUNT` (100,000) — `.take(MAX_ITERATION_COUNT)` on every `.iter()` over user-supplied collections (dependencies, keywords, authors, archive entries, etc.)
+- `MAX_MANIFEST_SIZE`, `MAX_FIELD_LENGTH` — ADR 0004 resource-limit constants
+
 **Use existing parsers as templates**:
 
-- `src/parsers/cargo.rs` — manifest parser with declared-license normalization and dependencies
+- `src/parsers/cargo.rs` — manifest parser with declared-license normalization, `is_pinned` version analysis, and `file_references` extraction (license-file, readme). Shows the `normalize_spdx_expression` license path and workspace-inheritance detection in `extra_data`.
 - `src/parsers/about.rs` — file-reference handling
-- `src/parsers/npm.rs` or `src/parsers/python.rs` — complex multi-surface ecosystems
+- `src/parsers/npm.rs` — rich manifest parser: multi-scope dependency groups via `extract_dependency_group`, VCS URL normalization (`normalize_repo_url`), SRI integrity hash parsing, party extraction (author/contributor/maintainer), and workspace/overrides metadata in `extra_data`. Good reference for ecosystems with many optional manifest surfaces.
+- `src/parsers/python.rs` — complex multi-surface ecosystem: 11 datasources in one parser, AST-based setup.py parsing (no code execution), archive safety (size/compression-ratio limits via `collect_validated_zip_entries`), bounded sibling enrichment from adjacent `.dist-info`/`.egg-info` sidecars. Demonstrates the most extensive parser structure.
 
 ### Step 3: Register the parser in `src/parsers/mod.rs`
 
@@ -274,6 +284,7 @@ Before considering a parser complete, verify ALL of the following:
 
 - `docs/HOW_TO_ADD_A_PARSER.md` — full canonical guide
 - `docs/ARCHITECTURE.md` — parser/assembly subsystem rationale
+- `docs/adr/0004-security-first-parsing.md` — security-first parsing decision and threat model (no code execution, DoS limits, archive safety, input validation)
 - `docs/TESTING_STRATEGY.md` — test-layer definitions and command guidance
 - `xtask/README.md` — xtask command CLI reference
 - `AGENTS.md` — contributor guardrails and repo conventions
