@@ -789,6 +789,9 @@ pub(crate) fn project_package_fields(value: &Value) -> Value {
                     "version": package.get("version").cloned().unwrap_or(Value::Null),
                     "purl": package.get("purl").cloned().unwrap_or(Value::Null),
                     "declared_license_expression": package.get("declared_license_expression").cloned().unwrap_or(Value::Null),
+                    "declared_license_expression_spdx": package.get("declared_license_expression_spdx").cloned().unwrap_or(Value::Null),
+                    "other_license_expression": package.get("other_license_expression").cloned().unwrap_or(Value::Null),
+                    "other_license_expression_spdx": package.get("other_license_expression_spdx").cloned().unwrap_or(Value::Null),
                     "datafile_paths": package.get("datafile_paths").cloned().unwrap_or_else(|| json!([])),
                     "datasource_ids": package.get("datasource_ids").cloned().unwrap_or_else(|| json!([])),
                 })
@@ -979,6 +982,7 @@ pub(crate) fn project_reference_follow_fields(value: &Value) -> Value {
                 "declared_license_expression": package.get("declared_license_expression").cloned().unwrap_or(Value::Null),
                 "declared_license_expression_spdx": package.get("declared_license_expression_spdx").cloned().unwrap_or(Value::Null),
                 "other_license_expression": package.get("other_license_expression").cloned().unwrap_or(Value::Null),
+                "other_license_expression_spdx": package.get("other_license_expression_spdx").cloned().unwrap_or(Value::Null),
                 "datafile_paths": package.get("datafile_paths").cloned().unwrap_or_else(|| json!([])),
                 "license_detections": package
                     .get("license_detections")
@@ -1043,6 +1047,7 @@ pub(crate) fn project_reference_follow_fields(value: &Value) -> Value {
                             "declared_license_expression": package_data.get("declared_license_expression").cloned().unwrap_or(Value::Null),
                             "declared_license_expression_spdx": package_data.get("declared_license_expression_spdx").cloned().unwrap_or(Value::Null),
                             "other_license_expression": package_data.get("other_license_expression").cloned().unwrap_or(Value::Null),
+                            "other_license_expression_spdx": package_data.get("other_license_expression_spdx").cloned().unwrap_or(Value::Null),
                             "license_detections": package_data
                                 .get("license_detections")
                                 .and_then(Value::as_array)
@@ -1146,6 +1151,89 @@ pub(crate) fn assert_package_fixture_matches_expected(fixture_dir: &str, expecte
             error,
             serde_json::to_string_pretty(&actual_normalized).unwrap_or_default(),
             serde_json::to_string_pretty(&expected_normalized).unwrap_or_default()
+        );
+    }
+}
+
+#[cfg(all(test, feature = "golden-tests"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_projection_helpers_keep_other_license_expression_spdx() {
+        let package_projection = project_package_fields(&json!({
+            "packages": [
+                {
+                    "type": "deb",
+                    "name": "demo",
+                    "declared_license_expression": "mit",
+                    "declared_license_expression_spdx": "MIT",
+                    "other_license_expression": "apache-2.0",
+                    "other_license_expression_spdx": "Apache-2.0",
+                    "datafile_paths": [],
+                    "datasource_ids": []
+                }
+            ],
+            "dependencies": []
+        }));
+        assert_eq!(
+            package_projection["packages"][0]["other_license_expression_spdx"],
+            json!("Apache-2.0")
+        );
+
+        let reference_projection = project_reference_follow_fields(&json!({
+            "packages": [
+                {
+                    "type": "deb",
+                    "name": "demo",
+                    "declared_license_expression": "mit",
+                    "declared_license_expression_spdx": "MIT",
+                    "other_license_expression": "apache-2.0",
+                    "other_license_expression_spdx": "Apache-2.0",
+                    "datafile_paths": [],
+                    "license_detections": [],
+                    "other_license_detections": []
+                }
+            ],
+            "files": [
+                {
+                    "path": "demo/copyright",
+                    "type": "file",
+                    "is_top_level": true,
+                    "is_key_file": true,
+                    "is_manifest": true,
+                    "detected_license_expression": null,
+                    "detected_license_expression_spdx": null,
+                    "license_detections": [],
+                    "package_data": [
+                        {
+                            "type": "deb",
+                            "name": "demo",
+                            "version": "1.0.0",
+                            "declared_license_expression": "mit",
+                            "declared_license_expression_spdx": "MIT",
+                            "other_license_expression": "apache-2.0",
+                            "other_license_expression_spdx": "Apache-2.0",
+                            "license_detections": [],
+                            "other_license_detections": []
+                        }
+                    ]
+                }
+            ],
+            "license_detections": [],
+            "license_references": [],
+            "license_rule_references": [],
+            "summary": null,
+            "tallies": null,
+            "tallies_of_key_files": null
+        }));
+        assert_eq!(
+            reference_projection["packages"][0]["other_license_expression_spdx"],
+            json!("Apache-2.0")
+        );
+        assert_eq!(
+            reference_projection["files"][0]["package_data"][0]["other_license_expression_spdx"],
+            json!("Apache-2.0")
         );
     }
 }
