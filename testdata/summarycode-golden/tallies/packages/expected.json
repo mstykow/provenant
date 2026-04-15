@@ -25,15 +25,15 @@
       "copyright": null,
       "holder": null,
       "declared_license_expression": "public-domain",
-      "declared_license_expression_spdx": "LicenseRef-scancode-public-domain",
+      "declared_license_expression_spdx": "LicenseRef-provenant-public-domain",
       "license_detections": [
         {
           "license_expression": "public-domain",
-          "license_expression_spdx": "LicenseRef-scancode-public-domain",
+          "license_expression_spdx": "LicenseRef-provenant-public-domain",
           "matches": [
             {
               "license_expression": "public-domain",
-              "license_expression_spdx": "LicenseRef-scancode-public-domain",
+              "license_expression_spdx": "LicenseRef-provenant-public-domain",
               "from_file": "scan/aopalliance/aopalliance/1.0/aopalliance-1.0.pom",
               "start_line": 1,
               "end_line": 1,
@@ -1199,15 +1199,15 @@
           "copyright": null,
           "holder": null,
           "declared_license_expression": "public-domain",
-          "declared_license_expression_spdx": "LicenseRef-scancode-public-domain",
+          "declared_license_expression_spdx": "LicenseRef-provenant-public-domain",
           "license_detections": [
             {
               "license_expression": "public-domain",
-              "license_expression_spdx": "LicenseRef-scancode-public-domain",
+              "license_expression_spdx": "LicenseRef-provenant-public-domain",
               "matches": [
                 {
                   "license_expression": "public-domain",
-                  "license_expression_spdx": "LicenseRef-scancode-public-domain",
+                  "license_expression_spdx": "LicenseRef-provenant-public-domain",
                   "from_file": "scan/aopalliance/aopalliance/1.0/aopalliance-1.0.pom",
                   "start_line": 1,
                   "end_line": 1,
