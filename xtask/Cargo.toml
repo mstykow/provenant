@@ -41,10 +41,10 @@ path = "src/bin/compare_outputs.rs"
 anyhow = { workspace = true }
 clap = { workspace = true }
 inventory = { workspace = true }
+postcard = { workspace = true }
 provenant = { path = "..", package = "provenant-cli", features = ["golden-tests"] }
 rayon = { workspace = true }
 regex = { workspace = true }
-rmp-serde = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.11.0"

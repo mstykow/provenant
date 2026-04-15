@@ -93,8 +93,8 @@ fn serialize_loader_snapshot_to_bytes(
         licenses,
     };
 
-    let msgpack = rmp_serde::to_vec(&snapshot).map_err(|e| e.to_string())?;
-    zstd::encode_all(&msgpack[..], 0).map_err(|e| e.to_string())
+    let postcard_bytes = postcard::to_allocvec(&snapshot).map_err(|e| e.to_string())?;
+    zstd::encode_all(&postcard_bytes[..], 0).map_err(|e| e.to_string())
 }
 
 mod engine_loading {
@@ -200,8 +200,8 @@ mod failure_handling {
             rules: vec![create_test_loaded_rule()],
             licenses: vec![create_test_loaded_license()],
         };
-        let msgpack = rmp_serde::to_vec(&snapshot).unwrap();
-        let bytes = zstd::encode_all(&msgpack[..], 0).unwrap();
+        let postcard_bytes = postcard::to_allocvec(&snapshot).unwrap();
+        let bytes = zstd::encode_all(&postcard_bytes[..], 0).unwrap();
 
         let error = load_embedded_license_index_from_bytes(&bytes)
             .map(|loaded| loaded.index)
@@ -231,7 +231,7 @@ mod packaging {
     fn test_embedded_artifact_schema_version() {
         let artifact_bytes = include_bytes!("../../resources/license_detection/license_index.zst");
         let decompressed = zstd::decode_all(&artifact_bytes[..]).unwrap();
-        let snapshot: EmbeddedLoaderSnapshot = rmp_serde::from_slice(&decompressed).unwrap();
+        let snapshot: EmbeddedLoaderSnapshot = postcard::from_bytes(&decompressed).unwrap();
 
         assert_eq!(snapshot.schema_version, SCHEMA_VERSION);
     }
@@ -240,7 +240,7 @@ mod packaging {
     fn test_embedded_artifact_has_non_empty_rules_and_licenses() {
         let artifact_bytes = include_bytes!("../../resources/license_detection/license_index.zst");
         let decompressed = zstd::decode_all(&artifact_bytes[..]).unwrap();
-        let snapshot: EmbeddedLoaderSnapshot = rmp_serde::from_slice(&decompressed).unwrap();
+        let snapshot: EmbeddedLoaderSnapshot = postcard::from_bytes(&decompressed).unwrap();
 
         assert!(!snapshot.rules.is_empty());
         assert!(!snapshot.licenses.is_empty());
@@ -250,7 +250,7 @@ mod packaging {
     fn test_embedded_artifact_metadata_has_spdx_license_list_version() {
         let artifact_bytes = include_bytes!("../../resources/license_detection/license_index.zst");
         let decompressed = zstd::decode_all(&artifact_bytes[..]).unwrap();
-        let snapshot: EmbeddedLoaderSnapshot = rmp_serde::from_slice(&decompressed).unwrap();
+        let snapshot: EmbeddedLoaderSnapshot = postcard::from_bytes(&decompressed).unwrap();
 
         assert!(!snapshot.metadata.spdx_license_list_version.is_empty());
     }

@@ -33,7 +33,7 @@ pub fn load_loader_snapshot_from_bytes(
         SerializationError(format!("Failed to decompress embedded artifact: {}", e))
     })?;
 
-    let snapshot: EmbeddedLoaderSnapshot = rmp_serde::from_slice(&decompressed).map_err(|e| {
+    let snapshot: EmbeddedLoaderSnapshot = postcard::from_bytes(&decompressed).map_err(|e| {
         SerializationError(format!("Failed to deserialize embedded artifact: {}", e))
     })?;
 
@@ -88,11 +88,11 @@ mod tests {
             licenses,
         };
 
-        let msgpack = rmp_serde::to_vec(&snapshot).map_err(|e| {
+        let postcard_bytes = postcard::to_allocvec(&snapshot).map_err(|e| {
             SerializationError(format!("Failed to serialize embedded artifact: {}", e))
         })?;
 
-        zstd::encode_all(&msgpack[..], 0)
+        zstd::encode_all(&postcard_bytes[..], 0)
             .map_err(|e| SerializationError(format!("Failed to compress embedded artifact: {}", e)))
     }
 

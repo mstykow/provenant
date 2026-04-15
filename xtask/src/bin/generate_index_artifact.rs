@@ -69,9 +69,10 @@ fn main() -> Result<()> {
     };
 
     println!("Serializing...");
-    let msgpack = rmp_serde::to_vec(&snapshot).context("Failed to serialize embedded artifact")?;
+    let postcard_bytes =
+        postcard::to_allocvec(&snapshot).context("Failed to serialize embedded artifact")?;
     let bytes =
-        zstd::encode_all(&msgpack[..], 0).context("Failed to compress embedded artifact")?;
+        zstd::encode_all(&postcard_bytes[..], 0).context("Failed to compress embedded artifact")?;
 
     println!("Total artifact size: {} bytes", bytes.len());
 
