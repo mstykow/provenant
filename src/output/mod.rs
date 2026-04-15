@@ -355,6 +355,28 @@ mod tests {
     }
 
     #[test]
+    fn test_detected_license_expression_spdx_prefers_detection_spdx_values() {
+        let mut internal = sample_internal_output();
+        internal.files[0].license_expression = Some("mit".to_string());
+
+        let schema_file = OutputFileInfo::from(&internal.files[0]);
+        let schema_value = serde_json::to_value(&schema_file).expect("file info serializes");
+        assert_eq!(schema_value["detected_license_expression_spdx"], "MIT");
+
+        let output = Output::from(&internal);
+        let mut bytes = Vec::new();
+        writer_for_format(OutputFormat::Json)
+            .write(&output, &mut bytes, &OutputWriteConfig::default())
+            .expect("json write should succeed");
+
+        let rendered: Value = serde_json::from_slice(&bytes).expect("json output should parse");
+        assert_eq!(
+            rendered["files"][0]["detected_license_expression_spdx"],
+            "MIT"
+        );
+    }
+
+    #[test]
     fn test_json_lines_writer_sorts_files_by_path_for_reproducibility() {
         let mut internal = sample_internal_output();
         internal.files.reverse();
