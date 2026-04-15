@@ -1,8 +1,41 @@
 #[cfg(test)]
 mod tests {
     use crate::models::DatasourceId;
+    use std::path::PathBuf;
 
     use super::super::scan_test_utils::scan_and_assemble;
+
+    #[test]
+    fn test_debian_deb_scan_promotes_top_level_package() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("testdata/debian/deb/adduser_3.112ubuntu1_all.deb");
+        let copied_fixture = temp_dir.path().join("adduser_3.112ubuntu1_all.deb");
+
+        std::fs::copy(&fixture, &copied_fixture).expect("copy deb fixture");
+
+        let (files, result) = scan_and_assemble(temp_dir.path());
+
+        let package = result
+            .packages
+            .iter()
+            .find(|package| package.name.as_deref() == Some("adduser"))
+            .expect("deb archive should be promoted to a top-level package");
+
+        assert!(package.datasource_ids.contains(&DatasourceId::DebianDeb));
+        assert_eq!(package.version.as_deref(), Some("3.112ubuntu1"));
+        assert_eq!(
+            package.purl.as_deref(),
+            Some("pkg:deb/ubuntu/adduser@3.112ubuntu1?arch=all")
+        );
+
+        let deb_file = files
+            .iter()
+            .find(|file| file.path.ends_with("/adduser_3.112ubuntu1_all.deb"))
+            .expect("copied deb fixture should be present in scan output");
+
+        assert!(deb_file.for_packages.contains(&package.package_uid));
+    }
 
     #[test]
     fn test_debian_status_d_scan_assigns_installed_files_and_keeps_dependencies() {
