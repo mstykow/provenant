@@ -322,6 +322,7 @@ use std::path::Path;
 
 use crate::models::{PackageData, PackageType};
 use crate::parsers::license_normalization::finalize_package_declared_license_references;
+use crate::parsers::utils::MAX_ITERATION_COUNT;
 
 thread_local! {
     static PARSER_DIAGNOSTIC_STACK: RefCell<Vec<Vec<String>>> = const { RefCell::new(Vec::new()) };
@@ -367,6 +368,7 @@ where
                     finalize_package_declared_license_references(&mut package);
                     package
                 })
+                .take(MAX_ITERATION_COUNT)
                 .collect(),
             scan_errors,
         },

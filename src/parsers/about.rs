@@ -23,8 +23,8 @@
 
 use crate::models::{DatasourceId, FileReference, PackageData, PackageType, Party};
 use crate::parser_warn as warn;
+use crate::parsers::utils::{read_file_to_string, truncate_field};
 use packageurl::PackageUrl;
-use std::fs;
 use std::path::Path;
 use std::str::FromStr;
 use url::Url;
@@ -85,23 +85,23 @@ impl PackageParser for AboutFileParser {
         let about_namespace = yaml
             .get(FIELD_NAMESPACE)
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|v| truncate_field(v.to_string()));
 
         let purl_string = yaml
             .get(FIELD_PURL)
             .and_then(|v| v.as_str())
             .or_else(|| yaml.get(FIELD_PACKAGE_URL).and_then(|v| v.as_str()))
-            .map(String::from);
+            .map(|v| truncate_field(v.to_string()));
 
         // Parse purl if present
         let (purl_type, purl_namespace, purl_name, purl_version) =
             if let Some(ref purl_str) = purl_string {
                 match PackageUrl::from_str(purl_str) {
                     Ok(purl) => (
-                        Some(purl.ty().to_string()),
-                        purl.namespace().map(String::from),
-                        Some(purl.name().to_string()),
-                        purl.version().map(String::from),
+                        Some(truncate_field(purl.ty().to_string())),
+                        purl.namespace().map(|v| truncate_field(v.to_string())),
+                        Some(truncate_field(purl.name().to_string())),
+                        purl.version().map(|v| truncate_field(v.to_string())),
                     ),
                     Err(e) => {
                         warn!("Failed to parse purl '{}': {}", purl_str, e);
@@ -137,14 +137,16 @@ impl PackageParser for AboutFileParser {
                 inferred
                     .as_ref()
                     .and_then(|identity| identity.namespace.clone())
-            });
+            })
+            .map(truncate_field);
 
         // Name and version from YAML or purl
         let name = yaml
             .get(FIELD_NAME)
             .and_then(yaml_value_to_string)
             .or(purl_name.clone())
-            .or_else(|| inferred.as_ref().and_then(|identity| identity.name.clone()));
+            .or_else(|| inferred.as_ref().and_then(|identity| identity.name.clone()))
+            .map(truncate_field);
 
         let version = yaml
             .get(FIELD_VERSION)
@@ -154,29 +156,30 @@ impl PackageParser for AboutFileParser {
                 inferred
                     .as_ref()
                     .and_then(|identity| identity.version.clone())
-            });
+            })
+            .map(truncate_field);
 
         // Homepage URL (two possible field names)
         let homepage_url = yaml
             .get(FIELD_HOME_URL)
             .and_then(|v| v.as_str())
             .or_else(|| yaml.get(FIELD_HOMEPAGE_URL).and_then(|v| v.as_str()))
-            .map(String::from);
+            .map(|v| truncate_field(v.to_string()));
 
         let download_url = yaml
             .get(FIELD_DOWNLOAD_URL)
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|v| truncate_field(v.to_string()));
 
         let copyright = yaml
             .get(FIELD_COPYRIGHT)
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|v| truncate_field(v.to_string()));
 
         let extracted_license_statement = yaml
             .get(FIELD_LICENSE_EXPRESSION)
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|v| truncate_field(v.to_string()));
         let file_references = extract_file_references(&yaml);
         let (declared_license_expression, declared_license_expression_spdx, license_detections) =
             extracted_license_statement
@@ -197,37 +200,39 @@ impl PackageParser for AboutFileParser {
         let vcs_url = yaml
             .get(Value::String("vcs_url".to_string()))
             .and_then(|v| v.as_str())
-            .map(String::from);
+            .map(|v| truncate_field(v.to_string()));
 
         let extra_data = build_extra_data(&yaml);
 
-        let purl = purl_string.or_else(|| {
-            let name = yaml
-                .get(FIELD_NAME)
-                .and_then(yaml_value_to_string)
-                .or(purl_name.clone())
-                .or_else(|| inferred.as_ref().and_then(|identity| identity.name.clone()));
-            let version = yaml
-                .get(FIELD_VERSION)
-                .and_then(yaml_value_to_string)
-                .or(purl_version.clone())
-                .or_else(|| {
+        let purl = purl_string
+            .or_else(|| {
+                let name = yaml
+                    .get(FIELD_NAME)
+                    .and_then(yaml_value_to_string)
+                    .or(purl_name.clone())
+                    .or_else(|| inferred.as_ref().and_then(|identity| identity.name.clone()));
+                let version = yaml
+                    .get(FIELD_VERSION)
+                    .and_then(yaml_value_to_string)
+                    .or(purl_version.clone())
+                    .or_else(|| {
+                        inferred
+                            .as_ref()
+                            .and_then(|identity| identity.version.clone())
+                    });
+                let namespace = about_namespace.clone().or_else(|| {
                     inferred
                         .as_ref()
-                        .and_then(|identity| identity.version.clone())
+                        .and_then(|identity| identity.namespace.clone())
                 });
-            let namespace = about_namespace.clone().or_else(|| {
-                inferred
-                    .as_ref()
-                    .and_then(|identity| identity.namespace.clone())
-            });
-            build_about_purl(
-                package_type,
-                namespace.as_deref(),
-                name.as_deref(),
-                version.as_deref(),
-            )
-        });
+                build_about_purl(
+                    package_type,
+                    namespace.as_deref(),
+                    name.as_deref(),
+                    version.as_deref(),
+                )
+            })
+            .map(truncate_field);
 
         // Owner party
         let parties = extract_owner_party(&yaml);
@@ -288,7 +293,8 @@ impl PackageParser for AboutFileParser {
 
 /// Reads and parses a YAML file.
 fn read_and_parse_yaml(path: &Path) -> Result<yaml_serde::Mapping, String> {
-    let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let content =
+        read_file_to_string(path, None).map_err(|e| format!("Failed to read file: {}", e))?;
 
     let value: Value =
         yaml_serde::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
@@ -314,11 +320,8 @@ fn extract_owner_party(yaml: &yaml_serde::Mapping) -> Vec<Party> {
     let owner = yaml
         .get(Value::String(FIELD_OWNER.to_string()))
         .map(|v| match v {
-            Value::String(s) => s.clone(),
-            _ => {
-                // Convert non-string values to their debug representation
-                format!("{:?}", v)
-            }
+            Value::String(s) => truncate_field(s.clone()),
+            _ => truncate_field(format!("{:?}", v)),
         });
 
     if let Some(owner_name) = owner {
@@ -357,7 +360,7 @@ fn extract_file_references(yaml: &yaml_serde::Mapping) -> Vec<FileReference> {
 
     if let Some(path) = about_resource {
         refs.push(FileReference {
-            path: path.to_string(),
+            path: truncate_field(path.to_string()),
             size: None,
             sha1: None,
             md5: None,
@@ -369,7 +372,7 @@ fn extract_file_references(yaml: &yaml_serde::Mapping) -> Vec<FileReference> {
 
     for path in [license_file, notice_file].into_iter().flatten() {
         refs.push(FileReference {
-            path: path.to_string(),
+            path: truncate_field(path.to_string()),
             size: None,
             sha1: None,
             md5: None,
@@ -454,7 +457,10 @@ fn build_extra_data(
         if let Some(value) = yaml.get(Value::String(key.to_string()))
             && let Some(value) = yaml_value_to_string(value)
         {
-            extra_data.insert(key.to_string(), serde_json::Value::String(value));
+            extra_data.insert(
+                key.to_string(),
+                serde_json::Value::String(truncate_field(value)),
+            );
         }
     }
     (!extra_data.is_empty()).then_some(extra_data)
