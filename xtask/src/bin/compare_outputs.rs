@@ -1550,7 +1550,7 @@ fn write_manifest(context: &ContextState) -> Result<()> {
 fn build_scancode_cli_args(context: &ContextState) -> Vec<String> {
     let mut args = vec!["--json-pp".to_string(), "/out/scancode.json".to_string()];
     args.extend(context.scan_args.clone());
-    args.extend(shared_ignore_args());
+    args.extend(scancode_ignore_args());
     args.push("/input".to_string());
     args
 }
@@ -1586,13 +1586,20 @@ fn build_provenant_args(context: &ContextState) -> Vec<String> {
         "--no-license-index-cache".to_string(),
     ];
     args.extend(context.scan_args.clone());
-    args.extend(shared_ignore_args());
+    args.extend(provenant_ignore_args());
     args.push(".".to_string());
     args
 }
 
-fn shared_ignore_args() -> Vec<String> {
+fn scancode_ignore_args() -> Vec<String> {
     [".git", ".git/**", "**/.git", "**/.git/**", "target/*"]
+        .into_iter()
+        .flat_map(|pattern| ["--ignore".to_string(), pattern.to_string()])
+        .collect()
+}
+
+fn provenant_ignore_args() -> Vec<String> {
+    ["target/*"]
         .into_iter()
         .flat_map(|pattern| ["--ignore".to_string(), pattern.to_string()])
         .collect()
@@ -2226,8 +2233,8 @@ mod tests {
     }
 
     #[test]
-    fn shared_ignore_args_keep_git_control_paths_without_hiding_gitmodules() {
-        let args = shared_ignore_args();
+    fn scancode_ignore_args_keep_git_control_paths_without_hiding_gitmodules() {
+        let args = scancode_ignore_args();
 
         assert!(args.windows(2).any(|pair| pair == ["--ignore", ".git"]));
         assert!(args.windows(2).any(|pair| pair == ["--ignore", ".git/**"]));
@@ -2238,6 +2245,17 @@ mod tests {
         );
         assert!(!args.iter().any(|arg| arg == "*.git*"));
         assert!(!args.iter().any(|arg| arg == ".gitmodules"));
+    }
+
+    #[test]
+    fn provenant_ignore_args_only_keep_target_build_output_excluded() {
+        let args = provenant_ignore_args();
+
+        assert!(args.windows(2).any(|pair| pair == ["--ignore", "target/*"]));
+        assert!(!args.iter().any(|arg| arg == ".git"));
+        assert!(!args.iter().any(|arg| arg == ".git/**"));
+        assert!(!args.iter().any(|arg| arg == "**/.git"));
+        assert!(!args.iter().any(|arg| arg == "**/.git/**"));
     }
 
     #[test]
