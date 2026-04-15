@@ -29,8 +29,8 @@ use crate::scan_result_shaping::{
     apply_cli_path_selection_filter, apply_ignore_resource_filter, apply_mark_source,
     apply_only_findings_filter, apply_user_path_filters_to_collected, filter_redundant_clues,
     filter_redundant_clues_with_rules, load_and_merge_json_inputs, normalize_paths,
-    normalize_top_level_output_paths, prepare_filter_clue_rule_lookup, resolve_native_scan_inputs,
-    trim_preloaded_assembly_to_files,
+    normalize_top_level_output_paths, populate_info_resource_counts,
+    prepare_filter_clue_rule_lookup, resolve_native_scan_inputs, trim_preloaded_assembly_to_files,
 };
 use crate::scanner::{
     LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected_with_memory_limit,
@@ -893,44 +893,6 @@ fn should_include_info_surface(files: &[crate::models::FileInfo], cli: &Cli) -> 
                 || file.dirs_count.is_some()
                 || file.size_count.is_some()
         })
-}
-
-fn populate_info_resource_counts(files: &mut [crate::models::FileInfo]) {
-    let snapshot: Vec<(String, crate::models::FileType, u64)> = files
-        .iter()
-        .map(|file| (file.path.clone(), file.file_type.clone(), file.size))
-        .collect();
-
-    for file in files {
-        match file.file_type {
-            crate::models::FileType::Directory => {
-                let prefix = format!("{}/", file.path);
-                let mut files_count = 0usize;
-                let mut dirs_count = 0usize;
-                let mut size_count = 0u64;
-                for (path, file_type, size) in &snapshot {
-                    if !path.starts_with(&prefix) {
-                        continue;
-                    }
-                    match file_type {
-                        crate::models::FileType::Directory => dirs_count += 1,
-                        crate::models::FileType::File => {
-                            files_count += 1;
-                            size_count += *size;
-                        }
-                    }
-                }
-                file.files_count = Some(files_count);
-                file.dirs_count = Some(dirs_count);
-                file.size_count = Some(size_count);
-            }
-            crate::models::FileType::File => {
-                file.files_count = Some(0);
-                file.dirs_count = Some(0);
-                file.size_count = Some(0);
-            }
-        }
-    }
 }
 
 fn record_detail_timing<T, F>(progress: &Arc<ScanProgress>, name: impl Into<String>, f: F) -> T
