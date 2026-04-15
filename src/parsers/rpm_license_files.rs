@@ -8,6 +8,7 @@ use std::path::Path;
 
 use crate::models::PackageData;
 use crate::parsers::PackageParser;
+use crate::parsers::utils::truncate_field;
 
 const PACKAGE_TYPE: PackageType = PackageType::Rpm;
 
@@ -60,7 +61,10 @@ impl PackageParser for RpmLicenseFilesParser {
         // Split by usr/share/licenses/ and get the next path component
         let name = if let Some(after_licenses) = path_str.split("usr/share/licenses/").nth(1) {
             // Get the first path component after licenses/ (the package name)
-            after_licenses.split('/').next().map(|s| s.to_string())
+            after_licenses
+                .split('/')
+                .next()
+                .map(|s| truncate_field(s.to_string()))
         } else {
             None
         };
@@ -80,7 +84,7 @@ impl PackageParser for RpmLicenseFilesParser {
             if let Ok(mut purl) = PackageUrl::new(PACKAGE_TYPE.as_str(), package_name)
                 && purl.with_namespace("mariner").is_ok()
             {
-                pkg.purl = Some(purl.to_string());
+                pkg.purl = Some(truncate_field(purl.to_string()));
             }
         }
 

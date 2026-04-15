@@ -21,9 +21,10 @@
 //! - IO.read(...) expressions in Ruby files are skipped (cannot evaluate Ruby code)
 
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::fs::{self, File};
+use std::io::{BufRead, BufReader};
 use std::path::Path;
+use std::sync::LazyLock;
 
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
@@ -33,6 +34,7 @@ use serde_json::Value;
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 
 use super::PackageParser;
+use super::utils::{MAX_ITERATION_COUNT, MAX_MANIFEST_SIZE, read_file_to_string, truncate_field};
 
 const FIELD_NAME: &str = "name";
 const FIELD_VERSION: &str = "version";
@@ -45,6 +47,14 @@ const FIELD_SOURCE_URL: &str = "source_url";
 const FIELD_ISSUES_URL: &str = "issues_url";
 const FIELD_DEPENDENCIES: &str = "dependencies";
 const FIELD_DEPENDS: &str = "depends";
+
+static RE_FIELD: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"^\s*(\w+)\s+['"](.+?)['"]"#).expect("valid regex"));
+static RE_DEPENDS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"^\s*depends\s+['"](.+?)['"](?:\s*,\s*['"](.+?)['"])?"#).expect("valid regex")
+});
+static RE_IO_READ: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"IO\.read\(").expect("valid regex"));
 
 struct ChefPackageFields {
     datasource_id: DatasourceId,
@@ -95,45 +105,52 @@ impl PackageParser for ChefMetadataJsonParser {
             .get(FIELD_NAME)
             .and_then(|v| v.as_str())
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(truncate_field);
 
         let version = json_content
             .get(FIELD_VERSION)
             .and_then(|v| v.as_str())
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(truncate_field);
 
-        let description = extract_description(&json_content);
+        let description = extract_description(&json_content).map(truncate_field);
 
         let extracted_license_statement = json_content
             .get(FIELD_LICENSE)
             .and_then(|v| v.as_str())
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(truncate_field);
 
         let maintainer_name = json_content
             .get(FIELD_MAINTAINER)
             .and_then(|v| v.as_str())
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(truncate_field);
 
         let maintainer_email = json_content
             .get(FIELD_MAINTAINER_EMAIL)
             .and_then(|v| v.as_str())
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(truncate_field);
 
         let code_view_url = json_content
             .get(FIELD_SOURCE_URL)
             .and_then(|v| v.as_str())
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(truncate_field);
 
         let bug_tracking_url = json_content
             .get(FIELD_ISSUES_URL)
             .and_then(|v| v.as_str())
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(truncate_field);
 
         let mut deps: HashMap<String, Option<String>> = HashMap::new();
 
@@ -141,22 +158,30 @@ impl PackageParser for ChefMetadataJsonParser {
             .get(FIELD_DEPENDENCIES)
             .and_then(|v| v.as_object())
         {
-            for (dep_name, dep_version) in deps_obj {
+            for (dep_name, dep_version) in deps_obj.iter().take(MAX_ITERATION_COUNT) {
                 let version_constraint = dep_version
                     .as_str()
                     .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty());
-                deps.insert(dep_name.trim().to_string(), version_constraint);
+                    .filter(|s| !s.is_empty())
+                    .map(truncate_field);
+                deps.insert(
+                    truncate_field(dep_name.trim().to_string()),
+                    version_constraint,
+                );
             }
         }
 
         if let Some(depends_obj) = json_content.get(FIELD_DEPENDS).and_then(|v| v.as_object()) {
-            for (dep_name, dep_version) in depends_obj {
+            for (dep_name, dep_version) in depends_obj.iter().take(MAX_ITERATION_COUNT) {
                 let version_constraint = dep_version
                     .as_str()
                     .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty());
-                deps.insert(dep_name.trim().to_string(), version_constraint);
+                    .filter(|s| !s.is_empty())
+                    .map(truncate_field);
+                deps.insert(
+                    truncate_field(dep_name.trim().to_string()),
+                    version_constraint,
+                );
             }
         }
 
@@ -176,10 +201,7 @@ impl PackageParser for ChefMetadataJsonParser {
 }
 
 fn read_json_file(path: &Path) -> Result<Value, String> {
-    let mut file = File::open(path).map_err(|e| format!("Failed to open file: {}", e))?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let contents = read_file_to_string(path, None).map_err(|e| e.to_string())?;
     serde_json::from_str(&contents).map_err(|e| format!("Failed to parse JSON: {}", e))
 }
 
@@ -218,6 +240,18 @@ impl PackageParser for ChefMetadataRbParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
+        if let Ok(metadata) = fs::metadata(path)
+            && metadata.len() > MAX_MANIFEST_SIZE
+        {
+            warn!(
+                "File {:?} is {} bytes, exceeding the {} byte limit",
+                path,
+                metadata.len(),
+                MAX_MANIFEST_SIZE
+            );
+            return vec![default_package_data(DatasourceId::ChefCookbookMetadataRb)];
+        }
+
         let file = match File::open(path) {
             Ok(f) => f,
             Err(e) => {
@@ -230,15 +264,13 @@ impl PackageParser for ChefMetadataRbParser {
         let mut fields: HashMap<String, String> = HashMap::new();
         let mut deps: HashMap<String, Option<String>> = HashMap::new();
 
-        let field_pattern = Regex::new(r#"^\s*(\w+)\s+['"](.+?)['"]"#).unwrap();
-        let depends_pattern =
-            Regex::new(r#"^\s*depends\s+['"](.+?)['"](?:\s*,\s*['"](.+?)['"])?"#).unwrap();
-        let io_read_pattern = Regex::new(r"IO\.read\(").unwrap();
-
-        for line in reader.lines() {
+        for line in reader.lines().take(MAX_ITERATION_COUNT) {
             let line = match line {
                 Ok(l) => l,
-                Err(_) => continue,
+                Err(e) => {
+                    warn!("Skipping non-UTF-8 line in {:?}: {}", path, e);
+                    continue;
+                }
             };
 
             let trimmed = line.trim();
@@ -247,27 +279,40 @@ impl PackageParser for ChefMetadataRbParser {
                 continue;
             }
 
-            if io_read_pattern.is_match(&line) {
+            if RE_IO_READ.is_match(&line) {
                 continue;
             }
 
-            if let Some(caps) = depends_pattern.captures(&line) {
-                let dep_name = caps.get(1).map(|m| m.as_str().to_string()).unwrap();
+            if let Some(caps) = RE_DEPENDS.captures(&line) {
+                let dep_name = caps
+                    .get(1)
+                    .map(|m| m.as_str().to_string())
+                    .unwrap_or_default();
                 let dep_version = caps.get(2).map(|m| m.as_str().to_string());
-                deps.insert(dep_name, dep_version);
+                if !dep_name.is_empty() {
+                    deps.insert(dep_name, dep_version);
+                }
                 continue;
             }
 
-            if let Some(caps) = field_pattern.captures(&line) {
-                let key = caps.get(1).map(|m| m.as_str().to_string()).unwrap();
-                let value = caps.get(2).map(|m| m.as_str().to_string()).unwrap();
+            if let Some(caps) = RE_FIELD.captures(&line) {
+                let key = caps
+                    .get(1)
+                    .map(|m| m.as_str().to_string())
+                    .unwrap_or_default();
+                let value = caps
+                    .get(2)
+                    .map(|m| m.as_str().to_string())
+                    .unwrap_or_default();
 
-                match key.as_str() {
-                    "name" | "version" | "description" | "long_description" | "license"
-                    | "maintainer" | "maintainer_email" | "source_url" | "issues_url" => {
-                        fields.insert(key, value);
+                if !key.is_empty() && !value.is_empty() {
+                    match key.as_str() {
+                        "name" | "version" | "description" | "long_description" | "license"
+                        | "maintainer" | "maintainer_email" | "source_url" | "issues_url" => {
+                            fields.insert(key, value);
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
         }
@@ -275,48 +320,57 @@ impl PackageParser for ChefMetadataRbParser {
         let name = fields
             .get("name")
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(truncate_field);
 
         let version = fields
             .get("version")
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(truncate_field);
 
         let description = fields
             .get("description")
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
+            .map(truncate_field)
             .or_else(|| {
                 fields
                     .get("long_description")
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty())
+                    .map(truncate_field)
             });
 
         let extracted_license_statement = fields
             .get("license")
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(truncate_field);
 
         let maintainer_name = fields
             .get("maintainer")
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(truncate_field);
 
         let maintainer_email = fields
             .get("maintainer_email")
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(truncate_field);
 
         let code_view_url = fields
             .get("source_url")
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(truncate_field);
 
         let bug_tracking_url = fields
             .get("issues_url")
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+            .filter(|s| !s.is_empty())
+            .map(truncate_field);
 
         vec![build_package(ChefPackageFields {
             datasource_id: DatasourceId::ChefCookbookMetadataRb,
@@ -349,9 +403,9 @@ fn build_package(fields: ChefPackageFields) -> PackageData {
     let parties = if maintainer_name.is_some() || maintainer_email.is_some() {
         vec![Party {
             r#type: None,
-            role: Some("maintainer".to_string()),
-            name: maintainer_name,
-            email: maintainer_email,
+            role: Some(truncate_field("maintainer".to_string())),
+            name: maintainer_name.map(truncate_field),
+            email: maintainer_email.map(truncate_field),
             url: None,
             organization: None,
             organization_url: None,
@@ -365,12 +419,12 @@ fn build_package(fields: ChefPackageFields) -> PackageData {
         .into_iter()
         .map(|(dep_name, version_constraint)| {
             let purl = PackageUrl::new("chef", &dep_name)
-                .map(|p| p.to_string())
+                .map(|p| truncate_field(p.to_string()))
                 .ok();
             Dependency {
                 purl,
-                extracted_requirement: version_constraint,
-                scope: Some("dependencies".to_string()),
+                extracted_requirement: version_constraint.map(truncate_field),
+                scope: Some(truncate_field("dependencies".to_string())),
                 is_runtime: Some(true),
                 is_optional: Some(false),
                 is_pinned: None,
@@ -389,18 +443,18 @@ fn build_package(fields: ChefPackageFields) -> PackageData {
 
     let (download_url, repository_download_url, repository_homepage_url, api_data_url) =
         if let (Some(n), Some(v)) = (&name, &version) {
-            let download = format!(
+            let download = truncate_field(format!(
                 "https://supermarket.chef.io/cookbooks/{}/versions/{}/download",
                 n, v
-            );
-            let homepage = format!(
+            ));
+            let homepage = truncate_field(format!(
                 "https://supermarket.chef.io/cookbooks/{}/versions/{}/",
                 n, v
-            );
-            let api = format!(
+            ));
+            let api = truncate_field(format!(
                 "https://supermarket.chef.io/api/v1/cookbooks/{}/versions/{}",
                 n, v
-            );
+            ));
             (
                 Some(download.clone()),
                 Some(download),
@@ -415,7 +469,7 @@ fn build_package(fields: ChefPackageFields) -> PackageData {
         (Some(name), Some(version)) => PackageUrl::new("chef", name)
             .map(|mut p| {
                 let _ = p.with_version(version);
-                p.to_string()
+                truncate_field(p.to_string())
             })
             .ok(),
         _ => None,
@@ -437,7 +491,7 @@ fn build_package(fields: ChefPackageFields) -> PackageData {
         repository_homepage_url,
         api_data_url,
         purl,
-        primary_language: Some("Ruby".to_string()),
+        primary_language: Some(truncate_field("Ruby".to_string())),
         ..Default::default()
     }
 }

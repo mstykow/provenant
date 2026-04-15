@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::Path;
 
 use crate::models::{DatasourceId, PackageData, PackageType, Party};
@@ -6,6 +5,7 @@ use crate::parser_warn as warn;
 
 use super::PackageParser;
 use super::license_normalization::normalize_spdx_declared_license;
+use super::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 pub struct CitationCffParser;
 
@@ -17,7 +17,7 @@ impl PackageParser for CitationCffParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(content) => content,
             Err(error) => {
                 warn!("Failed to read CITATION.cff at {:?}: {}", path, error);
@@ -58,28 +58,28 @@ fn parse_citation_cff(yaml: &yaml_serde::Value) -> PackageData {
     package.name = yaml
         .get("title")
         .and_then(yaml_serde::Value::as_str)
-        .map(str::to_string);
+        .map(|s| truncate_field(s.to_string()));
     package.version = yaml
         .get("version")
         .and_then(yaml_serde::Value::as_str)
-        .map(str::to_string);
+        .map(|s| truncate_field(s.to_string()));
     package.description = yaml
         .get("abstract")
         .and_then(yaml_serde::Value::as_str)
         .or_else(|| yaml.get("message").and_then(yaml_serde::Value::as_str))
-        .map(str::to_string);
+        .map(|s| truncate_field(s.to_string()));
     package.homepage_url = yaml
         .get("url")
         .and_then(yaml_serde::Value::as_str)
-        .map(str::to_string);
+        .map(|s| truncate_field(s.to_string()));
     package.vcs_url = yaml
         .get("repository-code")
         .and_then(yaml_serde::Value::as_str)
-        .map(str::to_string);
+        .map(|s| truncate_field(s.to_string()));
     package.parties = extract_author_parties(yaml.get("authors"));
 
     if let Some(license) = yaml.get("license").and_then(yaml_serde::Value::as_str) {
-        let license = license.to_string();
+        let license = truncate_field(license.to_string());
         package.extracted_license_statement = Some(license.clone());
         let (declared, declared_spdx, detections) = normalize_spdx_declared_license(Some(&license));
         package.declared_license_expression = declared;
@@ -95,31 +95,34 @@ fn extract_author_parties(value: Option<&yaml_serde::Value>) -> Vec<Party> {
         .and_then(yaml_serde::Value::as_sequence)
         .into_iter()
         .flatten()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|entry| {
             let name = entry
                 .get("name")
                 .and_then(yaml_serde::Value::as_str)
-                .map(str::to_string)
+                .map(|s| truncate_field(s.to_string()))
                 .or_else(|| {
                     let given = entry.get("given-names").and_then(yaml_serde::Value::as_str);
                     let family = entry
                         .get("family-names")
                         .and_then(yaml_serde::Value::as_str);
                     match (given, family) {
-                        (Some(given), Some(family)) => Some(format!("{given} {family}")),
-                        (Some(given), None) => Some(given.to_string()),
-                        (None, Some(family)) => Some(family.to_string()),
+                        (Some(given), Some(family)) => {
+                            Some(truncate_field(format!("{given} {family}")))
+                        }
+                        (Some(given), None) => Some(truncate_field(given.to_string())),
+                        (None, Some(family)) => Some(truncate_field(family.to_string())),
                         (None, None) => None,
                     }
                 });
             let email = entry
                 .get("email")
                 .and_then(yaml_serde::Value::as_str)
-                .map(str::to_string);
+                .map(|s| truncate_field(s.to_string()));
             let url = entry
                 .get("orcid")
                 .and_then(yaml_serde::Value::as_str)
-                .map(str::to_string);
+                .map(|s| truncate_field(s.to_string()));
 
             if name.is_none() && email.is_none() && url.is_none() {
                 return None;
