@@ -130,9 +130,7 @@ pub fn assemble(files: &mut [FileInfo]) -> AssemblyResult {
 
             match config.mode {
                 AssemblyMode::SiblingMerge => {
-                    let results = sibling_merge::assemble_siblings(config, files, file_indices)
-                        .into_iter()
-                        .collect();
+                    let results = sibling_merge::assemble_siblings(config, files, file_indices);
                     apply_directory_merge_results(files, &mut packages, &mut dependencies, results);
                 }
                 AssemblyMode::OnePerPackageData => {
