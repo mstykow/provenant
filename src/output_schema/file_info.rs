@@ -109,6 +109,29 @@ impl OutputFileInfo {
             || !self.license_clues.is_empty()
             || self.percentage_of_license_text.is_some()
     }
+
+    pub(crate) fn detected_license_expression_spdx(&self) -> Option<String> {
+        crate::utils::spdx::combine_license_expressions(
+            self.license_detections
+                .iter()
+                .filter(|detection| !detection.license_expression_spdx.is_empty())
+                .map(|detection| detection.license_expression_spdx.clone()),
+        )
+        .or_else(|| {
+            crate::utils::spdx::combine_license_expressions(
+                self.package_data
+                    .iter()
+                    .flat_map(|package_data| package_data.license_detections.iter())
+                    .filter(|detection| !detection.license_expression_spdx.is_empty())
+                    .map(|detection| detection.license_expression_spdx.clone()),
+            )
+        })
+        .or_else(|| {
+            self.license_expression
+                .clone()
+                .filter(|expression| !expression.is_empty())
+        })
+    }
 }
 
 impl Serialize for OutputFileInfo {
@@ -148,7 +171,7 @@ impl Serialize for OutputFileInfo {
         insert_json(
             &mut map,
             "detected_license_expression_spdx",
-            &self.license_expression,
+            self.detected_license_expression_spdx(),
         )?;
         insert_json(&mut map, "license_detections", &self.license_detections)?;
         if self.should_serialize_license_surface() {
