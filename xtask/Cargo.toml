@@ -41,7 +41,6 @@ path = "src/bin/compare_outputs.rs"
 anyhow = { workspace = true }
 clap = { workspace = true }
 inventory = { workspace = true }
-lazy_static = { workspace = true }
 provenant = { path = "..", package = "provenant-cli", features = ["golden-tests"] }
 rayon = { workspace = true }
 regex = { workspace = true }

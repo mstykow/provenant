@@ -7,14 +7,14 @@ use crate::license_detection::position_set::PositionSet;
 use crate::license_detection::spdx_lid::split_spdx_lid;
 use crate::license_detection::tokenize::STOPWORDS;
 use crate::license_detection::tokenize::tokenize_as_ids;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
-static QUERY_PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[^_\W]+\+?[^_\W]*").expect("valid query regex"));
-static MATCHED_TEXT_PATTERN: Lazy<Regex> = Lazy::new(|| {
+static QUERY_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[^_\W]+\+?[^_\W]*").expect("valid query regex"));
+static MATCHED_TEXT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?P<token>[^_\W]+\+?[^_\W]*)|(?P<punct>[_\W\s\+]+[_\W\s]?)")
         .expect("valid matched text regex")
 });

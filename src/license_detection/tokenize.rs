@@ -4,10 +4,10 @@
 //! against license rules. This module implements ScanCode-compatible tokenization.
 
 use crate::license_detection::index::dictionary::{QueryToken, TokenDictionary};
-use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashSet;
 use std::ops::Range;
+use std::sync::LazyLock;
 
 const REQUIRED_PHRASE_OPEN: &str = "{{";
 const REQUIRED_PHRASE_CLOSE: &str = "}}";
@@ -16,7 +16,7 @@ const REQUIRED_PHRASE_CLOSE: &str = "}}";
 ///
 /// This is the Rust equivalent of the Python STOPWORDS frozenset from
 /// reference/scancode-toolkit/src/licensedcode/stopwords.py
-pub(crate) static STOPWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+pub(crate) static STOPWORDS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     let mut set = HashSet::new();
 
     // common XML character references as &quot;
@@ -111,8 +111,8 @@ pub(crate) static STOPWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
 ///
 /// This matches word-like sequences while preserving trailing `+` characters.
 /// Uses Unicode-aware matching to match Python's `re.UNICODE` behavior.
-static QUERY_PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[^_\W]+\+?[^_\W]*").expect("Invalid regex pattern"));
+static QUERY_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[^_\W]+\+?[^_\W]*").expect("Invalid regex pattern"));
 
 /// Tokenizes text to match index rules and queries.
 ///
@@ -355,7 +355,7 @@ impl Iterator for RequiredPhraseTokenIter {
 
 /// Pattern for matching words and braces in required phrase tokenizer.
 /// Equivalent to Python's: `(?:[^_\W]+\+?[^_\W]*|\{\{|\}\})`
-static REQUIRED_PHRASE_PATTERN: Lazy<Regex> = Lazy::new(|| {
+static REQUIRED_PHRASE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?:[^_\W]+\+?[^_\W]*|\{\{|\}\})").expect("Invalid required phrase pattern")
 });
 

@@ -15,6 +15,7 @@
 
 use regex::Regex;
 use sha1::{Digest, Sha1};
+use std::sync::LazyLock;
 
 use crate::license_detection::expression::{LicenseExpression, parse_expression};
 use crate::license_detection::index::LicenseIndex;
@@ -46,15 +47,14 @@ enum BooleanOperator {
     Or,
 }
 
-lazy_static::lazy_static! {
-    static ref SPDX_LID_PATTERN: Regex = Regex::new(
-        r"(?i)(spd[xz][\-\s]+lin?[cs]en?[sc]es?[\-\s]+identifi?er\s*:? *)"
-    ).expect("Invalid SPDX-LID regex");
+static SPDX_LID_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(spd[xz][\-\s]+lin?[cs]en?[sc]es?[\-\s]+identifi?er\s*:? *)")
+        .expect("Invalid SPDX-LID regex")
+});
 
-    static ref NUGET_SPDX_PATTERN: Regex = Regex::new(
-        r"(?i)(https?://licenses\.nuget\.org/?)\s*:? *"
-    ).expect("Invalid NuGet SPDX regex");
-}
+static NUGET_SPDX_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(https?://licenses\.nuget\.org/?)\s*:? *").expect("Invalid NuGet SPDX regex")
+});
 
 pub fn split_spdx_lid(text: &str) -> (Option<String>, String) {
     // Try SPDX pattern first

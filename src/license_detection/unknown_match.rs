@@ -1,9 +1,9 @@
 //! Unknown license detection using ngram matching.
 
 use crate::license_detection::automaton::Automaton;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use sha1::{Digest, Sha1};
+use std::sync::LazyLock;
 
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::{TokenId, TokenKind};
@@ -23,9 +23,9 @@ const MIN_NGRAM_MATCHES: usize = 3;
 
 const MIN_REGION_LENGTH: usize = 5;
 
-static QUERY_PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[^_\W]+\+?[^_\W]*").expect("Invalid regex pattern"));
-static MATCHED_TEXT_PATTERN: Lazy<Regex> = Lazy::new(|| {
+static QUERY_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[^_\W]+\+?[^_\W]*").expect("Invalid regex pattern"));
+static MATCHED_TEXT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?P<token>[^_\W]+\+?[^_\W]*)|(?P<punct>[_\W\s\+]+[_\W\s]?)")
         .expect("Invalid matched text regex pattern")
 });

@@ -1,12 +1,11 @@
 use super::*;
-use once_cell::sync::Lazy;
-use std::sync::Once;
+use std::sync::{LazyLock, Once};
 
 use crate::license_detection::models::{MatchCoordinates, position_span::PositionSpan};
 use crate::models::LineNumber;
 use crate::models::MatchScore;
 
-static TEST_ENGINE: Lazy<LicenseDetectionEngine> = Lazy::new(|| {
+static TEST_ENGINE: LazyLock<LicenseDetectionEngine> = LazyLock::new(|| {
     LicenseDetectionEngine::from_embedded().expect("Should initialize from embedded artifact")
 });
 
