@@ -780,6 +780,11 @@ pub static ASSEMBLERS: &[AssemblerConfig] = &[
     },
     // Debian installed package databases
     AssemblerConfig {
+        datasource_ids: &[DatasourceId::DebianDeb],
+        sibling_file_patterns: &["*.deb"],
+        mode: AssemblyMode::OnePerPackageData,
+    },
+    AssemblerConfig {
         datasource_ids: &[
             DatasourceId::DebianInstalledStatusDb,
             DatasourceId::DebianDistrolessInstalledDb,
@@ -823,7 +828,6 @@ pub static UNASSEMBLED_DATASOURCE_IDS: &[DatasourceId] = &[
     DatasourceId::AppleDmg,
     DatasourceId::Axis2Mar,
     DatasourceId::ChromeCrx,
-    DatasourceId::DebianDeb,
     DatasourceId::DebianOriginalSourceTarball,
     DatasourceId::DebianSourceMetadataTarball,
     DatasourceId::InstallshieldInstaller,
