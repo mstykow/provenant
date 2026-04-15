@@ -428,6 +428,16 @@ fn test_refine_copyright_empty() {
 }
 
 #[test]
+fn test_refine_copyright_keeps_confidential_and_proprietary_phrase() {
+    let result =
+        refine_copyright("(c) Example Corp. and affiliates. Confidential and proprietary.");
+    assert_eq!(
+        result,
+        Some("(c) Example Corp. and affiliates. Confidential and proprietary".to_string())
+    );
+}
+
+#[test]
 fn test_refine_copyright_strips_junk_prefix() {
     let result = refine_copyright("by Copyright 2024 Acme");
     assert_eq!(result, Some("Copyright 2024 Acme".to_string()));

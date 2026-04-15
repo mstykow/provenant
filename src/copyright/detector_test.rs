@@ -818,6 +818,41 @@ fn test_copyright_span_does_not_absorb_following_author_line() {
 }
 
 #[test]
+fn test_copyright_span_does_not_absorb_following_lint_directive_line() {
+    let input = concat!(
+        "// (c) Example Corp. and affiliates. Confidential and proprietary.\n",
+        "// @lint-ignore-every FBOBJCIMPORTORDER1 METHOD_BRACKETSMETHOD_BRACKETS\n",
+    );
+
+    let (copyrights, _holders, _authors) = detect_copyrights_from_text(input);
+    let values: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
+
+    assert!(
+        values
+            .iter()
+            .any(|c| c == "(c) Example Corp. and affiliates. Confidential and proprietary"),
+        "copyrights: {values:#?}"
+    );
+    assert!(
+        !values.iter().any(|c| c.contains("@lint-ignore-every")),
+        "copyrights: {values:#?}"
+    );
+}
+
+#[test]
+fn test_history_written_by_fixture_keeps_following_author() {
+    let path = PathBuf::from("testdata/copyright-golden/copyrights/misco4/more-linux/multi.txt");
+    let content = fs::read_to_string(&path).expect("read fixture");
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(&content);
+
+    let values: Vec<String> = authors.into_iter().map(|a| a.author).collect();
+    assert!(
+        values.iter().any(|a| a == "Ben Dooks <ben@simtec.co.uk>"),
+        "authors: {values:#?}"
+    );
+}
+
+#[test]
 fn test_multilines_fixture_detects_split_copyright_by_holder() {
     let path = PathBuf::from("testdata/copyright-golden/copyrights/misco4/linux4/multilines.txt");
     let content = fs::read_to_string(&path).expect("read fixture");
@@ -3074,6 +3109,45 @@ fn test_detect_copyright_holder_suffix_the_respective_contributors() {
         h
     );
     assert!(a.is_empty(), "Unexpected authors detected: {:?}", a);
+}
+
+#[test]
+fn test_collect_trailing_orphan_tokens_keeps_confidential_and_proprietary_phrase() {
+    let text = "(c) Example Corp. and affiliates. Confidential and proprietary.";
+    let prepared = super::super::prepare::prepare_text_line(text);
+    let tokens = get_tokens(&[(1, prepared)]);
+    let tree = parse(tokens);
+    let (copyright_idx, copyright_node) = tree
+        .iter()
+        .enumerate()
+        .find(|(_i, n)| {
+            matches!(
+                n.label(),
+                Some(TreeLabel::Copyright) | Some(TreeLabel::Copyright2)
+            )
+        })
+        .expect("Should parse a COPYRIGHT node");
+    let start = copyright_idx + 1;
+
+    assert!(
+        should_start_absorbing(copyright_node, &tree, start),
+        "Should absorb trailing confidentiality phrase; tree={:?}",
+        tree
+    );
+
+    let (trailing, _skip) = collect_trailing_orphan_tokens(copyright_node, &tree, start);
+    let trailing_values: Vec<&str> = trailing.iter().map(|t| t.value.as_str()).collect();
+
+    assert!(
+        trailing_values.contains(&"and"),
+        "Trailing tokens should include trailing conjunction, got: {:?}",
+        trailing_values
+    );
+    assert!(
+        trailing_values.contains(&"proprietary."),
+        "Trailing tokens should include 'proprietary.', got: {:?}",
+        trailing_values
+    );
 }
 
 #[test]

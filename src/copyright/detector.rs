@@ -11825,6 +11825,31 @@ fn is_same_line_holder_suffix_prefix(tree: &[ParseNode], idx: usize, line: LineN
     })
 }
 
+fn has_same_line_confidential_proprietary_suffix(
+    copyright_node: &ParseNode,
+    tree: &[ParseNode],
+    start: usize,
+    line: LineNumber,
+) -> bool {
+    let node_has_confidential = collect_all_leaves(copyright_node)
+        .iter()
+        .any(|t| t.start_line == line && t.value.eq_ignore_ascii_case("Confidential"));
+    if !node_has_confidential {
+        return false;
+    }
+
+    let end = std::cmp::min(start + 6, tree.len());
+    tree[start + 1..end].iter().any(|node| {
+        collect_all_leaves(node).iter().any(|token| {
+            token.start_line == line
+                && token
+                    .value
+                    .trim_end_matches(|c: char| c.is_ascii_punctuation())
+                    .eq_ignore_ascii_case("proprietary")
+        })
+    })
+}
+
 fn is_orphan_copy_name_match(node: &ParseNode) -> bool {
     match node.label() {
         Some(TreeLabel::NameYear) | Some(TreeLabel::NameEmail) | Some(TreeLabel::Company) => true,
@@ -12081,7 +12106,16 @@ fn should_start_absorbing(copyright_node: &ParseNode, tree: &[ParseNode], start:
             tree[start + 1..end].iter().enumerate().any(|(offset, _)| {
                 is_same_line_holder_suffix_prefix(tree, start + 1 + offset, token.start_line)
             });
-        if has_expected_continuation || has_holder_suffix_prefix {
+        let has_confidential_proprietary_suffix = has_same_line_confidential_proprietary_suffix(
+            copyright_node,
+            tree,
+            start,
+            token.start_line,
+        );
+        if has_expected_continuation
+            || has_holder_suffix_prefix
+            || has_confidential_proprietary_suffix
+        {
             return true;
         }
     }
