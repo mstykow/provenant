@@ -22,7 +22,7 @@
 //! - Comments (lines starting with `#`) are skipped
 //! - Environment markers are preserved for dependency filtering
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::parser_warn as warn;
@@ -31,11 +31,11 @@ use serde_json::Value as JsonValue;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 use crate::parsers::pep508::{Pep508Requirement, parse_pep508_requirement};
-use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, MAX_RECURSION_DEPTH, RecursionGuard, read_file_to_string, truncate_field,
+};
 
 use super::PackageParser;
-
-const MAX_RECURSION_DEPTH: usize = 50;
 
 /// pip requirements.txt parser supporting PEP 508 dependency specifications.
 ///
@@ -110,7 +110,7 @@ struct ParseState {
     index_url: Option<String>,
     includes: Vec<String>,
     constraints: Vec<String>,
-    visited: HashSet<PathBuf>,
+    guard: RecursionGuard<PathBuf>,
 }
 
 fn extract_from_requirements_txt(path: &Path) -> PackageData {
@@ -120,12 +120,12 @@ fn extract_from_requirements_txt(path: &Path) -> PackageData {
         index_url: None,
         includes: Vec::new(),
         constraints: Vec::new(),
-        visited: HashSet::new(),
+        guard: RecursionGuard::new(),
     };
 
     let (scope, is_runtime) = scope_from_filename(path);
 
-    parse_requirements_with_includes(path, &mut state, &scope, is_runtime, 0);
+    parse_requirements_with_includes(path, &mut state, &scope, is_runtime);
 
     let mut extra_data = HashMap::new();
     if let Some(url) = state.index_url {
@@ -185,9 +185,8 @@ fn parse_requirements_with_includes(
     state: &mut ParseState,
     scope: &str,
     is_runtime: bool,
-    depth: usize,
 ) {
-    if depth > MAX_RECURSION_DEPTH {
+    if state.guard.exceeded() {
         warn!(
             "Maximum recursion depth ({}) exceeded for include: {:?}",
             MAX_RECURSION_DEPTH, path
@@ -203,12 +202,10 @@ fn parse_requirements_with_includes(
         }
     };
 
-    if state.visited.contains(&abs_path) {
+    if state.guard.enter(abs_path.clone()) {
         warn!("Circular include detected: {:?}", path);
         return;
     }
-
-    state.visited.insert(abs_path.clone());
 
     let content = match read_file_to_string(&abs_path, None) {
         Ok(c) => c,
@@ -248,13 +245,7 @@ fn parse_requirements_with_includes(
                 .join(&path_value);
 
             if included_path.exists() {
-                parse_requirements_with_includes(
-                    &included_path,
-                    state,
-                    scope,
-                    is_runtime,
-                    depth + 1,
-                );
+                parse_requirements_with_includes(&included_path, state, scope, is_runtime);
             } else {
                 warn!("Included file not found: {:?}", included_path);
             }
@@ -271,13 +262,7 @@ fn parse_requirements_with_includes(
                 .join(&path_value);
 
             if constraint_path.exists() {
-                parse_requirements_with_includes(
-                    &constraint_path,
-                    state,
-                    scope,
-                    is_runtime,
-                    depth + 1,
-                );
+                parse_requirements_with_includes(&constraint_path, state, scope, is_runtime);
             } else {
                 warn!("Constraint file not found: {:?}", constraint_path);
             }
@@ -302,6 +287,8 @@ fn parse_requirements_with_includes(
             state.dependencies.push(dependency);
         }
     }
+
+    state.guard.leave(abs_path);
 }
 
 fn default_package_data(

@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::parser_warn as warn;
-use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, RecursionGuard, read_file_to_string, truncate_field,
+};
 use packageurl::PackageUrl;
 use serde_json::Value as JsonValue;
 
@@ -11,8 +13,6 @@ use crate::models::{
 };
 
 use super::PackageParser;
-
-const MAX_RECURSION_DEPTH: usize = 50;
 
 pub struct HexLockParser;
 
@@ -32,7 +32,7 @@ struct Parser<'a> {
     chars: Vec<char>,
     pos: usize,
     source: &'a str,
-    depth: usize,
+    guard: RecursionGuard<()>,
 }
 
 impl PackageParser for HexLockParser {
@@ -348,16 +348,16 @@ impl<'a> Parser<'a> {
             chars: source.chars().collect(),
             pos: 0,
             source,
-            depth: 0,
+            guard: RecursionGuard::depth_only(),
         }
     }
 
     fn parse_term(&mut self) -> Result<Term, String> {
-        if self.depth > MAX_RECURSION_DEPTH {
+        if self.guard.descend() {
             return Err("recursion depth exceeded".to_string());
         }
         self.skip_ws();
-        match self.peek() {
+        let result = match self.peek() {
             Some('%') => self.parse_map(),
             Some('{') => self.parse_tuple(),
             Some('[') => self.parse_list(),
@@ -367,7 +367,9 @@ impl<'a> Parser<'a> {
             Some('t') | Some('f') => self.parse_bool().map(Term::Bool),
             Some(other) => Err(format!("Unexpected character '{}' at {}", other, self.pos)),
             None => Err("Unexpected end of mix.lock".to_string()),
-        }
+        };
+        self.guard.ascend();
+        result
     }
 
     fn parse_map(&mut self) -> Result<Term, String> {
@@ -385,18 +387,14 @@ impl<'a> Parser<'a> {
                 warn!("map entry count exceeded MAX_ITERATION_COUNT in mix.lock");
                 break;
             }
-            self.depth += 1;
             let key = self.parse_term()?;
-            self.depth -= 1;
             self.skip_ws();
             if self.starts_with("=>") {
                 self.expect_sequence("=>")?;
             } else {
                 self.expect(':')?;
             }
-            self.depth += 1;
             let value = self.parse_term()?;
-            self.depth -= 1;
             entries.push((key, value));
             count += 1;
             self.skip_ws();
@@ -421,9 +419,7 @@ impl<'a> Parser<'a> {
                 warn!("tuple item count exceeded MAX_ITERATION_COUNT in mix.lock");
                 break;
             }
-            self.depth += 1;
             items.push(self.parse_term()?);
-            self.depth -= 1;
             count += 1;
             self.skip_ws();
             if self.peek() == Some(',') {
@@ -453,14 +449,10 @@ impl<'a> Parser<'a> {
 
             if let Some(keyword) = self.try_parse_keyword_key() {
                 saw_keyword = true;
-                self.depth += 1;
                 let value = self.parse_term()?;
-                self.depth -= 1;
                 keyword_entries.push((keyword, value));
             } else {
-                self.depth += 1;
                 items.push(self.parse_term()?);
-                self.depth -= 1;
             }
 
             count += 1;

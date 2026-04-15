@@ -13,7 +13,7 @@ use crate::models::{
     Sha512Digest,
 };
 use crate::parsers::python::read_toml_file;
-use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, RecursionGuard, truncate_field};
 
 use super::PackageParser;
 
@@ -39,7 +39,6 @@ const FIELD_WHEELS: &str = "wheels";
 const FIELD_HASHES: &str = "hashes";
 const FIELD_TOOL: &str = "tool";
 const FIELD_ATTESTATION_IDENTITIES: &str = "attestation-identities";
-const MAX_RECURSION_DEPTH: usize = 50;
 
 pub struct PylockTomlParser;
 
@@ -354,19 +353,20 @@ fn package_reference_matches(
     package_table: &TomlMap<String, TomlValue>,
     reference: &TomlMap<String, TomlValue>,
 ) -> bool {
+    let mut guard = RecursionGuard::depth_only();
     reference.iter().all(|(key, ref_value)| {
         package_table
             .get(key)
-            .is_some_and(|pkg_value| toml_values_match(pkg_value, ref_value, 0))
+            .is_some_and(|pkg_value| toml_values_match(pkg_value, ref_value, &mut guard))
     })
 }
 
-fn toml_values_match(left: &TomlValue, right: &TomlValue, depth: usize) -> bool {
-    if depth >= MAX_RECURSION_DEPTH {
+fn toml_values_match(left: &TomlValue, right: &TomlValue, guard: &mut RecursionGuard<()>) -> bool {
+    if guard.descend() {
         warn!("toml_values_match: recursion depth limit exceeded");
         return false;
     }
-    match (left, right) {
+    let result = match (left, right) {
         (TomlValue::String(left), TomlValue::String(right)) => left == right,
         (TomlValue::Integer(left), TomlValue::Integer(right)) => left == right,
         (TomlValue::Float(left), TomlValue::Float(right)) => left == right,
@@ -377,16 +377,18 @@ fn toml_values_match(left: &TomlValue, right: &TomlValue, depth: usize) -> bool 
                 && left
                     .iter()
                     .zip(right.iter())
-                    .all(|(left, right)| toml_values_match(left, right, depth + 1))
+                    .all(|(left, right)| toml_values_match(left, right, guard))
         }
         (TomlValue::Table(left), TomlValue::Table(right)) => {
             right.iter().all(|(key, right_value)| {
                 left.get(key)
-                    .is_some_and(|left_value| toml_values_match(left_value, right_value, depth + 1))
+                    .is_some_and(|left_value| toml_values_match(left_value, right_value, guard))
             })
         }
         _ => false,
-    }
+    };
+    guard.ascend();
+    result
 }
 
 fn build_incoming_counts(package_count: usize, dependency_indices: &[Vec<usize>]) -> Vec<usize> {

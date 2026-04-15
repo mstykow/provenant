@@ -5,22 +5,20 @@ use std::cell::Cell;
 
 use crate::parser_warn as warn;
 use crate::parsers::active_parser_license_engine;
-use crate::parsers::utils::MAX_ITERATION_COUNT;
+use crate::parsers::utils::{RecursionGuard, MAX_ITERATION_COUNT};
 
-use crate::license_detection::LicenseDetectionEngine;
 use crate::license_detection::expression::{
-    LicenseExpression, parse_expression, simplify_expression,
+    parse_expression, simplify_expression, LicenseExpression,
 };
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::license_cache::LicenseCacheConfig;
+use crate::license_detection::LicenseDetectionEngine;
 use crate::models::{LicenseDetection, LineNumber, Match, MatchScore, PackageData};
 use crate::utils::spdx::{
-    ExpressionRelation, combine_license_expressions, combine_license_expressions_with_relation,
+    combine_license_expressions, combine_license_expressions_with_relation, ExpressionRelation,
 };
 
 pub(crate) const PARSER_DECLARED_MATCHER: &str = "parser-declared-license";
-
-const MAX_RECURSION_DEPTH: usize = 50;
 
 static PARSER_LICENSE_ENGINE: LazyLock<Option<Arc<LicenseDetectionEngine>>> = LazyLock::new(|| {
     let cache_config =
@@ -112,8 +110,8 @@ impl<'a> DeclaredLicenseMatchMetadata<'a> {
     }
 }
 
-pub(crate) fn empty_declared_license_data()
--> (Option<String>, Option<String>, Vec<LicenseDetection>) {
+pub(crate) fn empty_declared_license_data(
+) -> (Option<String>, Option<String>, Vec<LicenseDetection>) {
     (None, None, Vec::new())
 }
 
@@ -189,8 +187,11 @@ pub(crate) fn normalize_spdx_expression(statement: &str) -> Option<NormalizedDec
 
     let engine = parser_license_engine()?;
     let expression = parse_expression(statement).ok()?;
-    let (declared_ast, declared_spdx_ast) =
-        normalize_expression_ast(&expression, engine.index(), 0)?;
+    let (declared_ast, declared_spdx_ast) = normalize_expression_ast(
+        &expression,
+        engine.index(),
+        &mut RecursionGuard::depth_only(),
+    )?;
     let declared_ast = simplify_expression(&declared_ast);
     let declared_spdx_ast = simplify_expression(&declared_spdx_ast);
 
@@ -487,17 +488,14 @@ fn collect_reference_strings(value: Option<&serde_json::Value>, references: &mut
 fn normalize_expression_ast(
     expression: &LicenseExpression,
     index: &LicenseIndex,
-    depth: usize,
+    guard: &mut RecursionGuard<()>,
 ) -> Option<(LicenseExpression, LicenseExpression)> {
-    if depth > MAX_RECURSION_DEPTH {
-        warn!(
-            "normalize_expression_ast: recursion depth {} exceeded limit {}, returning None",
-            depth, MAX_RECURSION_DEPTH
-        );
+    if guard.descend() {
+        warn!("normalize_expression_ast: recursion depth exceeded limit, returning None");
         return None;
     }
 
-    match expression {
+    let result = match expression {
         LicenseExpression::License(key) => normalize_license_key(key, index).map(|normalized| {
             (
                 LicenseExpression::License(normalized.declared_license_expression),
@@ -509,8 +507,8 @@ fn normalize_expression_ast(
             LicenseExpression::LicenseRef(key.clone()),
         )),
         LicenseExpression::And { left, right } => {
-            let (left_declared, left_spdx) = normalize_expression_ast(left, index, depth + 1)?;
-            let (right_declared, right_spdx) = normalize_expression_ast(right, index, depth + 1)?;
+            let (left_declared, left_spdx) = normalize_expression_ast(left, index, guard)?;
+            let (right_declared, right_spdx) = normalize_expression_ast(right, index, guard)?;
 
             Some((
                 LicenseExpression::And {
@@ -524,8 +522,8 @@ fn normalize_expression_ast(
             ))
         }
         LicenseExpression::Or { left, right } => {
-            let (left_declared, left_spdx) = normalize_expression_ast(left, index, depth + 1)?;
-            let (right_declared, right_spdx) = normalize_expression_ast(right, index, depth + 1)?;
+            let (left_declared, left_spdx) = normalize_expression_ast(left, index, guard)?;
+            let (right_declared, right_spdx) = normalize_expression_ast(right, index, guard)?;
 
             Some((
                 LicenseExpression::Or {
@@ -539,8 +537,8 @@ fn normalize_expression_ast(
             ))
         }
         LicenseExpression::With { left, right } => {
-            let (left_declared, left_spdx) = normalize_expression_ast(left, index, depth + 1)?;
-            let (right_declared, right_spdx) = normalize_expression_ast(right, index, depth + 1)?;
+            let (left_declared, left_spdx) = normalize_expression_ast(left, index, guard)?;
+            let (right_declared, right_spdx) = normalize_expression_ast(right, index, guard)?;
 
             Some((
                 LicenseExpression::With {
@@ -553,7 +551,9 @@ fn normalize_expression_ast(
                 },
             ))
         }
-    }
+    };
+    guard.ascend();
+    result
 }
 
 fn normalize_license_key(key: &str, index: &LicenseIndex) -> Option<NormalizedDeclaredLicense> {
@@ -634,7 +634,12 @@ fn render_canonical_expression(expression: &LicenseExpression) -> String {
 
 fn render_flat_boolean_chain(expression: &LicenseExpression, operator: BooleanOperator) -> String {
     let mut parts = Vec::new();
-    collect_boolean_chain(expression, operator, &mut parts, 0);
+    collect_boolean_chain(
+        expression,
+        operator,
+        &mut parts,
+        &mut RecursionGuard::depth_only(),
+    );
 
     let separator = match operator {
         BooleanOperator::And => " AND ",
@@ -652,13 +657,10 @@ fn collect_boolean_chain<'a>(
     expression: &'a LicenseExpression,
     operator: BooleanOperator,
     parts: &mut Vec<&'a LicenseExpression>,
-    depth: usize,
+    guard: &mut RecursionGuard<()>,
 ) {
-    if depth > MAX_RECURSION_DEPTH {
-        warn!(
-            "collect_boolean_chain: recursion depth {} exceeded limit {}, truncating chain",
-            depth, MAX_RECURSION_DEPTH
-        );
+    if guard.descend() {
+        warn!("collect_boolean_chain: recursion depth exceeded limit, truncating chain");
         parts.push(expression);
         return;
     }
@@ -666,11 +668,12 @@ fn collect_boolean_chain<'a>(
     match (operator, expression) {
         (BooleanOperator::And, LicenseExpression::And { left, right })
         | (BooleanOperator::Or, LicenseExpression::Or { left, right }) => {
-            collect_boolean_chain(left, operator, parts, depth + 1);
-            collect_boolean_chain(right, operator, parts, depth + 1);
+            collect_boolean_chain(left, operator, parts, guard);
+            collect_boolean_chain(right, operator, parts, guard);
         }
         _ => parts.push(expression),
     }
+    guard.ascend();
 }
 
 fn render_boolean_operand(
@@ -788,12 +791,10 @@ mod tests {
             LineNumber::new(4).expect("valid")
         );
         assert_eq!(detection.matches[0].matched_text.as_deref(), Some("MIT"));
-        assert!(
-            detection.matches[0]
-                .rule_identifier
-                .as_deref()
-                .is_some_and(|identifier| !identifier.is_empty())
-        );
+        assert!(detection.matches[0]
+            .rule_identifier
+            .as_deref()
+            .is_some_and(|identifier| !identifier.is_empty()));
     }
 
     #[test]

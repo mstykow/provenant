@@ -22,7 +22,7 @@
 //! - Graceful error handling with warn!()
 //! - No unwrap/expect in library code
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -36,9 +36,9 @@ use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 
 use super::PackageParser;
 use super::license_normalization::{empty_declared_license_data, normalize_spdx_declared_license};
-use super::utils::{MAX_ITERATION_COUNT, MAX_MANIFEST_SIZE, read_file_to_string, truncate_field};
-
-const MAX_RECURSION_DEPTH: usize = 50;
+use super::utils::{
+    MAX_ITERATION_COUNT, MAX_MANIFEST_SIZE, RecursionGuard, read_file_to_string, truncate_field,
+};
 
 fn check_file_size(path: &Path) -> Result<(), String> {
     match fs::metadata(path) {
@@ -1759,18 +1759,17 @@ fn build_directory_packages_dependency(
 
 fn resolve_directory_packages_props(
     path: &Path,
-    visited: &mut HashSet<PathBuf>,
-    depth: usize,
+    guard: &mut RecursionGuard<PathBuf>,
 ) -> Result<CentralPackagePropsData, String> {
-    if depth > MAX_RECURSION_DEPTH {
+    if guard.exceeded() {
         return Err(format!(
-            "Recursion depth exceeded ({}) resolving Directory.Packages.props at {:?}",
-            depth, path
+            "Recursion depth exceeded resolving Directory.Packages.props at {:?}",
+            path
         ));
     }
 
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    if !visited.insert(canonical.clone()) {
+    if guard.enter(canonical.clone()) {
         return Ok(CentralPackagePropsData::default());
     }
 
@@ -1783,7 +1782,7 @@ fn resolve_directory_packages_props(
         else {
             continue;
         };
-        let imported = resolve_directory_packages_props(&import_path, visited, depth + 1)?;
+        let imported = resolve_directory_packages_props(&import_path, guard)?;
         merge_central_package_props(&mut merged, imported);
     }
 
@@ -1826,23 +1825,23 @@ fn resolve_directory_packages_props(
         }
     }
 
+    guard.leave(canonical);
     Ok(merged)
 }
 
 fn resolve_directory_build_props(
     path: &Path,
-    visited: &mut HashSet<PathBuf>,
-    depth: usize,
+    guard: &mut RecursionGuard<PathBuf>,
 ) -> Result<BuildPropsData, String> {
-    if depth > MAX_RECURSION_DEPTH {
+    if guard.exceeded() {
         return Err(format!(
-            "Recursion depth exceeded ({}) resolving Directory.Build.props at {:?}",
-            depth, path
+            "Recursion depth exceeded resolving Directory.Build.props at {:?}",
+            path
         ));
     }
 
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    if !visited.insert(canonical.clone()) {
+    if guard.enter(canonical.clone()) {
         return Ok(BuildPropsData::default());
     }
 
@@ -1855,7 +1854,7 @@ fn resolve_directory_build_props(
         else {
             continue;
         };
-        let imported = resolve_directory_build_props(&import_path, visited, depth + 1)?;
+        let imported = resolve_directory_build_props(&import_path, guard)?;
         merge_build_props_data(&mut merged, imported);
     }
 
@@ -1881,6 +1880,7 @@ fn resolve_directory_build_props(
         merged.central_package_version_override_enabled = Some(value);
     }
 
+    guard.leave(canonical);
     Ok(merged)
 }
 
@@ -2545,7 +2545,7 @@ impl PackageParser for DirectoryBuildPropsParser {
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
         vec![match (
-            resolve_directory_build_props(path, &mut HashSet::new(), 0),
+            resolve_directory_build_props(path, &mut RecursionGuard::new()),
             parse_directory_build_props_file(path),
         ) {
             (Ok(data), Ok(raw)) => build_directory_build_props_package_data(data, raw),
@@ -2566,7 +2566,7 @@ impl PackageParser for CentralPackageManagementPropsParser {
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
         vec![match (
-            resolve_directory_packages_props(path, &mut HashSet::new(), 0),
+            resolve_directory_packages_props(path, &mut RecursionGuard::new()),
             parse_directory_packages_props_file(path),
         ) {
             (Ok(data), Ok(raw)) => build_directory_packages_package_data(data, raw),

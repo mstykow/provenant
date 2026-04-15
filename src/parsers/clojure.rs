@@ -2,15 +2,15 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::parser_warn as warn;
-use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, RecursionGuard, read_file_to_string, truncate_field,
+};
 use packageurl::PackageUrl;
 use serde_json::Value as JsonValue;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 
 use super::PackageParser;
-
-const MAX_RECURSION_DEPTH: usize = 50;
 
 pub struct ClojureDepsEdnParser;
 
@@ -117,7 +117,7 @@ enum Form {
 struct Reader {
     chars: Vec<char>,
     index: usize,
-    depth: usize,
+    guard: RecursionGuard<()>,
 }
 
 impl Reader {
@@ -125,7 +125,7 @@ impl Reader {
         Self {
             chars: input.chars().collect(),
             index: 0,
-            depth: 0,
+            guard: RecursionGuard::depth_only(),
         }
     }
 
@@ -165,55 +165,39 @@ impl Reader {
     }
 
     fn parse_form(&mut self) -> Result<Form, String> {
-        if self.depth > MAX_RECURSION_DEPTH {
+        if self.guard.descend() {
             return Err("recursion depth exceeded".to_string());
         }
         self.skip_ws_and_comments();
-        match self.peek() {
+        let result = match self.peek() {
             Some('"') => self.parse_string().map(Form::String),
             Some(':') => self.parse_keyword().map(Form::Keyword),
-            Some('[') => {
-                self.depth += 1;
-                let result = self.parse_collection('[', ']').map(Form::Vector);
-                self.depth -= 1;
-                result
-            }
-            Some('(') => {
-                self.depth += 1;
-                let result = self.parse_collection('(', ')').map(Form::List);
-                self.depth -= 1;
-                result
-            }
-            Some('{') => {
-                self.depth += 1;
-                let result = self.parse_map();
-                self.depth -= 1;
-                result
-            }
+            Some('[') => self.parse_collection('[', ']').map(Form::Vector),
+            Some('(') => self.parse_collection('(', ')').map(Form::List),
+            Some('{') => self.parse_map(),
             Some('^') => {
                 self.index += 1;
-                self.depth += 1;
                 let _ = self.parse_form()?;
                 let result = self.parse_form();
-                self.depth -= 1;
-                result
+                self.guard.ascend();
+                return result;
             }
             Some('~') | Some('\'') | Some('`') | Some('@') => {
                 self.index += 1;
-                self.depth += 1;
                 let form = self.parse_form()?;
-                self.depth -= 1;
-                Ok(Form::Prefixed(Box::new(form)))
+                self.guard.ascend();
+                return Ok(Form::Prefixed(Box::new(form)));
             }
             Some('#') => {
-                self.depth += 1;
                 let result = self.parse_dispatch_form();
-                self.depth -= 1;
-                result
+                self.guard.ascend();
+                return result;
             }
             Some(_) => self.parse_atom(),
             None => Err("unexpected end of input".to_string()),
-        }
+        };
+        self.guard.ascend();
+        result
     }
 
     fn parse_dispatch_form(&mut self) -> Result<Form, String> {
@@ -434,15 +418,22 @@ fn parse_deps_edn_form(form: &Form) -> Result<PackageData, String> {
                 }
             }
         }
-        if let Some(json) = form_to_json(&Form::Map(alias_map.clone()), 0) {
+        if let Some(json) = form_to_json(
+            &Form::Map(alias_map.clone()),
+            &mut RecursionGuard::depth_only(),
+        ) {
             extra_data.insert("aliases".to_string(), json);
         }
     }
 
-    if let Some(value) = map_get_keyword(entries, "paths").and_then(|f| form_to_json(f, 0)) {
+    if let Some(value) = map_get_keyword(entries, "paths")
+        .and_then(|f| form_to_json(f, &mut RecursionGuard::depth_only()))
+    {
         extra_data.insert("paths".to_string(), value);
     }
-    if let Some(value) = map_get_keyword(entries, "mvn/repos").and_then(|f| form_to_json(f, 0)) {
+    if let Some(value) = map_get_keyword(entries, "mvn/repos")
+        .and_then(|f| form_to_json(f, &mut RecursionGuard::depth_only()))
+    {
         extra_data.insert("mvn_repos".to_string(), value);
     }
 
@@ -488,7 +479,8 @@ fn parse_project_clj_form(form: &Form) -> Result<PackageData, String> {
                 package.homepage_url = form_as_string(value).map(|s| truncate_field(s.to_owned()))
             }
             "license" => {
-                package.extracted_license_statement = format_license(value, 0).map(truncate_field);
+                package.extracted_license_statement =
+                    format_license(value, &mut RecursionGuard::depth_only()).map(truncate_field);
             }
             "scm" => {
                 if let Form::Map(entries) = value {
@@ -568,7 +560,9 @@ fn build_deps_edn_dependency(
             ("local/root", "local_root"),
             ("exclusions", "exclusions"),
         ] {
-            if let Some(value) = map_get_keyword(entries, key).and_then(|f| form_to_json(f, 0)) {
+            if let Some(value) = map_get_keyword(entries, key)
+                .and_then(|f| form_to_json(f, &mut RecursionGuard::depth_only()))
+            {
                 extra_data.insert(data_key.to_string(), value);
             }
         }
@@ -607,7 +601,8 @@ fn extract_project_dependencies(entries: &[Form], scope: Option<&str>) -> Vec<De
             let mut index = 2usize;
             while index + 1 < parts.len() {
                 if let Some(key) = form_as_keyword(&parts[index])
-                    && let Some(value) = form_to_json(&parts[index + 1], 0)
+                    && let Some(value) =
+                        form_to_json(&parts[index + 1], &mut RecursionGuard::depth_only())
                 {
                     extra_data.insert(key.replace('-', "_"), value);
                 }
@@ -692,12 +687,12 @@ fn map_key_name(form: &Form) -> Option<String> {
     }
 }
 
-fn form_to_json(form: &Form, depth: usize) -> Option<JsonValue> {
-    if depth > MAX_RECURSION_DEPTH {
+fn form_to_json(form: &Form, guard: &mut RecursionGuard<()>) -> Option<JsonValue> {
+    if guard.descend() {
         warn!("form_to_json exceeded MAX_RECURSION_DEPTH");
         return None;
     }
-    Some(match form {
+    let result = Some(match form {
         Form::Nil => JsonValue::Null,
         Form::Bool(value) => JsonValue::Bool(*value),
         Form::String(value) => JsonValue::String(value.clone()),
@@ -706,7 +701,7 @@ fn form_to_json(form: &Form, depth: usize) -> Option<JsonValue> {
         Form::Vector(values) | Form::List(values) => JsonValue::Array(
             values
                 .iter()
-                .filter_map(|f| form_to_json(f, depth + 1))
+                .filter_map(|f| form_to_json(f, guard))
                 .collect(),
         ),
         Form::Map(entries) => {
@@ -715,27 +710,29 @@ fn form_to_json(form: &Form, depth: usize) -> Option<JsonValue> {
                 let Some(key_name) = map_key_name(key) else {
                     continue;
                 };
-                if let Some(json) = form_to_json(value, depth + 1) {
+                if let Some(json) = form_to_json(value, guard) {
                     map.insert(key_name, json);
                 }
             }
             JsonValue::Object(map)
         }
-        Form::Prefixed(value) => form_to_json(value, depth + 1)?,
-    })
+        Form::Prefixed(value) => form_to_json(value, guard)?,
+    });
+    guard.ascend();
+    result
 }
 
-fn format_license(form: &Form, depth: usize) -> Option<String> {
-    if depth > MAX_RECURSION_DEPTH {
+fn format_license(form: &Form, guard: &mut RecursionGuard<()>) -> Option<String> {
+    if guard.descend() {
         warn!("format_license exceeded MAX_RECURSION_DEPTH");
         return None;
     }
-    match form {
+    let result = match form {
         Form::Map(entries) => format_license_map(entries),
         Form::Vector(values) | Form::List(values) => {
             let licenses: Vec<String> = values
                 .iter()
-                .filter_map(|f| format_license(f, depth + 1))
+                .filter_map(|f| format_license(f, guard))
                 .collect();
             if licenses.is_empty() {
                 None
@@ -744,7 +741,9 @@ fn format_license(form: &Form, depth: usize) -> Option<String> {
             }
         }
         _ => None,
-    }
+    };
+    guard.ascend();
+    result
 }
 
 fn format_license_map(entries: &[(Form, Form)]) -> Option<String> {

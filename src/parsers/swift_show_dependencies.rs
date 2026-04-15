@@ -12,18 +12,17 @@
 //! - Extracts full dependency graph with versions (beyond Python which only extracts name)
 //! - Spec: https://forums.swift.org/t/swiftpm-show-dependencies-without-fetching-dependencies/51154
 
-use std::collections::HashSet;
 use std::path::Path;
 
 use crate::parser_warn as warn;
 use serde::{Deserialize, Serialize};
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage};
-use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, RecursionGuard, read_file_to_string, truncate_field,
+};
 
 use super::PackageParser;
-
-const MAX_RECURSION_DEPTH: usize = 50;
 
 const PACKAGE_TYPE: PackageType = PackageType::Swift;
 
@@ -113,8 +112,9 @@ fn flatten_dependencies(deps: &[SwiftDependency]) -> Vec<Dependency> {
     let mut result = Vec::new();
 
     for dep in deps {
-        let mut path = HashSet::new();
-        flatten_dependency(dep, true, &mut result, &mut path, 0);
+        let mut guard: RecursionGuard<String> = RecursionGuard::new();
+        let mut depth_guard = RecursionGuard::<()>::depth_only();
+        flatten_dependency(dep, true, &mut result, &mut guard, &mut depth_guard);
     }
 
     result
@@ -124,14 +124,11 @@ fn flatten_dependency(
     dep: &SwiftDependency,
     is_direct: bool,
     result: &mut Vec<Dependency>,
-    path: &mut HashSet<String>,
-    depth: usize,
+    guard: &mut RecursionGuard<String>,
+    depth_guard: &mut RecursionGuard<()>,
 ) {
-    if depth >= MAX_RECURSION_DEPTH {
-        warn!(
-            "Recursion depth exceeded in swift dependency flattening at depth {}",
-            depth
-        );
+    if guard.exceeded() || depth_guard.exceeded() {
+        warn!("Recursion depth exceeded in swift dependency flattening");
         return;
     }
 
@@ -145,29 +142,30 @@ fn flatten_dependency(
         .or(dep.name.as_deref())
         .unwrap_or("")
         .to_string();
-    if !dep_key.is_empty() && !path.insert(dep_key.clone()) {
+    if !dep_key.is_empty() && guard.enter(dep_key.clone()) {
         return;
     }
 
-    if let Some(dependency) = build_dependency(dep, is_direct, depth) {
+    if let Some(dependency) = build_dependency(dep, is_direct, depth_guard) {
         result.push(dependency);
     }
 
     for child in &dep.dependencies {
-        flatten_dependency(child, false, result, path, depth + 1);
+        flatten_dependency(child, false, result, guard, depth_guard);
     }
 
     if !dep_key.is_empty() {
-        path.remove(&dep_key);
+        guard.leave(dep_key);
     }
 }
 
-fn build_dependency(dep: &SwiftDependency, is_direct: bool, depth: usize) -> Option<Dependency> {
-    if depth >= MAX_RECURSION_DEPTH {
-        warn!(
-            "Recursion depth exceeded in swift dependency building at depth {}",
-            depth
-        );
+fn build_dependency(
+    dep: &SwiftDependency,
+    is_direct: bool,
+    guard: &mut RecursionGuard<()>,
+) -> Option<Dependency> {
+    if guard.descend() {
+        warn!("Recursion depth exceeded in swift dependency building");
         return None;
     }
 
@@ -178,8 +176,10 @@ fn build_dependency(dep: &SwiftDependency, is_direct: bool, depth: usize) -> Opt
         .dependencies
         .iter()
         .take(MAX_ITERATION_COUNT)
-        .filter_map(|child| build_dependency(child, true, depth + 1))
+        .filter_map(|child| build_dependency(child, true, guard))
         .collect();
+
+    guard.ascend();
 
     Some(Dependency {
         purl: Some(truncate_field(purl.clone())),

@@ -21,7 +21,9 @@
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 use crate::parser_warn as warn;
-use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, RecursionGuard, read_file_to_string, truncate_field,
+};
 use packageurl::PackageUrl;
 use std::path::Path;
 use toml::Value;
@@ -42,8 +44,6 @@ const FIELD_DEPS: &str = "deps";
 const FIELD_COMPAT: &str = "compat";
 const FIELD_TARGETS: &str = "targets";
 const FIELD_HOMEPAGE: &str = "homepage";
-
-const MAX_RECURSION_DEPTH: usize = 50;
 
 pub struct JuliaProjectTomlParser;
 
@@ -448,35 +448,34 @@ fn extract_project_extra_data(
 }
 
 fn toml_to_json(value: &toml::Value) -> serde_json::Value {
-    toml_to_json_inner(value, 0)
+    toml_to_json_inner(value, &mut RecursionGuard::depth_only())
 }
 
-fn toml_to_json_inner(value: &toml::Value, depth: usize) -> serde_json::Value {
-    if depth > MAX_RECURSION_DEPTH {
-        warn!(
-            "Recursion depth exceeded {} in toml_to_json, returning Null",
-            MAX_RECURSION_DEPTH
-        );
+fn toml_to_json_inner(value: &toml::Value, guard: &mut RecursionGuard<()>) -> serde_json::Value {
+    if guard.descend() {
+        warn!("Recursion depth exceeded in toml_to_json, returning Null");
         return serde_json::Value::Null;
     }
 
-    match value {
+    let result = match value {
         toml::Value::String(s) => serde_json::json!(s),
         toml::Value::Integer(i) => serde_json::json!(i),
         toml::Value::Float(f) => serde_json::json!(f),
         toml::Value::Boolean(b) => serde_json::json!(b),
         toml::Value::Array(a) => {
-            serde_json::Value::Array(a.iter().map(|v| toml_to_json_inner(v, depth + 1)).collect())
+            serde_json::Value::Array(a.iter().map(|v| toml_to_json_inner(v, guard)).collect())
         }
         toml::Value::Table(t) => {
             let map: serde_json::Map<String, serde_json::Value> = t
                 .iter()
-                .map(|(k, v)| (k.clone(), toml_to_json_inner(v, depth + 1)))
+                .map(|(k, v)| (k.clone(), toml_to_json_inner(v, guard)))
                 .collect();
             serde_json::Value::Object(map)
         }
         toml::Value::Datetime(d) => serde_json::json!(d.to_string()),
-    }
+    };
+    guard.ascend();
+    result
 }
 
 fn default_project_package_data() -> PackageData {

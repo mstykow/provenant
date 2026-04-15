@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -8,7 +8,9 @@ use serde_json::Value as JsonValue;
 use crate::models::{
     DatasourceId, Dependency, PackageData, PackageType, ResolvedPackage, Sha512Digest,
 };
-use crate::parsers::utils::{MAX_ITERATION_COUNT, npm_purl, parse_sri, truncate_field};
+use crate::parsers::utils::{
+    MAX_ITERATION_COUNT, MAX_RECURSION_DEPTH, RecursionGuard, npm_purl, parse_sri, truncate_field,
+};
 
 use super::PackageParser;
 
@@ -21,39 +23,6 @@ const FIELD_COUNT_WITH_SCRIPTS: usize = 8;
 const PACKAGE_FIELD_LENGTHS: [usize; 8] = [8, 8, 64, 8, 8, 88, 20, 48];
 const DEPENDENCY_ENTRY_SIZE: usize = 26;
 const MAX_MANIFEST_SIZE: u64 = 100 * 1024 * 1024;
-const MAX_RECURSION_DEPTH: usize = 50;
-
-struct RecursionGuard {
-    depth: usize,
-    visited: HashSet<usize>,
-}
-
-impl RecursionGuard {
-    fn new() -> Self {
-        Self {
-            depth: 0,
-            visited: HashSet::new(),
-        }
-    }
-
-    fn exceeded(&self) -> bool {
-        self.depth > MAX_RECURSION_DEPTH
-    }
-
-    fn enter(&mut self, pkg_idx: usize) -> bool {
-        if self.visited.contains(&pkg_idx) {
-            return true;
-        }
-        self.visited.insert(pkg_idx);
-        self.depth += 1;
-        false
-    }
-
-    fn leave(&mut self, pkg_idx: usize) {
-        self.visited.remove(&pkg_idx);
-        self.depth -= 1;
-    }
-}
 
 #[derive(Clone, Copy)]
 struct SliceRef {
@@ -370,7 +339,7 @@ fn build_package_data_from_lockb(
         &resolution_ids,
         buffers.string_bytes,
         true,
-        &mut RecursionGuard::new(),
+        &mut RecursionGuard::<usize>::new(),
     )?;
 
     Ok(package_data)
@@ -421,7 +390,7 @@ fn build_dependencies_for_package(
     resolution_ids: &[u32],
     string_bytes: &[u8],
     is_direct: bool,
-    guard: &mut RecursionGuard,
+    guard: &mut RecursionGuard<usize>,
 ) -> Result<Vec<Dependency>, String> {
     if guard.exceeded() {
         warn!(
@@ -494,7 +463,7 @@ fn build_resolved_package(
     dependency_entries: &[BunLockbDependencyEntry],
     resolution_ids: &[u32],
     string_bytes: &[u8],
-    guard: &mut RecursionGuard,
+    guard: &mut RecursionGuard<usize>,
 ) -> Result<ResolvedPackage, String> {
     if guard.exceeded() {
         warn!(

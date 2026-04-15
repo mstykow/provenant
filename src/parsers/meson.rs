@@ -9,7 +9,7 @@ use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
 
 use super::PackageParser;
 use super::license_normalization::normalize_spdx_declared_license;
-use super::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
+use super::utils::{MAX_ITERATION_COUNT, RecursionGuard, read_file_to_string, truncate_field};
 
 pub struct MesonParser;
 
@@ -452,18 +452,14 @@ fn parse_statement(statement: &str) -> Result<Statement, String> {
 
     if let [Token::Ident(name), Token::Equal, rest @ ..] = tokens.as_slice() {
         let mut parser = Parser::new(rest);
-        parser.depth += 1;
         let expr = parser.parse_expr()?;
-        parser.depth -= 1;
         parser.expect_end()?;
         let _ = name;
         return Ok(Statement::Assignment(expr));
     }
 
     let mut parser = Parser::new(&tokens);
-    parser.depth += 1;
     let expr = parser.parse_expr()?;
-    parser.depth -= 1;
     parser.expect_end()?;
     Ok(Statement::Expr(expr))
 }
@@ -567,12 +563,10 @@ fn is_ident_continue(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || ch == '_'
 }
 
-const MAX_RECURSION_DEPTH: usize = 50;
-
 struct Parser<'a> {
     tokens: &'a [Token],
     index: usize,
-    depth: usize,
+    guard: RecursionGuard<()>,
 }
 
 impl<'a> Parser<'a> {
@@ -580,15 +574,15 @@ impl<'a> Parser<'a> {
         Self {
             tokens,
             index: 0,
-            depth: 0,
+            guard: RecursionGuard::depth_only(),
         }
     }
 
     fn parse_expr(&mut self) -> Result<Expr, String> {
-        if self.depth > MAX_RECURSION_DEPTH {
+        if self.guard.descend() {
             return Err("recursion depth exceeded".to_string());
         }
-        match self.peek() {
+        let result = match self.peek() {
             Some(Token::Str(value)) => {
                 self.index += 1;
                 Ok(Expr::String(value.clone()))
@@ -601,7 +595,9 @@ impl<'a> Parser<'a> {
             Some(Token::Ident(_)) => self.parse_identifier_or_call(),
             Some(token) => Err(format!("unexpected token {:?}", token)),
             None => Err("unexpected end of input".to_string()),
-        }
+        };
+        self.guard.ascend();
+        result
     }
 
     fn parse_array(&mut self) -> Result<Expr, String> {
@@ -613,9 +609,7 @@ impl<'a> Parser<'a> {
             if element_count > MAX_ITERATION_COUNT {
                 break;
             }
-            self.depth += 1;
             let expr = self.parse_expr()?;
-            self.depth -= 1;
             values.push(expr);
             if matches!(self.peek(), Some(Token::Comma)) {
                 self.index += 1;
@@ -656,14 +650,10 @@ impl<'a> Parser<'a> {
             {
                 let arg_name = arg_name.clone();
                 self.index += 2;
-                self.depth += 1;
                 let value = self.parse_expr()?;
-                self.depth -= 1;
                 keyword.insert(arg_name, value);
             } else {
-                self.depth += 1;
                 let expr = self.parse_expr()?;
-                self.depth -= 1;
                 positional.push(expr);
             }
 
