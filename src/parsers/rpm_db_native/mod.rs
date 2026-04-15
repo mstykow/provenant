@@ -6,9 +6,13 @@ mod package;
 mod sqlite;
 mod tags;
 
+use std::fs;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+
+use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, MAX_MANIFEST_SIZE};
 
 use self::bdb::BdbDatabase;
 use self::entry::HeaderBlob;
@@ -32,6 +36,15 @@ pub(crate) fn read_installed_rpm_packages(
     path: &Path,
     kind: InstalledRpmDbKind,
 ) -> Result<Vec<InstalledRpmPackage>> {
+    let metadata = fs::metadata(path)?;
+    if metadata.len() > MAX_MANIFEST_SIZE {
+        return Err(anyhow!(
+            "RPM database file too large: {} bytes (max {} bytes)",
+            metadata.len(),
+            MAX_MANIFEST_SIZE
+        ));
+    }
+
     let mut reader: Box<dyn BlobReader> = match kind {
         InstalledRpmDbKind::Bdb => Box::new(BdbDatabase::open(path)?),
         InstalledRpmDbKind::Ndb => Box::new(NdbDatabase::open(path)?),
@@ -49,9 +62,18 @@ pub(crate) fn read_installed_rpm_packages(
         }
     };
 
-    reader
-        .read_blobs()?
+    let blobs = reader.read_blobs()?;
+    if blobs.len() > MAX_ITERATION_COUNT {
+        warn!(
+            "RPM database blob iteration exceeded MAX_ITERATION_COUNT ({} blobs), truncating to {}",
+            blobs.len(),
+            MAX_ITERATION_COUNT
+        );
+    }
+
+    blobs
         .into_iter()
+        .take(MAX_ITERATION_COUNT)
         .map(|blob| {
             let header = HeaderBlob::parse(&blob)?;
             let entries = header.import_entries(&blob)?;
