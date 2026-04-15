@@ -42,7 +42,6 @@ use anyhow::Result;
 use crate::license_detection::embedded::index::{
     load_embedded_artifact_metadata_from_bytes, load_loader_snapshot_from_bytes,
 };
-use crate::license_detection::index::CachedLicenseIndex;
 use crate::license_detection::index::build_index_from_loaded;
 use crate::license_detection::license_cache::{
     LicenseCacheConfig, LicenseCacheNamespace, cache_file_size, compute_artifact_fingerprint,
@@ -495,12 +494,11 @@ impl LicenseDetectionEngine {
             {
                 let start = Instant::now();
                 let spdx_version = cached.spdx_license_list_version.clone();
-                let index = index::LicenseIndex::from(cached);
                 eprintln!(
                     "License index loaded from rkyv cache in {:.2}s",
                     start.elapsed().as_secs_f64()
                 );
-                return Self::from_index(index, spdx_version);
+                return Self::from_index(cached, spdx_version);
             }
         } else {
             delete_cache(cache_config, LicenseCacheNamespace::Embedded, &fingerprint)?;
@@ -517,12 +515,12 @@ impl LicenseDetectionEngine {
             start.elapsed().as_secs_f64()
         );
 
-        let mut cached = CachedLicenseIndex::from(index.clone());
-        cached.spdx_license_list_version = spdx_version.clone();
+        let mut index = index;
+        index.spdx_license_list_version = spdx_version.clone();
         if let Err(e) = save_cached_index(
             cache_config,
             LicenseCacheNamespace::Embedded,
-            &cached,
+            &index,
             &fingerprint,
         ) {
             eprintln!("Warning: failed to save license index cache: {}", e);
@@ -586,13 +584,12 @@ impl LicenseDetectionEngine {
                 &fingerprint,
             )? {
                 let start = Instant::now();
-                let index = index::LicenseIndex::from(cached);
                 eprintln!(
                     "License index loaded from rkyv cache in {:.2}s",
                     start.elapsed().as_secs_f64()
                 );
                 let spdx_version = detect_scancode_spdx_license_list_version(&rules_dir)?;
-                return Self::from_index(index, spdx_version);
+                return Self::from_index(cached, spdx_version);
             }
         } else {
             delete_cache(
@@ -611,11 +608,10 @@ impl LicenseDetectionEngine {
 
         let spdx_license_list_version = detect_scancode_spdx_license_list_version(&rules_dir)?;
 
-        let cached = CachedLicenseIndex::from(index.clone());
         if let Err(e) = save_cached_index(
             cache_config,
             LicenseCacheNamespace::CustomRules,
-            &cached,
+            &index,
             &fingerprint,
         ) {
             eprintln!("Warning: failed to save license index cache: {}", e);

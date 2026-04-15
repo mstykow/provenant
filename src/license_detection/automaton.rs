@@ -6,6 +6,42 @@
 //! serialization support.
 
 use daachorse::DoubleArrayAhoCorasick;
+use rancor::Fallible;
+use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
+use rkyv::{Archive, Deserialize, Place, Serialize};
+
+/// rkyv `with` adapter that archives an `Automaton` as its serialized byte form.
+pub struct AsBytes;
+
+impl ArchiveWith<Automaton> for AsBytes {
+    type Archived = <Vec<u8> as Archive>::Archived;
+    type Resolver = <Vec<u8> as Archive>::Resolver;
+
+    fn resolve_with(field: &Automaton, resolver: Self::Resolver, out: Place<Self::Archived>) {
+        field.serialize_bytes().resolve(resolver, out);
+    }
+}
+
+impl<S: Fallible + rkyv::ser::Writer + rkyv::ser::Allocator + ?Sized> SerializeWith<Automaton, S>
+    for AsBytes
+{
+    fn serialize_with(field: &Automaton, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        field.serialize_bytes().serialize(serializer)
+    }
+}
+
+impl<D: Fallible + ?Sized> DeserializeWith<<Vec<u8> as Archive>::Archived, Automaton, D> for AsBytes
+where
+    <Vec<u8> as Archive>::Archived: Deserialize<Vec<u8>, D>,
+{
+    fn deserialize_with(
+        field: &<Vec<u8> as Archive>::Archived,
+        deserializer: &mut D,
+    ) -> Result<Automaton, D::Error> {
+        let bytes: Vec<u8> = field.deserialize(deserializer)?;
+        Ok(Automaton::deserialize_unchecked(&bytes))
+    }
+}
 
 /// A match found by the automaton.
 #[derive(Debug, Clone, PartialEq, Eq)]

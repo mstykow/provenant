@@ -569,6 +569,7 @@ pub fn build_index(rules: Vec<Rule>, licenses: Vec<License>) -> LicenseIndex {
         rid_by_spdx_key,
         unknown_spdx_rid,
         rids_by_high_tid,
+        spdx_license_list_version: None,
     };
     populate_precomputed_rule_spdx(&mut index);
     index
@@ -1062,6 +1063,7 @@ fn build_index_with_automatons(
         rid_by_spdx_key,
         unknown_spdx_rid,
         rids_by_high_tid,
+        spdx_license_list_version: None,
     };
     populate_precomputed_rule_spdx(&mut index);
     index
