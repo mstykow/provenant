@@ -11,9 +11,8 @@ pub use builder::{
     loaded_license_to_license, loaded_rule_to_rule,
 };
 
-use crate::license_detection::automaton::Automaton;
+use crate::license_detection::automaton::{AsBytes, Automaton};
 use crate::license_detection::index::dictionary::{TokenDictionary, TokenId};
-use crate::license_detection::models::{License, Rule};
 use crate::license_detection::{TokenMultiset, TokenSet};
 use rkyv::Archive;
 use std::collections::{HashMap, HashSet};
@@ -23,88 +22,6 @@ pub struct IndexedRuleMetadata {
     pub license_expression_spdx: Option<String>,
     pub skip_for_required_phrase_generation: bool,
     pub replaced_by: Vec<String>,
-}
-
-/// Rkyv-compatible cache representation of LicenseIndex.
-///
-/// Automaton fields are stored as serialized byte vectors since they have
-/// custom serialization logic that isn't compatible with rkyv's derive macros.
-/// Rule and License types are stored natively via rkyv.
-#[derive(Debug, Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub struct CachedLicenseIndex {
-    pub dictionary: TokenDictionary,
-    pub len_legalese: usize,
-    pub rid_by_hash: HashMap<[u8; 20], usize>,
-    pub rules_by_rid: Vec<Rule>,
-    pub tids_by_rid: Vec<Vec<TokenId>>,
-    pub rules_automaton_bytes: Vec<u8>,
-    pub unknown_automaton_bytes: Vec<u8>,
-    pub sets_by_rid: HashMap<usize, TokenSet>,
-    pub rule_metadata_by_identifier: HashMap<String, IndexedRuleMetadata>,
-    pub msets_by_rid: HashMap<usize, TokenMultiset>,
-    pub high_sets_by_rid: HashMap<usize, TokenSet>,
-    pub high_postings_by_rid: HashMap<usize, HashMap<TokenId, Vec<usize>>>,
-    pub false_positive_rids: HashSet<usize>,
-    pub approx_matchable_rids: HashSet<usize>,
-    pub licenses_by_key: HashMap<String, License>,
-    pub pattern_id_to_rid: Vec<Vec<usize>>,
-    pub rid_by_spdx_key: HashMap<String, usize>,
-    pub unknown_spdx_rid: Option<usize>,
-    pub rids_by_high_tid: HashMap<TokenId, HashSet<usize>>,
-    pub spdx_license_list_version: Option<String>,
-}
-
-impl From<LicenseIndex> for CachedLicenseIndex {
-    fn from(index: LicenseIndex) -> Self {
-        Self {
-            dictionary: index.dictionary,
-            len_legalese: index.len_legalese,
-            rid_by_hash: index.rid_by_hash,
-            rules_by_rid: index.rules_by_rid,
-            tids_by_rid: index.tids_by_rid,
-            rules_automaton_bytes: index.rules_automaton.serialize_bytes(),
-            unknown_automaton_bytes: index.unknown_automaton.serialize_bytes(),
-            sets_by_rid: index.sets_by_rid,
-            rule_metadata_by_identifier: index.rule_metadata_by_identifier,
-            msets_by_rid: index.msets_by_rid,
-            high_sets_by_rid: index.high_sets_by_rid,
-            high_postings_by_rid: index.high_postings_by_rid,
-            false_positive_rids: index.false_positive_rids,
-            approx_matchable_rids: index.approx_matchable_rids,
-            licenses_by_key: index.licenses_by_key,
-            pattern_id_to_rid: index.pattern_id_to_rid,
-            rid_by_spdx_key: index.rid_by_spdx_key,
-            unknown_spdx_rid: index.unknown_spdx_rid,
-            rids_by_high_tid: index.rids_by_high_tid,
-            spdx_license_list_version: None,
-        }
-    }
-}
-
-impl From<CachedLicenseIndex> for LicenseIndex {
-    fn from(cached: CachedLicenseIndex) -> Self {
-        Self {
-            dictionary: cached.dictionary,
-            len_legalese: cached.len_legalese,
-            rid_by_hash: cached.rid_by_hash,
-            rules_by_rid: cached.rules_by_rid,
-            tids_by_rid: cached.tids_by_rid,
-            rules_automaton: Automaton::deserialize_unchecked(&cached.rules_automaton_bytes),
-            unknown_automaton: Automaton::deserialize_unchecked(&cached.unknown_automaton_bytes),
-            sets_by_rid: cached.sets_by_rid,
-            rule_metadata_by_identifier: cached.rule_metadata_by_identifier,
-            msets_by_rid: cached.msets_by_rid,
-            high_sets_by_rid: cached.high_sets_by_rid,
-            high_postings_by_rid: cached.high_postings_by_rid,
-            false_positive_rids: cached.false_positive_rids,
-            approx_matchable_rids: cached.approx_matchable_rids,
-            licenses_by_key: cached.licenses_by_key,
-            pattern_id_to_rid: cached.pattern_id_to_rid,
-            rid_by_spdx_key: cached.rid_by_spdx_key,
-            unknown_spdx_rid: cached.unknown_spdx_rid,
-            rids_by_high_tid: cached.rids_by_high_tid,
-        }
-    }
 }
 
 /// License index containing all data structures for efficient license detection.
@@ -125,7 +42,7 @@ impl From<CachedLicenseIndex> for LicenseIndex {
 /// - **Candidate selection**: `sets_by_rid` and `msets_by_rid` for set-based ranking
 /// - **Sequence matching**: `high_postings_by_rid` for high-value token position tracking
 /// - **Rule classification**: `false_positive_rids`, `approx_matchable_rids`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct LicenseIndex {
     /// Token dictionary mapping token strings to integer IDs.
     ///
@@ -172,6 +89,7 @@ pub struct LicenseIndex {
     /// Used for exact matching of complete rules or rule fragments in query text.
     ///
     /// Corresponds to Python: `self.rules_automaton = match_aho.get_automaton()` (line 219)
+    #[rkyv(with = AsBytes)]
     pub rules_automaton: Automaton,
 
     /// Aho-Corasick automaton for unknown license detection.
@@ -180,6 +98,7 @@ pub struct LicenseIndex {
     /// any known rule. Populated with ngrams from all approx-matchable rules.
     ///
     /// Corresponds to Python: `self.unknown_automaton = match_unknown.get_automaton()` (line 222)
+    #[rkyv(with = AsBytes)]
     pub unknown_automaton: Automaton,
 
     /// Token ID sets per rule for candidate selection.
@@ -292,6 +211,9 @@ pub struct LicenseIndex {
     /// Only contains entries for tokens with ID < len_legalese (high-value tokens).
     /// Rules not in approx_matchable_rids are excluded from this index.
     pub rids_by_high_tid: HashMap<TokenId, HashSet<usize>>,
+
+    /// SPDX license list version used to build this index.
+    pub spdx_license_list_version: Option<String>,
 }
 
 impl LicenseIndex {}
@@ -329,6 +251,7 @@ impl LicenseIndex {
             rid_by_spdx_key: HashMap::new(),
             unknown_spdx_rid: None,
             rids_by_high_tid: HashMap::new(),
+            spdx_license_list_version: None,
         }
     }
 

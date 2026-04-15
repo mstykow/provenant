@@ -7,7 +7,7 @@ use rancor::{Panic, ResultExt};
 use sha2::{Digest, Sha256};
 
 use crate::cache::{CacheConfig, write_bytes_atomically};
-use crate::license_detection::index::CachedLicenseIndex;
+use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::models::{LoadedLicense, LoadedRule};
 
 const CACHE_ROOT_DIR_NAME: &str = "license-index";
@@ -120,7 +120,7 @@ pub fn load_cached_index(
     config: &LicenseCacheConfig,
     namespace: LicenseCacheNamespace,
     fingerprint: &[u8; 32],
-) -> Result<Option<CachedLicenseIndex>> {
+) -> Result<Option<LicenseIndex>> {
     if !config.enabled {
         return Ok(None);
     }
@@ -146,14 +146,12 @@ pub fn load_cached_index(
     }
 
     let archived =
-        match rkyv::access::<rkyv::Archived<CachedLicenseIndex>, rkyv::rancor::Error>(&bytes[32..])
-        {
+        match rkyv::access::<rkyv::Archived<LicenseIndex>, rkyv::rancor::Error>(&bytes[32..]) {
             Ok(archived) => archived,
             Err(_) => return Ok(None),
         };
 
-    let cached: CachedLicenseIndex =
-        rkyv::deserialize::<CachedLicenseIndex, Panic>(archived).always_ok();
+    let cached: LicenseIndex = rkyv::deserialize::<LicenseIndex, Panic>(archived).always_ok();
 
     Ok(Some(cached))
 }
@@ -161,7 +159,7 @@ pub fn load_cached_index(
 pub fn save_cached_index(
     config: &LicenseCacheConfig,
     namespace: LicenseCacheNamespace,
-    cached: &CachedLicenseIndex,
+    cached: &LicenseIndex,
     fingerprint: &[u8; 32],
 ) -> Result<()> {
     if !config.enabled {
@@ -228,17 +226,18 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::license_detection::automaton::Automaton;
     use crate::license_detection::index::dictionary::TokenDictionary;
 
-    fn sample_cached_index() -> CachedLicenseIndex {
-        CachedLicenseIndex {
+    fn sample_cached_index() -> LicenseIndex {
+        LicenseIndex {
             dictionary: TokenDictionary::default(),
             len_legalese: 0,
             rid_by_hash: Default::default(),
             rules_by_rid: Default::default(),
             tids_by_rid: Default::default(),
-            rules_automaton_bytes: Default::default(),
-            unknown_automaton_bytes: Default::default(),
+            rules_automaton: Automaton::empty(),
+            unknown_automaton: Automaton::empty(),
             sets_by_rid: Default::default(),
             rule_metadata_by_identifier: Default::default(),
             msets_by_rid: Default::default(),
