@@ -316,7 +316,12 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
     fs::create_dir_all(&raw_dir)?;
     fs::create_dir_all(&samples_dir)?;
     let target_dir = if let Some(target_path) = &args.target_path {
-        realpath(target_path)?
+        let resolved_target = realpath(target_path)?;
+        if resolved_target.is_file() {
+            run_dir.join("input")
+        } else {
+            resolved_target
+        }
     } else {
         run_dir.join(&slug)
     };
@@ -383,16 +388,20 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
 
 fn prepare_target(context: &mut ContextState, args: &Args) -> Result<CheckoutGuard> {
     if let Some(target_path) = &args.target_path {
-        if let Some(log_line) = current_git_log_line(&realpath(target_path)?) {
+        let resolved_target = realpath(target_path)?;
+        if let Some(log_line) = current_git_log_line(&resolved_target) {
             println!("{log_line}");
         } else {
             println!(
-                "  Using local directory without git metadata: {}",
-                context.target_dir.display()
+                "  Using local path without git metadata: {}",
+                resolved_target.display()
             );
         }
-        context.target_revision = current_git_revision(&context.target_dir)
+        context.target_revision = current_git_revision(&resolved_target)
             .unwrap_or_else(|| "current local checkout".to_string());
+        if resolved_target.is_file() {
+            materialize_file(&resolved_target, &context.target_dir)?;
+        }
         return Ok(CheckoutGuard {
             cache_dir: None,
             target_dir: context.target_dir.clone(),
@@ -766,10 +775,29 @@ fn normalize_scancode_error_path(path: &str) -> String {
         .to_string()
 }
 
+fn build_provenant_invocation(context: &ContextState) -> (PathBuf, String) {
+    if context.target_dir.is_file() {
+        let working_dir = context
+            .target_dir
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
+        let input_arg = context
+            .target_dir
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| ".".to_string());
+        (working_dir, input_arg)
+    } else {
+        (context.target_dir.clone(), ".".to_string())
+    }
+}
+
 fn run_provenant(context: &ContextState) -> Result<()> {
     println!("------------------------------------------");
     println!("Running Provenant");
     println!("------------------------------------------");
+    let (working_dir, _input_arg) = build_provenant_invocation(context);
     let args = build_provenant_args(context);
     println!(
         "  {}",
@@ -782,7 +810,7 @@ fn run_provenant(context: &ContextState) -> Result<()> {
     let (combined, log_warning) = run_and_capture_optional_log(
         context.provenant_bin.to_str().unwrap(),
         &args,
-        Some(&context.target_dir),
+        Some(&working_dir),
         &context.provenant_stdout,
     )?;
     if let Some(log_warning) = log_warning {
@@ -1486,6 +1514,7 @@ fn tsv_row(metric: &str, scancode: i64, provenant: i64, delta: i64, notes: &str)
 fn write_manifest(context: &ContextState) -> Result<()> {
     let scancode_args = build_scancode_docker_args(context);
     let provenant_args = build_provenant_args(context);
+    let (provenant_working_dir, _provenant_input_arg) = build_provenant_invocation(context);
     let manifest = CompareRunManifest {
         run_id: context.run_id.clone(),
         target: TargetManifest::new(
@@ -1493,7 +1522,7 @@ fn write_manifest(context: &ContextState) -> Result<()> {
             context.target_label.clone(),
             context.target_revision.clone(),
             if context.target_source_label == "Target path" {
-                Some(context.target_dir.clone())
+                Some(PathBuf::from(&context.target_label))
             } else {
                 None
             },
@@ -1522,7 +1551,7 @@ fn write_manifest(context: &ContextState) -> Result<()> {
                         .chain(provenant_args.iter().cloned())
                         .collect::<Vec<_>>(),
                 ),
-                working_directory: Some(context.target_dir.clone()),
+                working_directory: Some(provenant_working_dir),
             },
         },
         provenant: ProvenantManifest {
@@ -1580,6 +1609,7 @@ fn build_scancode_docker_args(context: &ContextState) -> Vec<String> {
 }
 
 fn build_provenant_args(context: &ContextState) -> Vec<String> {
+    let (_working_dir, input_arg) = build_provenant_invocation(context);
     let mut args = vec![
         "--json-pp".to_string(),
         context.provenant_json.display().to_string(),
@@ -1587,7 +1617,7 @@ fn build_provenant_args(context: &ContextState) -> Vec<String> {
     ];
     args.extend(context.scan_args.clone());
     args.extend(provenant_ignore_args());
-    args.push(".".to_string());
+    args.push(input_arg);
     args
 }
 
@@ -2230,6 +2260,105 @@ mod tests {
         let args = build_provenant_args(&context);
 
         assert!(args.iter().any(|arg| arg == "--no-license-index-cache"));
+    }
+
+    #[test]
+    fn build_provenant_args_uses_staged_input_file_for_single_file_targets() {
+        let temp_root = unique_temp_dir("single-file-provenant-args");
+        fs::create_dir_all(&temp_root).unwrap();
+        let staged_input = temp_root.join("input");
+        fs::write(&staged_input, "fixture").unwrap();
+
+        let mut context = test_context();
+        context.target_dir = staged_input;
+
+        let args = build_provenant_args(&context);
+
+        assert_eq!(args.last().map(String::as_str), Some("input"));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn build_provenant_invocation_uses_parent_dir_for_single_file_targets() {
+        let temp_root = unique_temp_dir("single-file-provenant-invocation");
+        fs::create_dir_all(&temp_root).unwrap();
+        let staged_input = temp_root.join("input");
+        fs::write(&staged_input, "fixture").unwrap();
+
+        let mut context = test_context();
+        context.target_dir = staged_input;
+
+        let (working_dir, input_arg) = build_provenant_invocation(&context);
+
+        assert_eq!(working_dir, temp_root);
+        assert_eq!(input_arg, "input");
+
+        let _ = fs::remove_dir_all(&working_dir);
+    }
+
+    #[test]
+    fn prepare_context_stages_single_file_targets_as_input() {
+        let temp_root = unique_temp_dir("single-file-target-context");
+        fs::create_dir_all(&temp_root).unwrap();
+        let fixture = temp_root.join("fixture.txt");
+        fs::write(&fixture, "fixture").unwrap();
+
+        let args = Args {
+            repo_url: None,
+            target_path: Some(fixture.clone()),
+            scancode_cache_identity: Some("fixture@rev".to_string()),
+            repo_ref: None,
+            profile: None,
+            scan_args: Vec::new(),
+        };
+
+        let context = prepare_context(&args, vec!["--copyright".to_string()]).unwrap();
+
+        assert_eq!(
+            context.target_label,
+            realpath(&fixture).unwrap().display().to_string()
+        );
+        assert_eq!(
+            context
+                .target_dir
+                .file_name()
+                .and_then(|name| name.to_str()),
+            Some("input")
+        );
+        assert_ne!(context.target_dir, fixture);
+
+        let _ = fs::remove_dir_all(&temp_root);
+        let _ = fs::remove_dir_all(&context.run_dir);
+    }
+
+    #[test]
+    fn prepare_target_materializes_single_file_target_into_staged_input() {
+        let temp_root = unique_temp_dir("single-file-target-prepare");
+        fs::create_dir_all(&temp_root).unwrap();
+        let fixture = temp_root.join("fixture.txt");
+        fs::write(&fixture, "fixture contents").unwrap();
+
+        let mut context = test_context();
+        context.target_dir = temp_root.join("run/input");
+        let args = Args {
+            repo_url: None,
+            target_path: Some(fixture.clone()),
+            scancode_cache_identity: Some("fixture@rev".to_string()),
+            repo_ref: None,
+            profile: None,
+            scan_args: Vec::new(),
+        };
+
+        let _guard = prepare_target(&mut context, &args).unwrap();
+
+        assert!(context.target_dir.is_file());
+        assert_eq!(
+            fs::read_to_string(&context.target_dir).unwrap(),
+            "fixture contents"
+        );
+
+        let _ = fs::remove_dir_all(&temp_root);
     }
 
     #[test]
