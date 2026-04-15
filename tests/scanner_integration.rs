@@ -1,5 +1,4 @@
 use glob::Pattern;
-use once_cell::sync::Lazy;
 use provenant::license_detection::LicenseDetectionEngine;
 use provenant::models::{LineNumber, PackageType};
 use provenant::parsers::list_parser_types;
@@ -9,9 +8,9 @@ use provenant::utils::file::{ExtractedTextKind, extract_text_for_detection};
 use provenant::{FileType, TextDetectionOptions, collect_paths, process_collected};
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
-static TEST_LICENSE_ENGINE: Lazy<Arc<LicenseDetectionEngine>> = Lazy::new(|| {
+static TEST_LICENSE_ENGINE: LazyLock<Arc<LicenseDetectionEngine>> = LazyLock::new(|| {
     Arc::new(
         LicenseDetectionEngine::from_embedded()
             .expect("embedded license index should be available for tests"),

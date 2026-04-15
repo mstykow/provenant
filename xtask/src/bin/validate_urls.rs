@@ -2,11 +2,11 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::Result;
 use clap::Parser;
-use lazy_static::lazy_static;
 use rayon::prelude::*;
 use regex::Regex;
 use url::Url;
@@ -52,12 +52,10 @@ struct UrlValidationResult {
     message: String,
 }
 
-lazy_static! {
-    static ref BARE_URL_PATTERN: Regex =
-        Regex::new(r#"https?://[^\s\"'<>)\]]+"#).expect("valid URL regex");
-    static ref DOCSTRING_PATTERN: Regex =
-        Regex::new(r"^\s*(///|//!)").expect("valid docstring regex");
-}
+static BARE_URL_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"https?://[^\s\"'<>)\]]+"#).expect("valid URL regex"));
+static DOCSTRING_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s*(///|//!)").expect("valid docstring regex"));
 
 #[derive(Debug, Clone, Copy)]
 enum MarkdownUrlStyle {

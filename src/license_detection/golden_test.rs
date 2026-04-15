@@ -33,17 +33,16 @@ mod golden_tests {
     use crate::license_detection::golden_utils::{
         detect_detection_expressions_for_golden, detect_license_expressions_for_golden,
     };
-    use once_cell::sync::Lazy;
     use serde::Deserialize;
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::sync::Once;
+    use std::sync::{LazyLock, Once};
 
     const GOLDEN_DIR: &str = "testdata/license-golden/datadriven";
 
     /// Shared engine instance - created once and reused across all tests
-    static TEST_ENGINE: Lazy<Option<LicenseDetectionEngine>> =
-        Lazy::new(|| match LicenseDetectionEngine::from_embedded() {
+    static TEST_ENGINE: LazyLock<Option<LicenseDetectionEngine>> =
+        LazyLock::new(|| match LicenseDetectionEngine::from_embedded() {
             Ok(engine) => {
                 eprintln!("License detection engine initialized from embedded artifact");
                 Some(engine)

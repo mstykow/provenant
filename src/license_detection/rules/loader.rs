@@ -12,15 +12,15 @@ use crate::license_detection::index::{loaded_license_to_license, loaded_rule_to_
 use crate::license_detection::models::{License, LoadedLicense, LoadedRule, Rule};
 use anyhow::{Context, Result, anyhow};
 use log::warn;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
 
-static FM_BOUNDARY: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?m)^-{3,}\s*$").expect("Invalid frontmatter regex"));
+static FM_BOUNDARY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^-{3,}\s*$").expect("Invalid frontmatter regex"));
 
 fn deserialize_yes_no_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
 where

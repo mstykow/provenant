@@ -4,11 +4,10 @@ use crate::license_detection::embedded::schema::{
     EmbeddedArtifactMetadata, EmbeddedLoaderSnapshot, SCHEMA_VERSION,
 };
 use crate::license_detection::models::{LoadedLicense, LoadedRule, RuleKind};
-use once_cell::sync::Lazy;
 use std::path::PathBuf;
-use std::sync::Once;
+use std::sync::{LazyLock, Once};
 
-static TEST_ENGINE: Lazy<LicenseDetectionEngine> = Lazy::new(|| {
+static TEST_ENGINE: LazyLock<LicenseDetectionEngine> = LazyLock::new(|| {
     LicenseDetectionEngine::from_embedded().expect("Should initialize from embedded artifact")
 });
 
