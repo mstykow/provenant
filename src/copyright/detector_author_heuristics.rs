@@ -1496,6 +1496,57 @@ pub(super) fn extract_debian_maintainer_authors(
     }
 }
 
+pub(super) fn extract_maintainers_label_authors(
+    prepared_cache: &mut PreparedLineCache<'_>,
+    authors: &mut Vec<AuthorDetection>,
+) {
+    if prepared_cache.is_empty() {
+        return;
+    }
+
+    static MAINTAINERS_LABEL_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)^maintainers?\s*:?[ \t]+(?P<who>.+)$").unwrap());
+    static GITREPO_SUFFIX_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)\s+GitRepo\s+https?://\S+.*$").unwrap());
+
+    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+
+    for idx in 0..prepared_cache.len() {
+        let ln = idx + 1;
+        let Some(prepared) = prepared_cache.get_by_index(idx) else {
+            continue;
+        };
+        let line = prepared.trim().trim_start_matches('*').trim_start();
+        if line.is_empty() {
+            continue;
+        }
+
+        let Some(cap) = MAINTAINERS_LABEL_RE.captures(line) else {
+            continue;
+        };
+
+        let who_raw = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
+        if who_raw.is_empty() || (!who_raw.contains('@') && !who_raw.contains('<')) {
+            continue;
+        }
+
+        let candidate = GITREPO_SUFFIX_RE.replace(who_raw, "");
+        let candidate = candidate.trim().trim_end_matches(',').trim();
+        let author = normalize_whitespace(&format!("Maintainers {candidate}"));
+        if author.is_empty() {
+            continue;
+        }
+
+        if seen.insert(author.clone()) {
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
+            });
+        }
+    }
+}
+
 pub(super) fn extract_created_by_project_author(
     prepared_cache: &mut PreparedLineCache<'_>,
     authors: &mut Vec<AuthorDetection>,

@@ -2130,6 +2130,33 @@ fn test_rst_field_author_and_maintainer_extracts_single_author() {
 }
 
 #[test]
+fn test_maintainers_label_extracts_author_and_trims_gitrepo_suffix() {
+    let input = "Maintainers Tianon Gravi <admwiggin@gmail.com> (@tianon) GitRepo https://github.com/tianon/docker-bash.git\n";
+
+    let (_c, _h, authors) = detect_copyrights_from_text(input);
+    let values: Vec<&str> = authors
+        .iter()
+        .map(|author| author.author.as_str())
+        .collect();
+    assert!(
+        values.contains(&"Maintainers Tianon Gravi <admwiggin@gmail.com> (@tianon)"),
+        "authors: {values:?}"
+    );
+    assert!(
+        !values.iter().any(|value| value.contains("GitRepo")),
+        "authors: {values:?}"
+    );
+}
+
+#[test]
+fn test_maintainers_label_without_email_does_not_extract_author() {
+    let input = "Maintainers the Docker Community\n";
+
+    let (_c, _h, authors) = detect_copyrights_from_text(input);
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
 fn test_dash_bullet_changelog_lines_extract_individual_authors() {
     let input = "- Written by Mydraal <vulpyne@vulpyne.net>\n- Updated by Adam Sulmicki <adam@cfar.umd.edu>\n- Updated by Jeremy M. Dolan <jmd@turbogeek.org> 2001/01/28 10:15:59\n- Added to by Crutcher Dunnavant <crutcher+kernel@datastacks.com>\n";
 
