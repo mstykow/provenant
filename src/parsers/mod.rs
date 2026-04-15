@@ -319,13 +319,16 @@ mod golden_test;
 use std::cell::RefCell;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
+use std::sync::Arc;
 
+use crate::license_detection::LicenseDetectionEngine;
 use crate::models::{PackageData, PackageType};
 use crate::parsers::license_normalization::finalize_package_declared_license_references;
 use crate::parsers::utils::MAX_ITERATION_COUNT;
 
 thread_local! {
     static PARSER_DIAGNOSTIC_STACK: RefCell<Vec<Vec<String>>> = const { RefCell::new(Vec::new()) };
+    static PARSER_LICENSE_ENGINE_STACK: RefCell<Vec<Option<Arc<LicenseDetectionEngine>>>> = const { RefCell::new(Vec::new()) };
 }
 
 #[derive(Debug, Default)]
@@ -348,6 +351,7 @@ pub(crate) fn capture_parser_diagnostics<F>(
     extract: F,
     handler_name: &str,
     path: &Path,
+    license_engine: Option<Arc<LicenseDetectionEngine>>,
 ) -> ParsePackagesResult
 where
     F: FnOnce() -> Vec<PackageData>,
@@ -355,21 +359,29 @@ where
     PARSER_DIAGNOSTIC_STACK.with(|stack| {
         stack.borrow_mut().push(Vec::new());
     });
+    PARSER_LICENSE_ENGINE_STACK.with(|stack| {
+        stack.borrow_mut().push(license_engine);
+    });
 
-    let extract_result = catch_unwind(AssertUnwindSafe(extract));
+    let extract_result = catch_unwind(AssertUnwindSafe(|| {
+        extract()
+            .into_iter()
+            .map(|mut package| {
+                finalize_package_declared_license_references(&mut package);
+                package
+            })
+            .take(MAX_ITERATION_COUNT)
+            .collect::<Vec<_>>()
+    }));
+    PARSER_LICENSE_ENGINE_STACK.with(|stack| {
+        stack.borrow_mut().pop();
+    });
     let mut scan_errors =
         PARSER_DIAGNOSTIC_STACK.with(|stack| stack.borrow_mut().pop().unwrap_or_default());
 
     match extract_result {
         Ok(packages) => ParsePackagesResult {
-            packages: packages
-                .into_iter()
-                .map(|mut package| {
-                    finalize_package_declared_license_references(&mut package);
-                    package
-                })
-                .take(MAX_ITERATION_COUNT)
-                .collect(),
+            packages,
             scan_errors,
         },
         Err(payload) => {
@@ -385,6 +397,10 @@ where
             }
         }
     }
+}
+
+pub(crate) fn active_parser_license_engine() -> Option<Arc<LicenseDetectionEngine>> {
+    PARSER_LICENSE_ENGINE_STACK.with(|stack| stack.borrow().last().cloned().flatten())
 }
 
 pub(crate) fn record_parser_diagnostic(message: String) -> bool {
@@ -598,7 +614,10 @@ macro_rules! register_package_handlers {
         parsers: [$($(#[$parser_meta:meta])* $parser:ty),* $(,)?],
         recognizers: [$($recognizer:ty),* $(,)?] $(,)?
     ) => {
-        pub fn try_parse_file(path: &Path) -> Option<ParsePackagesResult> {
+        pub fn try_parse_file_with_license_engine(
+            path: &Path,
+            license_engine: Option<Arc<LicenseDetectionEngine>>,
+        ) -> Option<ParsePackagesResult> {
             $(
                 $(#[$parser_meta])*
                 if <$parser>::is_match(path) {
@@ -606,6 +625,7 @@ macro_rules! register_package_handlers {
                         || <$parser>::extract_packages(path),
                         stringify!($parser),
                         path,
+                        license_engine.clone(),
                     ));
                 }
             )*
@@ -615,10 +635,15 @@ macro_rules! register_package_handlers {
                         || <$recognizer>::extract_packages(path),
                         stringify!($recognizer),
                         path,
+                        license_engine.clone(),
                     ));
                 }
             )*
             None
+        }
+
+        pub fn try_parse_file(path: &Path) -> Option<ParsePackagesResult> {
+            try_parse_file_with_license_engine(path, None)
         }
 
         // Used by the parser-golden maintenance tool in `xtask`.
@@ -652,6 +677,77 @@ macro_rules! register_package_handlers {
             ]
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::{active_parser_license_engine, capture_parser_diagnostics};
+    use crate::license_detection::LicenseDetectionEngine;
+    use crate::models::PackageData;
+    use crate::parsers::license_normalization::{
+        clear_last_parser_license_engine_ptr, last_parser_license_engine_ptr,
+    };
+    use std::path::Path;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_capture_parser_diagnostics_exposes_active_license_engine() {
+        let engine =
+            Arc::new(LicenseDetectionEngine::from_embedded().expect("embedded engine should load"));
+
+        let result = capture_parser_diagnostics(
+            || {
+                assert!(active_parser_license_engine().is_some());
+                vec![PackageData::default()]
+            },
+            "TestParser",
+            Path::new("testdata/package.json"),
+            Some(engine),
+        );
+
+        assert_eq!(result.packages.len(), 1);
+        assert!(active_parser_license_engine().is_none());
+    }
+
+    #[test]
+    fn test_capture_parser_diagnostics_keeps_active_license_engine_for_finalization() {
+        let engine =
+            Arc::new(LicenseDetectionEngine::from_embedded().expect("embedded engine should load"));
+        clear_last_parser_license_engine_ptr();
+
+        let result = capture_parser_diagnostics(
+            || {
+                vec![PackageData {
+                    declared_license_expression: Some("mit".to_string()),
+                    declared_license_expression_spdx: Some("MIT".to_string()),
+                    extracted_license_statement: Some("MIT".to_string()),
+                    extra_data: Some(HashMap::from([(
+                        "license_file".to_string(),
+                        serde_json::Value::String("LICENSE".to_string()),
+                    )])),
+                    ..Default::default()
+                }]
+            },
+            "TestParser",
+            Path::new("testdata/package.json"),
+            Some(Arc::clone(&engine)),
+        );
+
+        assert_eq!(result.packages.len(), 1);
+        assert_eq!(
+            last_parser_license_engine_ptr(),
+            Some(Arc::as_ptr(&engine) as usize)
+        );
+        assert_eq!(
+            result.packages[0].license_detections[0].matches[0]
+                .referenced_filenames
+                .as_ref(),
+            Some(&vec!["LICENSE".to_string()])
+        );
+        assert!(active_parser_license_engine().is_none());
+    }
 }
 
 register_package_handlers! {
@@ -825,6 +921,7 @@ mod panic_isolation_tests {
             || -> Vec<PackageData> { panic!("panic boom") },
             "PanicParser",
             path,
+            None,
         );
 
         assert!(result.packages.is_empty());
@@ -841,6 +938,7 @@ mod panic_isolation_tests {
             || -> Vec<PackageData> { panic!("panic boom") },
             "PanicParser",
             panic_path,
+            None,
         );
 
         let ok_path = Path::new("fixtures/recovered-package.json");
@@ -854,6 +952,7 @@ mod panic_isolation_tests {
             },
             "RecoveringParser",
             ok_path,
+            None,
         );
 
         assert_eq!(result.packages.len(), 1);

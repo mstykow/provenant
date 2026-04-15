@@ -200,6 +200,7 @@ mod tests {
             || ClojureProjectCljParser::extract_packages(&path),
             "ClojureProjectCljParser",
             &path,
+            None,
         );
 
         assert!(result.scan_errors.is_empty());
@@ -226,6 +227,7 @@ mod tests {
             || ClojureProjectCljParser::extract_packages(&path),
             "ClojureProjectCljParser",
             &path,
+            None,
         );
 
         assert!(result.scan_errors.is_empty());
@@ -249,6 +251,7 @@ mod tests {
             || ClojureProjectCljParser::extract_packages(&path),
             "ClojureProjectCljParser",
             &path,
+            None,
         );
 
         assert!(result.scan_errors.is_empty());
@@ -281,6 +284,7 @@ mod tests {
             || ClojureProjectCljParser::extract_packages(&path),
             "ClojureProjectCljParser",
             &path,
+            None,
         );
 
         assert!(result.scan_errors.is_empty());
@@ -306,6 +310,7 @@ mod tests {
             || ClojureProjectCljParser::extract_packages(&path),
             "ClojureProjectCljParser",
             &path,
+            None,
         );
 
         assert!(result.scan_errors.is_empty());
@@ -337,6 +342,7 @@ mod tests {
             || ClojureProjectCljParser::extract_packages(&path),
             "ClojureProjectCljParser",
             &path,
+            None,
         );
 
         assert!(result.scan_errors.is_empty());
