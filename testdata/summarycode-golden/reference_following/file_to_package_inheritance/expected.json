@@ -231,7 +231,7 @@
       "is_key_file": false,
       "is_manifest": false,
       "detected_license_expression": null,
-      "detected_license_expression_spdx": "bsd-new",
+      "detected_license_expression_spdx": "BSD-3-Clause",
       "license_detections": [
         {
           "license_expression": "bsd-new",
