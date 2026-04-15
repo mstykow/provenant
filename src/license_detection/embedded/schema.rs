@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::license_detection::models::{LoadedLicense, LoadedRule};
 
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EmbeddedArtifactMetadata {
