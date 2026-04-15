@@ -5,17 +5,17 @@ use std::cell::Cell;
 
 use crate::parser_warn as warn;
 use crate::parsers::active_parser_license_engine;
-use crate::parsers::utils::{RecursionGuard, MAX_ITERATION_COUNT};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, RecursionGuard};
 
+use crate::license_detection::LicenseDetectionEngine;
 use crate::license_detection::expression::{
-    parse_expression, simplify_expression, LicenseExpression,
+    LicenseExpression, parse_expression, simplify_expression,
 };
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::license_cache::LicenseCacheConfig;
-use crate::license_detection::LicenseDetectionEngine;
 use crate::models::{LicenseDetection, LineNumber, Match, MatchScore, PackageData};
 use crate::utils::spdx::{
-    combine_license_expressions, combine_license_expressions_with_relation, ExpressionRelation,
+    ExpressionRelation, combine_license_expressions, combine_license_expressions_with_relation,
 };
 
 pub(crate) const PARSER_DECLARED_MATCHER: &str = "parser-declared-license";
@@ -110,8 +110,8 @@ impl<'a> DeclaredLicenseMatchMetadata<'a> {
     }
 }
 
-pub(crate) fn empty_declared_license_data(
-) -> (Option<String>, Option<String>, Vec<LicenseDetection>) {
+pub(crate) fn empty_declared_license_data()
+-> (Option<String>, Option<String>, Vec<LicenseDetection>) {
     (None, None, Vec::new())
 }
 
@@ -791,10 +791,12 @@ mod tests {
             LineNumber::new(4).expect("valid")
         );
         assert_eq!(detection.matches[0].matched_text.as_deref(), Some("MIT"));
-        assert!(detection.matches[0]
-            .rule_identifier
-            .as_deref()
-            .is_some_and(|identifier| !identifier.is_empty()));
+        assert!(
+            detection.matches[0]
+                .rule_identifier
+                .as_deref()
+                .is_some_and(|identifier| !identifier.is_empty())
+        );
     }
 
     #[test]

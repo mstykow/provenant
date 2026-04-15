@@ -124,7 +124,13 @@ Every parser should use these shared helpers rather than reimplementing ADR 0004
 - `read_file_to_string(path, max_size)` — stat-before-read size check (default 100 MB), UTF-8 with lossy fallback and warning
 - `truncate_field(value)` — caps individual string fields to 10 MB (`MAX_FIELD_LENGTH`), warns on truncation
 - `MAX_ITERATION_COUNT` (100,000) — `.take(MAX_ITERATION_COUNT)` on every `.iter()` over user-supplied collections (dependencies, keywords, authors, archive entries, etc.)
-- `MAX_MANIFEST_SIZE`, `MAX_FIELD_LENGTH` — ADR 0004 resource-limit constants
+- `MAX_MANIFEST_SIZE`, `MAX_FIELD_LENGTH`, `MAX_RECURSION_DEPTH` (50) — ADR 0004 resource-limit constants
+- `RecursionGuard<K>` — tracks recursion depth and detects cycles; use in every recursive parser function:
+  - **Depth-only** (no cycle detection): `RecursionGuard<()>` with `guard.descend()` / `guard.ascend()`. Create with `RecursionGuard::depth_only()`.
+  - **Depth + cycle detection**: `RecursionGuard<K>` where `K: Hash + Eq` (e.g., `usize` for package indices, `String` for dependency names, `PathBuf` for file paths). Use `guard.enter(key)` / `guard.leave(key)`. Create with `RecursionGuard::new()`.
+  - `guard.exceeded()` returns `true` when depth exceeds `MAX_RECURSION_DEPTH` — check before recursing and return early with `warn!()`.
+  - `guard.enter(key)` returns `true` if `key` was already visited (cycle) — return early with `warn!()`.
+  - Always pair `descend()`/`ascend()` or `enter()`/`leave()` so depth stays consistent.
 
 **Use existing parsers as templates**:
 
