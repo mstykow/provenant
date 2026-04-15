@@ -7,8 +7,8 @@ use crate::models::{DatasourceId, FileInfo, FileInfoBuilder, FileType, Sha256Dig
 use crate::parsers::compiled_binary::{
     is_supported_compiled_binary_format, try_parse_compiled_bytes,
 };
-use crate::parsers::try_parse_file;
 use crate::parsers::windows_executable::try_parse_windows_executable_bytes;
+use crate::parsers::{try_parse_file, try_parse_file_with_license_engine};
 use crate::progress::ScanProgress;
 use crate::scanner::{LicenseScanOptions, TextDetectionOptions};
 use crate::utils::file::{
@@ -163,23 +163,27 @@ fn extract_information_from_content(
 
     if text_options.detect_packages {
         let started = Instant::now();
-        let parse_result = try_parse_file(&filesystem_path)
-            .or_else(|| {
-                text_options
-                    .detect_application_packages
-                    .then(|| try_parse_windows_executable_bytes(&filesystem_path, &buffer))
-                    .flatten()
-            })
-            .or_else(|| {
-                text_options
-                    .detect_packages_in_compiled
-                    .then(|| {
-                        (classification.is_binary && is_supported_compiled_binary_format(&buffer))
-                            .then(|| try_parse_compiled_bytes(&buffer))
-                            .flatten()
-                    })
-                    .flatten()
-            });
+        let parse_result = if let Some(engine) = license_engine.clone() {
+            try_parse_file_with_license_engine(&filesystem_path, Some(engine))
+        } else {
+            try_parse_file(&filesystem_path)
+        }
+        .or_else(|| {
+            text_options
+                .detect_application_packages
+                .then(|| try_parse_windows_executable_bytes(&filesystem_path, &buffer))
+                .flatten()
+        })
+        .or_else(|| {
+            text_options
+                .detect_packages_in_compiled
+                .then(|| {
+                    (classification.is_binary && is_supported_compiled_binary_format(&buffer))
+                        .then(|| try_parse_compiled_bytes(&buffer))
+                        .flatten()
+                })
+                .flatten()
+        });
 
         if let Some(parse_result) = parse_result {
             let packages = parse_result

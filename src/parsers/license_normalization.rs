@@ -1,6 +1,10 @@
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
+
+#[cfg(test)]
+use std::cell::Cell;
 
 use crate::parser_warn as warn;
+use crate::parsers::active_parser_license_engine;
 use crate::parsers::utils::MAX_ITERATION_COUNT;
 
 use crate::license_detection::LicenseDetectionEngine;
@@ -18,11 +22,11 @@ pub(crate) const PARSER_DECLARED_MATCHER: &str = "parser-declared-license";
 
 const MAX_RECURSION_DEPTH: usize = 50;
 
-static PARSER_LICENSE_ENGINE: LazyLock<Option<LicenseDetectionEngine>> = LazyLock::new(|| {
+static PARSER_LICENSE_ENGINE: LazyLock<Option<Arc<LicenseDetectionEngine>>> = LazyLock::new(|| {
     let cache_config =
         LicenseCacheConfig::new(LicenseCacheConfig::default_root_dir(), false, false);
     match LicenseDetectionEngine::from_embedded_with_cache(&cache_config) {
-        Ok(engine) => Some(engine),
+        Ok(engine) => Some(Arc::new(engine)),
         Err(error) => {
             warn!(
                 "Failed to initialize embedded license engine for parser declared-license normalization: {}",
@@ -32,6 +36,35 @@ static PARSER_LICENSE_ENGINE: LazyLock<Option<LicenseDetectionEngine>> = LazyLoc
         }
     }
 });
+
+#[cfg(test)]
+thread_local! {
+    static LAST_PARSER_LICENSE_ENGINE_PTR: Cell<usize> = const { Cell::new(0) };
+}
+
+fn parser_license_engine() -> Option<Arc<LicenseDetectionEngine>> {
+    let engine = active_parser_license_engine().or_else(|| PARSER_LICENSE_ENGINE.as_ref().cloned());
+    #[cfg(test)]
+    if let Some(active_engine) = engine.as_ref() {
+        LAST_PARSER_LICENSE_ENGINE_PTR.with(|slot| {
+            slot.set(Arc::as_ptr(active_engine) as usize);
+        });
+    }
+    engine
+}
+
+#[cfg(test)]
+pub(crate) fn clear_last_parser_license_engine_ptr() {
+    LAST_PARSER_LICENSE_ENGINE_PTR.with(|slot| slot.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn last_parser_license_engine_ptr() -> Option<usize> {
+    LAST_PARSER_LICENSE_ENGINE_PTR.with(|slot| {
+        let ptr = slot.get();
+        (ptr != 0).then_some(ptr)
+    })
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct NormalizedDeclaredLicense {
@@ -110,7 +143,7 @@ pub(crate) fn detect_declared_license_from_text(
         return empty_declared_license_data();
     }
 
-    let Some(engine) = PARSER_LICENSE_ENGINE.as_ref() else {
+    let Some(engine) = parser_license_engine() else {
         return empty_declared_license_data();
     };
     let Ok(detections) = engine.detect_with_kind(text, false, false) else {
@@ -154,7 +187,7 @@ pub(crate) fn normalize_spdx_expression(statement: &str) -> Option<NormalizedDec
         return None;
     }
 
-    let engine = PARSER_LICENSE_ENGINE.as_ref()?;
+    let engine = parser_license_engine()?;
     let expression = parse_expression(statement).ok()?;
     let (declared_ast, declared_spdx_ast) =
         normalize_expression_ast(&expression, engine.index(), 0)?;
@@ -173,7 +206,7 @@ pub(crate) fn normalize_declared_license_key(key: &str) -> Option<NormalizedDecl
         return None;
     }
 
-    let engine = PARSER_LICENSE_ENGINE.as_ref()?;
+    let engine = parser_license_engine()?;
     normalize_license_key(key, engine.index())
 }
 
@@ -301,7 +334,7 @@ fn derive_declared_rule_metadata(
         return None;
     }
 
-    let engine = PARSER_LICENSE_ENGINE.as_ref()?;
+    let engine = parser_license_engine()?;
     let detections = engine.detect_with_kind(matched_text, false, false).ok()?;
     let license_match = detections
         .into_iter()
