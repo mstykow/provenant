@@ -326,6 +326,7 @@ fn run() -> Result<()> {
     progress.start_post_scan();
 
     if cli.filter_clues {
+        progress.post_scan_step("Filtering redundant clues...");
         let clue_rule_lookup = record_detail_timing(&progress, "post-scan:filter-clues", || {
             prepare_filter_clue_rule_lookup(
                 &scan_result.files,
@@ -342,6 +343,7 @@ fn run() -> Result<()> {
     }
 
     if !ignore_author_patterns.is_empty() || !ignore_copyright_holder_patterns.is_empty() {
+        progress.post_scan_step("Applying ignore-resource filters...");
         record_detail_timing(&progress, "post-scan:ignore-resource", || {
             apply_ignore_resource_filter(
                 &mut scan_result.files,
@@ -352,29 +354,34 @@ fn run() -> Result<()> {
     }
 
     if cli.from_json && (!cli.include.is_empty() || !cli.exclude.is_empty()) {
+        progress.post_scan_step("Applying path selection filters...");
         record_detail_timing(&progress, "output-filter:path-selection", || {
             apply_cli_path_selection_filter(&mut scan_result.files, &cli.include, &cli.exclude);
         });
     }
 
     if cli.only_findings {
+        progress.post_scan_step("Filtering to files with findings...");
         record_detail_timing(&progress, "output-filter:only-findings", || {
             apply_only_findings_filter(&mut scan_result.files);
         });
     }
 
     if cli.info && cli.mark_source {
+        progress.post_scan_step("Marking source files...");
         record_detail_timing(&progress, "post-scan:mark-source", || {
             apply_mark_source(&mut scan_result.files);
         });
     }
 
     if should_include_info_surface(&scan_result.files, &cli) {
+        progress.post_scan_step("Populating info resource counts...");
         record_detail_timing(&progress, "post-scan:info-resource-counts", || {
             populate_info_resource_counts(&mut scan_result.files);
         });
     }
 
+    progress.post_scan_step("Backfilling license provenance...");
     record_detail_timing(&progress, "post-scan:license-provenance", || {
         for file in &mut scan_result.files {
             file.backfill_license_provenance();
@@ -389,6 +396,7 @@ fn run() -> Result<()> {
 
     let mut extra_errors = preloaded_extra_errors;
     if let Some(policy_path) = cli.license_policy.as_deref() {
+        progress.post_scan_step("Applying license policy...");
         let license_policy_errors =
             record_detail_timing(&progress, "post-scan:license-policy", || {
                 apply_license_policy_from_file(&mut scan_result.files, Path::new(policy_path))
@@ -400,6 +408,7 @@ fn run() -> Result<()> {
     }
 
     if cli.from_json {
+        progress.post_scan_step("Trimming preloaded assembly to filtered files...");
         record_detail_timing(&progress, "post-scan:trim-preloaded-assembly", || {
             trim_preloaded_assembly_to_files(
                 &scan_result.files,
@@ -460,12 +469,14 @@ fn run() -> Result<()> {
     }
 
     progress.start_post_scan();
+    progress.post_scan_step("Backfilling package license provenance...");
     record_detail_timing(&progress, "post-scan:package-license-provenance", || {
         for package in &mut assembly_result.packages {
             package.backfill_license_provenance();
         }
     });
 
+    progress.post_scan_step("Applying package reference following...");
     record_detail_timing(&progress, "post-scan:package-reference-following", || {
         apply_package_reference_following(&mut scan_result.files, &mut assembly_result.packages);
     });
@@ -473,6 +484,7 @@ fn run() -> Result<()> {
 
     progress.start_finalize();
 
+    progress.finalize_step("Collecting license detections...");
     let license_detections = record_detail_timing(&progress, "finalize:license-detections", || {
         if cli.from_json {
             let _ = preloaded_license_detections;
@@ -500,6 +512,7 @@ fn run() -> Result<()> {
         progress.finish_license_detection_engine_creation("finalize:license-engine-creation");
     }
 
+    progress.finalize_step("Collecting license references...");
     let (license_references, license_rule_references) =
         record_detail_timing(&progress, "finalize:license-references", || {
             if cli.from_json && !should_recompute_license_references {
@@ -529,6 +542,7 @@ fn run() -> Result<()> {
         .and_then(|engine| engine.spdx_license_list_version().map(ToOwned::to_owned))
         .unwrap_or(LicenseDetectionEngine::embedded_spdx_license_list_version()?);
 
+    progress.finalize_step("Preparing output...");
     let output = record_detail_timing(&progress, "finalize:output-prepare", || {
         create_output(
             start_time,
