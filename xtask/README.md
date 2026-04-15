@@ -179,7 +179,7 @@ Optional diagnostic logs when available:
 - Local `--target-path` runs rerun ScanCode by default. Pass `--scancode-cache-identity <id>` to opt into shared ScanCode raw-artifact reuse for a local snapshot you have identified explicitly.
 - Cache hits now require a cached `scancode.json` plus cache `manifest.json`; `scancode-stdout.txt` is reused when available but is no longer required for cache completeness.
 - `scancode-stdout.txt` and `provenant-stdout.txt` are best-effort diagnostic logs. The compare pipeline only requires the JSON outputs, so a log-write failure no longer makes the command fail.
-- The command always adds shared ignore rules for Git control paths (`.git`, nested `.git`, and their contents) plus `target/*` to both scanners so repository metadata and build output do not dominate the comparison artifacts without hiding package-adjacent files such as `.gitmodules`.
+- The command adds Git control-path ignore rules (`.git`, nested `.git`, and their contents) on the ScanCode side plus `target/*` on both scanners so repository metadata and Cargo build output do not dominate the comparison artifacts without hiding package-adjacent files such as `.gitmodules`. Provenant already excludes `.git` directories during path collection by default, so xtask does not need to restate those ignores for Provenant.
 
 ## `update-parser-golden`
 
