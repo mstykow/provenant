@@ -9,6 +9,7 @@ mod cargo_resource_assign;
 mod cargo_workspace_merge;
 mod composer_resource_assign;
 mod conda_rootfs_merge;
+mod debian_source_merge;
 pub mod file_ref_resolve;
 mod hackage_merge;
 mod nested_merge;
