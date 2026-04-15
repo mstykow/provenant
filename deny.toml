@@ -16,7 +16,6 @@ yanked = "deny"
 unmaintained = "workspace"
 unsound = "workspace"
 ignore = [
-    { crate = "core2@0.4.0", reason = "all versions yanked; transitive dep via pdf_oxide -> libflate. See https://github.com/sile/libflate/issues/85" },
 ]
 
 [bans]
