@@ -304,6 +304,15 @@ impl ScanProgress {
 
     pub fn start_post_scan(&self) {
         self.start_phase("post-scan");
+        if self.mode == ProgressMode::Verbose {
+            self.message("Post-processing scan results...");
+        }
+    }
+
+    pub fn post_scan_step(&self, step: &str) {
+        if self.mode == ProgressMode::Verbose {
+            self.message(&format!("  {step}"));
+        }
     }
 
     pub fn finish_post_scan(&self) {
@@ -312,6 +321,15 @@ impl ScanProgress {
 
     pub fn start_finalize(&self) {
         self.start_phase("finalize");
+        if self.mode == ProgressMode::Verbose {
+            self.message("Finalizing scan results...");
+        }
+    }
+
+    pub fn finalize_step(&self, step: &str) {
+        if self.mode == ProgressMode::Verbose {
+            self.message(&format!("  {step}"));
+        }
     }
 
     pub fn finish_finalize(&self) {
