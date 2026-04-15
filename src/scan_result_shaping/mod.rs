@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod core_test;
+mod directory_tree;
 pub(crate) mod json_input;
 pub(crate) mod selection;
 #[cfg(test)]
@@ -32,11 +33,32 @@ where
         .map(|entry| entry.path.clone())
         .collect();
 
+    let tree = directory_tree::DirectoryTree::build(files);
+
+    let mut dir_has_kept_file: HashSet<String> = HashSet::new();
+    for path in &kept_file_paths {
+        if let Some(parent) = Path::new(path).parent().and_then(|p| p.to_str())
+            && !parent.is_empty()
+        {
+            dir_has_kept_file.insert(parent.to_string());
+        }
+    }
+
+    let mut dir_has_kept_descendant: HashSet<String> = HashSet::new();
+    for dir_path in tree.dirs_deepest_first() {
+        let has_direct = dir_has_kept_file.contains(dir_path);
+        let has_child_descendant = tree
+            .child_dirs(dir_path)
+            .iter()
+            .any(|child| dir_has_kept_descendant.contains(child));
+        if has_direct || has_child_descendant {
+            dir_has_kept_descendant.insert(dir_path.clone());
+        }
+    }
+
     files.retain(|entry| match entry.file_type {
         crate::models::FileType::File => kept_file_paths.contains(&entry.path),
-        crate::models::FileType::Directory => kept_file_paths
-            .iter()
-            .any(|path| Path::new(path).starts_with(Path::new(&entry.path))),
+        crate::models::FileType::Directory => dir_has_kept_descendant.contains(&entry.path),
     });
 }
 
@@ -45,6 +67,60 @@ where
     F: FnMut(&FileInfo) -> bool,
 {
     retain_matching_files_with_ancestor_dirs(files, keep_file);
+}
+
+pub(crate) fn populate_info_resource_counts(files: &mut [FileInfo]) {
+    let tree = directory_tree::DirectoryTree::build(files);
+
+    let mut direct_counts: HashMap<String, (usize, usize, u64)> = HashMap::new();
+    for file in files.iter() {
+        if let Some(parent) = Path::new(&file.path).parent().and_then(|p| p.to_str()) {
+            if parent.is_empty() {
+                continue;
+            }
+            let counts = direct_counts.entry(parent.to_string()).or_insert((0, 0, 0));
+            match file.file_type {
+                crate::models::FileType::File => {
+                    counts.0 += 1;
+                    counts.2 += file.size;
+                }
+                crate::models::FileType::Directory => {
+                    counts.1 += 1;
+                }
+            }
+        }
+    }
+
+    let mut descendant_counts: HashMap<String, (usize, usize, u64)> = HashMap::new();
+    for dir_path in tree.dirs_deepest_first() {
+        let (mut f, mut d, mut s) = direct_counts.get(dir_path).copied().unwrap_or((0, 0, 0));
+        for child in tree.child_dirs(dir_path) {
+            let (cf, cd, cs) = descendant_counts.get(child).copied().unwrap_or((0, 0, 0));
+            f += cf;
+            d += cd;
+            s += cs;
+        }
+        descendant_counts.insert(dir_path.clone(), (f, d, s));
+    }
+
+    for entry in files.iter_mut() {
+        match entry.file_type {
+            crate::models::FileType::Directory => {
+                let (f, d, s) = descendant_counts
+                    .get(&entry.path)
+                    .copied()
+                    .unwrap_or((0, 0, 0));
+                entry.files_count = Some(f);
+                entry.dirs_count = Some(d);
+                entry.size_count = Some(s);
+            }
+            crate::models::FileType::File => {
+                entry.files_count = Some(0);
+                entry.dirs_count = Some(0);
+                entry.size_count = Some(0);
+            }
+        }
+    }
 }
 
 fn has_findings(file: &FileInfo) -> bool {
@@ -585,36 +661,24 @@ pub(crate) fn apply_mark_source(files: &mut [FileInfo]) {
         entry.source_count = Some(0);
     }
 
-    let mut dir_paths = files
-        .iter()
-        .filter(|entry| entry.file_type == crate::models::FileType::Directory)
-        .map(|entry| entry.path.clone())
-        .collect::<Vec<_>>();
-    dir_paths.sort_by_key(|path| usize::MAX - Path::new(path).components().count());
+    let tree = directory_tree::DirectoryTree::build(files);
 
     let mut direct_file_count = HashMap::<String, usize>::new();
     let mut direct_source_file_count = HashMap::<String, usize>::new();
-    let mut child_dirs = HashMap::<String, Vec<String>>::new();
 
     for entry in files.iter() {
-        if let Some(parent) = Path::new(&entry.path).parent().and_then(|p| p.to_str()) {
+        if let Some(parent) = Path::new(&entry.path).parent().and_then(|p| p.to_str())
+            && entry.file_type == crate::models::FileType::File
+        {
+            let excluded_go_non_production = entry.programming_language.as_deref() == Some("Go")
+                && entry.is_source == Some(false);
+            if excluded_go_non_production {
+                continue;
+            }
             let parent_key = parent.to_string();
-            if entry.file_type == crate::models::FileType::File {
-                let excluded_go_non_production = entry.programming_language.as_deref()
-                    == Some("Go")
-                    && entry.is_source == Some(false);
-                if excluded_go_non_production {
-                    continue;
-                }
-                *direct_file_count.entry(parent_key.clone()).or_insert(0) += 1;
-                if entry.is_source.unwrap_or(false) {
-                    *direct_source_file_count.entry(parent_key).or_insert(0) += 1;
-                }
-            } else {
-                child_dirs
-                    .entry(parent_key)
-                    .or_default()
-                    .push(entry.path.clone());
+            *direct_file_count.entry(parent_key.clone()).or_insert(0) += 1;
+            if entry.is_source.unwrap_or(false) {
+                *direct_source_file_count.entry(parent_key).or_insert(0) += 1;
             }
         }
     }
@@ -622,20 +686,18 @@ pub(crate) fn apply_mark_source(files: &mut [FileInfo]) {
     let mut descendant_file_count = HashMap::<String, usize>::new();
     let mut descendant_source_count = HashMap::<String, usize>::new();
 
-    for dir_path in dir_paths {
-        let mut total_files = *direct_file_count.get(&dir_path).unwrap_or(&0);
-        let mut source_files = *direct_source_file_count.get(&dir_path).unwrap_or(&0);
+    for dir_path in tree.dirs_deepest_first() {
+        let mut total_files = *direct_file_count.get(dir_path).unwrap_or(&0);
+        let mut source_files = *direct_source_file_count.get(dir_path).unwrap_or(&0);
 
-        if let Some(children) = child_dirs.get(&dir_path) {
-            for child in children {
-                total_files += descendant_file_count.get(child).copied().unwrap_or(0);
-                source_files += descendant_source_count.get(child).copied().unwrap_or(0);
-            }
+        for child in tree.child_dirs(dir_path) {
+            total_files += descendant_file_count.get(child).copied().unwrap_or(0);
+            source_files += descendant_source_count.get(child).copied().unwrap_or(0);
         }
 
         let qualifies = total_files > 0 && (source_files as f64 / total_files as f64) >= 0.9;
 
-        if let Some(idx) = index_by_path.get(&dir_path)
+        if let Some(idx) = index_by_path.get(dir_path)
             && let Some(entry) = files.get_mut(*idx)
         {
             if qualifies && source_files > 0 {
@@ -648,7 +710,7 @@ pub(crate) fn apply_mark_source(files: &mut [FileInfo]) {
         }
 
         descendant_file_count.insert(dir_path.clone(), total_files);
-        descendant_source_count.insert(dir_path, if qualifies { source_files } else { 0 });
+        descendant_source_count.insert(dir_path.clone(), if qualifies { source_files } else { 0 });
     }
 }
 
