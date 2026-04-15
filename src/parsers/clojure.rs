@@ -434,15 +434,15 @@ fn parse_deps_edn_form(form: &Form) -> Result<PackageData, String> {
                 }
             }
         }
-        if let Some(json) = form_to_json(&Form::Map(alias_map.clone())) {
+        if let Some(json) = form_to_json(&Form::Map(alias_map.clone()), 0) {
             extra_data.insert("aliases".to_string(), json);
         }
     }
 
-    if let Some(value) = map_get_keyword(entries, "paths").and_then(form_to_json) {
+    if let Some(value) = map_get_keyword(entries, "paths").and_then(|f| form_to_json(f, 0)) {
         extra_data.insert("paths".to_string(), value);
     }
-    if let Some(value) = map_get_keyword(entries, "mvn/repos").and_then(form_to_json) {
+    if let Some(value) = map_get_keyword(entries, "mvn/repos").and_then(|f| form_to_json(f, 0)) {
         extra_data.insert("mvn_repos".to_string(), value);
     }
 
@@ -488,7 +488,7 @@ fn parse_project_clj_form(form: &Form) -> Result<PackageData, String> {
                 package.homepage_url = form_as_string(value).map(|s| truncate_field(s.to_owned()))
             }
             "license" => {
-                package.extracted_license_statement = format_license(value).map(truncate_field);
+                package.extracted_license_statement = format_license(value, 0).map(truncate_field);
             }
             "scm" => {
                 if let Form::Map(entries) = value {
@@ -568,7 +568,7 @@ fn build_deps_edn_dependency(
             ("local/root", "local_root"),
             ("exclusions", "exclusions"),
         ] {
-            if let Some(value) = map_get_keyword(entries, key).and_then(form_to_json) {
+            if let Some(value) = map_get_keyword(entries, key).and_then(|f| form_to_json(f, 0)) {
                 extra_data.insert(data_key.to_string(), value);
             }
         }
@@ -607,7 +607,7 @@ fn extract_project_dependencies(entries: &[Form], scope: Option<&str>) -> Vec<De
             let mut index = 2usize;
             while index + 1 < parts.len() {
                 if let Some(key) = form_as_keyword(&parts[index])
-                    && let Some(value) = form_to_json(&parts[index + 1])
+                    && let Some(value) = form_to_json(&parts[index + 1], 0)
                 {
                     extra_data.insert(key.replace('-', "_"), value);
                 }
@@ -692,37 +692,51 @@ fn map_key_name(form: &Form) -> Option<String> {
     }
 }
 
-fn form_to_json(form: &Form) -> Option<JsonValue> {
+fn form_to_json(form: &Form, depth: usize) -> Option<JsonValue> {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!("form_to_json exceeded MAX_RECURSION_DEPTH");
+        return None;
+    }
     Some(match form {
         Form::Nil => JsonValue::Null,
         Form::Bool(value) => JsonValue::Bool(*value),
         Form::String(value) => JsonValue::String(value.clone()),
         Form::Keyword(value) => JsonValue::String(format!(":{value}")),
         Form::Symbol(value) => JsonValue::String(value.clone()),
-        Form::Vector(values) | Form::List(values) => {
-            JsonValue::Array(values.iter().filter_map(form_to_json).collect())
-        }
+        Form::Vector(values) | Form::List(values) => JsonValue::Array(
+            values
+                .iter()
+                .filter_map(|f| form_to_json(f, depth + 1))
+                .collect(),
+        ),
         Form::Map(entries) => {
             let mut map = serde_json::Map::new();
             for (key, value) in entries {
                 let Some(key_name) = map_key_name(key) else {
                     continue;
                 };
-                if let Some(json) = form_to_json(value) {
+                if let Some(json) = form_to_json(value, depth + 1) {
                     map.insert(key_name, json);
                 }
             }
             JsonValue::Object(map)
         }
-        Form::Prefixed(value) => form_to_json(value)?,
+        Form::Prefixed(value) => form_to_json(value, depth + 1)?,
     })
 }
 
-fn format_license(form: &Form) -> Option<String> {
+fn format_license(form: &Form, depth: usize) -> Option<String> {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!("format_license exceeded MAX_RECURSION_DEPTH");
+        return None;
+    }
     match form {
         Form::Map(entries) => format_license_map(entries),
         Form::Vector(values) | Form::List(values) => {
-            let licenses: Vec<String> = values.iter().filter_map(format_license).collect();
+            let licenses: Vec<String> = values
+                .iter()
+                .filter_map(|f| format_license(f, depth + 1))
+                .collect();
             if licenses.is_empty() {
                 None
             } else {

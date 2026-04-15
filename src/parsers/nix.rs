@@ -497,7 +497,10 @@ impl Parser {
         }
 
         let expr = if terms.len() == 1 {
-            terms.pop().unwrap()
+            terms
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| Expr::Symbol(String::new()))
         } else {
             Expr::Application(terms)
         };

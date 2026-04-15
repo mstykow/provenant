@@ -25,6 +25,8 @@ use std::path::Path;
 
 use crate::parser_warn as warn;
 use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
+
+const MAX_RECURSION_DEPTH: usize = 50;
 use packageurl::PackageUrl;
 use serde_json::json;
 
@@ -327,7 +329,16 @@ fn find_dependency_blocks(tokens: &[Tok]) -> Vec<Vec<Tok>> {
             let start = i;
             while i < tokens.len() && depth > 0 {
                 match &tokens[i] {
-                    Tok::OpenBrace => depth += 1,
+                    Tok::OpenBrace => {
+                        depth += 1;
+                        if depth > MAX_RECURSION_DEPTH {
+                            warn!(
+                                "Gradle parser: nesting depth exceeded {} in find_dependency_blocks",
+                                MAX_RECURSION_DEPTH
+                            );
+                            break;
+                        }
+                    }
                     Tok::CloseBrace => depth -= 1,
                     _ => {}
                 }
@@ -399,7 +410,16 @@ fn parse_block(tokens: &[Tok]) -> Vec<RawDep> {
             i += 1;
             while i < tokens.len() && depth > 0 {
                 match &tokens[i] {
-                    Tok::OpenBrace => depth += 1,
+                    Tok::OpenBrace => {
+                        depth += 1;
+                        if depth > MAX_RECURSION_DEPTH {
+                            warn!(
+                                "Gradle parser: nesting depth exceeded {} in parse_block",
+                                MAX_RECURSION_DEPTH
+                            );
+                            break;
+                        }
+                    }
                     Tok::CloseBrace => depth -= 1,
                     _ => {}
                 }
@@ -829,7 +849,16 @@ fn find_matching_paren(tokens: &[Tok], start: usize) -> Option<usize> {
     let mut i = start + 1;
     while i < tokens.len() && depth > 0 {
         match &tokens[i] {
-            Tok::OpenParen => depth += 1,
+            Tok::OpenParen => {
+                depth += 1;
+                if depth > MAX_RECURSION_DEPTH {
+                    warn!(
+                        "Gradle parser: nesting depth exceeded {} in find_matching_paren",
+                        MAX_RECURSION_DEPTH
+                    );
+                    break;
+                }
+            }
             Tok::CloseParen => depth -= 1,
             _ => {}
         }
@@ -849,7 +878,16 @@ fn find_matching_bracket(tokens: &[Tok], start: usize) -> Option<usize> {
     let mut i = start + 1;
     while i < tokens.len() && depth > 0 {
         match &tokens[i] {
-            Tok::OpenBracket => depth += 1,
+            Tok::OpenBracket => {
+                depth += 1;
+                if depth > MAX_RECURSION_DEPTH {
+                    warn!(
+                        "Gradle parser: nesting depth exceeded {} in find_matching_bracket",
+                        MAX_RECURSION_DEPTH
+                    );
+                    break;
+                }
+            }
             Tok::CloseBracket => depth -= 1,
             _ => {}
         }
@@ -1218,7 +1256,16 @@ fn find_matching_brace(tokens: &[Tok], start: usize) -> Option<usize> {
     let mut i = start + 1;
     while i < tokens.len() && depth > 0 {
         match &tokens[i] {
-            Tok::OpenBrace => depth += 1,
+            Tok::OpenBrace => {
+                depth += 1;
+                if depth > MAX_RECURSION_DEPTH {
+                    warn!(
+                        "Gradle parser: nesting depth exceeded {} in find_matching_brace",
+                        MAX_RECURSION_DEPTH
+                    );
+                    break;
+                }
+            }
             Tok::CloseBrace => depth -= 1,
             _ => {}
         }

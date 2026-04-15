@@ -597,6 +597,7 @@ fn default_package_data(datasource_id: Option<DatasourceId>) -> PackageData {
 const MAX_ARCHIVE_SIZE: u64 = 100 * 1024 * 1024; // 100MB
 const MAX_FILE_SIZE: u64 = 50 * 1024 * 1024; // 50MB
 const MAX_COMPRESSION_RATIO: f64 = 100.0; // 100:1
+const MAX_UNCOMPRESSED_SIZE: u64 = 1024 * 1024 * 1024; // 1GB
 
 /// Parser for packages.lock.json (NuGet lock file)
 pub struct PackagesLockParser;
@@ -2622,6 +2623,8 @@ fn extract_nupkg_archive(path: &Path) -> Result<PackageData, String> {
     let mut archive =
         ZipArchive::new(file).map_err(|e| format!("Failed to read ZIP archive: {}", e))?;
 
+    let mut total_uncompressed: u64 = 0;
+
     for i in 0..archive.len() {
         let content = {
             let mut entry = archive
@@ -2629,11 +2632,24 @@ fn extract_nupkg_archive(path: &Path) -> Result<PackageData, String> {
                 .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
 
             let entry_name = entry.name().to_string();
+            let entry_size = entry.size();
+
+            total_uncompressed += entry_size;
+            if total_uncompressed > MAX_UNCOMPRESSED_SIZE {
+                warn!(
+                    "NuGet: total uncompressed size exceeds {} bytes for {:?}",
+                    MAX_UNCOMPRESSED_SIZE, path
+                );
+                return Err(format!(
+                    "Total uncompressed size exceeds limit: {} bytes (limit: {} bytes)",
+                    total_uncompressed, MAX_UNCOMPRESSED_SIZE
+                ));
+            }
+
             if !entry_name.ends_with(".nuspec") {
                 continue;
             }
 
-            let entry_size = entry.size();
             if entry_size > MAX_FILE_SIZE {
                 return Err(format!(
                     ".nuspec too large: {} bytes (limit: {} bytes)",
@@ -2684,6 +2700,14 @@ fn read_nupkg_license_file(
     archive: &mut zip::ZipArchive<File>,
     license_file: &str,
 ) -> Result<Option<String>, String> {
+    if license_file.split('/').any(|c| c == "..") || license_file.split('\\').any(|c| c == "..") {
+        warn!(
+            "NuGet: path traversal detected in license file path: {}",
+            license_file
+        );
+        return Ok(None);
+    }
+
     let normalized_target = license_file.replace('\\', "/");
 
     for i in 0..archive.len() {

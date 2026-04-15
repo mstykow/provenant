@@ -156,7 +156,7 @@ fn parse_rpm_database(
         ));
     }
 
-    let native_kind = native_kind_for_datasource(datasource_id);
+    let native_kind = native_kind_for_datasource(datasource_id)?;
     match read_installed_rpm_packages(path, native_kind) {
         Ok(packages) => Ok(packages
             .into_iter()
@@ -181,12 +181,14 @@ fn path_matches_any_suffix(path: &Path, suffixes: &[&str]) -> bool {
         .any(|suffix| path_matches_suffix(path, suffix))
 }
 
-fn native_kind_for_datasource(datasource_id: DatasourceId) -> InstalledRpmDbKind {
+fn native_kind_for_datasource(datasource_id: DatasourceId) -> Result<InstalledRpmDbKind, String> {
     match datasource_id {
-        DatasourceId::RpmInstalledDatabaseBdb => InstalledRpmDbKind::Bdb,
-        DatasourceId::RpmInstalledDatabaseNdb => InstalledRpmDbKind::Ndb,
-        DatasourceId::RpmInstalledDatabaseSqlite => InstalledRpmDbKind::Sqlite,
-        other => panic!("unexpected datasource for installed RPM DB: {other:?}"),
+        DatasourceId::RpmInstalledDatabaseBdb => Ok(InstalledRpmDbKind::Bdb),
+        DatasourceId::RpmInstalledDatabaseNdb => Ok(InstalledRpmDbKind::Ndb),
+        DatasourceId::RpmInstalledDatabaseSqlite => Ok(InstalledRpmDbKind::Sqlite),
+        other => Err(format!(
+            "unexpected datasource for installed RPM DB: {other:?}"
+        )),
     }
 }
 
