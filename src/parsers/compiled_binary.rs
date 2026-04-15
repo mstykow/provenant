@@ -8,6 +8,8 @@ use packageurl::PackageUrl;
 use serde::Deserialize;
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType};
+use crate::parser_warn as warn;
+use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
 use crate::register_parser;
 
 use super::ParsePackagesResult;
@@ -110,6 +112,7 @@ fn parse_rust_binary_bytes(bytes: &[u8]) -> Vec<PackageData> {
     audit_data
         .packages
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .map(|package| build_rust_binary_package(package, &audit_data.packages))
         .collect()
 }
@@ -133,13 +136,14 @@ fn build_rust_binary_package(
     let dependencies = package
         .dependencies
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .filter_map(|index| packages.get(*index))
         .filter_map(|dependency| {
             let purl = create_cargo_purl(&dependency.name, &dependency.version)?;
             Some(Dependency {
                 purl: Some(purl),
-                extracted_requirement: Some(dependency.version.clone()),
-                scope: dependency.kind.clone(),
+                extracted_requirement: Some(truncate_field(dependency.version.clone())),
+                scope: dependency.kind.as_ref().map(|k| truncate_field(k.clone())),
                 is_runtime: Some(dependency.kind.as_deref() != Some("build")),
                 is_optional: Some(false),
                 is_pinned: Some(true),
@@ -168,8 +172,8 @@ fn build_rust_binary_package(
         package_type: Some(PackageType::Cargo),
         datasource_id: Some(DatasourceId::RustBinary),
         primary_language: Some("Rust".to_string()),
-        name: Some(package.name.clone()),
-        version: Some(package.version.clone()),
+        name: Some(truncate_field(package.name.clone())),
+        version: Some(truncate_field(package.version.clone())),
         is_private,
         repository_homepage_url,
         repository_download_url,
@@ -236,7 +240,14 @@ fn decode_go_build_info_inline(bytes: &[u8], header_offset: usize) -> Option<(St
     let (modinfo, _) = decode_varint_bytes(payload)?;
 
     let modinfo = if modinfo.len() >= 33 && modinfo.get(modinfo.len() - 17) == Some(&b'\n') {
-        String::from_utf8(modinfo[16..modinfo.len() - 16].to_vec()).ok()?
+        let slice = &modinfo[16..modinfo.len() - 16];
+        let lossy = String::from_utf8_lossy(slice);
+        if lossy.is_ascii() {
+            lossy.into_owned()
+        } else {
+            warn!("invalid UTF-8 in Go build info modinfo");
+            lossy.into_owned()
+        }
     } else {
         String::new()
     };
@@ -248,10 +259,12 @@ fn decode_varint_string(bytes: &[u8]) -> Option<(String, &[u8])> {
     let (length, consumed) = decode_uvarint(bytes)?;
     let start = consumed;
     let end = start.checked_add(length)?;
-    let value = std::str::from_utf8(bytes.get(start..end)?)
-        .ok()?
-        .to_string();
-    Some((value, &bytes[end..]))
+    let raw = bytes.get(start..end)?;
+    let lossy = String::from_utf8_lossy(raw);
+    if !raw.is_ascii() {
+        warn!("invalid UTF-8 in varint string field");
+    }
+    Some((lossy.into_owned(), &bytes[end..]))
 }
 
 fn decode_varint_bytes(bytes: &[u8]) -> Option<(Vec<u8>, &[u8])> {
@@ -281,7 +294,7 @@ fn decode_uvarint(bytes: &[u8]) -> Option<(usize, usize)> {
 
 fn parse_go_modinfo_packages(modinfo: &str) -> Vec<PackageData> {
     let mut packages = Vec::new();
-    for line in modinfo.lines() {
+    for line in modinfo.lines().take(MAX_ITERATION_COUNT) {
         if let Some(rest) = line.strip_prefix("path\t") {
             packages.push(build_go_binary_package(rest, None, true));
             continue;
@@ -314,6 +327,8 @@ fn build_go_binary_package(
     is_private: bool,
 ) -> PackageData {
     let (namespace, name) = split_module_path(module_path);
+    let name = truncate_field(name);
+    let version = version.map(truncate_field);
     let repository_homepage_url = Some(format!("https://pkg.go.dev/{module_path}"));
     let purl = create_golang_purl(module_path, version.as_deref());
 
@@ -334,7 +349,10 @@ fn build_go_binary_package(
 
 fn split_module_path(module_path: &str) -> (Option<String>, String) {
     match module_path.rsplit_once('/') {
-        Some((namespace, name)) => (Some(namespace.to_string()), name.to_string()),
+        Some((namespace, name)) => (
+            Some(truncate_field(namespace.to_string())),
+            name.to_string(),
+        ),
         None => (None, module_path.to_string()),
     }
 }

@@ -1,6 +1,7 @@
 use std::sync::LazyLock;
 
 use crate::parser_warn as warn;
+use crate::parsers::utils::MAX_ITERATION_COUNT;
 
 use crate::license_detection::LicenseDetectionEngine;
 use crate::license_detection::expression::{
@@ -14,6 +15,8 @@ use crate::utils::spdx::{
 };
 
 pub(crate) const PARSER_DECLARED_MATCHER: &str = "parser-declared-license";
+
+const MAX_RECURSION_DEPTH: usize = 50;
 
 static PARSER_LICENSE_ENGINE: LazyLock<Option<LicenseDetectionEngine>> = LazyLock::new(|| {
     let cache_config =
@@ -153,7 +156,8 @@ pub(crate) fn normalize_spdx_expression(statement: &str) -> Option<NormalizedDec
 
     let engine = PARSER_LICENSE_ENGINE.as_ref()?;
     let expression = parse_expression(statement).ok()?;
-    let (declared_ast, declared_spdx_ast) = normalize_expression_ast(&expression, engine.index())?;
+    let (declared_ast, declared_spdx_ast) =
+        normalize_expression_ast(&expression, engine.index(), 0)?;
     let declared_ast = simplify_expression(&declared_ast);
     let declared_spdx_ast = simplify_expression(&declared_spdx_ast);
 
@@ -437,7 +441,7 @@ fn collect_reference_strings(value: Option<&serde_json::Value>, references: &mut
             }
         }
         serde_json::Value::Array(values) => {
-            for value in values {
+            for value in values.iter().take(MAX_ITERATION_COUNT) {
                 if let Some(value) = value.as_str().filter(|value| !value.trim().is_empty()) {
                     references.push(value.trim().to_string());
                 }
@@ -450,7 +454,16 @@ fn collect_reference_strings(value: Option<&serde_json::Value>, references: &mut
 fn normalize_expression_ast(
     expression: &LicenseExpression,
     index: &LicenseIndex,
+    depth: usize,
 ) -> Option<(LicenseExpression, LicenseExpression)> {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!(
+            "normalize_expression_ast: recursion depth {} exceeded limit {}, returning None",
+            depth, MAX_RECURSION_DEPTH
+        );
+        return None;
+    }
+
     match expression {
         LicenseExpression::License(key) => normalize_license_key(key, index).map(|normalized| {
             (
@@ -463,8 +476,8 @@ fn normalize_expression_ast(
             LicenseExpression::LicenseRef(key.clone()),
         )),
         LicenseExpression::And { left, right } => {
-            let (left_declared, left_spdx) = normalize_expression_ast(left, index)?;
-            let (right_declared, right_spdx) = normalize_expression_ast(right, index)?;
+            let (left_declared, left_spdx) = normalize_expression_ast(left, index, depth + 1)?;
+            let (right_declared, right_spdx) = normalize_expression_ast(right, index, depth + 1)?;
 
             Some((
                 LicenseExpression::And {
@@ -478,8 +491,8 @@ fn normalize_expression_ast(
             ))
         }
         LicenseExpression::Or { left, right } => {
-            let (left_declared, left_spdx) = normalize_expression_ast(left, index)?;
-            let (right_declared, right_spdx) = normalize_expression_ast(right, index)?;
+            let (left_declared, left_spdx) = normalize_expression_ast(left, index, depth + 1)?;
+            let (right_declared, right_spdx) = normalize_expression_ast(right, index, depth + 1)?;
 
             Some((
                 LicenseExpression::Or {
@@ -493,8 +506,8 @@ fn normalize_expression_ast(
             ))
         }
         LicenseExpression::With { left, right } => {
-            let (left_declared, left_spdx) = normalize_expression_ast(left, index)?;
-            let (right_declared, right_spdx) = normalize_expression_ast(right, index)?;
+            let (left_declared, left_spdx) = normalize_expression_ast(left, index, depth + 1)?;
+            let (right_declared, right_spdx) = normalize_expression_ast(right, index, depth + 1)?;
 
             Some((
                 LicenseExpression::With {
@@ -588,7 +601,7 @@ fn render_canonical_expression(expression: &LicenseExpression) -> String {
 
 fn render_flat_boolean_chain(expression: &LicenseExpression, operator: BooleanOperator) -> String {
     let mut parts = Vec::new();
-    collect_boolean_chain(expression, operator, &mut parts);
+    collect_boolean_chain(expression, operator, &mut parts, 0);
 
     let separator = match operator {
         BooleanOperator::And => " AND ",
@@ -606,12 +619,22 @@ fn collect_boolean_chain<'a>(
     expression: &'a LicenseExpression,
     operator: BooleanOperator,
     parts: &mut Vec<&'a LicenseExpression>,
+    depth: usize,
 ) {
+    if depth > MAX_RECURSION_DEPTH {
+        warn!(
+            "collect_boolean_chain: recursion depth {} exceeded limit {}, truncating chain",
+            depth, MAX_RECURSION_DEPTH
+        );
+        parts.push(expression);
+        return;
+    }
+
     match (operator, expression) {
         (BooleanOperator::And, LicenseExpression::And { left, right })
         | (BooleanOperator::Or, LicenseExpression::Or { left, right }) => {
-            collect_boolean_chain(left, operator, parts);
-            collect_boolean_chain(right, operator, parts);
+            collect_boolean_chain(left, operator, parts, depth + 1);
+            collect_boolean_chain(right, operator, parts, depth + 1);
         }
         _ => parts.push(expression),
     }

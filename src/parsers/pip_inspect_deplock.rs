@@ -34,6 +34,8 @@ use super::license_normalization::normalize_spdx_declared_license;
 use super::python::PythonParser;
 #[cfg(test)]
 use super::python::extract_requires_dist_dependencies;
+#[cfg(test)]
+use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
 
 const PACKAGE_TYPE: PackageType = PackageType::Pypi;
 
@@ -107,6 +109,7 @@ pub(crate) fn parse_pip_inspect_deplock(content: &str) -> PackageData {
     // Find the main package (has direct_url and is_requested)
     let main_package = installed_packages
         .iter()
+        .take(MAX_ITERATION_COUNT)
         .find(|p| p.requested.unwrap_or(false) && p.direct_url.is_some());
 
     let metadata = if let Some(pkg) = main_package {
@@ -115,6 +118,7 @@ pub(crate) fn parse_pip_inspect_deplock(content: &str) -> PackageData {
         // If no main package found, try to find any requested package
         installed_packages
             .iter()
+            .take(MAX_ITERATION_COUNT)
             .find(|p| p.requested.unwrap_or(false))
             .and_then(|p| p.metadata.as_ref())
     };
@@ -147,7 +151,7 @@ pub(crate) fn parse_pip_inspect_deplock(content: &str) -> PackageData {
     let keywords = metadata
         .keywords
         .as_ref()
-        .map(|k| vec![k.clone()])
+        .map(|k| vec![truncate_field(k.clone())])
         .unwrap_or_default();
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         normalize_spdx_declared_license(metadata.license.as_deref());
@@ -160,13 +164,16 @@ pub(crate) fn parse_pip_inspect_deplock(content: &str) -> PackageData {
     PackageData {
         package_type: Some(PACKAGE_TYPE),
         primary_language: Some("Python".to_string()),
-        name: metadata.name.clone(),
-        version: metadata.version.clone(),
+        name: metadata.name.as_ref().map(|v| truncate_field(v.clone())),
+        version: metadata.version.as_ref().map(|v| truncate_field(v.clone())),
         declared_license_expression,
         declared_license_expression_spdx,
         license_detections,
-        extracted_license_statement: metadata.license.clone(),
-        description: metadata.description.clone(),
+        extracted_license_statement: metadata.license.as_ref().map(|v| truncate_field(v.clone())),
+        description: metadata
+            .description
+            .as_ref()
+            .map(|v| truncate_field(v.clone())),
         keywords,
         is_virtual: true,
         extra_data: extra_data_opt,

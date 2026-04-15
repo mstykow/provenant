@@ -21,7 +21,6 @@
 
 use crate::models::{DatasourceId, PackageType};
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -29,6 +28,7 @@ use crate::parser_warn as warn;
 use crate::models::PackageData;
 
 use super::PackageParser;
+use super::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 const PACKAGE_TYPE: PackageType = PackageType::LinuxDistro;
 
@@ -44,7 +44,7 @@ impl PackageParser for OsReleaseParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match fs::read_to_string(path) {
+        let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read os-release file {:?}: {}", path, e);
@@ -74,16 +74,15 @@ pub(crate) fn parse_os_release(content: &str) -> PackageData {
     // Namespace and name mapping logic from Python reference
     let (namespace, name) = determine_namespace_and_name(id, id_like, &pretty_name);
 
-    // Extract URL fields (beyond Python implementation)
-    let homepage_url = fields.get("HOME_URL").cloned();
-    let bug_tracking_url = fields.get("BUG_REPORT_URL").cloned();
-    let code_view_url = fields.get("SUPPORT_URL").cloned();
+    let homepage_url = fields.get("HOME_URL").cloned().map(truncate_field);
+    let bug_tracking_url = fields.get("BUG_REPORT_URL").cloned().map(truncate_field);
+    let code_view_url = fields.get("SUPPORT_URL").cloned().map(truncate_field);
 
     PackageData {
         package_type: Some(PACKAGE_TYPE),
-        namespace: Some(namespace.to_string()),
-        name: Some(name.to_string()),
-        version: version_id,
+        namespace: Some(truncate_field(namespace.to_string())),
+        name: Some(truncate_field(name.to_string())),
+        version: version_id.map(truncate_field),
         homepage_url,
         bug_tracking_url,
         code_view_url,
@@ -121,7 +120,7 @@ fn determine_namespace_and_name<'a>(
 fn parse_key_value_pairs(content: &str) -> HashMap<String, String> {
     let mut fields = HashMap::new();
 
-    for line in content.lines() {
+    for line in content.lines().take(MAX_ITERATION_COUNT) {
         let line = line.trim();
 
         // Skip empty lines and comments

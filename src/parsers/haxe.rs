@@ -21,8 +21,6 @@ use crate::parser_warn as warn;
 use packageurl::PackageUrl;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
 
 use super::PackageParser;
@@ -30,6 +28,7 @@ use super::license_normalization::{
     DeclaredLicenseMatchMetadata, build_declared_license_data_from_pair,
     empty_declared_license_data,
 };
+use super::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 
 /// Haxe package manifest (haxelib.json) parser.
 ///
@@ -53,12 +52,12 @@ impl PackageParser for HaxeParser {
             }
         };
 
-        let name = json_content.name;
-        let version = json_content.version;
+        let name = json_content.name.map(truncate_field);
+        let version = json_content.version.map(truncate_field);
 
         // Generate PURL
         let purl = create_package_url(&name, &version);
-        let extracted_license_statement = json_content.license.clone();
+        let extracted_license_statement = json_content.license.map(truncate_field);
         let (declared_license_expression, declared_license_expression_spdx, license_detections) =
             normalize_haxe_declared_license(extracted_license_statement.as_deref());
 
@@ -78,7 +77,11 @@ impl PackageParser for HaxeParser {
 
         // Extract dependencies (maintain insertion order by sorting)
         let mut dependencies = Vec::new();
-        let mut deps_list: Vec<_> = json_content.dependencies.into_iter().collect();
+        let mut deps_list: Vec<_> = json_content
+            .dependencies
+            .into_iter()
+            .take(MAX_ITERATION_COUNT)
+            .collect();
         deps_list.sort_by(|a, b| a.0.cmp(&b.0));
 
         for (dep_name, dep_version) in deps_list {
@@ -100,11 +103,15 @@ impl PackageParser for HaxeParser {
 
         // Extract contributors as parties
         let mut parties = Vec::new();
-        for contrib in json_content.contributors {
+        for contrib in json_content
+            .contributors
+            .into_iter()
+            .take(MAX_ITERATION_COUNT)
+        {
             parties.push(Party {
                 r#type: Some("person".to_string()),
                 role: Some("contributor".to_string()),
-                name: Some(contrib.clone()),
+                name: Some(truncate_field(contrib.clone())),
                 email: None,
                 url: Some(format!("https://lib.haxe.org/u/{}", contrib)),
                 organization: None,
@@ -121,11 +128,16 @@ impl PackageParser for HaxeParser {
             qualifiers: None,
             subpath: None,
             primary_language: Some("Haxe".to_string()),
-            description: json_content.description,
+            description: json_content.description.map(truncate_field),
             release_date: None,
             parties,
-            keywords: json_content.tags,
-            homepage_url: json_content.url,
+            keywords: json_content
+                .tags
+                .into_iter()
+                .take(MAX_ITERATION_COUNT)
+                .map(truncate_field)
+                .collect(),
+            homepage_url: json_content.url.map(truncate_field),
             download_url,
             size: None,
             sha1: None,
@@ -183,11 +195,8 @@ struct HaxelibJson {
 
 /// Read and parse a haxelib.json file.
 fn read_haxelib_json(path: &Path) -> Result<HaxelibJson, String> {
-    let mut file = File::open(path).map_err(|e| format!("Failed to open file: {}", e))?;
-
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let content =
+        read_file_to_string(path, None).map_err(|e| format!("Failed to read file: {}", e))?;
 
     serde_json::from_str(&content).map_err(|e| format!("Failed to parse JSON: {}", e))
 }
