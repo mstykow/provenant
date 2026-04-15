@@ -2100,6 +2100,26 @@ fn merge_debian_copyright_into_package(target: &mut PackageData, copyright: &Pac
         target.extracted_license_statement = copyright.extracted_license_statement.clone();
     }
 
+    if target.declared_license_expression.is_none() {
+        target.declared_license_expression = copyright.declared_license_expression.clone();
+    }
+    if target.declared_license_expression_spdx.is_none() {
+        target.declared_license_expression_spdx =
+            copyright.declared_license_expression_spdx.clone();
+    }
+    if target.license_detections.is_empty() {
+        target.license_detections = copyright.license_detections.clone();
+    }
+    if target.other_license_expression.is_none() {
+        target.other_license_expression = copyright.other_license_expression.clone();
+    }
+    if target.other_license_expression_spdx.is_none() {
+        target.other_license_expression_spdx = copyright.other_license_expression_spdx.clone();
+    }
+    if target.other_license_detections.is_empty() {
+        target.other_license_detections = copyright.other_license_detections.clone();
+    }
+
     for party in &copyright.parties {
         if !target.parties.iter().any(|existing| {
             existing.r#type == party.r#type
@@ -3696,6 +3716,40 @@ Copyright (C) 2015-2018 Example Corp";
         assert_eq!(pkg.name, Some("test".to_string()));
         assert!(pkg.parties.is_empty());
         assert!(pkg.extracted_license_statement.is_none());
+    }
+
+    #[test]
+    fn test_merge_debian_copyright_into_package_preserves_license_fields() {
+        let copyright = parse_copyright_file(
+            "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\n\
+             Upstream-Name: demo\n\n\
+             Files: *\n\
+             Copyright: 2024 Example\n\
+             License: MIT\n\n\
+             Files: debian/*\n\
+             Copyright: 2024 Debian Example\n\
+             License: Apache-2.0\n",
+            Some("demo"),
+        );
+        let mut target = default_package_data(DatasourceId::DebianDeb);
+
+        merge_debian_copyright_into_package(&mut target, &copyright);
+
+        assert_eq!(target.declared_license_expression.as_deref(), Some("mit"));
+        assert_eq!(
+            target.declared_license_expression_spdx.as_deref(),
+            Some("MIT")
+        );
+        assert_eq!(
+            target.other_license_expression.as_deref(),
+            Some("apache-2.0")
+        );
+        assert_eq!(
+            target.other_license_expression_spdx.as_deref(),
+            Some("Apache-2.0")
+        );
+        assert_eq!(target.license_detections.len(), 1);
+        assert_eq!(target.other_license_detections.len(), 1);
     }
 
     #[test]
