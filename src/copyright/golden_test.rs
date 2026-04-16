@@ -242,7 +242,7 @@ mod tests {
             };
 
             // Run detection
-            let (copyrights, holders, authors) = detect_copyrights(&content);
+            let (copyrights, holders, authors) = detect_copyrights(&content, None);
 
             // Compare requested fields
             let mut field_diffs: Vec<FieldDiff> = Vec::new();
@@ -377,7 +377,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -410,7 +410,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, authors) = detect_copyrights(&content);
+        let (copyrights, holders, authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -472,7 +472,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -505,7 +505,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, authors) = detect_copyrights(&content);
+        let (copyrights, holders, authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -566,7 +566,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -612,7 +612,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -658,7 +658,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, authors) = detect_copyrights(&content);
+        let (copyrights, holders, authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -720,7 +720,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, authors) = detect_copyrights(&content);
+        let (copyrights, holders, authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -781,7 +781,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, authors) = detect_copyrights(&content);
+        let (copyrights, holders, authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -843,7 +843,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -889,7 +889,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -935,7 +935,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -981,7 +981,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -1026,7 +1026,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -1073,7 +1073,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -1120,7 +1120,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -1166,7 +1166,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -1211,7 +1211,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (_copyrights, _holders, authors) = detect_copyrights(&content);
+        let (_copyrights, _holders, authors) = detect_copyrights(&content, None);
         let actual_authors: Vec<String> = authors.iter().map(|a| a.author.clone()).collect();
 
         let diff = compare_field(
@@ -1241,7 +1241,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -1288,7 +1288,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -1335,7 +1335,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -1382,7 +1382,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -1428,7 +1428,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, authors) = detect_copyrights(&content);
+        let (copyrights, holders, authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -1496,7 +1496,7 @@ mod tests {
             crate::copyright::parser::parse(tokens.clone())
         };
 
-        let (copyrights, holders, _authors) = detect_copyrights(&content);
+        let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -1543,7 +1543,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, authors) = detect_copyrights(&content);
+        let (copyrights, holders, authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
@@ -1605,7 +1605,7 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let (copyrights, holders, authors) = detect_copyrights(&content);
+        let (copyrights, holders, authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
         let actual_holders: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
