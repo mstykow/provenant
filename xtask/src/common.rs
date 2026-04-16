@@ -40,7 +40,13 @@ impl TargetSource {
 impl ScanProfile {
     pub fn args(self) -> &'static [&'static str] {
         match self {
-            Self::Common => &["-clupe", "--system-package", "--strip-root"],
+            Self::Common => &[
+                "-clupe",
+                "--system-package",
+                "--strip-root",
+                "--processes",
+                "4",
+            ],
             Self::CommonWithCompiled => &[
                 "-clupe",
                 "--system-package",
@@ -460,6 +466,21 @@ mod tests {
     }
 
     #[test]
+    fn common_profile_expands_to_expected_args() {
+        assert_eq!(
+            ScanProfile::Common.args(),
+            [
+                "-clupe",
+                "--system-package",
+                "--strip-root",
+                "--processes",
+                "4",
+            ]
+        );
+        assert_eq!(ScanProfile::Common.display_name(), "common");
+    }
+
+    #[test]
     fn common_with_compiled_profile_expands_to_expected_args() {
         assert_eq!(
             ScanProfile::CommonWithCompiled.args(),
@@ -473,6 +494,23 @@ mod tests {
         assert_eq!(
             ScanProfile::CommonWithCompiled.display_name(),
             "common-with-compiled"
+        );
+    }
+
+    #[test]
+    fn resolve_scan_args_uses_common_profile() {
+        let resolved = resolve_scan_args(Some(ScanProfile::Common), Vec::new(), "unused")
+            .expect("profile should resolve");
+
+        assert_eq!(
+            resolved,
+            vec![
+                "-clupe".to_string(),
+                "--system-package".to_string(),
+                "--strip-root".to_string(),
+                "--processes".to_string(),
+                "4".to_string(),
+            ]
         );
     }
 
