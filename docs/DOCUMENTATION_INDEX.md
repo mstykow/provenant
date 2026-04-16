@@ -7,6 +7,7 @@ This index helps you find the right documentation for your needs.
 - **[README.md](../README.md)** - Installation, usage, and quick start
 - **[CLI_GUIDE.md](CLI_GUIDE.md)** - Command-line workflows and important flag combinations
 - **[SCANCODE_COMPARISON.md](SCANCODE_COMPARISON.md)** - Provenant's relationship to ScanCode Toolkit and high-level comparison notes
+- **[MIGRATING_FROM_SCANCODE.md](MIGRATING_FROM_SCANCODE.md)** - Practical migration notes for ScanCode users, especially power-user workflows
 - **[BENCHMARKS.md](BENCHMARKS.md)** - Maintained package-detection compare-run record, timing methodology, and Provenant-vs-ScanCode outcomes
 - **[SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md)** - Generated support matrix for package and package-adjacent detection surfaces
 - **[NOTICE](../NOTICE)** - Upstream attribution and licensing details for included ScanCode-derived materials
@@ -85,6 +86,9 @@ docs/
 **...understand Provenant's relationship to ScanCode Toolkit**
 → [SCANCODE_COMPARISON.md](SCANCODE_COMPARISON.md)
 
+**...migrate an existing ScanCode workflow to Provenant**
+→ [MIGRATING_FROM_SCANCODE.md](MIGRATING_FROM_SCANCODE.md)
+
 **...review upstream attribution or the code/data licensing split**
 → [NOTICE](../NOTICE)
 
@@ -113,6 +117,7 @@ docs/
 - **ARCHITECTURE.md** - Updated as architecture evolves
 - **CLI_GUIDE.md** - Updated as the public CLI workflows evolve
 - **SCANCODE_COMPARISON.md** - Updated as positioning, trust model, or comparison guidance evolves
+- **MIGRATING_FROM_SCANCODE.md** - Updated as the practical migration surface for ScanCode users evolves
 - **BENCHMARKS.md** - Updated as maintained benchmark examples and methodology evolve
 - **LICENSE_DETECTION_ARCHITECTURE.md** - Updated as the license-detection subsystem evolves
 - **RELEASING.md** - Updated as the release workflow changes

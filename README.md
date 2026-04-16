@@ -53,6 +53,7 @@ For architecture, comparison notes, supported formats, testing, and contributor 
 - It continues to use the upstream ScanCode license and rule data.
 - Provenant does not replace the value of upstream rule curation; it provides a Rust scanning engine around that expert-maintained knowledge base.
 - For a concise side-by-side overview, see [Provenant and ScanCode Toolkit](docs/SCANCODE_COMPARISON.md).
+- If you are moving an existing ScanCode power-user workflow, see [Migrating from ScanCode Toolkit](docs/MIGRATING_FROM_SCANCODE.md).
 
 ## Features
 
@@ -204,6 +205,7 @@ Output architecture and compatibility approach are documented in:
 - **[Documentation Index](docs/DOCUMENTATION_INDEX.md)** - Best starting point for navigating the docs set
 - **[CLI Guide](docs/CLI_GUIDE.md)** - Common workflows and important flag combinations
 - **[Provenant and ScanCode Toolkit](docs/SCANCODE_COMPARISON.md)** - Relationship, trust model, and high-level comparison notes
+- **[Migrating from ScanCode Toolkit](docs/MIGRATING_FROM_SCANCODE.md)** - Practical migration notes for ScanCode users, especially power-user workflows
 - **[Architecture](docs/ARCHITECTURE.md)** - System design, processing pipeline, and design decisions
 - **[Supported Formats](docs/SUPPORTED_FORMATS.md)** - Generated support matrix for package ecosystems and file formats
 - **[How to Add a Parser](docs/HOW_TO_ADD_A_PARSER.md)** - Step-by-step guide for adding new parsers

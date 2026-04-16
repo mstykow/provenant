@@ -70,6 +70,7 @@ vendored or nested source trees can resolve their own root `LICENSE` files.
 ## Related Docs
 
 - [README](../README.md) for installation, usage, and positioning
+- [Migrating from ScanCode Toolkit](MIGRATING_FROM_SCANCODE.md) for practical workflow differences that matter during adoption
 - [SECURITY.md](../SECURITY.md) for vulnerability reporting guidance
 - [NOTICE](../NOTICE) for upstream attribution, code/data licensing split, and ScanCode-derived data notices
 - [Architecture](ARCHITECTURE.md) for system design and performance characteristics
