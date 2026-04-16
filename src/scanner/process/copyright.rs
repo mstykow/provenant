@@ -2,9 +2,7 @@ use super::binary_text::{
     extract_named_author_from_binary_line, has_binary_name_like_shape, has_excessive_at_noise,
     has_sufficient_alphabetic_content, is_binary_string_author_candidate, is_company_like_suffix,
 };
-use crate::copyright::{
-    self, AuthorDetection, CopyrightDetection, CopyrightDetectionOptions, HolderDetection,
-};
+use crate::copyright::{self, AuthorDetection, CopyrightDetection, HolderDetection};
 use crate::models::{Author, Copyright, FileInfoBuilder, Holder, LineNumber};
 use std::collections::HashSet;
 use std::path::Path;
@@ -34,17 +32,13 @@ pub(super) fn extract_copyright_information(
         }
     }
 
-    let copyright_options = CopyrightDetectionOptions {
-        max_runtime: if timeout_seconds.is_finite() && timeout_seconds > 0.0 {
-            Some(Duration::from_secs_f64(timeout_seconds))
-        } else {
-            None
-        },
-        ..CopyrightDetectionOptions::default()
+    let max_runtime = if timeout_seconds.is_finite() && timeout_seconds > 0.0 {
+        Some(Duration::from_secs_f64(timeout_seconds))
+    } else {
+        None
     };
 
-    let (copyrights, holders, authors) =
-        copyright::detect_copyrights_with_options(text_content, &copyright_options);
+    let (copyrights, holders, authors) = copyright::detect_copyrights(text_content, max_runtime);
     let (copyrights, holders, authors) = if from_binary_strings {
         prune_binary_string_detections(text_content, copyrights, holders, authors)
     } else {
