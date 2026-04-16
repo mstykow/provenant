@@ -1,6 +1,6 @@
 use super::contacts::extract_email_url_information;
 use super::copyright::extract_copyright_information;
-use super::license::extract_license_information;
+use super::license::{LicenseExtractionInput, extract_license_information};
 use super::special_cases::{is_go_non_production_source, should_skip_text_detection};
 use crate::license_detection::LicenseDetectionEngine;
 use crate::models::{DatasourceId, FileInfo, FileInfoBuilder, FileType, Sha256Digest};
@@ -25,7 +25,7 @@ use std::borrow::Cow;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES: usize = 128 * 1024;
 
@@ -265,27 +265,44 @@ fn extract_information_from_content(
     let text_content_for_license_detection =
         prepare_license_detection_text(path, &classification, text_content);
 
+    if is_timeout_exceeded(started, text_options.timeout_seconds) {
+        return Err(Error::msg(format!(
+            "Timeout during license scan (> {:.2}s)",
+            text_options.timeout_seconds
+        )));
+    }
+
+    let license_deadline = deadline_from_start(started, text_options.timeout_seconds);
+
     if license_enabled {
         let started = Instant::now();
         extract_license_information(
             file_info_builder,
             scan_errors,
-            &filesystem_path,
-            text_content_for_license_detection.clone(),
-            license_engine,
-            license_options,
-            from_binary_strings,
+            LicenseExtractionInput {
+                path: &filesystem_path,
+                text_content: text_content_for_license_detection.clone(),
+                license_engine,
+                license_options,
+                from_binary_strings,
+                timeout_seconds: text_options.timeout_seconds,
+                deadline: license_deadline,
+            },
         )?;
         progress.record_detail_timing("scan:licenses", started.elapsed().as_secs_f64());
     } else {
         extract_license_information(
             file_info_builder,
             scan_errors,
-            &filesystem_path,
-            text_content_for_license_detection,
-            license_engine,
-            license_options,
-            from_binary_strings,
+            LicenseExtractionInput {
+                path: &filesystem_path,
+                text_content: text_content_for_license_detection,
+                license_engine,
+                license_options,
+                from_binary_strings,
+                timeout_seconds: text_options.timeout_seconds,
+                deadline: license_deadline,
+            },
         )?;
     }
 
@@ -335,6 +352,15 @@ fn is_timeout_exceeded(started: Instant, timeout_seconds: f64) -> bool {
     timeout_seconds.is_finite()
         && timeout_seconds > 0.0
         && started.elapsed().as_secs_f64() > timeout_seconds
+}
+
+fn deadline_from_start(started: Instant, timeout_seconds: f64) -> Option<Instant> {
+    if !timeout_seconds.is_finite() || timeout_seconds <= 0.0 {
+        return None;
+    }
+
+    let remaining_seconds = (timeout_seconds - started.elapsed().as_secs_f64()).max(0.0);
+    Instant::now().checked_add(Duration::from_secs_f64(remaining_seconds))
 }
 
 fn maybe_record_processing_timeout(
