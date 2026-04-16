@@ -162,7 +162,7 @@ mod tests {
 
         let rendered = String::from_utf8(bytes).expect("yaml should be utf-8");
         assert!(rendered.contains("license_index_provenance:"));
-        assert!(rendered.contains("curation_fingerprint: test-fingerprint"));
+        assert!(rendered.contains("dataset_fingerprint: test-fingerprint"));
         assert!(rendered.contains("source: embedded-artifact"));
     }
 
@@ -1444,9 +1444,7 @@ mod tests {
                     excluded_count: 0,
                     license_index_provenance: Some(crate::models::LicenseIndexProvenance {
                         source: "embedded-artifact".to_string(),
-                        policy_path: "resources/license_detection/index_build_policy.toml"
-                            .to_string(),
-                        curation_fingerprint: "test-fingerprint".to_string(),
+                        dataset_fingerprint: "test-fingerprint".to_string(),
                         ignored_rules: vec![
                             "gpl-2.0_and-unknown-license-reference_1.RULE".to_string(),
                         ],
