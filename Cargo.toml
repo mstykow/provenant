@@ -2,6 +2,7 @@
 name = "provenant-cli"
 version = "0.0.19"
 edition = "2024"
+autobins = false
 repository = "https://github.com/mstykow/provenant"
 homepage = "https://github.com/mstykow/provenant"
 documentation = "https://github.com/mstykow/provenant/blob/main/docs/DOCUMENTATION_INDEX.md"
@@ -80,7 +81,7 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "provenant"
-path = "src/main.rs"
+path = "src/bin/provenant.rs"
 
 [features]
 default = ["rpm-sqlite"]
