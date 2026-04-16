@@ -527,7 +527,7 @@ impl LicenseDetectionEngine {
 
     #[cfg(test)]
     pub(crate) fn from_test_index(index: index::LicenseIndex) -> Self {
-        Self::from_index(index, None).expect("test index should build license engine")
+        Self::from_index(index, None, None).expect("test index should build license engine")
     }
 
     /// Create a new license detection engine from the embedded license index.
