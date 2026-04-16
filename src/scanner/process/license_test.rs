@@ -1,12 +1,30 @@
-use super::{compute_percentage_of_license_text, convert_detection_to_model};
+use super::{
+    LicenseExtractionInput, compute_percentage_of_license_text, convert_detection_to_model,
+    extract_license_information,
+};
 use crate::license_detection::LicenseDetection as InternalLicenseDetection;
+use crate::license_detection::LicenseDetectionEngine;
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::TokenDictionary;
 use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind, RuleKind};
 use crate::license_detection::query::Query;
-use crate::models::{LineNumber, MatchScore};
+use crate::models::{FileInfoBuilder, LineNumber, MatchScore};
 use crate::scanner::LicenseScanOptions;
+use std::sync::{Arc, LazyLock};
+use std::time::{Duration, Instant};
+
+static TEST_ENGINE: LazyLock<Arc<LicenseDetectionEngine>> = LazyLock::new(|| {
+    Arc::new(LicenseDetectionEngine::from_test_index(create_test_index(
+        &[
+            ("mit", 0),
+            ("license", 1),
+            ("permission", 2),
+            ("granted", 3),
+        ],
+        4,
+    )))
+});
 
 fn make_internal_match(rule_url: &str) -> LicenseMatch {
     LicenseMatch {
@@ -237,4 +255,30 @@ fn test_compute_percentage_of_license_text_counts_unknown_tokens() {
     let percentage = compute_percentage_of_license_text(&query, &[detection]);
 
     assert_eq!(percentage, 33.33);
+}
+
+#[test]
+fn test_extract_license_information_maps_timeout_to_stage_error() {
+    let mut file_info_builder = FileInfoBuilder::default();
+    let mut scan_errors = Vec::new();
+
+    let error = extract_license_information(
+        &mut file_info_builder,
+        &mut scan_errors,
+        LicenseExtractionInput {
+            path: std::path::Path::new("timeout.txt"),
+            text_content:
+                "Permission is hereby granted, free of charge, to any person obtaining a copy"
+                    .to_string(),
+            license_engine: Some(TEST_ENGINE.clone()),
+            license_options: LicenseScanOptions::default(),
+            from_binary_strings: false,
+            timeout_seconds: 1.0,
+            deadline: Some(Instant::now() - Duration::from_millis(1)),
+        },
+    )
+    .expect_err("expired deadline should map to stage-specific timeout");
+
+    assert!(scan_errors.is_empty());
+    assert_eq!(error.to_string(), "Timeout during license scan (> 1.00s)");
 }
