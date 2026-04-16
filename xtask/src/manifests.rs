@@ -81,6 +81,8 @@ pub struct ScancodeManifest {
     pub runtime_revision: String,
     pub runtime_dirty: bool,
     pub runtime_diff_hash: Option<String>,
+    pub docker_memory_limit: Option<String>,
+    pub docker_memory_swap_limit: Option<String>,
     pub cache_identity: Option<String>,
     pub cache_key: Option<String>,
     pub cache_dir: Option<PathBuf>,
