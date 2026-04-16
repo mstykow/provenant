@@ -110,6 +110,8 @@ fn run() -> Result<()> {
         preloaded_license_references,
         preloaded_license_rule_references,
         preloaded_extra_errors,
+        imported_spdx_license_list_version,
+        imported_license_index_provenance,
         mut active_license_engine,
     ) = if cli.from_json {
         let loaded = load_and_merge_json_inputs(&cli.dir_path, cli.strip_root, cli.full_root)?;
@@ -129,6 +131,8 @@ fn run() -> Result<()> {
             license_references,
             license_rule_references,
             extra_errors,
+            imported_spdx_license_list_version,
+            imported_license_index_provenance,
         ) = loaded.into_parts()?;
         (
             process_result,
@@ -138,6 +142,8 @@ fn run() -> Result<()> {
             license_references,
             license_rule_references,
             extra_errors,
+            imported_spdx_license_list_version,
+            imported_license_index_provenance,
             None,
         )
     } else {
@@ -319,6 +325,8 @@ fn run() -> Result<()> {
             Vec::new(),
             Vec::new(),
             runtime_errors,
+            None,
+            None,
             license_engine,
         )
     };
@@ -541,7 +549,12 @@ fn run() -> Result<()> {
     let spdx_license_list_version = active_license_engine
         .as_ref()
         .and_then(|engine| engine.spdx_license_list_version().map(ToOwned::to_owned))
+        .or(imported_spdx_license_list_version)
         .unwrap_or(LicenseDetectionEngine::embedded_spdx_license_list_version()?);
+    let license_index_provenance = active_license_engine
+        .as_ref()
+        .and_then(|engine| engine.license_index_provenance().cloned())
+        .or(imported_license_index_provenance);
 
     progress.finalize_step("Preparing output...");
     let output = record_detail_timing(&progress, "finalize:output-prepare", || {
@@ -556,6 +569,7 @@ fn run() -> Result<()> {
                 license_references,
                 license_rule_references,
                 spdx_license_list_version,
+                license_index_provenance,
                 extra_errors,
                 extra_warnings: Vec::new(),
                 header_options: cli.output_header_options(),

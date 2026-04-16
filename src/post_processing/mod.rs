@@ -95,6 +95,7 @@ pub(crate) struct CreateOutputContext<'a> {
     pub(crate) license_references: Vec<crate::models::LicenseReference>,
     pub(crate) license_rule_references: Vec<crate::models::LicenseRuleReference>,
     pub(crate) spdx_license_list_version: String,
+    pub(crate) license_index_provenance: Option<crate::models::LicenseIndexProvenance>,
     pub(crate) extra_errors: Vec<String>,
     pub(crate) extra_warnings: Vec<String>,
     pub(crate) header_options: Map<String, Value>,
@@ -119,6 +120,7 @@ pub(crate) fn create_output(
             .count(),
         directories_count: context.total_dirs,
         excluded_count: scan_result.excluded_count,
+        license_index_provenance: context.license_index_provenance,
     };
 
     let (mut errors, file_warnings) = summarize_header_messages(

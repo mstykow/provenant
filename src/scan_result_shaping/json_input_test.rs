@@ -81,6 +81,7 @@ fn normalize_loaded_json_scan_applies_strip_root_per_loaded_input() {
                 "Failed to read or parse package.json: archive/root/src/main.rs".to_string(),
             ],
             warnings: vec![],
+            extra_data: None,
         }],
         files: vec![
             output_json_file("archive/root", crate::models::FileType::Directory),
@@ -139,6 +140,7 @@ fn normalize_loaded_json_scan_trims_full_root_display_without_absolutizing() {
         headers: vec![JsonHeaderInput {
             errors: vec!["Path: /tmp/archive/root/src/main.rs".to_string()],
             warnings: vec![],
+            extra_data: None,
         }],
         files: vec![output_json_file(
             "/tmp/archive/root/src/main.rs",
@@ -196,6 +198,21 @@ fn into_parts_preserves_imported_header_errors_as_extra_errors() {
         headers: vec![JsonHeaderInput {
             errors: vec!["Failed to read directory: src/main.rs".to_string()],
             warnings: vec!["Imported warning".to_string()],
+            extra_data: Some(JsonHeaderExtraDataInput {
+                spdx_license_list_version: Some("3.27".to_string()),
+                license_index_provenance: Some(crate::models::LicenseIndexProvenance {
+                    source: "embedded-artifact".to_string(),
+                    policy_path: "resources/license_detection/index_build_policy.toml".to_string(),
+                    curation_fingerprint: "abc123".to_string(),
+                    ignored_rules: vec!["rule.RULE".to_string()],
+                    ignored_licenses: vec![],
+                    ignored_rules_due_to_licenses: vec![],
+                    added_rules: vec![],
+                    replaced_rules: vec![],
+                    added_licenses: vec![],
+                    replaced_licenses: vec![],
+                }),
+            }),
         }],
         files: vec![output_json_file(
             "src/main.rs",
@@ -209,10 +226,25 @@ fn into_parts_preserves_imported_header_errors_as_extra_errors() {
         excluded_count: 0,
     };
 
-    let (_process_result, _assembly_result, _dets, _refs, _rule_refs, extra_errors) =
-        loaded.into_parts().expect("into_parts should succeed");
+    let (
+        _process_result,
+        _assembly_result,
+        _dets,
+        _refs,
+        _rule_refs,
+        extra_errors,
+        imported_spdx_license_list_version,
+        imported_license_index_provenance,
+    ) = loaded.into_parts().expect("into_parts should succeed");
 
     assert_eq!(extra_errors, vec!["Failed to read directory: src/main.rs"]);
+    assert_eq!(imported_spdx_license_list_version.as_deref(), Some("3.27"));
+    assert_eq!(
+        imported_license_index_provenance
+            .as_ref()
+            .map(|provenance| provenance.curation_fingerprint.as_str()),
+        Some("abc123")
+    );
 }
 
 #[test]
@@ -224,6 +256,7 @@ fn into_parts_drops_imported_warnings_and_file_summary_errors() {
                 "Failed to read directory: src/vendor".to_string(),
             ],
             warnings: vec!["Imported warning".to_string()],
+            extra_data: None,
         }],
         files: vec![{
             let mut file = output_json_file("src/main.rs", crate::models::FileType::File);
@@ -238,10 +271,20 @@ fn into_parts_drops_imported_warnings_and_file_summary_errors() {
         excluded_count: 0,
     };
 
-    let (_process_result, _assembly_result, _dets, _refs, _rule_refs, extra_errors) =
-        loaded.into_parts().expect("into_parts should succeed");
+    let (
+        _process_result,
+        _assembly_result,
+        _dets,
+        _refs,
+        _rule_refs,
+        extra_errors,
+        imported_spdx_license_list_version,
+        imported_license_index_provenance,
+    ) = loaded.into_parts().expect("into_parts should succeed");
 
     assert_eq!(extra_errors, vec!["Failed to read directory: src/vendor"]);
+    assert!(imported_spdx_license_list_version.is_none());
+    assert!(imported_license_index_provenance.is_none());
 }
 
 #[test]
@@ -252,6 +295,7 @@ fn normalize_loaded_json_scan_rewrites_verbose_header_error_path_prefix() {
                 "Failed to parse package.json: /tmp/archive/root/src/main.rs\n  Failed to parse package.json".to_string(),
             ],
             warnings: vec![],
+            extra_data: None,
         }],
         files: vec![output_json_file(
             "/tmp/archive/root/src/main.rs",
@@ -273,4 +317,76 @@ fn normalize_loaded_json_scan_rewrites_verbose_header_error_path_prefix() {
             "Failed to parse package.json: tmp/archive/root/src/main.rs\n  Failed to parse package.json"
         ]
     );
+}
+
+#[test]
+fn into_parts_discards_conflicting_imported_header_provenance() {
+    let loaded = JsonScanInput {
+        headers: vec![
+            JsonHeaderInput {
+                errors: vec![],
+                warnings: vec![],
+                extra_data: Some(JsonHeaderExtraDataInput {
+                    spdx_license_list_version: Some("3.27".to_string()),
+                    license_index_provenance: Some(crate::models::LicenseIndexProvenance {
+                        source: "embedded-artifact".to_string(),
+                        policy_path: "resources/license_detection/index_build_policy.toml"
+                            .to_string(),
+                        curation_fingerprint: "one".to_string(),
+                        ignored_rules: vec![],
+                        ignored_licenses: vec![],
+                        ignored_rules_due_to_licenses: vec![],
+                        added_rules: vec![],
+                        replaced_rules: vec![],
+                        added_licenses: vec![],
+                        replaced_licenses: vec![],
+                    }),
+                }),
+            },
+            JsonHeaderInput {
+                errors: vec![],
+                warnings: vec![],
+                extra_data: Some(JsonHeaderExtraDataInput {
+                    spdx_license_list_version: Some("3.28".to_string()),
+                    license_index_provenance: Some(crate::models::LicenseIndexProvenance {
+                        source: "custom-rules".to_string(),
+                        policy_path: "resources/license_detection/index_build_policy.toml"
+                            .to_string(),
+                        curation_fingerprint: "two".to_string(),
+                        ignored_rules: vec![],
+                        ignored_licenses: vec![],
+                        ignored_rules_due_to_licenses: vec![],
+                        added_rules: vec![],
+                        replaced_rules: vec![],
+                        added_licenses: vec![],
+                        replaced_licenses: vec![],
+                    }),
+                }),
+            },
+        ],
+        files: vec![output_json_file(
+            "src/main.rs",
+            crate::models::FileType::File,
+        )],
+        packages: vec![],
+        dependencies: vec![],
+        license_detections: vec![],
+        license_references: vec![],
+        license_rule_references: vec![],
+        excluded_count: 0,
+    };
+
+    let (
+        _process_result,
+        _assembly_result,
+        _dets,
+        _refs,
+        _rule_refs,
+        _extra_errors,
+        imported_spdx_license_list_version,
+        imported_license_index_provenance,
+    ) = loaded.into_parts().expect("into_parts should succeed");
+
+    assert!(imported_spdx_license_list_version.is_none());
+    assert!(imported_license_index_provenance.is_none());
 }

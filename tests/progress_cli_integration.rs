@@ -43,6 +43,65 @@ fn create_ignore_fixture() -> (TempDir, String) {
     (temp, scan_dir.to_string_lossy().to_string())
 }
 
+fn create_from_json_fixture_with_provenance() -> (TempDir, String) {
+    let temp = TempDir::new().expect("failed to create temp dir");
+    let input_file = temp.path().join("input.json");
+    fs::write(
+        &input_file,
+        serde_json::json!({
+            "headers": [{
+                "tool_name": "provenant",
+                "tool_version": "0.0.0-test",
+                "options": {},
+                "notice": "test",
+                "start_timestamp": "2026-01-01T000000.000000",
+                "end_timestamp": "2026-01-01T000001.000000",
+                "output_format_version": "4.1.0",
+                "duration": 1.0,
+                "errors": [],
+                "warnings": [],
+                "extra_data": {
+                    "system_environment": {
+                        "operating_system": "linux",
+                        "cpu_architecture": "x86_64",
+                        "platform": "linux",
+                        "platform_version": "test",
+                        "rust_version": "1.0.0"
+                    },
+                    "spdx_license_list_version": "9.99",
+                    "files_count": 1,
+                    "directories_count": 0,
+                    "excluded_count": 0,
+                    "license_index_provenance": {
+                        "source": "custom-rules",
+                        "policy_path": "resources/license_detection/index_build_policy.toml",
+                        "curation_fingerprint": "imported-fingerprint",
+                        "ignored_rules": ["imported-rule.RULE"]
+                    }
+                }
+            }],
+            "files": [{
+                "path": "src/main.rs",
+                "type": "file",
+                "name": "main.rs",
+                "base_name": "main",
+                "extension": ".rs",
+                "size": 10,
+                "programming_language": "Rust"
+            }],
+            "packages": [],
+            "dependencies": [],
+            "license_detections": [],
+            "license_references": [],
+            "license_rule_references": []
+        })
+        .to_string(),
+    )
+    .expect("failed to write from-json fixture");
+
+    (temp, input_file.to_string_lossy().to_string())
+}
+
 fn normalize_multi_parser_header(output: &mut Value) {
     let header = output["headers"]
         .as_array_mut()
@@ -476,4 +535,36 @@ fn multi_parser_expected_header_fixture_matches_cli_output() {
     normalize_multi_parser_header(&mut expected);
 
     assert_eq!(actual["headers"], expected["headers"]);
+}
+
+#[test]
+fn from_json_preserves_imported_license_index_provenance() {
+    let (_temp, input_file) = create_from_json_fixture_with_provenance();
+
+    let output = provenant_command()
+        .args(["--json-pp", "-", "--from-json", &input_file])
+        .output()
+        .expect("failed to run provenant");
+
+    assert!(output.status.success());
+
+    let json: Value = serde_json::from_slice(&output.stdout).expect("stdout should be valid json");
+    let extra_data = &json["headers"][0]["extra_data"];
+
+    assert_eq!(
+        extra_data["spdx_license_list_version"].as_str(),
+        Some("9.99")
+    );
+    assert_eq!(
+        extra_data["license_index_provenance"]["source"].as_str(),
+        Some("custom-rules")
+    );
+    assert_eq!(
+        extra_data["license_index_provenance"]["curation_fingerprint"].as_str(),
+        Some("imported-fingerprint")
+    );
+    assert_eq!(
+        extra_data["license_index_provenance"]["ignored_rules"][0].as_str(),
+        Some("imported-rule.RULE")
+    );
 }
