@@ -590,7 +590,7 @@ User-facing behavior is:
 3. `--incremental` reuses unchanged file results from the last completed scan after validating stored metadata + SHA256 against the previous manifest
 4. license scans reuse a persistent license-index cache under that same root unless `--no-license-index-cache` is set
 
-Custom `--license-rules-path` scans still participate in the incremental manifest workflow, and their fingerprinted license-index cache entries also live under the shared `license-index/custom/` namespace.
+Custom `--license-dataset-path` scans still participate in the incremental manifest workflow, and their fingerprinted license-index cache entries also live under the shared `license-index/custom/` namespace.
 
 **Progress Tracking**:
 
@@ -630,6 +630,7 @@ The binary ships with a built-in license index embedded at compile time. This el
 - **Format**: MessagePack-serialized, zstd-compressed `EmbeddedLoaderSnapshot` data
 - **Contents**: Sorted `LoadedRule` and `LoadedLicense` values derived from the ScanCode rules dataset
 - **Structured provenance surface**: `headers[0].extra_data.license_index_provenance`
+- **Exported custom dataset root**: `manifest.json` + `rules/` + `licenses/`
 
 ### Loader/Build Stage Separation
 
@@ -690,11 +691,11 @@ The license detection system uses a two-stage loading process:
 // Default: Use embedded artifact
 let engine = LicenseDetectionEngine::from_embedded()?;
 
-// Custom rules: Load from directory
+// Custom dataset: Load from dataset root
 let engine = LicenseDetectionEngine::from_directory(&rules_path)?;
 ```
 
-The CLI uses `from_embedded()` by default. Use `--license-rules-path` to load from a custom directory instead.
+The CLI uses `from_embedded()` by default. Use `--license-dataset-path` to load from a custom dataset root instead, or `--export-license-dataset` to dump the built-in effective dataset for inspection and reuse.
 
 ### Regenerating the Embedded Artifact
 
@@ -721,7 +722,7 @@ git commit -m "chore: update embedded license data"
 The `reference/scancode-toolkit/` submodule is **optional for end users**. It's only needed for:
 
 1. **Developers updating embedded data**: Regenerating the compact embedded loader artifact
-2. **Custom license rules**: Using `--license-rules-path` to load custom rule sets
+2. **Custom license datasets**: Using `--license-dataset-path` to load exported or user-maintained dataset roots
 3. **Parity testing**: Comparing Rust behavior against Python reference
 
 Normal builds work without the submodule because the embedded artifact is checked into the repository.

@@ -134,7 +134,23 @@ This is especially useful for:
 - comparing license-detection changes between runs
 - collecting top-level license results without package-focused noise
 
-If you are validating a custom rule set or doing maintainer-level license-engine work, you can override the embedded rules with `--license-rules-path /path/to/rules`. That flag is intentionally kept as an advanced workflow, but it is not the recommended default for ordinary scans.
+If you need to customize the license dataset Provenant uses, first export the built-in effective dataset and then point a scan at the exported dataset root:
+
+```sh
+provenant --export-license-dataset /tmp/provenant-license-dataset
+provenant --json-pp licenses.json --license --license-dataset-path /tmp/provenant-license-dataset /path/to/project
+```
+
+Use this advanced workflow when you want to inspect, edit, or replace the `.RULE` and `.LICENSE` files Provenant uses. The dataset root must contain:
+
+```text
+<dataset-root>/
+  manifest.json
+  rules/
+  licenses/
+```
+
+When `--license-dataset-path` is set, Provenant uses that dataset as authoritative input instead of the embedded dataset shipped in the binary.
 
 If you need the matched text that triggered a detection, add `--license-text`:
 
@@ -164,7 +180,7 @@ runs load the cache instead of rebuilding the index, reducing startup from ~12s 
 The cache is automatically invalidated when:
 
 - a new provenant binary ships with different embedded rules (detected via SHA-256 fingerprint)
-- custom rules loaded with `--license-rules-path` change between runs
+- a custom license dataset loaded with `--license-dataset-path` changes between runs
 
 Three CLI flags control cache behavior:
 
