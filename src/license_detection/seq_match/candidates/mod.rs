@@ -7,6 +7,7 @@ use crate::license_detection::index::dictionary::TokenId;
 use crate::license_detection::models::Rule;
 use crate::license_detection::query::QueryRun;
 use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
 use super::HIGH_RESEMBLANCE_THRESHOLD_TENTHS;
 
@@ -366,6 +367,7 @@ fn find_set_candidates<'a>(
     index: &'a LicenseIndex,
     query_data: &QueryData,
     high_resemblance: bool,
+    deadline: Option<Instant>,
 ) -> Vec<Candidate<'a>> {
     let candidate_rids: HashSet<usize> = query_data
         .query_high_set
@@ -376,7 +378,11 @@ fn find_set_candidates<'a>(
 
     let mut candidates = Vec::new();
 
-    for rid in candidate_rids {
+    for (rid_index, rid) in candidate_rids.into_iter().enumerate() {
+        if rid_index.is_multiple_of(128) && crate::license_detection::deadline_exceeded(deadline) {
+            return candidates;
+        }
+
         let Some(rule) = index.rules_by_rid.get(rid) else {
             continue;
         };
@@ -428,10 +434,17 @@ fn rescore_candidates_with_multisets<'a>(
     query_data: &QueryData,
     shortlisted: Vec<Candidate<'a>>,
     high_resemblance: bool,
+    deadline: Option<Instant>,
 ) -> Vec<Candidate<'a>> {
     let mut candidates = Vec::new();
 
-    for candidate in shortlisted {
+    for (candidate_index, candidate) in shortlisted.into_iter().enumerate() {
+        if candidate_index.is_multiple_of(64)
+            && crate::license_detection::deadline_exceeded(deadline)
+        {
+            return candidates;
+        }
+
         let Some(rule_mset) = index.msets_by_rid.get(&candidate.rid) else {
             continue;
         };
@@ -546,16 +559,29 @@ pub(crate) fn select_seq_candidates<'a>(
     high_resemblance: bool,
     top_n: usize,
 ) -> Vec<Candidate<'a>> {
+    select_seq_candidates_with_deadline(index, query_run, high_resemblance, top_n, None)
+        .expect("Sequence candidate selection without deadline should not time out")
+}
+
+pub(crate) fn select_seq_candidates_with_deadline<'a>(
+    index: &'a LicenseIndex,
+    query_run: &QueryRun,
+    high_resemblance: bool,
+    top_n: usize,
+    deadline: Option<Instant>,
+) -> anyhow::Result<Vec<Candidate<'a>>> {
+    crate::license_detection::ensure_within_deadline(deadline)?;
     let Some(query_data) = QueryData::new(index, query_run) else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
 
-    let mut candidates = find_set_candidates(index, &query_data, high_resemblance);
+    let mut candidates = find_set_candidates(index, &query_data, high_resemblance, deadline);
 
     if candidates.is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
 
+    crate::license_detection::ensure_within_deadline(deadline)?;
     candidates.sort_by(|a, b| {
         compare_candidate_rank(
             &b.score_vec_rounded,
@@ -569,15 +595,21 @@ pub(crate) fn select_seq_candidates<'a>(
 
     candidates.truncate(top_n * 10);
 
-    let mut candidates =
-        rescore_candidates_with_multisets(index, &query_data, candidates, high_resemblance);
+    let mut candidates = rescore_candidates_with_multisets(
+        index,
+        &query_data,
+        candidates,
+        high_resemblance,
+        deadline,
+    );
 
+    crate::license_detection::ensure_within_deadline(deadline)?;
     candidates = filter_dupes(candidates);
 
     candidates.sort_by(|a, b| b.cmp(a));
     candidates.truncate(top_n);
 
-    candidates
+    Ok(candidates)
 }
 
 #[cfg(test)]
