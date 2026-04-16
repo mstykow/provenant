@@ -121,8 +121,7 @@ pub struct ExtraData {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct LicenseIndexProvenance {
     pub source: String,
-    pub policy_path: String,
-    pub curation_fingerprint: String,
+    pub dataset_fingerprint: String,
     #[serde(default)]
     pub ignored_rules: Vec<String>,
     #[serde(default)]

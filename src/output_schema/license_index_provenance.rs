@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OutputLicenseIndexProvenance {
     pub source: String,
-    pub policy_path: String,
-    pub curation_fingerprint: String,
+    pub dataset_fingerprint: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ignored_rules: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -25,8 +24,7 @@ impl From<&crate::models::LicenseIndexProvenance> for OutputLicenseIndexProvenan
     fn from(value: &crate::models::LicenseIndexProvenance) -> Self {
         Self {
             source: value.source.clone(),
-            policy_path: value.policy_path.clone(),
-            curation_fingerprint: value.curation_fingerprint.clone(),
+            dataset_fingerprint: value.dataset_fingerprint.clone(),
             ignored_rules: value.ignored_rules.clone(),
             ignored_licenses: value.ignored_licenses.clone(),
             ignored_rules_due_to_licenses: value.ignored_rules_due_to_licenses.clone(),
