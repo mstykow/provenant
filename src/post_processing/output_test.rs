@@ -2482,8 +2482,7 @@ fn create_output_embeds_license_index_provenance_in_header_extra_data() {
             spdx_license_list_version: "3.27".to_string(),
             license_index_provenance: Some(crate::models::LicenseIndexProvenance {
                 source: "embedded-artifact".to_string(),
-                policy_path: "resources/license_detection/index_build_policy.toml".to_string(),
-                curation_fingerprint: "abc123".to_string(),
+                dataset_fingerprint: "abc123".to_string(),
                 ignored_rules: vec!["gpl-2.0_and-unknown-license-reference_1.RULE".to_string()],
                 ignored_licenses: vec![],
                 ignored_rules_due_to_licenses: vec![],
@@ -2516,7 +2515,7 @@ fn create_output_embeds_license_index_provenance_in_header_extra_data() {
         .as_ref()
         .expect("header should carry license index provenance");
     assert_eq!(provenance.source, "embedded-artifact");
-    assert_eq!(provenance.curation_fingerprint, "abc123");
+    assert_eq!(provenance.dataset_fingerprint, "abc123");
     assert_eq!(
         provenance.ignored_rules,
         vec!["gpl-2.0_and-unknown-license-reference_1.RULE".to_string()]

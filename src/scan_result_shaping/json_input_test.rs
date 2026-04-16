@@ -202,8 +202,7 @@ fn into_parts_preserves_imported_header_errors_as_extra_errors() {
                 spdx_license_list_version: Some("3.27".to_string()),
                 license_index_provenance: Some(crate::models::LicenseIndexProvenance {
                     source: "embedded-artifact".to_string(),
-                    policy_path: "resources/license_detection/index_build_policy.toml".to_string(),
-                    curation_fingerprint: "abc123".to_string(),
+                    dataset_fingerprint: "abc123".to_string(),
                     ignored_rules: vec!["rule.RULE".to_string()],
                     ignored_licenses: vec![],
                     ignored_rules_due_to_licenses: vec![],
@@ -242,7 +241,7 @@ fn into_parts_preserves_imported_header_errors_as_extra_errors() {
     assert_eq!(
         imported_license_index_provenance
             .as_ref()
-            .map(|provenance| provenance.curation_fingerprint.as_str()),
+            .map(|provenance| provenance.dataset_fingerprint.as_str()),
         Some("abc123")
     );
 }
@@ -330,9 +329,7 @@ fn into_parts_discards_conflicting_imported_header_provenance() {
                     spdx_license_list_version: Some("3.27".to_string()),
                     license_index_provenance: Some(crate::models::LicenseIndexProvenance {
                         source: "embedded-artifact".to_string(),
-                        policy_path: "resources/license_detection/index_build_policy.toml"
-                            .to_string(),
-                        curation_fingerprint: "one".to_string(),
+                        dataset_fingerprint: "one".to_string(),
                         ignored_rules: vec![],
                         ignored_licenses: vec![],
                         ignored_rules_due_to_licenses: vec![],
@@ -349,10 +346,8 @@ fn into_parts_discards_conflicting_imported_header_provenance() {
                 extra_data: Some(JsonHeaderExtraDataInput {
                     spdx_license_list_version: Some("3.28".to_string()),
                     license_index_provenance: Some(crate::models::LicenseIndexProvenance {
-                        source: "custom-rules".to_string(),
-                        policy_path: "resources/license_detection/index_build_policy.toml"
-                            .to_string(),
-                        curation_fingerprint: "two".to_string(),
+                        source: "custom-license-dataset".to_string(),
+                        dataset_fingerprint: "two".to_string(),
                         ignored_rules: vec![],
                         ignored_licenses: vec![],
                         ignored_rules_due_to_licenses: vec![],
