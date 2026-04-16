@@ -1,3 +1,37 @@
+mod provenance {
+    pub use crate::*;
+}
+use self::provenance::assembly;
+use self::provenance::cache::{
+    CACHE_DIR_ENV_VAR, CacheConfig, IncrementalManifest, IncrementalManifestEntry,
+    build_collection_exclude_patterns, incremental_manifest_path, load_incremental_manifest,
+    manifest_entry_matches_path, metadata_fingerprint, write_incremental_manifest,
+};
+use self::provenance::cli::{Cli, ProcessMode};
+use self::provenance::license_detection::LicenseDetectionEngine;
+use self::provenance::license_detection::dataset::export_embedded_license_dataset;
+use self::provenance::license_detection::license_cache::LicenseCacheConfig;
+use self::provenance::models::{FileInfo, FileType, Sha256Digest};
+use self::provenance::output::{OutputWriteConfig, write_output_file};
+use self::provenance::post_processing::{
+    CreateOutputContext, CreateOutputOptions, DEFAULT_LICENSEDB_URL_TEMPLATE,
+    apply_license_policy_from_file, apply_package_reference_following, build_facet_rules,
+    collect_top_level_license_detections, collect_top_level_license_references, create_output,
+};
+use self::provenance::progress::{ProgressMode, ScanProgress, format_default_scan_error};
+use self::provenance::scan_result_shaping::{
+    apply_cli_path_selection_filter, apply_ignore_resource_filter, apply_mark_source,
+    apply_only_findings_filter, apply_user_path_filters_to_collected, filter_redundant_clues,
+    filter_redundant_clues_with_rules, load_and_merge_json_inputs, normalize_paths,
+    normalize_top_level_output_paths, populate_info_resource_counts,
+    prepare_filter_clue_rule_lookup, resolve_native_scan_inputs, trim_preloaded_assembly_to_files,
+};
+use self::provenance::scanner::{
+    LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected_with_memory_limit,
+    process_collected_with_memory_limit_sequential, scan_options_fingerprint,
+};
+use self::provenance::time::format_scancode_timestamp;
+use self::provenance::utils::hash::calculate_sha256;
 use anyhow::{Result, anyhow};
 use chrono::Utc;
 use clap::Parser;
@@ -9,55 +43,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::cache::{
-    CACHE_DIR_ENV_VAR, CacheConfig, IncrementalManifest, IncrementalManifestEntry,
-    build_collection_exclude_patterns, incremental_manifest_path, load_incremental_manifest,
-    manifest_entry_matches_path, metadata_fingerprint, write_incremental_manifest,
-};
-use crate::cli::{Cli, ProcessMode};
-use crate::license_detection::LicenseDetectionEngine;
-use crate::license_detection::license_cache::LicenseCacheConfig;
-use crate::models::{FileInfo, FileType, Sha256Digest};
-use crate::output::{OutputWriteConfig, write_output_file};
-use crate::post_processing::{
-    CreateOutputContext, CreateOutputOptions, DEFAULT_LICENSEDB_URL_TEMPLATE,
-    apply_license_policy_from_file, apply_package_reference_following, build_facet_rules,
-    collect_top_level_license_detections, collect_top_level_license_references, create_output,
-};
-use crate::progress::{ProgressMode, ScanProgress, format_default_scan_error};
-use crate::scan_result_shaping::{
-    apply_cli_path_selection_filter, apply_ignore_resource_filter, apply_mark_source,
-    apply_only_findings_filter, apply_user_path_filters_to_collected, filter_redundant_clues,
-    filter_redundant_clues_with_rules, load_and_merge_json_inputs, normalize_paths,
-    normalize_top_level_output_paths, populate_info_resource_counts,
-    prepare_filter_clue_rule_lookup, resolve_native_scan_inputs, trim_preloaded_assembly_to_files,
-};
-use crate::scanner::{
-    LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected_with_memory_limit,
-    process_collected_with_memory_limit_sequential, scan_options_fingerprint,
-};
-use crate::time::format_scancode_timestamp;
-use crate::utils::hash::calculate_sha256;
-
-mod assembly;
-mod cache;
-mod cli;
-mod copyright;
-mod finder;
-mod license_detection;
-mod models;
-mod output;
-mod output_schema;
-mod parsers;
-mod post_processing;
-mod progress;
-mod scan_result_shaping;
-mod scanner;
-mod time;
-mod utils;
-mod version;
-
-fn main() -> std::io::Result<()> {
+pub fn cli_main() -> std::io::Result<()> {
     if let Err(err) = run() {
         eprintln!("Error: {}", err);
         std::process::exit(1);
@@ -71,8 +57,15 @@ fn run() -> Result<()> {
 
     let cli = Cli::parse();
 
+    validate_scan_option_compatibility(&cli)?;
+
     if cli.show_attribution {
         print!("{}", include_str!("../NOTICE"));
+        return Ok(());
+    }
+
+    if let Some(export_dir) = cli.export_license_dataset.as_deref() {
+        export_embedded_license_dataset(Path::new(export_dir))?;
         return Ok(());
     }
 
@@ -84,7 +77,6 @@ fn run() -> Result<()> {
     let mut shared_license_cache_config: Option<LicenseCacheConfig> = None;
 
     progress.start_setup();
-    validate_scan_option_compatibility(&cli)?;
     let facet_rules = build_facet_rules(&cli.facet)?;
 
     let ignore_author_patterns = compile_regex_patterns("--ignore-author", &cli.ignore_author)?;
@@ -203,7 +195,7 @@ fn run() -> Result<()> {
             progress.finish_setup();
             progress.output_written(&describe_license_engine_source(
                 &engine,
-                cli.license_rules_path.as_deref(),
+                cli.license_dataset_path.as_deref(),
             ));
             Some(engine)
         } else {
@@ -339,7 +331,7 @@ fn run() -> Result<()> {
             prepare_filter_clue_rule_lookup(
                 &scan_result.files,
                 active_license_engine.as_deref(),
-                cli.license_rules_path.as_deref(),
+                cli.license_dataset_path.as_deref(),
                 shared_license_cache_config.as_ref(),
             )
         })?;
@@ -590,7 +582,7 @@ fn run() -> Result<()> {
     });
     progress.finish_finalize();
 
-    let output_schema_output = crate::output_schema::Output::from(&output);
+    let output_schema_output = provenance::output_schema::Output::from(&output);
     progress.start_output();
     for target in cli.output_targets() {
         let output_config = OutputWriteConfig {
@@ -626,13 +618,48 @@ fn run() -> Result<()> {
 
 #[cfg(feature = "golden-tests")]
 fn touch_license_golden_symbols() {
-    let _ = crate::license_detection::golden_utils::read_golden_input_content;
-    let _ = crate::license_detection::golden_utils::detect_matches_for_golden;
-    let _ = crate::license_detection::golden_utils::detect_license_expressions_for_golden;
-    let _ = crate::license_detection::LicenseDetectionEngine::detect_matches_with_kind;
+    let _ = provenance::license_detection::golden_utils::read_golden_input_content;
+    let _ = provenance::license_detection::golden_utils::detect_matches_for_golden;
+    let _ = provenance::license_detection::golden_utils::detect_license_expressions_for_golden;
+    let _ = provenance::license_detection::LicenseDetectionEngine::detect_matches_with_kind;
 }
 
 fn validate_scan_option_compatibility(cli: &Cli) -> Result<()> {
+    if cli.show_attribution {
+        return Ok(());
+    }
+
+    if cli.export_license_dataset.is_some() {
+        if !cli.dir_path.is_empty() {
+            return Err(anyhow!(
+                "--export-license-dataset does not accept scan input paths"
+            ));
+        }
+
+        if cli.from_json
+            || cli.license
+            || cli.package
+            || cli.system_package
+            || cli.package_in_compiled
+            || cli.package_only
+            || cli.copyright
+            || cli.email
+            || cli.url
+            || cli.generated
+            || cli.info
+            || cli.incremental
+            || cli.reindex
+            || cli.no_license_index_cache
+            || cli.license_dataset_path.is_some()
+        {
+            return Err(anyhow!(
+                "--export-license-dataset is a standalone mode and cannot be combined with scan or license-index flags"
+            ));
+        }
+
+        return Ok(());
+    }
+
     if cli.from_json
         && (cli.package
             || cli.system_package
@@ -681,7 +708,7 @@ fn prepare_cache_config(scan_root: Option<&Path>, cli: &Cli) -> Result<CacheConf
     );
 
     if cli.cache_clear {
-        crate::cache::locking::with_exclusive_cache_lock(config.root_dir(), || {
+        provenance::cache::locking::with_exclusive_cache_lock(config.root_dir(), || {
             config.clear_contents()
         })?;
     }
@@ -901,7 +928,7 @@ fn configured_scan_names(cli: &Cli) -> String {
     names.join(", ")
 }
 
-fn should_include_info_surface(files: &[crate::models::FileInfo], cli: &Cli) -> bool {
+fn should_include_info_surface(files: &[provenance::models::FileInfo], cli: &Cli) -> bool {
     cli.info
         || files.iter().any(|file| {
             file.date.is_some()
@@ -948,11 +975,11 @@ where
 fn init_license_engine(cache_root: &CacheConfig, cli: &Cli) -> Result<Arc<LicenseDetectionEngine>> {
     let cache_config = build_license_cache_config(cache_root, cli);
 
-    match &cli.license_rules_path {
+    match &cli.license_dataset_path {
         Some(p) => {
             let path = PathBuf::from(p);
             if !path.exists() {
-                return Err(anyhow!("License rules path does not exist: {:?}", path));
+                return Err(anyhow!("License dataset path does not exist: {:?}", path));
             }
             let engine = LicenseDetectionEngine::from_directory_with_cache(&path, &cache_config)?;
             Ok(Arc::new(engine))
@@ -970,7 +997,7 @@ fn describe_license_engine_source(
 ) -> String {
     match rules_path {
         Some(path) => format!(
-            "License detection engine initialized with {} rules from {}",
+            "License detection engine initialized with {} rules from custom dataset {}",
             engine.index().rules_by_rid.len(),
             path
         ),
@@ -982,4 +1009,5 @@ fn describe_license_engine_source(
 }
 
 #[cfg(test)]
+#[path = "main_test.rs"]
 mod main_test;

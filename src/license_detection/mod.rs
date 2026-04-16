@@ -3,6 +3,7 @@
 pub mod aho_match;
 pub mod automaton;
 pub mod build_policy;
+pub mod dataset;
 pub(crate) mod detection;
 pub mod embedded;
 pub mod license_cache;
@@ -40,9 +41,10 @@ use std::time::Instant;
 
 use anyhow::Result;
 
-use crate::license_detection::build_policy::{
-    CUSTOM_RULES_LICENSE_INDEX_SOURCE, DEFAULT_INDEX_BUILD_POLICY_PATH,
-    EMBEDDED_LICENSE_INDEX_SOURCE, apply_default_index_build_policy,
+use crate::license_detection::build_policy::EMBEDDED_LICENSE_INDEX_SOURCE;
+use crate::license_detection::dataset::{
+    CUSTOM_LICENSE_DATASET_SOURCE, LoadedLicenseDataset, compute_dataset_fingerprint_string,
+    load_license_dataset_from_root,
 };
 use crate::license_detection::embedded::index::{
     load_embedded_artifact_metadata_from_bytes, load_loader_snapshot_from_bytes,
@@ -53,9 +55,6 @@ use crate::license_detection::license_cache::{
     compute_rules_fingerprint, delete_cache, load_cached_index, save_cached_index,
 };
 use crate::license_detection::query::Query;
-use crate::license_detection::rules::{
-    load_loaded_licenses_from_directory, load_loaded_rules_from_directory,
-};
 use crate::license_detection::spdx_mapping::{SpdxMapping, build_spdx_mapping};
 use crate::models::LicenseIndexProvenance;
 use crate::utils::text::strip_utf8_bom_str;
@@ -617,7 +616,7 @@ impl LicenseDetectionEngine {
         Self::from_index(index, spdx_version, provenance)
     }
 
-    /// Create a new license detection engine from a directory of license rules.
+    /// Create a new license detection engine from a license dataset root.
     ///
     /// Convenience method that uses the default Provenant cache root and does
     /// not force a reindex.
@@ -629,11 +628,11 @@ impl LicenseDetectionEngine {
 
     /// Create a new license detection engine from a directory of license rules.
     ///
-    /// If a valid cache exists (matching fingerprint of the rules), the index is
+    /// If a valid cache exists (matching fingerprint of the dataset), the index is
     /// loaded from the rkyv cache file instead of being rebuilt from scratch.
     ///
     /// # Arguments
-    /// * `rules_path` - Path to directory containing .LICENSE and .RULE files
+    /// * `rules_path` - Path to dataset root containing rules/ and licenses/
     /// * `cache_config` - Cache configuration (directory and reindex flag)
     ///
     /// # Returns
@@ -642,39 +641,27 @@ impl LicenseDetectionEngine {
         rules_path: &Path,
         cache_config: &LicenseCacheConfig,
     ) -> Result<Self> {
-        let (rules_dir, licenses_dir) = if rules_path.ends_with("data") {
-            (rules_path.join("rules"), rules_path.join("licenses"))
-        } else if rules_path.ends_with("rules") {
-            let parent = rules_path.parent().ok_or_else(|| {
-                anyhow::anyhow!("Cannot determine parent directory for rules path")
-            })?;
-            (rules_path.to_path_buf(), parent.join("licenses"))
-        } else {
-            (rules_path.to_path_buf(), rules_path.to_path_buf())
-        };
-
-        let loaded_rules = load_loaded_rules_from_directory(&rules_dir)?;
-        let loaded_licenses = load_loaded_licenses_from_directory(&licenses_dir)?;
-        let (loaded_rules, loaded_licenses, policy_report) =
-            apply_default_index_build_policy(loaded_rules, loaded_licenses)?;
-        let provenance =
-            Some(policy_report.to_license_index_provenance(CUSTOM_RULES_LICENSE_INDEX_SOURCE));
-
-        if !policy_report.is_empty() {
-            eprintln!(
-                "Applied license index build policy from {} (ignored {} rules, {} licenses, {} dependent rules, added {} rules, replaced {} rules, added {} licenses, replaced {} licenses)",
-                DEFAULT_INDEX_BUILD_POLICY_PATH,
-                policy_report.ignored_rules.len(),
-                policy_report.ignored_licenses.len(),
-                policy_report.ignored_rules_due_to_licenses.len(),
-                policy_report.added_rules.len(),
-                policy_report.replaced_rules.len(),
-                policy_report.added_licenses.len(),
-                policy_report.replaced_licenses.len()
-            );
-        }
+        let LoadedLicenseDataset {
+            manifest,
+            rules: loaded_rules,
+            licenses: loaded_licenses,
+        } = load_license_dataset_from_root(rules_path)?;
 
         let fingerprint = compute_rules_fingerprint(&loaded_rules, &loaded_licenses)?;
+        let provenance = Some(LicenseIndexProvenance {
+            source: CUSTOM_LICENSE_DATASET_SOURCE.to_string(),
+            dataset_fingerprint: compute_dataset_fingerprint_string(
+                &loaded_rules,
+                &loaded_licenses,
+            )?,
+            ignored_rules: vec![],
+            ignored_licenses: vec![],
+            ignored_rules_due_to_licenses: vec![],
+            added_rules: vec![],
+            replaced_rules: vec![],
+            added_licenses: vec![],
+            replaced_licenses: vec![],
+        });
 
         if !cache_config.reindex {
             if let Some(cached) = load_cached_index(
@@ -687,8 +674,11 @@ impl LicenseDetectionEngine {
                     "License index loaded from rkyv cache in {:.2}s",
                     start.elapsed().as_secs_f64()
                 );
-                let spdx_version = detect_scancode_spdx_license_list_version(&rules_dir)?;
-                return Self::from_index(cached, spdx_version, provenance);
+                return Self::from_index(
+                    cached,
+                    Some(manifest.spdx_license_list_version),
+                    provenance,
+                );
             }
         } else {
             delete_cache(
@@ -701,11 +691,9 @@ impl LicenseDetectionEngine {
         let start = Instant::now();
         let index = build_index_from_loaded(loaded_rules, loaded_licenses, false);
         eprintln!(
-            "License index built from rules directory in {:.2}s",
+            "License index built from custom dataset in {:.2}s",
             start.elapsed().as_secs_f64()
         );
-
-        let spdx_license_list_version = detect_scancode_spdx_license_list_version(&rules_dir)?;
 
         if let Err(e) = save_cached_index(
             cache_config,
@@ -725,7 +713,7 @@ impl LicenseDetectionEngine {
             );
         }
 
-        Self::from_index(index, spdx_license_list_version, provenance)
+        Self::from_index(index, Some(manifest.spdx_license_list_version), provenance)
     }
 
     pub fn embedded_spdx_license_list_version() -> Result<String> {
