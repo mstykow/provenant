@@ -67,6 +67,22 @@ mod tests {
     }
 
     #[test]
+    fn test_find_emails_ignores_literal_escaped_newline_code_artifacts() {
+        let text = r#"email": "global_writer@email.com\n@app.route\n@csrf.exempt\nuser5@email.com"#;
+        let config = DetectionConfig::default();
+        let emails = find_emails(text, &config);
+
+        let values: Vec<_> = emails.into_iter().map(|email| email.email).collect();
+        assert_eq!(
+            values,
+            vec![
+                "global_writer@email.com".to_string(),
+                "user5@email.com".to_string(),
+            ]
+        );
+    }
+
+    #[test]
     fn test_find_urls_ignores_email_like_ftp_token() {
         let text = "See ftp.mtuci@gmail.com for details.";
         let config = DetectionConfig::default();

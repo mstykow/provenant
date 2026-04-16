@@ -23,20 +23,23 @@ pub fn find_emails(text: &str, config: &DetectionConfig) -> Vec<EmailDetection> 
 
     for (line_index, line) in text.lines().enumerate() {
         let line_number = LineNumber::from_0_indexed(line_index);
-        for matched in EMAILS_REGEX.find_iter(line) {
-            let email = matched.as_str().to_lowercase();
-            if !is_good_email_domain(&email) {
-                continue;
-            }
-            if !classify_email(&email) {
-                continue;
-            }
+        let normalized_line = line.replace("\\r\\n", "\\n").replace("\\r", "\\n");
+        for segment in normalized_line.split("\\n") {
+            for matched in EMAILS_REGEX.find_iter(segment) {
+                let email = matched.as_str().to_lowercase();
+                if !is_good_email_domain(&email) {
+                    continue;
+                }
+                if !classify_email(&email) {
+                    continue;
+                }
 
-            detections.push(EmailDetection {
-                email,
-                start_line: line_number,
-                end_line: line_number,
-            });
+                detections.push(EmailDetection {
+                    email,
+                    start_line: line_number,
+                    end_line: line_number,
+                });
+            }
         }
     }
 
