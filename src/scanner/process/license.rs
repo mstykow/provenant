@@ -8,21 +8,57 @@ use crate::scanner::LicenseScanOptions;
 use anyhow::Error;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Instant;
+
+pub(super) struct LicenseExtractionInput<'a> {
+    pub(super) path: &'a Path,
+    pub(super) text_content: String,
+    pub(super) license_engine: Option<Arc<LicenseDetectionEngine>>,
+    pub(super) license_options: LicenseScanOptions,
+    pub(super) from_binary_strings: bool,
+    pub(super) timeout_seconds: f64,
+    pub(super) deadline: Option<Instant>,
+}
 
 pub(super) fn extract_license_information(
     file_info_builder: &mut FileInfoBuilder,
     scan_errors: &mut Vec<String>,
-    path: &Path,
-    text_content: String,
-    license_engine: Option<Arc<LicenseDetectionEngine>>,
-    license_options: LicenseScanOptions,
-    from_binary_strings: bool,
+    input: LicenseExtractionInput<'_>,
 ) -> Result<(), Error> {
+    let LicenseExtractionInput {
+        path,
+        text_content,
+        license_engine,
+        license_options,
+        from_binary_strings,
+        timeout_seconds,
+        deadline,
+    } = input;
+
     let Some(engine) = license_engine else {
         return Ok(());
     };
 
-    let detection_result = if license_options.min_score == 0 {
+    let detection_result = if deadline.is_some() {
+        if license_options.min_score == 0 {
+            engine.detect_with_kind_and_source_with_deadline(
+                &text_content,
+                license_options.unknown_licenses,
+                from_binary_strings,
+                &path.to_string_lossy(),
+                deadline,
+            )
+        } else {
+            engine.detect_with_kind_and_source_with_score_and_deadline(
+                &text_content,
+                license_options.unknown_licenses,
+                from_binary_strings,
+                &path.to_string_lossy(),
+                f32::from(license_options.min_score),
+                deadline,
+            )
+        }
+    } else if license_options.min_score == 0 {
         engine.detect_with_kind_and_source(
             &text_content,
             license_options.unknown_licenses,
@@ -41,8 +77,22 @@ pub(super) fn extract_license_information(
 
     match detection_result {
         Ok(detections) => {
-            let query =
-                Query::from_extracted_text(&text_content, engine.index(), from_binary_strings).ok();
+            let query = match if deadline.is_some() {
+                Query::from_extracted_text_with_deadline(
+                    &text_content,
+                    engine.index(),
+                    from_binary_strings,
+                    deadline,
+                )
+            } else {
+                Query::from_extracted_text(&text_content, engine.index(), from_binary_strings)
+            } {
+                Ok(query) => Some(query),
+                Err(error) if is_license_detection_timeout_error(&error) => {
+                    return Err(timeout_during_license_scan(timeout_seconds));
+                }
+                Err(_) => None,
+            };
             let mut model_detections = Vec::new();
             let mut model_clues = Vec::new();
 
@@ -84,12 +134,26 @@ pub(super) fn extract_license_information(
                     .map(|query| compute_percentage_of_license_text(query, &detections)),
             );
         }
+        Err(e) if is_license_detection_timeout_error(&e) => {
+            return Err(timeout_during_license_scan(timeout_seconds));
+        }
         Err(e) => {
             scan_errors.push(format!("License detection failed: {}", e));
         }
     }
 
     Ok(())
+}
+
+fn is_license_detection_timeout_error(error: &Error) -> bool {
+    error.to_string() == crate::license_detection::LICENSE_DETECTION_TIMEOUT_MESSAGE
+}
+
+fn timeout_during_license_scan(timeout_seconds: f64) -> Error {
+    Error::msg(format!(
+        "Timeout during license scan (> {:.2}s)",
+        timeout_seconds
+    ))
 }
 
 fn convert_detection_to_model(

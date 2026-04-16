@@ -77,6 +77,7 @@ pub const SCANCODE_LICENSES_LICENSES_PATH: &str =
 pub const SCANCODE_LICENSES_DATA_PATH: &str = "reference/scancode-toolkit/src/licensedcode/data";
 
 pub const DEFAULT_LICENSEDB_URL_TEMPLATE: &str = "https://scancode-licensedb.aboutcode.org/{}";
+pub(crate) const LICENSE_DETECTION_TIMEOUT_MESSAGE: &str = "license detection timed out";
 
 pub(crate) use detection::{
     LicenseDetection, group_matches_by_region, post_process_detections, sort_matches_by_line,
@@ -95,7 +96,10 @@ pub use token_multiset::TokenMultiset;
 pub use token_set::TokenSet;
 pub use unknown_match::unknown_match;
 
-use self::seq_match::{MAX_NEAR_DUPE_CANDIDATES, select_seq_candidates, seq_match_with_candidates};
+use self::seq_match::{
+    MAX_NEAR_DUPE_CANDIDATES, select_seq_candidates_with_deadline,
+    seq_match_with_candidates_and_deadline,
+};
 
 /// License detection engine that orchestrates the detection pipeline.
 ///
@@ -113,6 +117,18 @@ const MAX_DETECTION_SIZE: usize = 10 * 1024 * 1024; // 10MB
 const MAX_REGULAR_SEQ_CANDIDATES: usize = 70;
 const MAX_REDUNDANT_SEQ_CONTAINER_BOUNDARY_GAP: usize = 8;
 const MAX_REDUNDANT_SEQ_CONTAINER_UNMATCHED_GAP: usize = 2;
+
+pub(crate) fn deadline_exceeded(deadline: Option<Instant>) -> bool {
+    deadline.is_some_and(|deadline| Instant::now() >= deadline)
+}
+
+pub(crate) fn ensure_within_deadline(deadline: Option<Instant>) -> Result<()> {
+    if deadline_exceeded(deadline) {
+        Err(anyhow::anyhow!(LICENSE_DETECTION_TIMEOUT_MESSAGE))
+    } else {
+        Ok(())
+    }
+}
 
 fn truncate_detection_text(clean_text: &str) -> &str {
     if clean_text.len() <= MAX_DETECTION_SIZE {
@@ -384,16 +400,34 @@ fn collect_whole_query_exact_followup_matches(
     query: &mut Query<'_>,
     matched_qspans: &mut Vec<models::PositionSpan>,
     whole_run: &query::QueryRun<'_>,
-) -> Vec<LicenseMatch> {
+    deadline: Option<Instant>,
+) -> Result<Vec<LicenseMatch>> {
     let mut seq_all_matches = Vec::new();
 
     if whole_run.is_matchable(false, matched_qspans) {
-        let near_dupe_candidates =
-            select_seq_candidates(index, whole_run, true, MAX_NEAR_DUPE_CANDIDATES);
+        let near_dupe_candidates = if deadline.is_some() {
+            select_seq_candidates_with_deadline(
+                index,
+                whole_run,
+                true,
+                MAX_NEAR_DUPE_CANDIDATES,
+                deadline,
+            )?
+        } else {
+            self::seq_match::select_seq_candidates(index, whole_run, true, MAX_NEAR_DUPE_CANDIDATES)
+        };
 
         if !near_dupe_candidates.is_empty() {
-            let near_dupe_matches =
-                seq_match_with_candidates(index, whole_run, &near_dupe_candidates);
+            let near_dupe_matches = if deadline.is_some() {
+                seq_match_with_candidates_and_deadline(
+                    index,
+                    whole_run,
+                    &near_dupe_candidates,
+                    deadline,
+                )?
+            } else {
+                self::seq_match::seq_match_with_candidates(index, whole_run, &near_dupe_candidates)
+            };
 
             for m in &near_dupe_matches {
                 if !m.query_span().is_empty() {
@@ -407,7 +441,7 @@ fn collect_whole_query_exact_followup_matches(
         }
     }
 
-    seq_all_matches
+    Ok(seq_all_matches)
 }
 
 fn collect_regular_seq_matches(
@@ -415,18 +449,41 @@ fn collect_regular_seq_matches(
     query: &Query<'_>,
     matched_qspans: &[models::PositionSpan],
     candidate_contained_matches: &[LicenseMatch],
-) -> Vec<LicenseMatch> {
+    deadline: Option<Instant>,
+) -> Result<Vec<LicenseMatch>> {
     let mut seq_all_matches = Vec::new();
 
-    for query_run in query.query_runs() {
+    for (query_run_index, query_run) in query.query_runs().into_iter().enumerate() {
+        if query_run_index % 8 == 0 {
+            ensure_within_deadline(deadline)?;
+        }
+
         if !query_run.is_matchable(false, matched_qspans) {
             continue;
         }
 
-        let candidates =
-            select_seq_candidates(index, &query_run, false, MAX_REGULAR_SEQ_CANDIDATES);
+        let candidates = if deadline.is_some() {
+            select_seq_candidates_with_deadline(
+                index,
+                &query_run,
+                false,
+                MAX_REGULAR_SEQ_CANDIDATES,
+                deadline,
+            )?
+        } else {
+            self::seq_match::select_seq_candidates(
+                index,
+                &query_run,
+                false,
+                MAX_REGULAR_SEQ_CANDIDATES,
+            )
+        };
         if !candidates.is_empty() {
-            let matches = seq_match_with_candidates(index, &query_run, &candidates);
+            let matches = if deadline.is_some() {
+                seq_match_with_candidates_and_deadline(index, &query_run, &candidates, deadline)?
+            } else {
+                self::seq_match::seq_match_with_candidates(index, &query_run, &candidates)
+            };
             seq_all_matches.extend(matches);
         }
     }
@@ -434,10 +491,10 @@ fn collect_regular_seq_matches(
     let merged_seq = merge_overlapping_matches(&seq_all_matches);
     let filtered_same_expression =
         filter_redundant_same_expression_seq_containers(merged_seq, candidate_contained_matches);
-    filter_redundant_low_coverage_composite_seq_wrappers(
+    Ok(filter_redundant_low_coverage_composite_seq_wrappers(
         filtered_same_expression,
         candidate_contained_matches,
-    )
+    ))
 }
 
 impl LicenseDetectionEngine {
@@ -458,6 +515,11 @@ impl LicenseDetectionEngine {
             spdx_mapping,
             spdx_license_list_version,
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_test_index(index: index::LicenseIndex) -> Self {
+        Self::from_index(index, None).expect("test index should build license engine")
     }
 
     /// Create a new license detection engine from the embedded license index.
@@ -644,7 +706,13 @@ impl LicenseDetectionEngine {
         unknown_licenses: bool,
         binary_derived: bool,
     ) -> Result<Vec<LicenseDetection>> {
-        self.detect_with_kind_with_score(text, unknown_licenses, binary_derived, 0.0)
+        self.detect_with_kind_with_score_and_deadline(
+            text,
+            unknown_licenses,
+            binary_derived,
+            0.0,
+            None,
+        )
     }
 
     pub fn detect_with_kind_with_score(
@@ -654,11 +722,39 @@ impl LicenseDetectionEngine {
         binary_derived: bool,
         min_score: f32,
     ) -> Result<Vec<LicenseDetection>> {
+        self.detect_with_kind_with_score_and_deadline(
+            text,
+            unknown_licenses,
+            binary_derived,
+            min_score,
+            None,
+        )
+    }
+
+    pub(crate) fn detect_with_kind_with_score_and_deadline(
+        &self,
+        text: &str,
+        unknown_licenses: bool,
+        binary_derived: bool,
+        min_score: f32,
+        deadline: Option<Instant>,
+    ) -> Result<Vec<LicenseDetection>> {
+        ensure_within_deadline(deadline)?;
         let clean_text = strip_utf8_bom_str(text);
 
         let content = truncate_detection_text(clean_text);
 
-        let mut query = Query::from_extracted_text(content, &self.index, binary_derived)?;
+        ensure_within_deadline(deadline)?;
+        let mut query = if deadline.is_some() {
+            Query::from_extracted_text_with_deadline(
+                content,
+                &self.index,
+                binary_derived,
+                deadline,
+            )?
+        } else {
+            Query::from_extracted_text(content, &self.index, binary_derived)?
+        };
         let whole_query_run = query.whole_query_run();
 
         let mut all_matches = Vec::new();
@@ -669,6 +765,7 @@ impl LicenseDetectionEngine {
         // Phase 1a: Hash matching
         // Python returns immediately if hash matches found (index.py:987-991)
         {
+            ensure_within_deadline(deadline)?;
             let hash_matches = hash_match(&self.index, &whole_query_run);
 
             if !hash_matches.is_empty() {
@@ -696,6 +793,7 @@ impl LicenseDetectionEngine {
 
         // Phase 1b: SPDX-LID matching
         {
+            ensure_within_deadline(deadline)?;
             let spdx_matches = spdx_lid_match(&self.index, &query);
             subtract_spdx_match_qspans(
                 &mut query,
@@ -708,14 +806,29 @@ impl LicenseDetectionEngine {
 
         // Phase 1c: Aho-Corasick matching
         {
+            ensure_within_deadline(deadline)?;
             let aho_matches = if aho_extra_matchables.is_empty() {
-                aho_match(&self.index, &whole_query_run)
+                if deadline.is_some() {
+                    aho_match::aho_match_with_deadline(&self.index, &whole_query_run, deadline)?
+                } else {
+                    aho_match(&self.index, &whole_query_run)
+                }
             } else {
-                aho_match::aho_match_with_extra_matchables(
-                    &self.index,
-                    &whole_query_run,
-                    Some(&aho_extra_matchables),
-                )
+                if deadline.is_some() {
+                    aho_match::aho_match_with_extra_matchables(
+                        &self.index,
+                        &whole_query_run,
+                        Some(&aho_extra_matchables),
+                        deadline,
+                    )?
+                } else {
+                    aho_match::aho_match_with_extra_matchables(
+                        &self.index,
+                        &whole_query_run,
+                        Some(&aho_extra_matchables),
+                        None,
+                    )?
+                }
             };
 
             // Python's get_exact_matches() calls refine_matches with merge=False
@@ -735,7 +848,8 @@ impl LicenseDetectionEngine {
                 &mut query,
                 &mut matched_qspans,
                 &whole_query_run,
-            );
+                deadline,
+            )?;
             all_matches.extend(whole_query_followup);
 
             let merged_seq = collect_regular_seq_matches(
@@ -743,12 +857,14 @@ impl LicenseDetectionEngine {
                 &query,
                 &matched_qspans,
                 &candidate_contained_matches,
-            );
+                deadline,
+            )?;
             all_matches.extend(merged_seq);
         }
 
         // Step 1: Initial refine WITHOUT false positive filtering
         // Python: refine_matches with filter_false_positive=False (index.py:1073-1080)
+        ensure_within_deadline(deadline)?;
         let merged_matches =
             refine_matches_without_false_positive_filter(&self.index, all_matches, &query);
 
@@ -774,6 +890,7 @@ impl LicenseDetectionEngine {
         };
 
         // Step 5: Final refine WITH false positive filtering - Python: index.py:1130-1145
+        ensure_within_deadline(deadline)?;
         let refined = refine_matches(&self.index, refined_matches, &query);
 
         let mut sorted = refined;
@@ -797,6 +914,7 @@ impl LicenseDetectionEngine {
 
         let detections = post_process_detections(detections, min_score);
 
+        ensure_within_deadline(deadline)?;
         Ok(detections)
     }
 
@@ -807,7 +925,30 @@ impl LicenseDetectionEngine {
         binary_derived: bool,
         source_path: &str,
     ) -> Result<Vec<LicenseDetection>> {
-        let mut detections = self.detect_with_kind(text, unknown_licenses, binary_derived)?;
+        self.detect_with_kind_and_source_with_deadline(
+            text,
+            unknown_licenses,
+            binary_derived,
+            source_path,
+            None,
+        )
+    }
+
+    pub(crate) fn detect_with_kind_and_source_with_deadline(
+        &self,
+        text: &str,
+        unknown_licenses: bool,
+        binary_derived: bool,
+        source_path: &str,
+        deadline: Option<Instant>,
+    ) -> Result<Vec<LicenseDetection>> {
+        let mut detections = self.detect_with_kind_with_score_and_deadline(
+            text,
+            unknown_licenses,
+            binary_derived,
+            0.0,
+            deadline,
+        )?;
         attach_source_path_to_detections(&mut detections, source_path);
         Ok(detections)
     }
@@ -822,6 +963,26 @@ impl LicenseDetectionEngine {
     ) -> Result<Vec<LicenseDetection>> {
         let mut detections =
             self.detect_with_kind_with_score(text, unknown_licenses, binary_derived, min_score)?;
+        attach_source_path_to_detections(&mut detections, source_path);
+        Ok(detections)
+    }
+
+    pub(crate) fn detect_with_kind_and_source_with_score_and_deadline(
+        &self,
+        text: &str,
+        unknown_licenses: bool,
+        binary_derived: bool,
+        source_path: &str,
+        min_score: f32,
+        deadline: Option<Instant>,
+    ) -> Result<Vec<LicenseDetection>> {
+        let mut detections = self.detect_with_kind_with_score_and_deadline(
+            text,
+            unknown_licenses,
+            binary_derived,
+            min_score,
+            deadline,
+        )?;
         attach_source_path_to_detections(&mut detections, source_path);
         Ok(detections)
     }
@@ -881,7 +1042,8 @@ impl LicenseDetectionEngine {
                     &self.index,
                     &whole_query_run,
                     Some(&aho_extra_matchables),
-                )
+                    None,
+                )?
             };
             let refined_aho = match_refine::refine_aho_matches(&self.index, aho_matches, &query);
             candidate_contained_matches.extend(refined_aho.clone());
@@ -898,7 +1060,8 @@ impl LicenseDetectionEngine {
                 &mut query,
                 &mut matched_qspans,
                 &whole_query_run,
-            );
+                None,
+            )?;
             all_matches.extend(whole_query_followup);
 
             let merged_seq = collect_regular_seq_matches(
@@ -906,7 +1069,8 @@ impl LicenseDetectionEngine {
                 &query,
                 &matched_qspans,
                 &candidate_contained_matches,
-            );
+                None,
+            )?;
             all_matches.extend(merged_seq);
         }
 
