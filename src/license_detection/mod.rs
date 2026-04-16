@@ -2,6 +2,7 @@
 
 pub mod aho_match;
 pub mod automaton;
+pub mod build_policy;
 pub(crate) mod detection;
 pub mod embedded;
 pub mod license_cache;
@@ -39,6 +40,10 @@ use std::time::Instant;
 
 use anyhow::Result;
 
+use crate::license_detection::build_policy::{
+    CUSTOM_RULES_LICENSE_INDEX_SOURCE, DEFAULT_INDEX_BUILD_POLICY_PATH,
+    EMBEDDED_LICENSE_INDEX_SOURCE, apply_default_index_build_policy,
+};
 use crate::license_detection::embedded::index::{
     load_embedded_artifact_metadata_from_bytes, load_loader_snapshot_from_bytes,
 };
@@ -52,6 +57,7 @@ use crate::license_detection::rules::{
     load_loaded_licenses_from_directory, load_loaded_rules_from_directory,
 };
 use crate::license_detection::spdx_mapping::{SpdxMapping, build_spdx_mapping};
+use crate::models::LicenseIndexProvenance;
 use crate::utils::text::strip_utf8_bom_str;
 
 use crate::license_detection::detection::{
@@ -111,6 +117,7 @@ pub struct LicenseDetectionEngine {
     index: Arc<index::LicenseIndex>,
     spdx_mapping: SpdxMapping,
     spdx_license_list_version: Option<String>,
+    license_index_provenance: Option<LicenseIndexProvenance>,
 }
 
 const MAX_DETECTION_SIZE: usize = 10 * 1024 * 1024; // 10MB
@@ -505,6 +512,7 @@ impl LicenseDetectionEngine {
     fn from_index(
         index: index::LicenseIndex,
         spdx_license_list_version: Option<String>,
+        license_index_provenance: Option<LicenseIndexProvenance>,
     ) -> Result<Self> {
         let mut license_vec: Vec<_> = index.licenses_by_key.values().cloned().collect();
         license_vec.sort_by(|a, b| a.key.cmp(&b.key));
@@ -514,6 +522,7 @@ impl LicenseDetectionEngine {
             index: Arc::new(index),
             spdx_mapping,
             spdx_license_list_version,
+            license_index_provenance,
         })
     }
 
@@ -549,18 +558,27 @@ impl LicenseDetectionEngine {
     pub fn from_embedded_with_cache(cache_config: &LicenseCacheConfig) -> Result<Self> {
         let artifact_bytes = include_bytes!("../../resources/license_detection/license_index.zst");
         let fingerprint = compute_artifact_fingerprint(artifact_bytes);
+        let artifact_metadata = load_embedded_artifact_metadata_from_bytes(artifact_bytes)
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to load embedded license artifact metadata: {}", e)
+            })?;
+        debug_assert_eq!(
+            artifact_metadata.license_index_provenance.source,
+            EMBEDDED_LICENSE_INDEX_SOURCE
+        );
+        let spdx_version = Some(artifact_metadata.spdx_license_list_version.clone());
+        let provenance = Some(artifact_metadata.license_index_provenance.clone());
 
         if !cache_config.reindex {
             if let Some(cached) =
                 load_cached_index(cache_config, LicenseCacheNamespace::Embedded, &fingerprint)?
             {
                 let start = Instant::now();
-                let spdx_version = cached.spdx_license_list_version.clone();
                 eprintln!(
                     "License index loaded from rkyv cache in {:.2}s",
                     start.elapsed().as_secs_f64()
                 );
-                return Self::from_index(cached, spdx_version);
+                return Self::from_index(cached, spdx_version, provenance);
             }
         } else {
             delete_cache(cache_config, LicenseCacheNamespace::Embedded, &fingerprint)?;
@@ -569,6 +587,7 @@ impl LicenseDetectionEngine {
         let snapshot = load_loader_snapshot_from_bytes(artifact_bytes)
             .map_err(|e| anyhow::anyhow!("Failed to load embedded license index: {}", e))?;
         let spdx_version = Some(snapshot.metadata.spdx_license_list_version.clone());
+        let provenance = Some(snapshot.metadata.license_index_provenance.clone());
 
         let start = Instant::now();
         let index = build_index_from_loaded(snapshot.rules, snapshot.licenses, false);
@@ -595,7 +614,7 @@ impl LicenseDetectionEngine {
             );
         }
 
-        Self::from_index(index, spdx_version)
+        Self::from_index(index, spdx_version, provenance)
     }
 
     /// Create a new license detection engine from a directory of license rules.
@@ -636,8 +655,26 @@ impl LicenseDetectionEngine {
 
         let loaded_rules = load_loaded_rules_from_directory(&rules_dir)?;
         let loaded_licenses = load_loaded_licenses_from_directory(&licenses_dir)?;
+        let (loaded_rules, loaded_licenses, policy_report) =
+            apply_default_index_build_policy(loaded_rules, loaded_licenses)?;
+        let provenance =
+            Some(policy_report.to_license_index_provenance(CUSTOM_RULES_LICENSE_INDEX_SOURCE));
 
-        let fingerprint = compute_rules_fingerprint(&loaded_rules, &loaded_licenses);
+        if !policy_report.is_empty() {
+            eprintln!(
+                "Applied license index build policy from {} (ignored {} rules, {} licenses, {} dependent rules, added {} rules, replaced {} rules, added {} licenses, replaced {} licenses)",
+                DEFAULT_INDEX_BUILD_POLICY_PATH,
+                policy_report.ignored_rules.len(),
+                policy_report.ignored_licenses.len(),
+                policy_report.ignored_rules_due_to_licenses.len(),
+                policy_report.added_rules.len(),
+                policy_report.replaced_rules.len(),
+                policy_report.added_licenses.len(),
+                policy_report.replaced_licenses.len()
+            );
+        }
+
+        let fingerprint = compute_rules_fingerprint(&loaded_rules, &loaded_licenses)?;
 
         if !cache_config.reindex {
             if let Some(cached) = load_cached_index(
@@ -651,7 +688,7 @@ impl LicenseDetectionEngine {
                     start.elapsed().as_secs_f64()
                 );
                 let spdx_version = detect_scancode_spdx_license_list_version(&rules_dir)?;
-                return Self::from_index(cached, spdx_version);
+                return Self::from_index(cached, spdx_version, provenance);
             }
         } else {
             delete_cache(
@@ -688,7 +725,7 @@ impl LicenseDetectionEngine {
             );
         }
 
-        Self::from_index(index, spdx_license_list_version)
+        Self::from_index(index, spdx_license_list_version, provenance)
     }
 
     pub fn embedded_spdx_license_list_version() -> Result<String> {
@@ -1110,6 +1147,10 @@ impl LicenseDetectionEngine {
 
     pub fn spdx_license_list_version(&self) -> Option<&str> {
         self.spdx_license_list_version.as_deref()
+    }
+
+    pub fn license_index_provenance(&self) -> Option<&LicenseIndexProvenance> {
+        self.license_index_provenance.as_ref()
     }
 
     /// Get a reference to the SPDX mapping.

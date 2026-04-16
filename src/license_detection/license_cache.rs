@@ -91,25 +91,19 @@ fn prune_namespace_dir(namespace_dir: &Path, active_path: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn compute_rules_fingerprint(rules: &[LoadedRule], licenses: &[LoadedLicense]) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-
+pub fn compute_rules_fingerprint(
+    rules: &[LoadedRule],
+    licenses: &[LoadedLicense],
+) -> Result<[u8; 32]> {
     let mut sorted_rules: Vec<_> = rules.iter().collect();
     sorted_rules.sort_by_key(|r| &r.identifier);
-    for rule in &sorted_rules {
-        hasher.update(rule.identifier.as_bytes());
-        hasher.update(rule.license_expression.as_bytes());
-        hasher.update(rule.text.as_bytes());
-    }
-
     let mut sorted_licenses: Vec<_> = licenses.iter().collect();
     sorted_licenses.sort_by_key(|l| &l.key);
-    for license in &sorted_licenses {
-        hasher.update(license.key.as_bytes());
-        hasher.update(license.text.as_bytes());
-    }
 
-    hasher.finalize().into()
+    let serialized = postcard::to_allocvec(&(sorted_rules, sorted_licenses))
+        .context("Failed to serialize effective rules/licenses for cache fingerprinting")?;
+
+    Ok(Sha256::digest(serialized).into())
 }
 
 pub fn compute_artifact_fingerprint(artifact_bytes: &[u8]) -> [u8; 32] {
@@ -329,5 +323,73 @@ mod tests {
                 .expect("disabled load should succeed")
                 .is_none()
         );
+    }
+
+    #[test]
+    fn test_compute_rules_fingerprint_changes_when_rule_metadata_changes() {
+        let rule_a = LoadedRule {
+            identifier: "example.RULE".to_string(),
+            license_expression: "mit".to_string(),
+            text: "example text".to_string(),
+            rule_kind: crate::license_detection::models::RuleKind::Text,
+            is_false_positive: false,
+            is_required_phrase: false,
+            skip_for_required_phrase_generation: false,
+            relevance: Some(100),
+            minimum_coverage: None,
+            has_stored_minimum_coverage: false,
+            is_continuous: false,
+            referenced_filenames: None,
+            ignorable_urls: None,
+            ignorable_emails: None,
+            ignorable_copyrights: None,
+            ignorable_holders: None,
+            ignorable_authors: None,
+            language: None,
+            notes: None,
+            is_deprecated: false,
+            replaced_by: vec![],
+        };
+        let mut rule_b = rule_a.clone();
+        rule_b.referenced_filenames = Some(vec!["LICENSE".to_string()]);
+
+        let license = LoadedLicense {
+            key: "mit".to_string(),
+            short_name: Some("MIT".to_string()),
+            name: "MIT License".to_string(),
+            language: Some("en".to_string()),
+            spdx_license_key: Some("MIT".to_string()),
+            other_spdx_license_keys: vec![],
+            category: Some("Permissive".to_string()),
+            owner: None,
+            homepage_url: None,
+            text: "MIT text".to_string(),
+            reference_urls: vec![],
+            osi_license_key: None,
+            text_urls: vec![],
+            osi_url: None,
+            faq_url: None,
+            other_urls: vec![],
+            notes: None,
+            is_deprecated: false,
+            is_exception: false,
+            is_unknown: false,
+            is_generic: false,
+            replaced_by: vec![],
+            minimum_coverage: None,
+            standard_notice: None,
+            ignorable_copyrights: None,
+            ignorable_holders: None,
+            ignorable_authors: None,
+            ignorable_urls: None,
+            ignorable_emails: None,
+        };
+
+        let fingerprint_a = compute_rules_fingerprint(&[rule_a], std::slice::from_ref(&license))
+            .expect("fingerprint A");
+        let fingerprint_b =
+            compute_rules_fingerprint(&[rule_b], &[license]).expect("fingerprint B");
+
+        assert_ne!(fingerprint_a, fingerprint_b);
     }
 }
