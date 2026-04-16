@@ -11,6 +11,7 @@ use regex::Regex;
 use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
 use std::sync::LazyLock;
+use std::time::Instant;
 
 static QUERY_PATTERN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[^_\W]+\+?[^_\W]*").expect("valid query regex"));
@@ -441,13 +442,22 @@ impl<'a> Query<'a> {
         index: &'a LicenseIndex,
         binary_derived: bool,
     ) -> Result<Self, anyhow::Error> {
+        Self::from_extracted_text_with_deadline(text, index, binary_derived, None)
+    }
+
+    pub fn from_extracted_text_with_deadline(
+        text: &str,
+        index: &'a LicenseIndex,
+        binary_derived: bool,
+        deadline: Option<Instant>,
+    ) -> Result<Self, anyhow::Error> {
         let line_threshold = if binary_derived {
             Self::BINARY_LINE_THRESHOLD
         } else {
             Self::TEXT_LINE_THRESHOLD
         };
 
-        Self::with_source_options(text, index, line_threshold, Some(binary_derived))
+        Self::with_source_options(text, index, line_threshold, Some(binary_derived), deadline)
     }
 
     /// Iterate over query runs.
@@ -465,7 +475,9 @@ impl<'a> Query<'a> {
         index: &'a LicenseIndex,
         line_threshold: usize,
         binary_derived: Option<bool>,
+        deadline: Option<Instant>,
     ) -> Result<Self, anyhow::Error> {
+        crate::license_detection::ensure_within_deadline(deadline)?;
         let is_binary = match binary_derived {
             Some(is_binary) => is_binary,
             None => Self::detect_binary(text)?,
@@ -485,7 +497,11 @@ impl<'a> Query<'a> {
 
         let mut tokens_by_line: Vec<Vec<Option<KnownToken>>> = Vec::new();
 
-        for line in text.lines() {
+        for (line_index, line) in text.lines().enumerate() {
+            if line_index.is_multiple_of(128) {
+                crate::license_detection::ensure_within_deadline(deadline)?;
+            }
+
             let line_trimmed = line.trim();
             let mut line_tokens: Vec<Option<KnownToken>> = Vec::new();
 
@@ -548,6 +564,8 @@ impl<'a> Query<'a> {
             tokens_by_line.push(line_tokens);
             current_line += 1;
         }
+
+        crate::license_detection::ensure_within_deadline(deadline)?;
 
         let high_matchables: PositionSet = tokens
             .iter()

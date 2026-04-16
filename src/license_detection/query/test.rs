@@ -20,7 +20,7 @@ mod tests {
         text: &str,
         index: &'a LicenseIndex,
     ) -> anyhow::Result<Query<'a>> {
-        Query::with_source_options(text, index, Query::TEXT_LINE_THRESHOLD, None)
+        Query::with_source_options(text, index, Query::TEXT_LINE_THRESHOLD, None, None)
     }
 
     fn build_query_with_threshold<'a>(
@@ -28,7 +28,7 @@ mod tests {
         index: &'a LicenseIndex,
         line_threshold: usize,
     ) -> anyhow::Result<Query<'a>> {
-        Query::with_source_options(text, index, line_threshold, None)
+        Query::with_source_options(text, index, line_threshold, None, None)
     }
 
     fn query_unknown_count_after(query: &Query<'_>, pos: Option<usize>) -> usize {
