@@ -15,6 +15,7 @@ use crate::license_detection::position_set::PositionSet;
 use crate::license_detection::query::QueryRun;
 use crate::models::LineNumber;
 use crate::models::MatchScore;
+use std::time::Instant;
 
 pub const MATCH_AHO: MatcherKind = MatcherKind::Aho;
 
@@ -61,7 +62,16 @@ fn byte_pos_to_token_pos(byte_pos: usize) -> usize {
 ///
 /// Corresponds to Python: `exact_match()` (lines 84-138)
 pub fn aho_match(index: &LicenseIndex, query_run: &QueryRun) -> Vec<LicenseMatch> {
-    aho_match_with_extra_matchables(index, query_run, None)
+    aho_match_with_extra_matchables(index, query_run, None, None)
+        .expect("Aho matching without deadline should not time out")
+}
+
+pub(crate) fn aho_match_with_deadline(
+    index: &LicenseIndex,
+    query_run: &QueryRun,
+    deadline: Option<Instant>,
+) -> anyhow::Result<Vec<LicenseMatch>> {
+    aho_match_with_extra_matchables(index, query_run, None, deadline)
 }
 
 /// Perform Aho-Corasick exact matching with temporary extra matchable positions.
@@ -73,12 +83,13 @@ pub fn aho_match_with_extra_matchables(
     index: &LicenseIndex,
     query_run: &QueryRun,
     extra_matchable_positions: Option<&PositionSet>,
-) -> Vec<LicenseMatch> {
+    deadline: Option<Instant>,
+) -> anyhow::Result<Vec<LicenseMatch>> {
     let mut matches = Vec::new();
 
     let query_tokens = query_run.tokens();
     if query_tokens.is_empty() {
-        return matches;
+        return Ok(matches);
     }
 
     let encoded_query = tokens_to_bytes(query_tokens);
@@ -88,7 +99,11 @@ pub fn aho_match_with_extra_matchables(
 
     let automaton = &index.rules_automaton;
 
-    for ac_match in automaton.find_overlapping_iter(&encoded_query) {
+    for (match_index, ac_match) in automaton.find_overlapping_iter(&encoded_query).enumerate() {
+        if match_index.is_multiple_of(1024) {
+            crate::license_detection::ensure_within_deadline(deadline)?;
+        }
+
         let pattern_id = ac_match.pattern;
         let byte_start = ac_match.start;
         let byte_end = ac_match.end;
@@ -194,6 +209,7 @@ pub fn aho_match_with_extra_matchables(
     }
 
     if let Some(extra_matchables) = extra_matchable_positions {
+        crate::license_detection::ensure_within_deadline(deadline)?;
         let live_matchables = query_run.matchables(true);
         matches = matches
             .iter()
@@ -227,7 +243,7 @@ pub fn aho_match_with_extra_matchables(
             .collect();
     }
 
-    matches
+    Ok(matches)
 }
 
 #[cfg(test)]
@@ -511,7 +527,8 @@ mod tests {
 
         let extra_matchables: PositionSet = [1usize].into_iter().collect();
         let matches =
-            aho_match_with_extra_matchables(run.get_index(), &run, Some(&extra_matchables));
+            aho_match_with_extra_matchables(run.get_index(), &run, Some(&extra_matchables), None)
+                .expect("Aho matching with extra matchables should succeed");
 
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].start_token, 0);
@@ -565,7 +582,8 @@ mod tests {
         let run = query.whole_query_run();
         let extra_matchables: PositionSet = [0usize, 1].into_iter().collect();
         let matches =
-            aho_match_with_extra_matchables(run.get_index(), &run, Some(&extra_matchables));
+            aho_match_with_extra_matchables(run.get_index(), &run, Some(&extra_matchables), None)
+                .expect("Aho matching with extra matchables should succeed");
 
         assert_eq!(matches.len(), 1);
         assert_eq!(
