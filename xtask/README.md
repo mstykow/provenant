@@ -53,7 +53,7 @@ CLI arguments:
 - `--repo-url URL`: benchmark the given repository URL via the shared repo cache.
 - `--repo-ref REF`: required with `--repo-url`; commit SHA, tag, or branch to resolve and benchmark.
 - `--target-path PATH`: benchmark an existing local directory in place.
-- `--profile common`: convenience shorthand for `-clupe --system-package --strip-root`.
+- `--profile common`: convenience shorthand for `-clupe --system-package --strip-root --processes 4`.
 - `--profile common-with-compiled`: convenience shorthand for `-clupe --system-package --package-in-compiled --strip-root`.
 - `--profile licenses`: convenience shorthand for `-l --strip-root`.
 - `--profile packages`: convenience shorthand for `-p --strip-root`.
@@ -128,7 +128,7 @@ CLI arguments:
 - `--repo-ref REF`: required with `--repo-url`; commit SHA, tag, or branch to resolve and compare.
 - `--target-path PATH`: compare an existing local directory in place.
 - `--scancode-cache-identity ID`: optional with `--target-path`; opt in to shared ScanCode cache reuse for a caller-asserted local snapshot identity.
-- `--profile common`: convenience shorthand for `-clupe --system-package --strip-root`.
+- `--profile common`: convenience shorthand for `-clupe --system-package --strip-root --processes 4`.
 - `--profile common-with-compiled`: convenience shorthand for `-clupe --system-package --package-in-compiled --strip-root`.
 - `--profile licenses`: convenience shorthand for `-l --strip-root`.
 - `--profile packages`: convenience shorthand for `-p --strip-root`.
@@ -171,7 +171,8 @@ Optional diagnostic logs when available:
 - Stdout is reserved for progress, a reduced summary table, and the saved artifact paths.
 - ScanCode currently runs via Docker on all platforms for this workflow because that is the reproducible runtime path verified in this repository.
 - When `compare-outputs` actually executes either scanner, it disables persistent license-cache reuse for fairness: Provenant runs with `--no-license-index-cache`, and ScanCode uses container-local ephemeral cache directories.
-- `compare-outputs` passes the same shared scan args to both scanners. The `common` profile includes installed package database coverage, which is usually a no-op on ordinary source repositories but matters for extracted rootfs/container trees and other artifact targets. Use `common-with-compiled` when you also want Go/Rust compiled-binary package extraction in the shared scan profile.
+- `compare-outputs` passes the same shared scan args to both scanners. The `common` profile includes installed package database coverage and fixes the shared worker count at `--processes 4`, which is usually a no-op on ordinary source repositories but matters for extracted rootfs/container trees and other artifact targets. Use `common-with-compiled` when you also want Go/Rust compiled-binary package extraction in the shared scan profile.
+- For `--profile common`, the ScanCode Docker invocation also adds `--memory 12g --memory-swap 12g`, and that runtime cap is part of ScanCode cache validation.
 - `--repo-url` mode requires `--repo-ref`; the command records both the requested ref and the resolved full commit SHA in `run-manifest.json`.
 - `run-manifest.json` also records the Provenant binary version plus the current Provenant repository revision, dirty state, and diff hash, alongside the ScanCode runtime identity.
 - Repo URL runs reuse cached git objects from `.provenant/repo-cache/`, and the temporary detached checkout is removed after the run so compare artifacts do not retain duplicate full repository trees.
