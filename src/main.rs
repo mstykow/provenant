@@ -427,31 +427,49 @@ fn run() -> Result<()> {
         .sum();
     let skip_assembly = cli.no_assemble || cli.package_only;
 
-    let mut assembly_result = if cli.from_json
-        && (!preloaded_assembly.packages.is_empty() || !preloaded_assembly.dependencies.is_empty())
-    {
-        progress.start_assembly();
-        progress.finish_assembly(preloaded_assembly.packages.len(), manifests_seen);
-        preloaded_assembly
-    } else if skip_assembly {
+    let mut assembly_result = if skip_assembly {
         assembly::AssemblyResult {
             packages: Vec::new(),
             dependencies: Vec::new(),
         }
     } else {
         progress.start_assembly();
-        let assembled = assembly::assemble(&mut scan_result.files);
-        progress.finish_assembly(assembled.packages.len(), manifests_seen);
-        assembled
+
+        let mut result = if cli.from_json
+            && (!preloaded_assembly.packages.is_empty()
+                || !preloaded_assembly.dependencies.is_empty())
+        {
+            progress.assembly_step("Using preloaded assembly...");
+            preloaded_assembly
+        } else {
+            assembly::assemble(&mut scan_result.files)
+        };
+
+        progress.assembly_step("Backfilling package license provenance...");
+        record_detail_timing(&progress, "assembly:package-license-provenance", || {
+            for package in &mut result.packages {
+                package.backfill_license_provenance();
+            }
+        });
+
+        progress.assembly_step("Applying package reference following...");
+        record_detail_timing(&progress, "assembly:package-reference-following", || {
+            apply_package_reference_following(&mut scan_result.files, &mut result.packages);
+        });
+
+        progress.finish_assembly(result.packages.len(), manifests_seen);
+        result
     };
+
+    progress.start_finalize();
 
     if !cli.from_json && (cli.strip_root || cli.full_root) {
         let root_path = cli
             .dir_path
             .first()
             .ok_or_else(|| anyhow!("No input path available for path normalization"))?;
-        progress.start_post_scan();
-        record_detail_timing(&progress, "post-scan:path-normalization", || {
+        progress.finalize_step("Normalizing paths...");
+        record_detail_timing(&progress, "finalize:path-normalization", || {
             normalize_paths(
                 &mut scan_result.files,
                 root_path,
@@ -465,24 +483,7 @@ fn run() -> Result<()> {
                 cli.strip_root,
             );
         });
-        progress.finish_post_scan();
     }
-
-    progress.start_post_scan();
-    progress.post_scan_step("Backfilling package license provenance...");
-    record_detail_timing(&progress, "post-scan:package-license-provenance", || {
-        for package in &mut assembly_result.packages {
-            package.backfill_license_provenance();
-        }
-    });
-
-    progress.post_scan_step("Applying package reference following...");
-    record_detail_timing(&progress, "post-scan:package-reference-following", || {
-        apply_package_reference_following(&mut scan_result.files, &mut assembly_result.packages);
-    });
-    progress.finish_post_scan();
-
-    progress.start_finalize();
 
     progress.finalize_step("Collecting license detections...");
     let license_detections = record_detail_timing(&progress, "finalize:license-detections", || {

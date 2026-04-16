@@ -276,6 +276,12 @@ impl ScanProgress {
         }
     }
 
+    pub fn assembly_step(&self, step: &str) {
+        if self.mode == ProgressMode::Verbose {
+            self.message(&format!("  {step}"));
+        }
+    }
+
     pub fn finish_assembly(&self, packages_assembled: usize, manifests_seen: usize) {
         self.finish_spinner();
         self.finish_top_level_phase("assembly");
