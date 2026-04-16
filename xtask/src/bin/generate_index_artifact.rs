@@ -4,6 +4,10 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::Parser;
 
+use provenant::license_detection::build_policy::{
+    DEFAULT_INDEX_BUILD_POLICY_PATH, EMBEDDED_LICENSE_INDEX_SOURCE,
+    apply_default_index_build_policy,
+};
 use provenant::license_detection::detect_scancode_spdx_license_list_version;
 use provenant::license_detection::embedded::schema::{EmbeddedLoaderSnapshot, SCHEMA_VERSION};
 use provenant::license_detection::rules::{
@@ -50,6 +54,27 @@ fn main() -> Result<()> {
     let mut loaded_licenses = load_loaded_licenses_from_directory(&licenses_dir)
         .with_context(|| format!("Failed to load licenses from {}", licenses_dir.display()))?;
 
+    let (filtered_rules, filtered_licenses, policy_report) =
+        apply_default_index_build_policy(loaded_rules, loaded_licenses)?;
+    loaded_rules = filtered_rules;
+    loaded_licenses = filtered_licenses;
+    let license_index_provenance =
+        policy_report.to_license_index_provenance(EMBEDDED_LICENSE_INDEX_SOURCE);
+
+    if !policy_report.is_empty() {
+        println!(
+            "Applied license index build policy from {} (ignored {} rules, {} licenses, {} dependent rules, added {} rules, replaced {} rules, added {} licenses, replaced {} licenses)",
+            DEFAULT_INDEX_BUILD_POLICY_PATH,
+            policy_report.ignored_rules.len(),
+            policy_report.ignored_licenses.len(),
+            policy_report.ignored_rules_due_to_licenses.len(),
+            policy_report.added_rules.len(),
+            policy_report.replaced_rules.len(),
+            policy_report.added_licenses.len(),
+            policy_report.replaced_licenses.len()
+        );
+    }
+
     println!("Loaded {} rules", loaded_rules.len());
     println!("Loaded {} licenses", loaded_licenses.len());
 
@@ -63,6 +88,7 @@ fn main() -> Result<()> {
         schema_version: SCHEMA_VERSION,
         metadata: provenant::license_detection::embedded::schema::EmbeddedArtifactMetadata {
             spdx_license_list_version,
+            license_index_provenance,
         },
         rules: loaded_rules,
         licenses: loaded_licenses,
