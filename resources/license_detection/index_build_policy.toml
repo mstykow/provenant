@@ -12,20 +12,9 @@
 #
 # The active curation fingerprint and applied changes are embedded into the
 # generated license artifact and surfaced in scan output headers.
-#
-# Current policy notes:
-# - `gpl-2.0_and-unknown-license-reference_1.RULE` is excluded in response to
-#   upstream ScanCode PR 4683, where the matched Android-generated header text
-#   is described as containing no copyrightable information.
-# - `unknown_10.RULE` is replaced via a local overlay file with the narrower
-#   upstream-reviewed shape from PR 4671: keep the unknown reference rule, but
-#   require a referenced filename of `LICENSE` so plain text mentions stop
-#   overmatching.
-# - Other surveyed cases such as PR 4666, PR 4674, and PR 4694 are already
-#   present in the pinned ScanCode dataset, so they do not need downstream
-#   overlays here.
 
 ignored_rules = [
+  # Android-generated header boilerplate says this text contains no copyrightable information; see ScanCode PR #4683.
   "gpl-2.0_and-unknown-license-reference_1.RULE",
 ]
 

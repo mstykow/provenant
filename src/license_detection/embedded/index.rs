@@ -76,8 +76,7 @@ mod tests {
             spdx_license_list_version: "3.27".to_string(),
             license_index_provenance: crate::models::LicenseIndexProvenance {
                 source: "embedded-artifact".to_string(),
-                policy_path: "resources/license_detection/index_build_policy.toml".to_string(),
-                curation_fingerprint: "test".to_string(),
+                dataset_fingerprint: "test".to_string(),
                 ignored_rules: vec![],
                 ignored_licenses: vec![],
                 ignored_rules_due_to_licenses: vec![],
