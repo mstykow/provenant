@@ -1336,7 +1336,7 @@ fn compute_score_mode_uses_single_joined_expression_without_ambiguity() {
     let score = summary.license_clarity_score.expect("clarity exists");
     assert_eq!(
         summary.declared_license_expression.as_deref(),
-        Some("mit OR apache-2.0")
+        Some("apache-2.0 OR mit")
     );
     assert_eq!(score.score, 100);
     assert!(!score.ambiguous_compound_licensing);
