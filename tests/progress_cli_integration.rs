@@ -20,6 +20,18 @@ fn create_scan_fixture() -> (TempDir, String) {
     (temp, scan_dir.to_string_lossy().to_string())
 }
 
+fn create_mit_license_fixture() -> (TempDir, String) {
+    let temp = TempDir::new().expect("failed to create temp dir");
+    let scan_dir = temp.path().join("scan");
+    fs::create_dir_all(&scan_dir).expect("failed to create scan dir");
+    fs::write(
+        scan_dir.join("LICENSE"),
+        "Permission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction.",
+    )
+    .expect("failed to write MIT fixture");
+    (temp, scan_dir.to_string_lossy().to_string())
+}
+
 fn create_malformed_package_fixture() -> (TempDir, String) {
     let temp = TempDir::new().expect("failed to create temp dir");
     let scan_dir = temp.path().join("scan");
@@ -73,9 +85,8 @@ fn create_from_json_fixture_with_provenance() -> (TempDir, String) {
                     "directories_count": 0,
                     "excluded_count": 0,
                     "license_index_provenance": {
-                        "source": "custom-rules",
-                        "policy_path": "resources/license_detection/index_build_policy.toml",
-                        "curation_fingerprint": "imported-fingerprint",
+                        "source": "custom-license-dataset",
+                        "dataset_fingerprint": "imported-fingerprint",
                         "ignored_rules": ["imported-rule.RULE"]
                     }
                 }
@@ -557,14 +568,97 @@ fn from_json_preserves_imported_license_index_provenance() {
     );
     assert_eq!(
         extra_data["license_index_provenance"]["source"].as_str(),
-        Some("custom-rules")
+        Some("custom-license-dataset")
     );
     assert_eq!(
-        extra_data["license_index_provenance"]["curation_fingerprint"].as_str(),
+        extra_data["license_index_provenance"]["dataset_fingerprint"].as_str(),
         Some("imported-fingerprint")
     );
     assert_eq!(
         extra_data["license_index_provenance"]["ignored_rules"][0].as_str(),
         Some("imported-rule.RULE")
+    );
+}
+
+#[test]
+fn export_license_dataset_writes_expected_dataset_structure() {
+    let temp = TempDir::new().expect("temp dir");
+    let export_dir = temp.path().join("dataset");
+
+    let output = provenant_command()
+        .args([
+            "--export-license-dataset",
+            export_dir.to_str().expect("utf8 export path"),
+        ])
+        .output()
+        .expect("failed to run dataset export");
+
+    assert!(output.status.success(), "dataset export should succeed");
+    assert!(export_dir.join("manifest.json").is_file());
+    assert!(export_dir.join("README.md").is_file());
+    assert!(export_dir.join("rules").is_dir());
+    assert!(export_dir.join("licenses").is_dir());
+    assert!(
+        fs::read_dir(export_dir.join("rules"))
+            .expect("rules dir should be readable")
+            .next()
+            .is_some()
+    );
+    assert!(
+        fs::read_dir(export_dir.join("licenses"))
+            .expect("licenses dir should be readable")
+            .next()
+            .is_some()
+    );
+}
+
+#[test]
+fn exported_dataset_can_be_reused_via_license_dataset_path() {
+    let export_temp = TempDir::new().expect("export temp dir");
+    let export_dir = export_temp.path().join("dataset");
+    let export_output = provenant_command()
+        .args([
+            "--export-license-dataset",
+            export_dir.to_str().expect("utf8 export path"),
+        ])
+        .output()
+        .expect("failed to export dataset");
+    assert!(
+        export_output.status.success(),
+        "dataset export should succeed"
+    );
+
+    let (_scan_temp, scan_dir) = create_mit_license_fixture();
+
+    let embedded_output = provenant_command()
+        .args(["--json-pp", "-", "--license", &scan_dir])
+        .output()
+        .expect("embedded scan should run");
+    assert!(embedded_output.status.success());
+    let embedded_json: Value =
+        serde_json::from_slice(&embedded_output.stdout).expect("embedded stdout json");
+
+    let custom_output = provenant_command()
+        .args([
+            "--json-pp",
+            "-",
+            "--license",
+            "--license-dataset-path",
+            export_dir.to_str().expect("utf8 export path"),
+            &scan_dir,
+        ])
+        .output()
+        .expect("custom dataset scan should run");
+    assert!(custom_output.status.success());
+    let custom_json: Value =
+        serde_json::from_slice(&custom_output.stdout).expect("custom stdout json");
+
+    assert_eq!(
+        embedded_json["files"][0]["license_detections"],
+        custom_json["files"][0]["license_detections"]
+    );
+    assert_eq!(
+        custom_json["headers"][0]["extra_data"]["license_index_provenance"]["source"].as_str(),
+        Some("custom-license-dataset")
     );
 }
