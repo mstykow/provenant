@@ -1,7 +1,9 @@
 use super::*;
 use std::sync::{LazyLock, Once};
+use std::time::{Duration, Instant};
 
 use crate::license_detection::models::{MatchCoordinates, position_span::PositionSpan};
+use crate::license_detection::test_utils::create_test_index_default;
 use crate::models::LineNumber;
 use crate::models::MatchScore;
 
@@ -180,6 +182,23 @@ fn test_engine_detect_spdx_identifier() {
         !detections.is_empty(),
         "Should detect license from SPDX identifier"
     );
+}
+
+#[test]
+fn test_engine_detect_with_deadline_times_out_when_already_expired() {
+    let engine = LicenseDetectionEngine::from_test_index(create_test_index_default());
+
+    let error = engine
+        .detect_with_kind_with_score_and_deadline(
+            "Permission is hereby granted, free of charge, to any person obtaining a copy",
+            false,
+            false,
+            0.0,
+            Some(Instant::now() - Duration::from_millis(1)),
+        )
+        .expect_err("expired deadline should abort license detection");
+
+    assert_eq!(error.to_string(), LICENSE_DETECTION_TIMEOUT_MESSAGE);
 }
 
 #[test]
