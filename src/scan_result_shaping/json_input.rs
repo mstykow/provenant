@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 
 use crate::assembly;
 use crate::models::{
-    FileInfo, FileType, LicenseReference, LicenseRuleReference, Package, TopLevelDependency,
-    TopLevelLicenseDetection,
+    FileInfo, FileType, LicenseIndexProvenance, LicenseReference, LicenseRuleReference, Package,
+    TopLevelDependency, TopLevelLicenseDetection,
 };
 use crate::output_schema::{
     OutputFileInfo, OutputLicenseReference, OutputLicenseRuleReference, OutputMatch, OutputPackage,
@@ -22,11 +22,21 @@ type JsonInputParts = (
     Vec<LicenseReference>,
     Vec<LicenseRuleReference>,
     Vec<String>,
+    Option<String>,
+    Option<LicenseIndexProvenance>,
 );
 
 #[cfg(test)]
 #[path = "json_input_test.rs"]
 mod json_input_test;
+
+#[derive(Deserialize, Clone)]
+pub(crate) struct JsonHeaderExtraDataInput {
+    #[serde(default)]
+    spdx_license_list_version: Option<String>,
+    #[serde(default)]
+    license_index_provenance: Option<LicenseIndexProvenance>,
+}
 
 #[derive(Deserialize)]
 pub(crate) struct JsonHeaderInput {
@@ -34,6 +44,8 @@ pub(crate) struct JsonHeaderInput {
     errors: Vec<String>,
     #[serde(default)]
     warnings: Vec<String>,
+    #[serde(default)]
+    extra_data: Option<JsonHeaderExtraDataInput>,
 }
 
 #[derive(Deserialize)]
@@ -122,6 +134,21 @@ impl JsonScanInput {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| anyhow!("Failed to convert license rule reference from JSON: {}", e))?;
 
+        let imported_spdx_license_list_version =
+            consistent_header_value(self.headers.iter().filter_map(|header| {
+                header
+                    .extra_data
+                    .as_ref()
+                    .and_then(|extra_data| extra_data.spdx_license_list_version.clone())
+            }));
+        let imported_license_index_provenance =
+            consistent_header_value(self.headers.iter().filter_map(|header| {
+                header
+                    .extra_data
+                    .as_ref()
+                    .and_then(|extra_data| extra_data.license_index_provenance.clone())
+            }));
+
         let preserved_header_errors = self
             .headers
             .into_iter()
@@ -129,6 +156,7 @@ impl JsonScanInput {
                 |JsonHeaderInput {
                      errors,
                      warnings: _,
+                     extra_data: _,
                  }| errors,
             )
             .filter(|error| !is_imported_file_summary_error(error, &files))
@@ -147,8 +175,18 @@ impl JsonScanInput {
             license_references,
             license_rule_references,
             preserved_header_errors,
+            imported_spdx_license_list_version,
+            imported_license_index_provenance,
         ))
     }
+}
+
+fn consistent_header_value<T>(mut values: impl Iterator<Item = T>) -> Option<T>
+where
+    T: PartialEq,
+{
+    let first = values.next()?;
+    values.all(|value| value == first).then_some(first)
 }
 
 fn is_imported_file_summary_error(error: &str, files: &[FileInfo]) -> bool {

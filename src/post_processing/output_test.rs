@@ -2371,6 +2371,7 @@ fn create_output_preserves_top_level_license_references_from_context() {
                 text: None,
             }],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -2422,6 +2423,7 @@ fn create_output_projects_file_scan_errors_into_headers_and_serialized_files() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -2458,6 +2460,74 @@ fn create_output_projects_file_scan_errors_into_headers_and_serialized_files() {
 }
 
 #[test]
+fn create_output_embeds_license_index_provenance_in_header_extra_data() {
+    let start = Utc::now();
+    let end = start;
+    let output = create_output(
+        start,
+        end,
+        crate::scanner::ProcessResult {
+            files: vec![dir("project")],
+            excluded_count: 0,
+        },
+        CreateOutputContext {
+            total_dirs: 1,
+            assembly_result: assembly::AssemblyResult {
+                packages: vec![],
+                dependencies: vec![],
+            },
+            license_detections: vec![],
+            license_references: vec![],
+            license_rule_references: vec![],
+            spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: Some(crate::models::LicenseIndexProvenance {
+                source: "embedded-artifact".to_string(),
+                policy_path: "resources/license_detection/index_build_policy.toml".to_string(),
+                curation_fingerprint: "abc123".to_string(),
+                ignored_rules: vec!["gpl-2.0_and-unknown-license-reference_1.RULE".to_string()],
+                ignored_licenses: vec![],
+                ignored_rules_due_to_licenses: vec![],
+                added_rules: vec!["false-positive-example_1.RULE".to_string()],
+                replaced_rules: vec![],
+                added_licenses: vec![],
+                replaced_licenses: vec![],
+            }),
+            extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
+            options: CreateOutputOptions {
+                facet_rules: &[],
+                include_classify: false,
+                include_tallies_by_facet: false,
+                include_summary: false,
+                include_license_clarity_score: false,
+                include_tallies: false,
+                include_tallies_with_details: false,
+                include_tallies_of_key_files: false,
+                include_generated: false,
+                verbose: false,
+            },
+        },
+    );
+
+    let provenance = output.headers[0]
+        .extra_data
+        .license_index_provenance
+        .as_ref()
+        .expect("header should carry license index provenance");
+    assert_eq!(provenance.source, "embedded-artifact");
+    assert_eq!(provenance.curation_fingerprint, "abc123");
+    assert_eq!(
+        provenance.ignored_rules,
+        vec!["gpl-2.0_and-unknown-license-reference_1.RULE".to_string()]
+    );
+    assert_eq!(
+        provenance.added_rules,
+        vec!["false-positive-example_1.RULE".to_string()]
+    );
+}
+
+#[test]
 fn create_output_header_errors_summarize_errored_paths_by_default() {
     let start = Utc::now();
     let end = start;
@@ -2484,6 +2554,7 @@ fn create_output_header_errors_summarize_errored_paths_by_default() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -2535,6 +2606,7 @@ fn create_output_header_errors_expand_scan_error_details_in_verbose_mode() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -2583,6 +2655,7 @@ fn create_output_preserves_extra_errors_in_header_summary() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec!["Failed to read directory: project/vendor".to_string()],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -2629,6 +2702,7 @@ fn create_output_preserves_extra_warnings_in_header() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec!["Imported warning".to_string()],
             header_options: serde_json::Map::new(),
@@ -2681,6 +2755,7 @@ fn create_output_routes_warning_like_scan_errors_into_header_warnings() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -2733,6 +2808,7 @@ fn create_output_deduplicates_header_summary_errors() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![
                 "Failed to read or parse package.json: project/package.json".to_string(),
             ],
@@ -2803,6 +2879,7 @@ fn create_output_preserves_top_level_license_detections_from_context() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -2852,6 +2929,7 @@ fn create_output_gates_summary_tallies_and_generated_sections() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -2923,6 +3001,7 @@ fn create_output_gates_summary_tallies_and_generated_sections() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -2983,6 +3062,7 @@ fn create_output_preserves_scanner_generated_flags_without_scan_root() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -3065,6 +3145,7 @@ fn create_output_score_only_keeps_clarity_without_full_summary_fields() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -3135,6 +3216,7 @@ fn create_output_preserves_file_level_license_clues_in_json_shape() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -3203,6 +3285,7 @@ fn create_output_preserves_empty_package_data_license_and_dependency_arrays() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -3263,6 +3346,7 @@ fn create_output_tallies_by_facet_does_not_leak_resource_tallies() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -3325,6 +3409,7 @@ fn create_output_promotes_package_metadata_without_summary_flags() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -3411,6 +3496,7 @@ fn create_output_summary_still_resolves_after_strip_root_normalization() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -3459,6 +3545,7 @@ fn create_output_classify_only_sets_key_file_flags() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),
@@ -3520,6 +3607,7 @@ fn create_output_uses_scancode_header_timestamp_format() {
             license_references: vec![],
             license_rule_references: vec![],
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
             extra_errors: vec![],
             extra_warnings: vec![],
             header_options: serde_json::Map::new(),

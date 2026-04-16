@@ -1638,6 +1638,7 @@ fn sample_header(files_count: usize, directories_count: usize) -> Header {
             files_count,
             directories_count,
             excluded_count: 0,
+            license_index_provenance: None,
         },
     }
 }
