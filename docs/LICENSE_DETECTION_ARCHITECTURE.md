@@ -450,6 +450,22 @@ The current public JSON output still omits `file_region`, but it does preserve
 }
 ```
 
+### Local File Reference Following
+
+After raw license detection, `src/post_processing/reference_following.rs` may merge detections from
+referenced local files such as `LICENSE`, `COPYING`, or manifest-adjacent sidecars.
+
+The default lookup stays conservative: current directory, package-manifest directories, then the
+current scan root / repo root.
+
+For notices that explicitly say the license file lives in the **root directory of this source
+tree** or equivalent project-root language, Provenant also allows a bounded ancestor lookup within
+the current scan root. Plain `See LICENSE` notices stay on the conservative path, and incompatible
+ancestor targets are rejected.
+
+This is an intentional product-quality difference from current ScanCode behavior, not a schema
+change.
+
 ## Related Documentation
 
 - [CLI_GUIDE.md](CLI_GUIDE.md) - user-facing workflows for the public license flags documented here

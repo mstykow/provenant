@@ -62,6 +62,11 @@ nullable and omitted values. Provenant therefore keeps these fields unset when t
 not actually prove them, rather than coercing output to common ScanCode defaults and overstating
 dependency intent.
 
+Another intentional difference is local license-reference following. Provenant keeps the same
+conservative default for vague notices such as plain `See LICENSE`, but it allows a bounded
+ancestor lookup for explicit **root directory of this source tree** / project-root notices so
+vendored or nested source trees can resolve their own root `LICENSE` files.
+
 ## Related Docs
 
 - [README](../README.md) for installation, usage, and positioning
