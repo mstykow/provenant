@@ -153,6 +153,20 @@ mod tests {
     }
 
     #[test]
+    fn test_yaml_writer_emits_license_index_provenance_in_headers() {
+        let output = Output::from(&sample_internal_output());
+        let mut bytes = Vec::new();
+        writer_for_format(OutputFormat::Yaml)
+            .write(&output, &mut bytes, &OutputWriteConfig::default())
+            .expect("yaml write should succeed");
+
+        let rendered = String::from_utf8(bytes).expect("yaml should be utf-8");
+        assert!(rendered.contains("license_index_provenance:"));
+        assert!(rendered.contains("curation_fingerprint: test-fingerprint"));
+        assert!(rendered.contains("source: embedded-artifact"));
+    }
+
+    #[test]
     fn test_debian_writer_outputs_dep5_style_document() {
         let mut internal = sample_internal_output();
         internal.files[0].license_expression = Some("mit".to_string());
@@ -1428,6 +1442,21 @@ mod tests {
                     files_count: 1,
                     directories_count: 1,
                     excluded_count: 0,
+                    license_index_provenance: Some(crate::models::LicenseIndexProvenance {
+                        source: "embedded-artifact".to_string(),
+                        policy_path: "resources/license_detection/index_build_policy.toml"
+                            .to_string(),
+                        curation_fingerprint: "test-fingerprint".to_string(),
+                        ignored_rules: vec![
+                            "gpl-2.0_and-unknown-license-reference_1.RULE".to_string(),
+                        ],
+                        ignored_licenses: vec![],
+                        ignored_rules_due_to_licenses: vec![],
+                        added_rules: vec![],
+                        replaced_rules: vec![],
+                        added_licenses: vec![],
+                        replaced_licenses: vec![],
+                    }),
                 },
             }],
             packages: vec![],

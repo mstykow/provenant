@@ -115,6 +115,28 @@ pub struct ExtraData {
     pub files_count: usize,
     pub directories_count: usize,
     pub excluded_count: usize,
+    pub license_index_provenance: Option<LicenseIndexProvenance>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct LicenseIndexProvenance {
+    pub source: String,
+    pub policy_path: String,
+    pub curation_fingerprint: String,
+    #[serde(default)]
+    pub ignored_rules: Vec<String>,
+    #[serde(default)]
+    pub ignored_licenses: Vec<String>,
+    #[serde(default)]
+    pub ignored_rules_due_to_licenses: Vec<String>,
+    #[serde(default)]
+    pub added_rules: Vec<String>,
+    #[serde(default)]
+    pub replaced_rules: Vec<String>,
+    #[serde(default)]
+    pub added_licenses: Vec<String>,
+    #[serde(default)]
+    pub replaced_licenses: Vec<String>,
 }
 
 #[derive(Debug)]
