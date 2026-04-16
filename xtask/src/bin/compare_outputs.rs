@@ -135,11 +135,14 @@ struct ScancodeCacheEntryManifest {
     scancode_runtime_revision: String,
     scancode_runtime_dirty: bool,
     scancode_runtime_diff_hash: Option<String>,
+    docker_memory_limit: Option<String>,
+    docker_memory_swap_limit: Option<String>,
     scancode_json: PathBuf,
     scancode_stdout: Option<PathBuf>,
 }
 
 const SCANCODE_PLACEHOLDER_LOG_MESSAGE: &str = "ScanCode stdout was not captured for this cache entry. Reused cached scancode.json without a corresponding log file.\n";
+const COMMON_PROFILE_SCANCODE_MEMORY_LIMIT: &str = "12g";
 
 fn main() -> Result<()> {
     let args = Args::parse();
@@ -1566,6 +1569,9 @@ fn write_manifest(context: &ContextState) -> Result<()> {
             runtime_revision: context.scancode_runtime_revision.clone(),
             runtime_dirty: context.scancode_runtime_dirty,
             runtime_diff_hash: context.scancode_runtime_diff_hash.clone(),
+            docker_memory_limit: scancode_docker_memory_limit(context).map(str::to_string),
+            docker_memory_swap_limit: scancode_docker_memory_swap_limit(context)
+                .map(str::to_string),
             cache_identity: effective_scancode_cache_identity(context).map(str::to_string),
             cache_key: context.scancode_cache_key.clone(),
             cache_dir: context.scancode_cache_dir.clone(),
@@ -1590,6 +1596,16 @@ fn build_scancode_docker_args(context: &ContextState) -> Vec<String> {
         "--rm".to_string(),
         "--platform".to_string(),
         "linux/amd64".to_string(),
+    ];
+    if let Some(limit) = scancode_docker_memory_limit(context) {
+        args.push("--memory".to_string());
+        args.push(limit.to_string());
+    }
+    if let Some(limit) = scancode_docker_memory_swap_limit(context) {
+        args.push("--memory-swap".to_string());
+        args.push(limit.to_string());
+    }
+    args.extend([
         "-e".to_string(),
         "SCANCODE_CACHE=/tmp/scancode-cache".to_string(),
         "-e".to_string(),
@@ -1603,7 +1619,7 @@ fn build_scancode_docker_args(context: &ContextState) -> Vec<String> {
         "-v".to_string(),
         format!("{}:/out", context.raw_dir.display()),
         context.scancode_image.clone(),
-    ];
+    ]);
     args.extend(build_scancode_cli_args(context));
     args
 }
@@ -1643,6 +1659,15 @@ fn effective_scancode_cache_identity(context: &ContextState) -> Option<&str> {
         .or(context.target_scancode_cache_identity.as_deref())
 }
 
+fn scancode_docker_memory_limit(context: &ContextState) -> Option<&'static str> {
+    matches!(context.profile_name.as_deref(), Some("common"))
+        .then_some(COMMON_PROFILE_SCANCODE_MEMORY_LIMIT)
+}
+
+fn scancode_docker_memory_swap_limit(context: &ContextState) -> Option<&'static str> {
+    scancode_docker_memory_limit(context)
+}
+
 fn build_scancode_cache_key(context: &ContextState) -> Result<String> {
     let cache_identity = effective_scancode_cache_identity(context)
         .context("ScanCode cache identity missing while building cache key")?;
@@ -1653,6 +1678,8 @@ fn build_scancode_cache_key(context: &ContextState) -> Result<String> {
         "scancode_runtime_revision": context.scancode_runtime_revision,
         "scancode_runtime_dirty": context.scancode_runtime_dirty,
         "scancode_runtime_diff_hash": context.scancode_runtime_diff_hash,
+        "docker_memory_limit": scancode_docker_memory_limit(context),
+        "docker_memory_swap_limit": scancode_docker_memory_swap_limit(context),
         "scancode_cli_args": build_scancode_cli_args(context),
     });
     let mut hasher = sha2::Sha256::default();
@@ -1769,6 +1796,14 @@ fn validate_scancode_cache_hit(context: &ContextState) -> Result<()> {
     if manifest.scancode_runtime_diff_hash != context.scancode_runtime_diff_hash {
         bail!("ScanCode runtime diff hash mismatch");
     }
+    if manifest.docker_memory_limit != scancode_docker_memory_limit(context).map(str::to_string) {
+        bail!("ScanCode docker memory limit mismatch");
+    }
+    if manifest.docker_memory_swap_limit
+        != scancode_docker_memory_swap_limit(context).map(str::to_string)
+    {
+        bail!("ScanCode docker memory swap limit mismatch");
+    }
     serde_json::from_reader::<_, Value>(BufReader::new(
         File::open(cache_json_path(cache_dir)).with_context(|| {
             format!(
@@ -1829,6 +1864,8 @@ fn persist_scancode_cache_entry(context: &ContextState) -> Result<()> {
         scancode_runtime_revision: context.scancode_runtime_revision.clone(),
         scancode_runtime_dirty: context.scancode_runtime_dirty,
         scancode_runtime_diff_hash: context.scancode_runtime_diff_hash.clone(),
+        docker_memory_limit: scancode_docker_memory_limit(context).map(str::to_string),
+        docker_memory_swap_limit: scancode_docker_memory_swap_limit(context).map(str::to_string),
         scancode_json: cache_json_path(cache_dir),
         scancode_stdout: cache_stdout,
     };
@@ -1924,6 +1961,8 @@ mod tests {
                 "-clupe".to_string(),
                 "--system-package".to_string(),
                 "--strip-root".to_string(),
+                "--processes".to_string(),
+                "4".to_string(),
             ],
             provenant_bin: PathBuf::from("/tmp/project/target/release/provenant"),
             provenant_json: PathBuf::from(
@@ -1965,6 +2004,9 @@ mod tests {
             scancode_runtime_revision: context.scancode_runtime_revision.clone(),
             scancode_runtime_dirty: context.scancode_runtime_dirty,
             scancode_runtime_diff_hash: context.scancode_runtime_diff_hash.clone(),
+            docker_memory_limit: scancode_docker_memory_limit(context).map(str::to_string),
+            docker_memory_swap_limit: scancode_docker_memory_swap_limit(context)
+                .map(str::to_string),
             scancode_json: cache_json_path(cache_dir),
             scancode_stdout: None,
         };
@@ -2231,6 +2273,9 @@ mod tests {
 
         let args = build_scancode_docker_args(&context);
 
+        assert!(args.windows(2).any(|pair| pair == ["--memory", "12g"]));
+        assert!(args.windows(2).any(|pair| pair == ["--memory-swap", "12g"]));
+
         assert!(
             args.windows(2)
                 .any(|pair| pair == ["-e", "SCANCODE_CACHE=/tmp/scancode-cache"])
@@ -2260,6 +2305,35 @@ mod tests {
         let args = build_provenant_args(&context);
 
         assert!(args.iter().any(|arg| arg == "--no-license-index-cache"));
+        assert!(args.windows(2).any(|pair| pair == ["--processes", "4"]));
+    }
+
+    #[test]
+    fn cache_validation_rejects_docker_memory_mismatch() {
+        let temp_root = unique_temp_dir("cache-memory-mismatch");
+        let cache_dir = temp_root.join("cache");
+        fs::create_dir_all(&cache_dir).unwrap();
+        fs::write(cache_json_path(&cache_dir), "{}\n").unwrap();
+
+        let mut context = test_context();
+        context.target_scancode_cache_identity = Some("defectdojo@rev".to_string());
+        context.scancode_cache_dir = Some(cache_dir.clone());
+        context.scancode_cache_key = Some(build_scancode_cache_key(&context).unwrap());
+
+        write_valid_cache_manifest(&cache_dir, &context);
+
+        let manifest_path = cache_manifest_path(&cache_dir);
+        let mut manifest: ScancodeCacheEntryManifest =
+            serde_json::from_reader(BufReader::new(File::open(&manifest_path).unwrap())).unwrap();
+        manifest.docker_memory_limit = Some("8g".to_string());
+        write_pretty_json(&manifest_path, &manifest).unwrap();
+
+        let error = validate_scancode_cache_hit(&context)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("docker memory limit mismatch"));
+
+        let _ = fs::remove_dir_all(&temp_root);
     }
 
     #[test]
