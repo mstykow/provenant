@@ -1242,11 +1242,11 @@ fn apply_package_reference_following_resolves_absolute_rootfs_license_reference(
         .expect("service file should exist");
     assert_eq!(
         service.license_expression.as_deref(),
-        Some("gpl-2.0-plus AND gpl-2.0")
+        Some("gpl-2.0 AND gpl-2.0-plus")
     );
     assert_eq!(
         service.license_detections[0].license_expression_spdx,
-        "GPL-2.0-or-later AND GPL-2.0-only"
+        "GPL-2.0-only AND GPL-2.0-or-later"
     );
     assert_eq!(service.license_detections[0].matches.len(), 2);
     assert_eq!(
@@ -1331,7 +1331,7 @@ fn apply_package_reference_following_falls_back_to_root_when_package_missing() {
 }
 
 #[test]
-fn apply_package_reference_following_prefers_nearest_ancestor_license_file() {
+fn apply_package_reference_following_falls_back_to_repo_root_instead_of_intermediate_ancestor() {
     let mut repo_root_license = file("project/LICENSE");
     repo_root_license.license_expression = Some("mit".to_string());
     repo_root_license.license_detections = vec![crate::models::LicenseDetection {
@@ -1454,8 +1454,8 @@ fn apply_package_reference_following_prefers_nearest_ancestor_license_file() {
         &[],
         &snapshot,
     )
-    .expect("nearest ancestor LICENSE should resolve");
-    assert_eq!(resolved.path, "project/java/LICENSE");
+    .expect("repo root LICENSE should resolve");
+    assert_eq!(resolved.path, "project/LICENSE");
 
     apply_package_reference_following(&mut files, &mut packages);
 
@@ -1468,20 +1468,20 @@ fn apply_package_reference_following_prefers_nearest_ancestor_license_file() {
         Some("apache-2.0 AND mit")
     );
     assert_eq!(source.license_detections.len(), 2);
-    let combined = source
+    let followed = source
         .license_detections
         .iter()
-        .find(|detection| detection.license_expression_spdx == "Apache-2.0 AND MIT")
-        .expect("combined followed detection should exist");
-    assert_eq!(combined.detection_log, ["unknown-reference-to-local-file"]);
+        .find(|detection| detection.license_expression_spdx == "MIT")
+        .expect("followed MIT detection should exist");
+    assert_eq!(followed.detection_log, ["unknown-reference-to-local-file"]);
     assert!(
         source
             .license_detections
             .iter()
             .any(|detection| detection.license_expression_spdx == "Apache-2.0")
     );
-    assert!(combined.matches.iter().any(|detection_match| {
-        detection_match.from_file.as_deref() == Some("project/java/LICENSE")
+    assert!(followed.matches.iter().any(|detection_match| {
+        detection_match.from_file.as_deref() == Some("project/LICENSE")
     }));
 }
 

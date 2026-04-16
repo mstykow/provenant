@@ -932,7 +932,7 @@ pub(super) fn resolve_referenced_resource(
     if is_absolute {
         candidates.push(referenced_filename.clone());
     }
-    for base in ancestor_reference_bases(current_path) {
+    if let Some(base) = current_reference_base(current_path) {
         candidates.push(join_reference_candidate(&base, &referenced_filename));
     }
 
@@ -966,22 +966,10 @@ pub(super) fn resolve_referenced_resource(
     None
 }
 
-fn ancestor_reference_bases(current_path: &str) -> Vec<String> {
-    let mut bases = Vec::new();
-    let mut current = Path::new(current_path).parent();
-
-    while let Some(path) = current {
-        let normalized = path.to_string_lossy().replace('\\', "/");
-        bases.push(normalized.clone());
-
-        if normalized.is_empty() {
-            break;
-        }
-
-        current = path.parent();
-    }
-
-    bases
+fn current_reference_base(current_path: &str) -> Option<String> {
+    Path::new(current_path)
+        .parent()
+        .map(|path| path.to_string_lossy().replace('\\', "/"))
 }
 
 fn explicit_reference_root(snapshot: &ReferenceFollowSnapshot) -> Option<&str> {
