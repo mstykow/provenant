@@ -410,6 +410,10 @@ pub fn prepare_text_line(line: &str) -> String {
     s = s.replace(['*', '#', '%'], " ");
     s = s.trim_matches(|c: char| " \\/*#%;".contains(c)).to_string();
 
+    if (s.contains("<a") || s.contains("href=")) && (s.contains("\\\"") || s.contains("\\'")) {
+        s = s.replace("\\\"", "\"").replace("\\'", "'");
+    }
+
     if s.contains('@') {
         s = LEADING_JAVADOC_AT_TAG_RE.replace(&s, " ").into_owned();
     }
@@ -707,6 +711,21 @@ mod tests {
             "got: {prepared:?}"
         );
         assert!(prepared.contains("Privacy Policy"), "got: {prepared:?}");
+        assert!(!prepared.contains("href="), "got: {prepared:?}");
+        assert!(!prepared.contains("<a"), "got: {prepared:?}");
+    }
+
+    #[test]
+    fn test_prepare_unwraps_json_escaped_http_anchor() {
+        let prepared = prepare_text_line(
+            r#"&copy; <a href=\"http://www.openstreetmap.org/copyright\">OpenStreetMap</a>"#,
+        );
+        assert!(prepared.contains("(c)"), "got: {prepared:?}");
+        assert!(
+            prepared.contains("http://www.openstreetmap.org/copyright"),
+            "got: {prepared:?}"
+        );
+        assert!(prepared.contains("OpenStreetMap"), "got: {prepared:?}");
         assert!(!prepared.contains("href="), "got: {prepared:?}");
         assert!(!prepared.contains("<a"), "got: {prepared:?}");
     }
