@@ -285,6 +285,70 @@ dependencies:
     }
 
     #[test]
+    fn test_environment_top_level_dependencies_preserve_build_string_separately() {
+        let temp_dir = TempDir::new().unwrap();
+        let env_path = temp_dir.path().join("environment.yml");
+        fs::write(
+            &env_path,
+            r#"
+name: test-env
+channels:
+  - defaults
+dependencies:
+  - bzip2=1.0.8=h4bc722e_7
+  - defaults::openssl=3.4.0=h7b32b05_1
+"#,
+        )
+        .unwrap();
+
+        let package_data = CondaEnvironmentYmlParser::extract_first_package(&env_path);
+
+        let bzip2 = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:conda/bzip2@1.0.8"))
+            .expect("conda bzip2 dependency missing");
+        assert_eq!(
+            bzip2.extracted_requirement.as_deref(),
+            Some("=1.0.8=h4bc722e_7")
+        );
+        assert_eq!(
+            bzip2
+                .extra_data
+                .as_ref()
+                .and_then(|m| m.get("build_string"))
+                .and_then(|v| v.as_str()),
+            Some("h4bc722e_7")
+        );
+
+        let openssl = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:conda/defaults/openssl@3.4.0"))
+            .expect("conda openssl dependency missing");
+        assert_eq!(
+            openssl.extracted_requirement.as_deref(),
+            Some("=3.4.0=h7b32b05_1")
+        );
+        assert_eq!(
+            openssl
+                .extra_data
+                .as_ref()
+                .and_then(|m| m.get("channel"))
+                .and_then(|v| v.as_str()),
+            Some("defaults")
+        );
+        assert_eq!(
+            openssl
+                .extra_data
+                .as_ref()
+                .and_then(|m| m.get("build_string"))
+                .and_then(|v| v.as_str()),
+            Some("h7b32b05_1")
+        );
+    }
+
+    #[test]
     fn test_environment_yaml_without_conda_structure_returns_no_packages() {
         let temp_dir = TempDir::new().unwrap();
         let env_path = temp_dir.path().join("pod-with-api-env.yaml");

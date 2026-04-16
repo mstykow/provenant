@@ -591,6 +591,28 @@ fn parse_environment_string_dependency(dep_str: &str) -> Option<Dependency> {
     create_conda_dependency(namespace, channel_url, dep_without_ns, "dependencies")
 }
 
+fn parse_conda_exact_requirement(req_no_space: &str) -> (Option<String>, Option<String>) {
+    let exact = req_no_space
+        .strip_prefix("==")
+        .or_else(|| req_no_space.strip_prefix('='));
+
+    let Some(exact) = exact else {
+        return (None, None);
+    };
+
+    if exact.is_empty() {
+        return (None, None);
+    }
+
+    match exact.split_once('=') {
+        Some((version, build_string)) if !version.is_empty() => (
+            Some(truncate_field(version.to_string())),
+            (!build_string.is_empty()).then(|| truncate_field(build_string.to_string())),
+        ),
+        _ => (Some(truncate_field(exact.to_string())), None),
+    }
+}
+
 fn parse_conda_channel_prefix(dep_str: &str) -> (Option<&str>, Option<&str>, &str) {
     if let Some((ns, rest)) = dep_str.rsplit_once("::") {
         if ns.contains('/') || ns.contains(':') {
@@ -620,24 +642,20 @@ fn create_conda_dependency(
     let name = name_match.as_str().trim();
     let rest = dep[name_match.end()..].trim();
 
-    let (version, is_pinned, extracted_requirement) = if rest.is_empty() {
-        (None, false, Some(String::new()))
+    let (version, build_string, is_pinned, extracted_requirement) = if rest.is_empty() {
+        (None, None, false, Some(String::new()))
     } else {
         let req_no_space = rest.replace(' ', "");
         let is_exact = req_no_space.starts_with("=") || req_no_space.starts_with("==");
-        let parsed_version = if is_exact {
-            Some(truncate_field(
-                req_no_space
-                    .trim_start_matches('=')
-                    .trim_start_matches('=')
-                    .to_string(),
-            ))
+        let (parsed_version, parsed_build_string) = if is_exact {
+            parse_conda_exact_requirement(&req_no_space)
         } else {
-            None
+            (None, None)
         };
 
         (
             parsed_version,
+            parsed_build_string,
             is_exact,
             Some(truncate_field(rest.to_string())),
         )
@@ -668,6 +686,9 @@ fn create_conda_dependency(
             "channel_url".to_string(),
             serde_json::json!(truncate_field(channel_url.to_string())),
         );
+    }
+    if let Some(build_string) = build_string {
+        extra_data.insert("build_string".to_string(), serde_json::json!(build_string));
     }
 
     Some(Dependency {
