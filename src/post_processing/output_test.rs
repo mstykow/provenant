@@ -1490,6 +1490,46 @@ fn apply_package_reference_following_prefers_intermediate_ancestor_for_source_tr
 }
 
 #[test]
+fn reference_root_language_accepts_project_scope_but_not_bare_root_directory() {
+    let project_root_notice = Match {
+        license_expression: "unknown-license-reference".to_string(),
+        license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
+        from_file: Some("project/src/file.c".to_string()),
+        start_line: LineNumber::ONE,
+        end_line: LineNumber::ONE,
+        matcher: Some("2-aho".to_string()),
+        score: MatchScore::MAX,
+        matched_length: Some(10),
+        match_coverage: Some(100.0),
+        rule_relevance: Some(100),
+        rule_identifier: Some("unknown-license-reference_see-license_1.RULE".to_string()),
+        rule_url: None,
+        matched_text: Some(
+            "This source code is licensed under the BSD-style license found in the LICENSE file in the root directory of this project.".to_string(),
+        ),
+        referenced_filenames: Some(vec!["LICENSE".to_string()]),
+        matched_text_diagnostics: None,
+    };
+    assert!(
+        super::reference_following::detection_match_explicitly_mentions_reference_root(
+            &project_root_notice
+        )
+    );
+
+    let bare_root_notice = Match {
+        matched_text: Some(
+            "This source code is licensed under the BSD-style license found in the LICENSE file in the root directory.".to_string(),
+        ),
+        ..project_root_notice
+    };
+    assert!(
+        !super::reference_following::detection_match_explicitly_mentions_reference_root(
+            &bare_root_notice
+        )
+    );
+}
+
+#[test]
 fn apply_package_reference_following_falls_back_past_nested_root_to_repo_root() {
     let mut root_license = file("LICENSE");
     root_license.license_expression = Some("mit".to_string());

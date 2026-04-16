@@ -1068,17 +1068,27 @@ fn detection_match_targets_reference(detection_match: &Match, referenced_filenam
         })
 }
 
-fn detection_match_explicitly_mentions_reference_root(detection_match: &Match) -> bool {
+pub(super) fn detection_match_explicitly_mentions_reference_root(detection_match: &Match) -> bool {
     let Some(matched_text) = detection_match.matched_text.as_deref() else {
         return false;
     };
     let lower = matched_text.to_ascii_lowercase();
 
-    lower.contains("root directory of this source tree")
+    mentions_named_root_reference(&lower, "source tree")
+        || mentions_named_root_reference(&lower, "project")
+        || mentions_named_root_reference(&lower, "repository")
         || lower.contains("project root")
+        || lower.contains("repository root")
         || lower.contains("root of the program")
         || lower.contains("root opencv directory")
         || lower.contains("at the project root")
+}
+
+fn mentions_named_root_reference(text: &str, scope: &str) -> bool {
+    text.contains(&format!("root directory of this {scope}"))
+        || text.contains(&format!("root directory of the {scope}"))
+        || text.contains(&format!("root of this {scope}"))
+        || text.contains(&format!("root of the {scope}"))
 }
 
 fn should_accept_ancestor_reference_target(
