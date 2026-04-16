@@ -710,6 +710,7 @@ fn apply_reference_following_to_detection(
             .filter_map(|referenced_filename| {
                 resolve_referenced_resource(
                     referenced_filename,
+                    detection,
                     current_path,
                     package_uids,
                     snapshot,
@@ -918,6 +919,7 @@ fn sanitize_referenced_filename(name: &str) -> String {
 
 pub(super) fn resolve_referenced_resource(
     referenced_filename: &str,
+    detection: &LicenseDetection,
     current_path: &str,
     package_uids: &[PackageUid],
     snapshot: &ReferenceFollowSnapshot,
@@ -928,33 +930,53 @@ pub(super) fn resolve_referenced_resource(
         return None;
     }
 
+    let search_ancestors =
+        should_search_ancestor_reference_candidates(detection, &referenced_filename);
+    let prefer_ancestors = prefers_ancestor_reference_candidates(detection, &referenced_filename);
+
     let mut candidates = Vec::new();
     if is_absolute {
-        candidates.push(referenced_filename.clone());
+        candidates.push((referenced_filename.clone(), false));
     }
     if let Some(base) = current_reference_base(current_path) {
-        candidates.push(join_reference_candidate(&base, &referenced_filename));
+        candidates.push((join_reference_candidate(&base, &referenced_filename), false));
     }
 
     for package_uid in package_uids {
         if let Some(dirs) = snapshot.package_manifest_dirs_by_uid.get(package_uid) {
             for dir in dirs {
-                candidates.push(join_reference_candidate(dir, &referenced_filename));
+                candidates.push((join_reference_candidate(dir, &referenced_filename), false));
             }
         }
     }
 
+    if search_ancestors && prefer_ancestors {
+        for base in bounded_ancestor_reference_bases(current_path, snapshot) {
+            candidates.push((join_reference_candidate(&base, &referenced_filename), true));
+        }
+    }
+
     if let Some(root) = explicit_reference_root(snapshot) {
-        candidates.push(join_reference_candidate(root, &referenced_filename));
+        candidates.push((join_reference_candidate(root, &referenced_filename), false));
+    }
+
+    if search_ancestors && !prefer_ancestors {
+        for base in bounded_ancestor_reference_bases(current_path, snapshot) {
+            candidates.push((join_reference_candidate(&base, &referenced_filename), true));
+        }
     }
 
     let mut seen = HashSet::new();
-    for candidate in candidates {
+    for (candidate, is_ancestor_candidate) in candidates {
         if !seen.insert(candidate.clone()) {
             continue;
         }
 
         if let Some(target) = snapshot.files_by_path.get(&candidate) {
+            if is_ancestor_candidate && !should_accept_ancestor_reference_target(detection, target)
+            {
+                continue;
+            }
             return Some(target.clone());
         }
 
@@ -970,6 +992,125 @@ fn current_reference_base(current_path: &str) -> Option<String> {
     Path::new(current_path)
         .parent()
         .map(|path| path.to_string_lossy().replace('\\', "/"))
+}
+
+fn bounded_ancestor_reference_bases(
+    current_path: &str,
+    snapshot: &ReferenceFollowSnapshot,
+) -> Vec<String> {
+    let Some(root) = nearest_reference_root(current_path, snapshot) else {
+        return Vec::new();
+    };
+
+    let mut bases = Vec::new();
+    let mut current = Path::new(current_path).parent().and_then(Path::parent);
+
+    while let Some(path) = current {
+        let normalized = path.to_string_lossy().replace('\\', "/");
+        if normalized.is_empty() || normalized == root || !path_is_within_root(&normalized, root) {
+            break;
+        }
+        bases.push(normalized.clone());
+        current = path.parent();
+    }
+
+    bases
+}
+
+fn nearest_reference_root<'a>(
+    current_path: &str,
+    snapshot: &'a ReferenceFollowSnapshot,
+) -> Option<&'a str> {
+    snapshot
+        .root_paths
+        .iter()
+        .filter(|root| !root.is_empty() && path_is_within_root(current_path, root))
+        .max_by_key(|root| root.len())
+        .map(|root| root.as_str())
+}
+
+fn should_search_ancestor_reference_candidates(
+    detection: &LicenseDetection,
+    referenced_filename: &str,
+) -> bool {
+    has_concrete_reference_expression(detection)
+        || detection.matches.iter().any(|detection_match| {
+            detection_match_targets_reference(detection_match, referenced_filename)
+                && detection_match_explicitly_mentions_reference_root(detection_match)
+        })
+}
+
+fn prefers_ancestor_reference_candidates(
+    detection: &LicenseDetection,
+    referenced_filename: &str,
+) -> bool {
+    detection.matches.iter().any(|detection_match| {
+        detection_match_targets_reference(detection_match, referenced_filename)
+            && detection_match_explicitly_mentions_reference_root(detection_match)
+    })
+}
+
+fn has_concrete_reference_expression(detection: &LicenseDetection) -> bool {
+    !matches!(
+        detection.license_expression.as_str(),
+        "unknown-license-reference" | "free-unknown"
+    )
+}
+
+fn detection_match_targets_reference(detection_match: &Match, referenced_filename: &str) -> bool {
+    detection_match
+        .referenced_filenames
+        .as_ref()
+        .is_some_and(|filenames| {
+            filenames
+                .iter()
+                .any(|filename| normalize_referenced_filename(filename) == referenced_filename)
+        })
+}
+
+fn detection_match_explicitly_mentions_reference_root(detection_match: &Match) -> bool {
+    let Some(matched_text) = detection_match.matched_text.as_deref() else {
+        return false;
+    };
+    let lower = matched_text.to_ascii_lowercase();
+
+    lower.contains("root directory of this source tree")
+        || lower.contains("project root")
+        || lower.contains("root of the program")
+        || lower.contains("root opencv directory")
+        || lower.contains("at the project root")
+}
+
+fn should_accept_ancestor_reference_target(
+    detection: &LicenseDetection,
+    target: &ResolvedReferenceTarget,
+) -> bool {
+    if !has_concrete_reference_expression(detection) {
+        return true;
+    }
+
+    if detection.license_expression.contains(" OR ") {
+        return false;
+    }
+
+    let Some(referenced_expression) = combine_detection_expressions(&target.detections) else {
+        return false;
+    };
+
+    let current_keys: HashSet<_> = parse_expression(&detection.license_expression)
+        .ok()
+        .map(|expr| expr.license_keys())
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+    let referenced_keys: HashSet<_> = parse_expression(&referenced_expression)
+        .ok()
+        .map(|expr| expr.license_keys())
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
+    !referenced_keys.is_empty() && referenced_keys.is_subset(&current_keys)
 }
 
 fn explicit_reference_root(snapshot: &ReferenceFollowSnapshot) -> Option<&str> {
