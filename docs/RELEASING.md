@@ -83,7 +83,7 @@ On every release attempt, the script:
 2. Fetches the latest `origin/develop` for `reference/scancode-toolkit`.
 3. Updates the submodule checkout if the upstream commit changed.
 4. Verifies that Provenant's output-format version is still aligned with the pinned ScanCode submodule and stops early if contract updates are required.
-5. Regenerates `resources/license_detection/license_index.zst`.
+5. Regenerates `resources/license_detection/license_index.zst` from the pinned ScanCode dataset plus the checked-in build policy manifest at `resources/license_detection/index_build_policy.toml` and any local overlay files under `resources/license_detection/overlay/`.
 6. In `--execute` mode, commits that license-data refresh as `chore: update license rules/licenses to latest` when needed.
 7. Runs `cargo release <patch|minor|major>` in dry-run or execute mode.
 

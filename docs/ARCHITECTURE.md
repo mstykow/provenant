@@ -625,8 +625,11 @@ For detailed documentation of the license detection pipeline, matching algorithm
 The binary ships with a built-in license index embedded at compile time. This eliminates the need for external files during normal usage:
 
 - **Embedded artifact**: `resources/license_detection/license_index.zst`
+- **Embedded build policy**: compile-time-bundled from `resources/license_detection/index_build_policy.toml`
+- **Embedded overlay files**: compile-time-bundled from `resources/license_detection/overlay/`
 - **Format**: MessagePack-serialized, zstd-compressed `EmbeddedLoaderSnapshot` data
 - **Contents**: Sorted `LoadedRule` and `LoadedLicense` values derived from the ScanCode rules dataset
+- **Structured provenance surface**: `headers[0].extra_data.license_index_provenance`
 
 ### Loader/Build Stage Separation
 
@@ -661,6 +664,9 @@ The license detection system uses a two-stage loading process:
 
 - Parse the ScanCode rules and licenses dataset
 - Normalize rule/license data before embedding
+- Apply the checked-in index build policy before sorting/serialization
+- Apply the single downstream overlay directory (ignore via policy manifest, add/replace via `.RULE` / `.LICENSE` files)
+- Fail fast on stale ignore ids or redundant overlays that upstream has absorbed verbatim
 - Serialize sorted `LoadedRule` / `LoadedLicense` snapshot bytes
 - Compress the serialized bytes for embedding
 
@@ -700,6 +706,10 @@ Maintainers can regenerate the embedded license artifact when the ScanCode rules
 
 # Regenerate the artifact
 cargo run --manifest-path xtask/Cargo.toml --bin generate-index-artifact
+
+# The generated artifact reflects the compile-time-bundled policy in
+# resources/license_detection/index_build_policy.toml, so policy edits need the
+# same regeneration step.
 
 # Commit the updated artifact
 git add resources/license_detection/license_index.zst

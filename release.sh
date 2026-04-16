@@ -39,23 +39,26 @@ cd ../..
 
 if [ "$CURRENT_COMMIT" != "$NEW_COMMIT" ]; then
     echo "✅ License data updated: $CURRENT_COMMIT → $NEW_COMMIT"
-    echo "🔎 Verifying ScanCode output format version sync..."
-    ./scripts/check_scancode_output_format_sync.sh
-    echo "🔧 Regenerating embedded license index artifact..."
-    cargo run --manifest-path xtask/Cargo.toml --bin generate-index-artifact
-    
-    if [ -n "$EXECUTE_FLAG" ]; then
-        git add reference/scancode-toolkit resources/license_detection/license_index.zst
-        git commit -m "chore: update license rules/licenses to latest"
-        echo "✅ Committed license data update"
-    else
-        echo "ℹ️  License data would be updated (dry-run mode)"
-        git restore reference/scancode-toolkit resources/license_detection/license_index.zst
-    fi
 else
     echo "✅ License data already up to date"
-    echo "🔎 Verifying ScanCode output format version sync..."
-    ./scripts/check_scancode_output_format_sync.sh
+fi
+
+echo "🔎 Verifying ScanCode output format version sync..."
+./scripts/check_scancode_output_format_sync.sh
+echo "🔧 Regenerating embedded license index artifact..."
+cargo run --manifest-path xtask/Cargo.toml --bin generate-index-artifact
+
+if [ -n "$EXECUTE_FLAG" ] && [ "$CURRENT_COMMIT" != "$NEW_COMMIT" ]; then
+    git add reference/scancode-toolkit resources/license_detection/license_index.zst
+    git commit -m "chore: update license rules/licenses to latest"
+    echo "✅ Committed license data update"
+elif [ -z "$EXECUTE_FLAG" ]; then
+    echo "ℹ️  Embedded license index artifact regenerated for validation (dry-run mode)"
+    git restore resources/license_detection/license_index.zst
+
+    if [ "$CURRENT_COMMIT" != "$NEW_COMMIT" ]; then
+        git restore reference/scancode-toolkit
+    fi
 fi
 
 # Run cargo-release
