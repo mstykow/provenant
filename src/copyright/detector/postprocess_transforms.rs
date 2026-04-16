@@ -2152,7 +2152,8 @@ pub fn drop_json_description_metadata_copyrights_and_holders(
         let explicit_attribution = copyright.copyright.starts_with("(c) ")
             && (copyright.copyright.contains("http://")
                 || copyright.copyright.contains("https://"));
-        let keep = !description_like || JSON_COPYRIGHT_KEY_RE.is_match(&window) || explicit_attribution;
+        let keep =
+            !description_like || JSON_COPYRIGHT_KEY_RE.is_match(&window) || explicit_attribution;
         if keep {
             retained_spans.insert((copyright.start_line.get(), copyright.end_line.get()));
         }
@@ -5224,7 +5225,9 @@ pub fn drop_url_embedded_suffix_variants_same_span(
                 if longer.start_line != shorter.start_line || longer.end_line != shorter.end_line {
                     continue;
                 }
-                if longer.copyright == shorter.copyright || !longer.copyright.starts_with(&shorter.copyright) {
+                if longer.copyright == shorter.copyright
+                    || !longer.copyright.starts_with(&shorter.copyright)
+                {
                     continue;
                 }
 

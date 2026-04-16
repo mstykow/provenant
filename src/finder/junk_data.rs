@@ -21,6 +21,7 @@ const JUNK_HOSTS_AND_DOMAINS: &[&str] = &[
     "maps.google.com",
     "hostname",
     "localhost",
+    "os.environ",
 ];
 
 const JUNK_IPS: &[&str] = &["1.2.3.4"];
