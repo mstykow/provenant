@@ -111,7 +111,7 @@ If you do not need that parser-or you are embedding Provenant in a project that 
 cargo build --release --no-default-features
 ```
 
-> **Note**: The binary includes a built-in compact license index. The `reference/scancode-toolkit/` submodule is only needed for developers updating the embedded license data, using maintainer commands that depend on it, or working with custom license rules.
+> **Note**: The binary includes a built-in compact license index. The `reference/scancode-toolkit/` submodule is only needed for developers updating the embedded license data, using maintainer commands that depend on it, or maintaining Provenant's built-in license dataset.
 
 ### Use as a Library
 

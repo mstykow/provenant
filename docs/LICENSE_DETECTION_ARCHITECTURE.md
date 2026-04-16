@@ -12,7 +12,8 @@ The license detection system is a multi-phase, multi-strategy detection engine t
 
 | Flag                         | Purpose                                                |
 | ---------------------------- | ------------------------------------------------------ |
-| `--license-rules-path`       | Override to load custom license/rules from a directory |
+| `--license-dataset-path`     | Override to load a custom license dataset root         |
+| `--export-license-dataset`   | Export the effective embedded license dataset and exit |
 | `--license`                  | Enable license scanning                                |
 | `--license-text`             | Include matched text in output                         |
 | `--license-text-diagnostics` | Highlight unmatched words inside matched text          |
@@ -27,7 +28,9 @@ The license detection system is a multi-phase, multi-strategy detection engine t
 
 > This document describes the current public license-detection surface and the repository's current engine/module layout.
 
-**Custom rules**: Use `--license-rules-path /path/to/rules` to load from a custom directory containing `.LICENSE` and `.RULE` files. This is an advanced maintainer/expert override rather than the recommended default workflow; normal scans should keep using the embedded artifact. Custom-rule scans are also cached using a content fingerprint of the loaded rules, so the index is rebuilt automatically when the rules change.
+**Custom license datasets**: Use `--license-dataset-path /path/to/dataset-root` to load from a custom dataset root containing `manifest.json`, `rules/`, and `licenses/`. This is an advanced override rather than the recommended default workflow; normal scans should keep using the embedded artifact. Custom-dataset scans are cached using a content fingerprint of the loaded effective rules/licenses, so the index is rebuilt automatically when the dataset changes.
+
+**Dataset export**: Use `--export-license-dataset /path/to/output-dir` to dump the effective embedded dataset into that dataset-root layout so you can inspect or edit it before reusing it with `--license-dataset-path`.
 
 **Index build policy**: Provenant also applies a checked-in build policy from `resources/license_detection/index_build_policy.toml` before fingerprinting and index construction. This manifest carries the small curation decisions (ignored rule/license ids), while downstream add/replace overlays live as real ScanCode-format files under `resources/license_detection/overlay/`. This keeps local curation in the same `.RULE` / `.LICENSE` syntax as upstream without severing the broader dataset dependency. Stale ignore ids and overlays that become identical to upstream now fail the build so maintainers get an explicit prompt to remove redundant downstream curation.
 
@@ -39,7 +42,7 @@ Provenant caches the built `LicenseIndex` as an rkyv-serialized file to avoid re
 - **Default location**: Under the shared cache root selected by `--cache-dir`, `PROVENANT_CACHE`, or the platform-native default
 - **Opt-out**: `--no-license-index-cache` skips both persistent reads and persistent writes for that run
 - **Invalidation**: Automatic when the source rules change (fingerprint mismatch) or when `--reindex` is passed
-- **Fingerprinting**: Embedded rules use SHA-256 of the raw artifact bytes; custom rules use SHA-256 of the sorted rules and licenses
+- **Fingerprinting**: Embedded rules use SHA-256 of the raw artifact bytes; custom license datasets use SHA-256 of the sorted loaded rules and licenses
 
 ### Current Public Output Surface
 
@@ -65,7 +68,7 @@ This document is the evergreen maintainer reference for the current public licen
 ```text
 main.rs::init_license_engine()
     │
-    ├── No --license-rules-path specified (default)
+    ├── No --license-dataset-path specified (default)
     │       ↓
     │   Compute SHA-256 fingerprint of embedded artifact bytes
     │       ↓
@@ -77,14 +80,11 @@ main.rs::init_license_engine()
     │                 → Build LicenseIndex
     │                 → Save rkyv cache with fingerprint prefix
     │
-    └── --license-rules-path specified
+    └── --license-dataset-path specified
             ↓
-        Load .LICENSE and .RULE files from directory
+        Validate dataset root (manifest.json + rules/ + licenses/)
             ↓
-        Parse into LoadedRule/LoadedLicense
-            ↓
-        Apply the checked-in build policy
-            + bundled overlay files from resources/license_detection/overlay/
+        Load .LICENSE and .RULE files from dataset directories
             ↓
         Compute SHA-256 fingerprint of sorted effective rules + licenses
             ↓
@@ -132,7 +132,7 @@ The loading process is split into two distinct stages:
 - Build token dictionary and automatons
 - Create `LicenseIndex` and `SpdxMapping`
 
-The active curation is surfaced in structured outputs at `headers[0].extra_data.license_index_provenance`, which includes the checked-in policy path, a curation fingerprint, and the exact ignored/added/replaced rule and license identifiers applied for that scan.
+The active dataset identity is surfaced in structured outputs at `headers[0].extra_data.license_index_provenance`, which includes the dataset source, dataset fingerprint, and, for embedded datasets, the exact ignored/added/replaced rule and license identifiers applied to build that embedded dataset.
 
 This separation enables:
 
@@ -343,7 +343,7 @@ Candidate ranking uses a compact score vector built from resemblance, containmen
 
 ## License Data Loading
 
-### Source Files (for custom rules / regeneration)
+### Source Files (for custom datasets / regeneration)
 
 **Location**: `reference/scancode-toolkit/src/licensedcode/data/`
 
