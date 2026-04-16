@@ -8,13 +8,11 @@ use crate::license_detection::expression::parse_expression;
 use crate::license_detection::models::{LoadedLicense, LoadedRule, RuleKind};
 use crate::license_detection::rules::{parse_license_str_to_loaded, parse_rule_str_to_loaded};
 use crate::models::LicenseIndexProvenance;
-use crate::utils::hash::calculate_sha256;
 
 pub const DEFAULT_INDEX_BUILD_POLICY_PATH: &str =
     "resources/license_detection/index_build_policy.toml";
 pub const DEFAULT_INDEX_BUILD_OVERLAY_ROOT: &str = "resources/license_detection/overlay";
 pub const EMBEDDED_LICENSE_INDEX_SOURCE: &str = "embedded-artifact";
-pub const CUSTOM_RULES_LICENSE_INDEX_SOURCE: &str = "custom-rules";
 
 const DEFAULT_INDEX_BUILD_POLICY_TEXT: &str =
     include_str!("../../resources/license_detection/index_build_policy.toml");
@@ -39,27 +37,6 @@ static DEFAULT_INDEX_BUILD_POLICY: LazyLock<IndexBuildPolicy> = LazyLock::new(||
             DEFAULT_INDEX_BUILD_POLICY_PATH, error
         )
     })
-});
-
-static DEFAULT_INDEX_BUILD_POLICY_FINGERPRINT: LazyLock<String> = LazyLock::new(|| {
-    let mut fingerprint_material = Vec::new();
-    fingerprint_material.extend_from_slice(DEFAULT_INDEX_BUILD_POLICY_TEXT.as_bytes());
-
-    for overlay in BUNDLED_RULE_OVERLAY_FILES {
-        fingerprint_material.extend_from_slice(overlay.identifier.as_bytes());
-        fingerprint_material.push(0);
-        fingerprint_material.extend_from_slice(overlay.contents.as_bytes());
-        fingerprint_material.push(0xFF);
-    }
-
-    for overlay in BUNDLED_LICENSE_OVERLAY_FILES {
-        fingerprint_material.extend_from_slice(overlay.identifier.as_bytes());
-        fingerprint_material.push(0);
-        fingerprint_material.extend_from_slice(overlay.contents.as_bytes());
-        fingerprint_material.push(0xFF);
-    }
-
-    calculate_sha256(&fingerprint_material).to_string()
 });
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
@@ -95,8 +72,6 @@ impl IndexBuildPolicy {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AppliedIndexBuildPolicy {
-    pub policy_path: String,
-    pub curation_fingerprint: String,
     pub ignored_rules: Vec<String>,
     pub ignored_licenses: Vec<String>,
     pub ignored_rules_due_to_licenses: Vec<String>,
@@ -132,17 +107,14 @@ impl AppliedIndexBuildPolicy {
         }
     }
 
-    fn with_default_provenance(mut self) -> Self {
-        self.policy_path = DEFAULT_INDEX_BUILD_POLICY_PATH.to_string();
-        self.curation_fingerprint = default_index_build_policy_fingerprint().to_string();
-        self
-    }
-
-    pub fn to_license_index_provenance(&self, source: &str) -> LicenseIndexProvenance {
+    pub fn to_license_index_provenance(
+        &self,
+        source: &str,
+        dataset_fingerprint: String,
+    ) -> LicenseIndexProvenance {
         LicenseIndexProvenance {
             source: source.to_string(),
-            policy_path: self.policy_path.clone(),
-            curation_fingerprint: self.curation_fingerprint.clone(),
+            dataset_fingerprint,
             ignored_rules: self.ignored_rules.clone(),
             ignored_licenses: self.ignored_licenses.clone(),
             ignored_rules_due_to_licenses: self.ignored_rules_due_to_licenses.clone(),
@@ -158,10 +130,6 @@ pub fn default_index_build_policy() -> &'static IndexBuildPolicy {
     &DEFAULT_INDEX_BUILD_POLICY
 }
 
-pub fn default_index_build_policy_fingerprint() -> &'static str {
-    DEFAULT_INDEX_BUILD_POLICY_FINGERPRINT.as_str()
-}
-
 pub fn apply_default_index_build_policy(
     loaded_rules: Vec<LoadedRule>,
     loaded_licenses: Vec<LoadedLicense>,
@@ -175,11 +143,7 @@ pub fn apply_default_index_build_policy(
         &overlay_rules,
         &overlay_licenses,
     )?;
-    Ok((
-        loaded_rules,
-        loaded_licenses,
-        report.with_default_provenance(),
-    ))
+    Ok((loaded_rules, loaded_licenses, report))
 }
 
 pub fn apply_index_build_policy(

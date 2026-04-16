@@ -8,6 +8,7 @@ use provenant::license_detection::build_policy::{
     DEFAULT_INDEX_BUILD_POLICY_PATH, EMBEDDED_LICENSE_INDEX_SOURCE,
     apply_default_index_build_policy,
 };
+use provenant::license_detection::dataset::compute_dataset_fingerprint_string;
 use provenant::license_detection::detect_scancode_spdx_license_list_version;
 use provenant::license_detection::embedded::schema::{EmbeddedLoaderSnapshot, SCHEMA_VERSION};
 use provenant::license_detection::rules::{
@@ -58,8 +59,9 @@ fn main() -> Result<()> {
         apply_default_index_build_policy(loaded_rules, loaded_licenses)?;
     loaded_rules = filtered_rules;
     loaded_licenses = filtered_licenses;
-    let license_index_provenance =
-        policy_report.to_license_index_provenance(EMBEDDED_LICENSE_INDEX_SOURCE);
+    let dataset_fingerprint = compute_dataset_fingerprint_string(&loaded_rules, &loaded_licenses)?;
+    let license_index_provenance = policy_report
+        .to_license_index_provenance(EMBEDDED_LICENSE_INDEX_SOURCE, dataset_fingerprint);
 
     if !policy_report.is_empty() {
         println!(
