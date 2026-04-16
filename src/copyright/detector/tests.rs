@@ -1,3 +1,10 @@
+use super::postprocess_transforms::{
+    drop_shadowed_c_sign_variants, drop_shadowed_year_only_copyright_prefixes_same_start_line,
+};
+use super::token_utils::{
+    collect_filtered_leaves, collect_holder_filtered_leaves, normalize_whitespace,
+    signal_lines_before_copy_line, strip_all_rights_reserved, tokens_to_string,
+};
 use super::*;
 use crate::models::LineNumber;
 use std::fs;
@@ -3528,7 +3535,7 @@ fn test_oprofile_authors_copyright() {
     let parsed_debug: Vec<String> = parsed
         .iter()
         .map(|n| {
-            let leaves: Vec<String> = crate::copyright::detector::collect_all_leaves(n)
+            let leaves: Vec<String> = super::token_utils::collect_all_leaves(n)
                 .iter()
                 .map(|t| format!("{}:{:?}", t.value, t.tag))
                 .collect();

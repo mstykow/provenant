@@ -143,7 +143,8 @@ pub fn extract_html_meta_name_copyright_content(
                 end_line: LineNumber::new(ln).unwrap(),
             });
 
-            if let Some(holder) = super::derive_holder_from_simple_copyright_string(&refined)
+            if let Some(holder) =
+                super::postprocess_transforms::derive_holder_from_simple_copyright_string(&refined)
                 && seen_h.insert((holder.clone(), ln))
             {
                 holders.push(HolderDetection {
@@ -1316,7 +1317,8 @@ pub fn extract_c_years_then_holder_lines(
                 });
             }
 
-            if let Some(h) = super::derive_holder_from_simple_copyright_string(&cr)
+            if let Some(h) =
+                super::postprocess_transforms::derive_holder_from_simple_copyright_string(&cr)
                 && seen_h.insert((*ln, h.clone()))
             {
                 holders.push(HolderDetection {
