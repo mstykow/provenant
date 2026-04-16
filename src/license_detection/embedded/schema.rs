@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
 
 use crate::license_detection::models::{LoadedLicense, LoadedRule};
+use crate::models::LicenseIndexProvenance;
 
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EmbeddedArtifactMetadata {
     pub spdx_license_list_version: String,
+    pub license_index_provenance: LicenseIndexProvenance,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

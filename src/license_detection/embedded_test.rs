@@ -88,6 +88,18 @@ fn serialize_loader_snapshot_to_bytes(
         schema_version: SCHEMA_VERSION,
         metadata: EmbeddedArtifactMetadata {
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: crate::models::LicenseIndexProvenance {
+                source: "embedded-artifact".to_string(),
+                policy_path: "resources/license_detection/index_build_policy.toml".to_string(),
+                curation_fingerprint: "test".to_string(),
+                ignored_rules: vec![],
+                ignored_licenses: vec![],
+                ignored_rules_due_to_licenses: vec![],
+                added_rules: vec![],
+                replaced_rules: vec![],
+                added_licenses: vec![],
+                replaced_licenses: vec![],
+            },
         },
         rules,
         licenses,
@@ -196,6 +208,18 @@ mod failure_handling {
             schema_version: 999,
             metadata: EmbeddedArtifactMetadata {
                 spdx_license_list_version: "3.27".to_string(),
+                license_index_provenance: crate::models::LicenseIndexProvenance {
+                    source: "embedded-artifact".to_string(),
+                    policy_path: "resources/license_detection/index_build_policy.toml".to_string(),
+                    curation_fingerprint: "test".to_string(),
+                    ignored_rules: vec![],
+                    ignored_licenses: vec![],
+                    ignored_rules_due_to_licenses: vec![],
+                    added_rules: vec![],
+                    replaced_rules: vec![],
+                    added_licenses: vec![],
+                    replaced_licenses: vec![],
+                },
             },
             rules: vec![create_test_loaded_rule()],
             licenses: vec![create_test_loaded_license()],
@@ -253,5 +277,13 @@ mod packaging {
         let snapshot: EmbeddedLoaderSnapshot = postcard::from_bytes(&decompressed).unwrap();
 
         assert!(!snapshot.metadata.spdx_license_list_version.is_empty());
+        assert_eq!(
+            snapshot.metadata.license_index_provenance.source,
+            "embedded-artifact"
+        );
+        assert_eq!(
+            snapshot.metadata.license_index_provenance.policy_path,
+            "resources/license_detection/index_build_policy.toml"
+        );
     }
 }

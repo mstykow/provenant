@@ -74,6 +74,18 @@ mod tests {
     fn create_test_metadata() -> EmbeddedArtifactMetadata {
         EmbeddedArtifactMetadata {
             spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: crate::models::LicenseIndexProvenance {
+                source: "embedded-artifact".to_string(),
+                policy_path: "resources/license_detection/index_build_policy.toml".to_string(),
+                curation_fingerprint: "test".to_string(),
+                ignored_rules: vec![],
+                ignored_licenses: vec![],
+                ignored_rules_due_to_licenses: vec![],
+                added_rules: vec![],
+                replaced_rules: vec![],
+                added_licenses: vec![],
+                replaced_licenses: vec![],
+            },
         }
     }
 
@@ -197,6 +209,10 @@ mod tests {
             .expect("Should deserialize metadata");
 
         assert_eq!(metadata.spdx_license_list_version, "3.27");
+        assert_eq!(
+            metadata.license_index_provenance.source,
+            "embedded-artifact"
+        );
     }
 
     #[test]
