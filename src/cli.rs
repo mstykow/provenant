@@ -137,7 +137,8 @@ fn parse_license_policy_arg(value: &str) -> Result<String, String> {
                 "output_cyclonedx",
                 "output_cyclonedx_xml",
                 "custom_output",
-                "show_attribution"
+                "show_attribution",
+                "export_license_dataset"
             ])
     )
 )]
@@ -292,10 +293,14 @@ pub struct Cli {
     #[arg(long)]
     pub no_assemble: bool,
 
-    /// Path to license rules directory containing .LICENSE and .RULE files.
+    /// Path to a custom license dataset root containing manifest.json, rules/, and licenses/.
     /// If not specified, uses the built-in embedded license index.
-    #[arg(long, value_name = "PATH", requires = "license")]
-    pub license_rules_path: Option<String>,
+    #[arg(
+        long = "license-dataset-path",
+        value_name = "PATH",
+        requires = "license"
+    )]
+    pub license_dataset_path: Option<String>,
 
     /// Force rebuild of the license index cache, ignoring any existing cache.
     #[arg(long)]
@@ -431,10 +436,32 @@ pub struct Cli {
             "output_spdx_rdf",
             "output_cyclonedx",
             "output_cyclonedx_xml",
-            "custom_output"
+            "custom_output",
+            "export_license_dataset"
         ]
     )]
     pub show_attribution: bool,
+
+    /// Export the effective built-in license dataset to DIR and exit.
+    #[arg(
+        long = "export-license-dataset",
+        value_name = "DIR",
+        conflicts_with_all = [
+            "output_json",
+            "output_json_pp",
+            "output_json_lines",
+            "output_yaml",
+            "output_debian",
+            "output_html",
+            "output_spdx_tv",
+            "output_spdx_rdf",
+            "output_cyclonedx",
+            "output_cyclonedx_xml",
+            "custom_output",
+            "show_attribution"
+        ]
+    )]
+    pub export_license_dataset: Option<String>,
 }
 
 fn parse_max_in_memory(value: &str) -> Result<MemoryMode, String> {
@@ -618,6 +645,11 @@ impl Cli {
             &mut flags,
             "--license-diagnostics",
             self.license_diagnostics,
+        );
+        push_string_option(
+            &mut flags,
+            "--license-dataset-path",
+            self.license_dataset_path.as_ref(),
         );
         push_string_option(&mut flags, "--license-policy", self.license_policy.as_ref());
         push_bool_option(
@@ -836,6 +868,44 @@ mod tests {
     }
 
     #[test]
+    fn test_show_attribution_conflicts_with_export_license_dataset() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--show-attribution",
+            "--export-license-dataset",
+            "dataset-out",
+        ]);
+        assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn test_export_license_dataset_allows_mode_without_output_file() {
+        let parsed = Cli::try_parse_from(["provenant", "--export-license-dataset", "dataset-out"])
+            .expect("cli parse should allow export mode without output flags");
+
+        assert_eq!(
+            parsed.export_license_dataset.as_deref(),
+            Some("dataset-out")
+        );
+    }
+
+    #[test]
+    fn test_license_dataset_path_parses_for_license_scans() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--license",
+            "--license-dataset-path",
+            "dataset-root",
+            "samples",
+        ])
+        .expect("cli parse should accept custom license dataset flag");
+
+        assert_eq!(parsed.license_dataset_path.as_deref(), Some("dataset-root"));
+    }
+
+    #[test]
     fn test_output_header_options_use_scancode_style_keys() {
         let parsed = Cli::try_parse_from([
             "provenant",
@@ -873,6 +943,26 @@ mod tests {
                 JsonValue::String("*.git*".to_string()),
                 JsonValue::String("target/*".to_string()),
             ]))
+        );
+    }
+
+    #[test]
+    fn test_output_header_options_include_license_dataset_path_when_set() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--license",
+            "--license-dataset-path",
+            "dataset-root",
+            "samples",
+        ])
+        .expect("cli parse should accept custom license dataset flag");
+
+        let options = parsed.output_header_options();
+        assert_eq!(
+            options.get("--license-dataset-path"),
+            Some(&JsonValue::String("dataset-root".to_string()))
         );
     }
 
