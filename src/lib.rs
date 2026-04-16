@@ -25,6 +25,12 @@
 //! rustdoc stays intentionally concise so fast-changing project details have a
 //! single source of truth outside this file.
 
+extern crate self as provenance;
+
+#[path = "main.rs"]
+mod app;
+pub use app::cli_main;
+
 pub mod assembly;
 pub mod cache;
 pub mod cli;
@@ -36,8 +42,11 @@ pub mod models;
 pub mod output;
 pub mod output_schema;
 pub mod parsers;
+pub(crate) mod post_processing;
 pub mod progress;
+pub(crate) mod scan_result_shaping;
 pub mod scanner;
+pub(crate) mod time;
 pub mod utils;
 pub mod version;
 

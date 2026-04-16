@@ -234,6 +234,7 @@ mod failure_handling {
 
 mod packaging {
     use super::*;
+    use crate::license_detection::dataset::compute_dataset_fingerprint_string;
 
     #[test]
     fn test_embedded_artifact_exists() {
@@ -279,12 +280,15 @@ mod packaging {
             snapshot.metadata.license_index_provenance.source,
             "embedded-artifact"
         );
+        let expected_fingerprint =
+            compute_dataset_fingerprint_string(&snapshot.rules, &snapshot.licenses)
+                .expect("embedded dataset fingerprint should compute");
         assert_eq!(
             snapshot
                 .metadata
                 .license_index_provenance
                 .dataset_fingerprint,
-            "test"
+            expected_fingerprint
         );
     }
 }
