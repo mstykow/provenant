@@ -3914,6 +3914,50 @@ fn test_html_anchor_copyright_url_multiline_span_preserved() {
 }
 
 #[test]
+fn test_json_escaped_html_anchor_copyright_url_detected() {
+    let input = r#"&copy; <a href=\"http://www.openstreetmap.org/copyright\">OpenStreetMap</a>"#;
+    let (c, h, _a) = detect_copyrights_from_text(input);
+
+    assert!(
+        c.iter().any(|cr| {
+            cr.copyright == "(c) http://www.openstreetmap.org/copyright OpenStreetMap"
+        }),
+        "copyrights: {c:?}"
+    );
+    assert!(
+        h.iter().any(|hr| hr.holder == "OpenStreetMap"),
+        "holders: {h:?}"
+    );
+    assert!(
+        !c.iter()
+            .any(|cr| cr.copyright == "(c) http://www.openstreetmap.org/copyright"),
+        "copyrights: {c:?}"
+    );
+    assert!(
+        !h.iter()
+            .any(|hr| hr.holder == "http://www.openstreetmap.org/copyright"),
+        "holders: {h:?}"
+    );
+}
+
+#[test]
+fn test_json_description_keeps_explicit_anchor_attribution() {
+    let input = r#"{"description":"&copy; <a href=\"http://www.openstreetmap.org/copyright\">OpenStreetMap</a>"}"#;
+    let (c, h, _a) = detect_copyrights_from_text(input);
+
+    assert!(
+        c.iter().any(|cr| {
+            cr.copyright == "(c) http://www.openstreetmap.org/copyright OpenStreetMap"
+        }),
+        "copyrights: {c:?}"
+    );
+    assert!(
+        h.iter().any(|hr| hr.holder == "OpenStreetMap"),
+        "holders: {h:?}"
+    );
+}
+
+#[test]
 fn test_normalize_split_angle_bracket_urls_keeps_tail() {
     let input = "Copyright Krzysztof <https://github.com\nHavret>, Stack Builders <https://github.com\nstackbuilders>, end";
     let out = super::normalize_split_angle_bracket_urls(input);

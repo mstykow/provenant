@@ -2149,7 +2149,10 @@ pub fn drop_json_description_metadata_copyrights_and_holders(
             || lower.contains("\"sponsor\"")
             || lower.contains("\"logo\"")
             || lower.contains("\"url\"");
-        let keep = !description_like || JSON_COPYRIGHT_KEY_RE.is_match(&window);
+        let explicit_attribution = copyright.copyright.starts_with("(c) ")
+            && (copyright.copyright.contains("http://")
+                || copyright.copyright.contains("https://"));
+        let keep = !description_like || JSON_COPYRIGHT_KEY_RE.is_match(&window) || explicit_attribution;
         if keep {
             retained_spans.insert((copyright.start_line.get(), copyright.end_line.get()));
         }
@@ -5209,6 +5212,41 @@ pub fn drop_url_embedded_suffix_variants_same_span(
                 !drop.contains(&(c.start_line.get(), c.end_line.get(), c.copyright.clone()))
             });
         }
+
+        let mut drop_shorter: HashSet<(usize, usize, String)> = HashSet::new();
+        for shorter in copyrights.iter() {
+            let shorter_lower = shorter.copyright.to_ascii_lowercase();
+            if !(shorter_lower.contains("http://") || shorter_lower.contains("https://")) {
+                continue;
+            }
+
+            for longer in copyrights.iter() {
+                if longer.start_line != shorter.start_line || longer.end_line != shorter.end_line {
+                    continue;
+                }
+                if longer.copyright == shorter.copyright || !longer.copyright.starts_with(&shorter.copyright) {
+                    continue;
+                }
+
+                let tail = longer.copyright[shorter.copyright.len()..].trim();
+                if tail.chars().any(|c| c.is_ascii_alphabetic())
+                    && !tail.to_ascii_lowercase().starts_with("http")
+                {
+                    drop_shorter.insert((
+                        shorter.start_line.get(),
+                        shorter.end_line.get(),
+                        shorter.copyright.clone(),
+                    ));
+                    break;
+                }
+            }
+        }
+
+        if !drop_shorter.is_empty() {
+            copyrights.retain(|c| {
+                !drop_shorter.contains(&(c.start_line.get(), c.end_line.get(), c.copyright.clone()))
+            });
+        }
     }
 
     if !holders.is_empty() {
@@ -5256,6 +5294,34 @@ pub fn drop_url_embedded_suffix_variants_same_span(
         if !drop.is_empty() {
             holders.retain(|h| {
                 !drop.contains(&(h.start_line.get(), h.end_line.get(), h.holder.clone()))
+            });
+        }
+
+        let mut drop_url_only: HashSet<(usize, usize, String)> = HashSet::new();
+        for shorter in holders.iter() {
+            let shorter_lower = shorter.holder.to_ascii_lowercase();
+            if !(shorter_lower.starts_with("http://") || shorter_lower.starts_with("https://")) {
+                continue;
+            }
+
+            if holders.iter().any(|other| {
+                other.start_line == shorter.start_line
+                    && other.end_line == shorter.end_line
+                    && other.holder != shorter.holder
+                    && !(other.holder.to_ascii_lowercase().starts_with("http://")
+                        || other.holder.to_ascii_lowercase().starts_with("https://"))
+            }) {
+                drop_url_only.insert((
+                    shorter.start_line.get(),
+                    shorter.end_line.get(),
+                    shorter.holder.clone(),
+                ));
+            }
+        }
+
+        if !drop_url_only.is_empty() {
+            holders.retain(|h| {
+                !drop_url_only.contains(&(h.start_line.get(), h.end_line.get(), h.holder.clone()))
             });
         }
     }

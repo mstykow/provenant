@@ -3422,6 +3422,12 @@ pub fn extract_html_anchor_copyright_url(
         )
         .unwrap()
     });
+    static COPY_SYMBOL_A_HREF_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r#"(?is)(?:&copy;|&#169;|&#xa9;|&#xA9;|\(c\)|©)\s*<\s*a\b[^>]*\bhref\s*=\s*(?:\\?['\"])(?P<url>https?://[^\\'\">]+)(?:\\?['\"])[^>]*>\s*(?P<text>[^<]+?)\s*</\s*a\s*>"#,
+        )
+        .unwrap()
+    });
 
     let mut seen_copyrights: HashSet<String> =
         copyrights.iter().map(|c| c.copyright.clone()).collect();
@@ -3455,6 +3461,44 @@ pub fn extract_html_anchor_copyright_url(
         }
 
         let holder = url.to_string();
+        if seen_holders.insert(holder.clone()) {
+            holders.push(HolderDetection {
+                holder,
+                start_line,
+                end_line,
+            });
+        }
+    }
+
+    for cap in COPY_SYMBOL_A_HREF_RE.captures_iter(content) {
+        let start_line = cap
+            .get(0)
+            .map(|m| line_number_index.line_number_at_offset(m.start()))
+            .unwrap_or(LineNumber::ONE);
+        let end_line = cap
+            .get(0)
+            .map(|m| line_number_index.line_number_at_offset(m.end()))
+            .unwrap_or(start_line);
+        let url = cap.name("url").map(|m| m.as_str()).unwrap_or("").trim();
+        let holder = cap.name("text").map(|m| m.as_str()).unwrap_or("").trim();
+        if url.is_empty() || holder.is_empty() {
+            continue;
+        }
+        let url = url.split('#').next().unwrap_or(url).trim();
+        if url.is_empty() {
+            continue;
+        }
+
+        let cr = format!("(c) {url} {holder}");
+        if seen_copyrights.insert(cr.clone()) {
+            copyrights.push(CopyrightDetection {
+                copyright: cr,
+                start_line,
+                end_line,
+            });
+        }
+
+        let holder = holder.to_string();
         if seen_holders.insert(holder.clone()) {
             holders.push(HolderDetection {
                 holder,
