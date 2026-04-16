@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::normalize_whitespace;
+use super::token_utils::normalize_whitespace;
 use crate::copyright::line_tracking::PreparedLineCache;
 use crate::copyright::prepare::prepare_text_line;
 use crate::copyright::refiner::{looks_like_name_with_parenthesized_url, refine_author};
