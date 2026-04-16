@@ -160,4 +160,22 @@ mod tests {
         assert_eq!(urls.len(), 1, "urls: {urls:#?}");
         assert_eq!(urls[0].url, "https://github.com/example/project.git");
     }
+
+    #[test]
+    fn test_find_urls_ignores_markdown_emphasis_inside_hostname() {
+        let text = "Use https://**yourcompany**.atlassian.net for Jira Cloud.";
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        assert!(urls.is_empty(), "urls: {urls:#?}");
+    }
+
+    #[test]
+    fn test_find_urls_filters_code_variable_host_artifacts() {
+        let text = "loginUrl = \"http://os.environ['DD_BASE_URL']/login\"";
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        assert!(urls.is_empty(), "urls: {urls:#?}");
+    }
 }
