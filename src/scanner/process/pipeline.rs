@@ -249,6 +249,7 @@ fn extract_information_from_content(
     }
     extract_email_url_information(
         file_info_builder,
+        path,
         &text_content,
         text_options,
         from_binary_strings,
