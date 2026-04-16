@@ -297,40 +297,31 @@ struct RuleFrontmatter {
     language: Option<String>,
 }
 
-/// Parse a .RULE file into a `LoadedRule` (loader-stage).
-///
-/// This function parses the file and returns a `LoadedRule` with normalized data.
-/// Deprecated entries are included - filtering is a build-stage concern.
-///
-/// # Arguments
-/// * `path` - Path to the .RULE file
-///
-/// # Returns
-/// * `Ok(LoadedRule)` - Successfully parsed rule
-/// * `Err(...)` - Parse error with context
-pub fn parse_rule_to_loaded(path: &Path) -> Result<LoadedRule> {
-    let content = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read rule file: {}", path.display()))?;
-
+fn parse_rule_source_to_loaded(
+    identifier: &str,
+    content: &str,
+    source_path: &Path,
+) -> Result<LoadedRule> {
     let identifier = LoadedRule::derive_identifier(
-        path.file_name()
+        source_path
+            .file_name()
             .and_then(|s| s.to_str())
-            .unwrap_or("unknown.RULE"),
+            .unwrap_or(identifier),
     );
 
-    let parsed = parse_file_content(&content, path)?;
+    let parsed = parse_file_content(content, source_path)?;
 
     if parsed.text_content.is_empty() {
         return Err(anyhow!(
             "Rule file has empty text content: {}",
-            path.display()
+            source_path.display()
         ));
     }
 
     let fm: RuleFrontmatter = yaml_serde::from_str(&parsed.yaml_content).map_err(|e| {
         anyhow!(
             "Failed to parse rule frontmatter YAML in {}: {}\nContent was:\n{}",
-            path.display(),
+            source_path.display(),
             e,
             parsed.yaml_content
         )
@@ -349,13 +340,18 @@ pub fn parse_rule_to_loaded(path: &Path) -> Result<LoadedRule> {
     .map_err(|e| {
         anyhow!(
             "Rule file has invalid rule-kind flags: {}: {}",
-            path.display(),
+            source_path.display(),
             e
         )
     })?;
 
-    LoadedRule::validate_rule_kind_flags(rule_kind, is_false_positive)
-        .map_err(|e| anyhow!("Rule file has invalid flags: {}: {}", path.display(), e))?;
+    LoadedRule::validate_rule_kind_flags(rule_kind, is_false_positive).map_err(|e| {
+        anyhow!(
+            "Rule file has invalid flags: {}: {}",
+            source_path.display(),
+            e
+        )
+    })?;
 
     let license_expression = LoadedRule::normalize_license_expression(
         fm.license_expression.as_deref(),
@@ -364,7 +360,7 @@ pub fn parse_rule_to_loaded(path: &Path) -> Result<LoadedRule> {
     .map_err(|e| {
         anyhow!(
             "Rule file has invalid license_expression: {}: {}",
-            path.display(),
+            source_path.display(),
             e
         )
     })?;
@@ -404,36 +400,53 @@ pub fn parse_rule_to_loaded(path: &Path) -> Result<LoadedRule> {
     })
 }
 
-/// Parse a .LICENSE file into a `LoadedLicense` (loader-stage).
+/// Parse a .RULE file into a `LoadedRule` (loader-stage).
 ///
-/// This function parses the file and returns a `LoadedLicense` with normalized data.
+/// This function parses the file and returns a `LoadedRule` with normalized data.
 /// Deprecated entries are included - filtering is a build-stage concern.
-///
-/// # Arguments
-/// * `path` - Path to the .LICENSE file
-///
-/// # Returns
-/// * `Ok(LoadedLicense)` - Successfully parsed license
-/// * `Err(...)` - Parse error with context
-pub fn parse_license_to_loaded(path: &Path) -> Result<LoadedLicense> {
+pub fn parse_rule_to_loaded(path: &Path) -> Result<LoadedRule> {
     let content = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read license file: {}", path.display()))?;
+        .with_context(|| format!("Failed to read rule file: {}", path.display()))?;
+    parse_rule_source_to_loaded(
+        path.file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown.RULE"),
+        &content,
+        path,
+    )
+}
 
-    let key = LoadedLicense::derive_key(path)?;
+/// Parse a rule from in-memory ScanCode-style `.RULE` content.
+pub fn parse_rule_str_to_loaded(identifier: &str, content: &str) -> Result<LoadedRule> {
+    let synthetic_path = Path::new(identifier);
+    parse_rule_source_to_loaded(identifier, content, synthetic_path)
+}
 
-    let parsed = parse_license_file_content(&content, path)?;
+fn parse_license_source_to_loaded(
+    filename: &str,
+    content: &str,
+    source_path: &Path,
+) -> Result<LoadedLicense> {
+    let key = LoadedLicense::derive_key(Path::new(filename))?;
+
+    let parsed = parse_license_file_content(content, source_path)?;
 
     let fm: LicenseFrontmatter = yaml_serde::from_str(&parsed.yaml_content).map_err(|e| {
         anyhow!(
             "Failed to parse license frontmatter YAML in {}: {}\nContent was:\n{}",
-            path.display(),
+            source_path.display(),
             e,
             parsed.yaml_content
         )
     })?;
 
-    LoadedLicense::validate_key_match(&key, fm.key.as_deref())
-        .map_err(|e| anyhow!("License file has key mismatch: {}: {}", path.display(), e))?;
+    LoadedLicense::validate_key_match(&key, fm.key.as_deref()).map_err(|e| {
+        anyhow!(
+            "License file has key mismatch: {}: {}",
+            source_path.display(),
+            e
+        )
+    })?;
 
     let is_deprecated = fm.is_deprecated.unwrap_or(false);
     let is_unknown = fm.is_unknown.unwrap_or(false);
@@ -448,7 +461,7 @@ pub fn parse_license_to_loaded(path: &Path) -> Result<LoadedLicense> {
     .map_err(|e| {
         anyhow!(
             "License file has invalid content: {}: {}",
-            path.display(),
+            source_path.display(),
             e
         )
     })?;
@@ -500,6 +513,28 @@ pub fn parse_license_to_loaded(path: &Path) -> Result<LoadedLicense> {
         ignorable_urls: LoadedLicense::normalize_optional_list(fm.ignorable_urls.as_deref()),
         ignorable_emails: LoadedLicense::normalize_optional_list(fm.ignorable_emails.as_deref()),
     })
+}
+
+/// Parse a .LICENSE file into a `LoadedLicense` (loader-stage).
+///
+/// This function parses the file and returns a `LoadedLicense` with normalized data.
+/// Deprecated entries are included - filtering is a build-stage concern.
+pub fn parse_license_to_loaded(path: &Path) -> Result<LoadedLicense> {
+    let content = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read license file: {}", path.display()))?;
+    parse_license_source_to_loaded(
+        path.file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown.LICENSE"),
+        &content,
+        path,
+    )
+}
+
+/// Parse a license from in-memory ScanCode-style `.LICENSE` content.
+pub fn parse_license_str_to_loaded(filename: &str, content: &str) -> Result<LoadedLicense> {
+    let synthetic_path = Path::new(filename);
+    parse_license_source_to_loaded(filename, content, synthetic_path)
 }
 
 /// Parse license file content into frontmatter and text sections.
