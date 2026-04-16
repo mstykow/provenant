@@ -29,6 +29,8 @@ The license detection system is a multi-phase, multi-strategy detection engine t
 
 **Custom rules**: Use `--license-rules-path /path/to/rules` to load from a custom directory containing `.LICENSE` and `.RULE` files. This is an advanced maintainer/expert override rather than the recommended default workflow; normal scans should keep using the embedded artifact. Custom-rule scans are also cached using a content fingerprint of the loaded rules, so the index is rebuilt automatically when the rules change.
 
+**Index build policy**: Provenant also applies a checked-in build policy from `resources/license_detection/index_build_policy.toml` before fingerprinting and index construction. This manifest carries the small curation decisions (ignored rule/license ids), while downstream add/replace overlays live as real ScanCode-format files under `resources/license_detection/overlay/`. This keeps local curation in the same `.RULE` / `.LICENSE` syntax as upstream without severing the broader dataset dependency. Stale ignore ids and overlays that become identical to upstream now fail the build so maintainers get an explicit prompt to remove redundant downstream curation.
+
 ### License Index Cache
 
 Provenant caches the built `LicenseIndex` as an rkyv-serialized file to avoid rebuilding it on every run. The cache reduces license engine startup from ~12s (cold) to ~0.8s (warm, release build).
@@ -81,7 +83,10 @@ main.rs::init_license_engine()
             ↓
         Parse into LoadedRule/LoadedLicense
             ↓
-        Compute SHA-256 fingerprint of sorted rules + licenses
+        Apply the checked-in build policy
+            + bundled overlay files from resources/license_detection/overlay/
+            ↓
+        Compute SHA-256 fingerprint of sorted effective rules + licenses
             ↓
         Cache hit (fingerprint matches)?
             ├── Yes → Load CachedLicenseIndex from rkyv cache
@@ -110,6 +115,9 @@ The loading process is split into two distinct stages:
 
 - Parse `.RULE` and `.LICENSE` files
 - Normalize rule and license data for embedding
+- Apply the checked-in license-index build policy
+- Apply any checked-in downstream overlay files from `resources/license_detection/overlay/`
+- Fail fast if an ignore id no longer exists upstream or an overlay file becomes identical to upstream data
 - Sort embedded rules and licenses deterministically
 - Serialize the embedded loader snapshot with MessagePack
 - Compress the serialized bytes with zstd
@@ -123,6 +131,8 @@ The loading process is split into two distinct stages:
 - Synthesize license-derived rules
 - Build token dictionary and automatons
 - Create `LicenseIndex` and `SpdxMapping`
+
+The active curation is surfaced in structured outputs at `headers[0].extra_data.license_index_provenance`, which includes the checked-in policy path, a curation fingerprint, and the exact ignored/added/replaced rule and license identifiers applied for that scan.
 
 This separation enables:
 
@@ -140,6 +150,9 @@ When the ScanCode rules dataset is updated, regenerate the embedded artifact:
 
 # Regenerate the artifact
 cargo run --manifest-path xtask/Cargo.toml --bin generate-index-artifact
+
+# If the ignore policy changed, regenerate the artifact too
+# (the generated snapshot is expected to reflect that policy)
 
 # Commit the updated artifact
 git add resources/license_detection/license_index.zst

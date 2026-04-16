@@ -318,6 +318,15 @@ cargo run --manifest-path xtask/Cargo.toml --bin generate-supported-formats -- -
 ## `generate-index-artifact`
 
 `generate-index-artifact` regenerates the embedded license index artifact from ScanCode rules and licenses.
+The generated artifact reflects the checked-in build policy at
+`resources/license_detection/index_build_policy.toml`, so policy changes should
+be committed alongside the regenerated `license_index.zst` artifact.
+Downstream add/replace overlays live as regular `.RULE` / `.LICENSE` files under
+`resources/license_detection/overlay/`, and the generated artifact embeds
+provenance that surfaces in structured scan output headers.
+If upstream absorbs one of these local curations, artifact generation now fails
+fast so maintainers remove the redundant ignore/overlay instead of silently
+shipping dead policy.
 
 Examples:
 
