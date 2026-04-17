@@ -893,6 +893,12 @@ fn test_refine_holder_strips_trailing_mountain_view_ca() {
 }
 
 #[test]
+fn test_refine_holder_strips_trailing_url_separator() {
+    let result = refine_holder("Continuum Analytics, Inc. / http://continuum.io");
+    assert_eq!(result, Some("Continuum Analytics, Inc.".to_string()));
+}
+
+#[test]
 fn test_refine_holder_empty() {
     assert_eq!(refine_holder(""), None);
 }
