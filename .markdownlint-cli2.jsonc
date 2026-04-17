@@ -26,6 +26,7 @@
     "MD059": false,
     "MD060": false,
   },
+  "gitignore": ".gitignore",
   "globs": ["**/*.md"],
   "ignores": [
     "node_modules/**",

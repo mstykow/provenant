@@ -179,6 +179,13 @@ fn main() -> Result<()> {
 
 fn find_markdown_files(root: &Path) -> Vec<PathBuf> {
     let excludes = excluded_directory_names();
+    if let Some(files) = git_tracked_files(root, &["*.md"]) {
+        return files
+            .into_iter()
+            .filter(|path| !is_excluded(path, &excludes))
+            .collect();
+    }
+
     let mut out = Vec::new();
     collect_files_recursive(
         root,
@@ -200,6 +207,24 @@ fn find_rust_files(root: &Path) -> Vec<PathBuf> {
         return Vec::new();
     }
 
+    if let Some(files) = git_tracked_files(root, &["*.rs"]) {
+        return files
+            .into_iter()
+            .filter(|path| path.starts_with(&src_dir))
+            .filter(|path| {
+                !path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.ends_with("_test.rs"))
+            })
+            .filter(|path| {
+                !path
+                    .components()
+                    .any(|component| component.as_os_str().to_string_lossy() == "tests")
+            })
+            .collect();
+    }
+
     let mut out = Vec::new();
     collect_files_recursive(
         &src_dir,
@@ -218,6 +243,31 @@ fn find_rust_files(root: &Path) -> Vec<PathBuf> {
         &mut out,
     );
     out
+}
+
+fn git_tracked_files(root: &Path, patterns: &[&str]) -> Option<Vec<PathBuf>> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .arg("ls-files")
+        .arg("-z")
+        .arg("--")
+        .args(patterns)
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    Some(
+        output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|bytes| !bytes.is_empty())
+            .map(|bytes| root.join(String::from_utf8_lossy(bytes).into_owned()))
+            .collect(),
+    )
 }
 
 fn collect_files_recursive(
@@ -580,8 +630,13 @@ fn is_placeholder_github_url(parsed: &Url) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{UrlStatus, extract_markdown_link_url, extract_urls_from_markdown, validate_url};
+    use super::{
+        UrlStatus, extract_markdown_link_url, extract_urls_from_markdown, find_markdown_files,
+        find_rust_files, validate_url,
+    };
     use std::fs;
+    use std::path::Path;
+    use std::process::Command;
 
     #[test]
     fn extract_markdown_link_url_handles_nested_parentheses() {
@@ -647,5 +702,94 @@ mod tests {
     fn validate_url_skips_github_placeholder_path() {
         let result = validate_url("https://github.com/user/repo.git", 10);
         assert_eq!(result.status, UrlStatus::Skip);
+    }
+
+    #[test]
+    fn find_markdown_files_ignores_gitignored_directories() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let root = temp_dir.path();
+
+        fs::create_dir_all(root.join("docs")).expect("create docs dir");
+        fs::create_dir_all(root.join(".provenant")).expect("create .provenant dir");
+        fs::create_dir_all(root.join(".opencode")).expect("create .opencode dir");
+
+        fs::write(root.join(".gitignore"), ".provenant/\n.opencode/\n").expect("write gitignore");
+        fs::write(
+            root.join("docs").join("tracked.md"),
+            "https://example.com\n",
+        )
+        .expect("write tracked markdown");
+        fs::write(
+            root.join(".provenant").join("ignored.md"),
+            "https://example.com\n",
+        )
+        .expect("write ignored markdown");
+        fs::write(
+            root.join(".opencode").join("ignored.md"),
+            "https://example.com\n",
+        )
+        .expect("write ignored markdown");
+
+        run_git(root, &["init"]);
+        run_git(root, &["add", ".gitignore", "docs/tracked.md"]);
+
+        let files = find_markdown_files(root);
+
+        assert_eq!(files, vec![root.join("docs").join("tracked.md")]);
+    }
+
+    #[test]
+    fn find_rust_files_ignores_gitignored_directories() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let root = temp_dir.path();
+
+        fs::create_dir_all(root.join("src")).expect("create src dir");
+        fs::create_dir_all(root.join("tests")).expect("create tests dir");
+        fs::create_dir_all(root.join(".provenant").join("src")).expect("create ignored src dir");
+
+        fs::write(root.join(".gitignore"), ".provenant/\n").expect("write gitignore");
+        fs::write(root.join("src").join("lib.rs"), "//! https://example.com\n")
+            .expect("write lib.rs");
+        fs::write(
+            root.join("src").join("lib_test.rs"),
+            "//! https://example.com/test\n",
+        )
+        .expect("write lib_test.rs");
+        fs::write(
+            root.join("tests").join("integration.rs"),
+            "//! https://example.com/integration\n",
+        )
+        .expect("write integration.rs");
+        fs::write(
+            root.join(".provenant").join("src").join("ignored.rs"),
+            "//! https://example.com/ignored\n",
+        )
+        .expect("write ignored.rs");
+
+        run_git(root, &["init"]);
+        run_git(
+            root,
+            &[
+                "add",
+                ".gitignore",
+                "src/lib.rs",
+                "src/lib_test.rs",
+                "tests/integration.rs",
+            ],
+        );
+
+        let files = find_rust_files(root);
+
+        assert_eq!(files, vec![root.join("src").join("lib.rs")]);
+    }
+
+    fn run_git(root: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .status()
+            .expect("run git command");
+        assert!(status.success(), "git {:?} failed", args);
     }
 }
