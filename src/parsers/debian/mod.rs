@@ -80,6 +80,20 @@ fn default_package_data(datasource_id: DatasourceId) -> PackageData {
     }
 }
 
+macro_rules! read_or_default {
+    ($path:expr, $msg:expr, $dsid:expr) => {
+        match crate::parsers::utils::read_file_to_string($path, None) {
+            Ok(c) => c,
+            Err(e) => {
+                crate::parser_warn!("Failed to read {} at {:?}: {}", $msg, $path, e);
+                return vec![default_package_data($dsid)];
+            }
+        }
+    };
+}
+
+use read_or_default;
+
 const VERSION_CLUES_DEBIAN: &[&str] = &["deb"];
 const VERSION_CLUES_UBUNTU: &[&str] = &["ubuntu"];
 

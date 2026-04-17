@@ -4,12 +4,10 @@ use std::path::Path;
 use crate::models::{DatasourceId, PackageData, PackageType};
 use crate::parser_warn as warn;
 use crate::parsers::rfc822;
-use crate::parsers::utils::{
-    MAX_ITERATION_COUNT, read_file_to_string, split_name_email, truncate_field,
-};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, split_name_email, truncate_field};
 
 use super::utils::{build_debian_purl, make_party, parse_dependency_field};
-use super::{PACKAGE_TYPE, default_package_data};
+use super::{PACKAGE_TYPE, default_package_data, read_or_default};
 use crate::parsers::PackageParser;
 
 /// Parser for Debian Source Control (.dsc) files
@@ -23,13 +21,7 @@ impl PackageParser for DebianDscParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path, None) {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Failed to read .dsc file {:?}: {}", path, e);
-                return vec![default_package_data(DatasourceId::DebianSourceControlDsc)];
-            }
-        };
+        let content = read_or_default!(path, ".dsc file", DatasourceId::DebianSourceControlDsc);
 
         vec![parse_dsc_content(&content)]
     }

@@ -3,14 +3,14 @@ use std::path::Path;
 use crate::models::{DatasourceId, FileReference, Md5Digest, PackageData, PackageType};
 use crate::parser_warn as warn;
 use crate::parsers::rfc822;
-use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
 
 use super::control::build_package_from_paragraph;
 use super::copyright::parse_copyright_file;
 use super::utils::build_debian_purl;
 use super::{
     IGNORED_ROOT_DIRS, MAX_ARCHIVE_SIZE, MAX_COMPRESSION_RATIO, MAX_FILE_SIZE, PACKAGE_TYPE,
-    default_package_data,
+    default_package_data, read_or_default,
 };
 use crate::parsers::PackageParser;
 
@@ -441,18 +441,11 @@ impl PackageParser for DebianControlInExtractedDebParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path, None) {
-            Ok(c) => c,
-            Err(e) => {
-                warn!(
-                    "Failed to read control file in extracted deb {:?}: {}",
-                    path, e
-                );
-                return vec![default_package_data(
-                    DatasourceId::DebianControlExtractedDeb,
-                )];
-            }
-        };
+        let content = read_or_default!(
+            path,
+            "control file in extracted deb",
+            DatasourceId::DebianControlExtractedDeb
+        );
 
         // A control file inside an extracted .deb has a single paragraph
         // (unlike debian/control which has source + binary paragraphs)
@@ -497,15 +490,11 @@ impl PackageParser for DebianMd5sumInPackageParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path, None) {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Failed to read md5sums file {:?}: {}", path, e);
-                return vec![default_package_data(
-                    DatasourceId::DebianMd5SumsInExtractedDeb,
-                )];
-            }
-        };
+        let content = read_or_default!(
+            path,
+            "md5sums file",
+            DatasourceId::DebianMd5SumsInExtractedDeb
+        );
 
         let package_name = extract_package_name_from_deb_path(path);
 
