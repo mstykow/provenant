@@ -1,6 +1,6 @@
 //! Grammar rule data for copyright parse tree construction.
 
-use super::grammar_types::{GrammarRule, TagMatcher};
+use super::types::{GrammarRule, TagMatcher};
 use crate::copyright::types::{PosTag, TreeLabel};
 
 // Convenience aliases to keep rule definitions concise.
