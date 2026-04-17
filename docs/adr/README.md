@@ -34,6 +34,7 @@ Each ADR follows a consistent structure:
 | [0006](0006-datasourceid-driven-package-assembly.md)     | DatasourceId-Driven Multi-Pass Package Assembly | Accepted | 2026-03-14 |
 | [0007](0007-embedded-license-index-artifact-strategy.md) | Embedded License Index Artifact Strategy        | Accepted | 2026-03-29 |
 | [0008](0008-output-schema-separation.md)                 | Output Schema Type Separation                   | Accepted | 2026-04-10 |
+| [0009](0009-parser-submodule-structure.md)               | Parser Submodule Structure for Large Ecosystems | Accepted | 2026-04-17 |
 
 ## When to Create a New ADR
 

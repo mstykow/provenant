@@ -2,10 +2,10 @@
 mod tests {
     use std::fs;
 
-    use super::super::scan_test_utils::{
+    use crate::models::{DatasourceId, PackageType};
+    use crate::parsers::scan_test_utils::{
         assert_dependency_present, assert_file_links_to_package, scan_and_assemble,
     };
-    use crate::models::{DatasourceId, PackageType};
     use serde_json::Value as JsonValue;
 
     #[test]
