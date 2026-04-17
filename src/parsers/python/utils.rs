@@ -43,13 +43,13 @@ static SETUP_VALUE_RE: LazyLock<Regex> = LazyLock::new(|| {
 
 use toml::Value as TomlValue;
 
-pub(super) fn default_package_data(path: &Path) -> PackageData {
-    PackageData {
+pub(super) fn default_package_data(path: &Path) -> Vec<PackageData> {
+    vec![PackageData {
         package_type: Some(PythonParser::PACKAGE_TYPE),
         primary_language: Some("Python".to_string()),
         datasource_id: infer_python_datasource_id(path),
         ..Default::default()
-    }
+    }]
 }
 
 fn infer_python_datasource_id(path: &Path) -> Option<DatasourceId> {

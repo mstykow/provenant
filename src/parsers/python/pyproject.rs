@@ -36,7 +36,7 @@ const FIELD_EXTRAS: &str = "extras";
 const FIELD_DEPENDENCY_GROUPS: &str = "dependency-groups";
 const FIELD_DEV_DEPENDENCIES: &str = "dev-dependencies";
 
-pub(super) fn extract_from_pyproject_toml(path: &Path) -> PackageData {
+pub(super) fn extract(path: &Path) -> Vec<PackageData> {
     let toml_content = match read_toml_file(path) {
         Ok(content) => content,
         Err(e) => {
@@ -174,7 +174,7 @@ pub(super) fn extract_from_pyproject_toml(path: &Path) -> PackageData {
         })
     });
 
-    PackageData {
+    vec![PackageData {
         package_type: Some(PythonParser::PACKAGE_TYPE),
         name,
         version,
@@ -209,7 +209,7 @@ pub(super) fn extract_from_pyproject_toml(path: &Path) -> PackageData {
         }),
         purl,
         ..Default::default()
-    }
+    }]
 }
 
 fn extract_raw_license_string(project: &TomlMap<String, TomlValue>) -> Option<String> {

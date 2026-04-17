@@ -13,7 +13,7 @@ use packageurl::PackageUrl;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-pub(super) fn extract_from_pypi_json(path: &Path) -> PackageData {
+pub(super) fn extract_from_pypi_json(path: &Path) -> Vec<PackageData> {
     let default = PackageData {
         package_type: Some(PythonParser::PACKAGE_TYPE),
         datasource_id: Some(DatasourceId::PypiJson),
@@ -24,7 +24,7 @@ pub(super) fn extract_from_pypi_json(path: &Path) -> PackageData {
         Ok(content) => content,
         Err(error) => {
             warn!("Failed to read pypi.json at {:?}: {}", path, error);
-            return default;
+            return vec![default];
         }
     };
 
@@ -32,13 +32,13 @@ pub(super) fn extract_from_pypi_json(path: &Path) -> PackageData {
         Ok(value) => value,
         Err(error) => {
             warn!("Failed to parse pypi.json at {:?}: {}", path, error);
-            return default;
+            return vec![default];
         }
     };
 
     let Some(info) = root.get("info").and_then(|value| value.as_object()) else {
         warn!("No info object found in pypi.json at {:?}", path);
-        return default;
+        return vec![default];
     };
 
     let name = info
@@ -152,7 +152,7 @@ pub(super) fn extract_from_pypi_json(path: &Path) -> PackageData {
 
     let pypi_urls = build_pypi_urls(name.as_deref(), version.as_deref());
 
-    PackageData {
+    vec![PackageData {
         package_type: Some(PythonParser::PACKAGE_TYPE),
         name,
         version,
@@ -185,7 +185,7 @@ pub(super) fn extract_from_pypi_json(path: &Path) -> PackageData {
         datasource_id: Some(DatasourceId::PypiJson),
         purl: pypi_urls.purl,
         ..Default::default()
-    }
+    }]
 }
 
 struct PypiArtifact {
@@ -229,7 +229,7 @@ fn select_pypi_json_artifact(urls: &[serde_json::Value]) -> PypiArtifact {
     }
 }
 
-pub(super) fn extract_from_pip_inspect(path: &Path) -> PackageData {
+pub(super) fn extract_from_pip_inspect(path: &Path) -> Vec<PackageData> {
     let content = match read_file_to_string(path, None) {
         Ok(content) => content,
         Err(e) => {
@@ -464,7 +464,7 @@ pub(super) fn extract_from_pip_inspect(path: &Path) -> PackageData {
 
         main_pkg.dependencies = dependencies;
         main_pkg.dependencies.extend(unresolved_dependencies);
-        main_pkg
+        vec![main_pkg]
     } else {
         default_package_data(path)
     }
