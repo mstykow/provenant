@@ -49,12 +49,12 @@ postcard = { workspace = true }
 provenant = { path = "..", package = "provenant-cli", features = ["golden-tests"] }
 rayon = { workspace = true }
 regex = { workspace = true }
-rkyv = "0.8.15"
+rkyv = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.11.0"
+sha2 = { workspace = true }
 url = { workspace = true }
-yaml_serde = "0.10.4"
+yaml_serde = { workspace = true }
 zstd = { workspace = true }
 
 [dev-dependencies]
