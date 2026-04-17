@@ -225,13 +225,12 @@ fn build_resolved_package(
 ) -> ResolvedPackage {
     let dependencies = extract_package_dependencies(package_table);
 
-    let (repository_homepage_url, repository_download_url, api_data_url, purl) =
-        build_pypi_urls(Some(name), Some(version));
+    let urls = build_pypi_urls(Some(name), Some(version));
 
-    let repository_homepage_url = repository_homepage_url.map(truncate_field);
-    let repository_download_url = repository_download_url.map(truncate_field);
-    let api_data_url = api_data_url.map(truncate_field);
-    let purl = purl.map(truncate_field);
+    let repository_homepage_url = urls.repository_homepage_url.map(truncate_field);
+    let repository_download_url = urls.repository_download_url.map(truncate_field);
+    let api_data_url = urls.api_data_url.map(truncate_field);
+    let purl = urls.purl.map(truncate_field);
 
     // Extract sha256 hash from files array (first file's hash)
     let sha256 = extract_sha256_from_files(package_table);

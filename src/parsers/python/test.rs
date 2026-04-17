@@ -2064,14 +2064,14 @@ Test package description.
     }
 
     #[test]
-    fn test_parse_installed_files_txt() {
-        use super::super::archive::parse_installed_files_txt;
+    fn test_parse_file_list() {
+        use super::super::archive::parse_file_list;
 
         let installed_files_content = "__init__.py\n\
                                        module.py\n\
                                        data.txt\n";
 
-        let file_refs = parse_installed_files_txt(installed_files_content);
+        let file_refs = parse_file_list(installed_files_content);
 
         assert_eq!(file_refs.len(), 3);
         assert_eq!(file_refs[0].path, "__init__.py");

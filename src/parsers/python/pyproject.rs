@@ -2,7 +2,7 @@ use super::super::license_normalization::normalize_spdx_declared_license;
 use super::PythonParser;
 use super::rfc822_meta::{build_extracted_license_statement, split_classifiers};
 use super::utils::{
-    apply_project_url_mappings, build_python_dependency_purl, default_package_data,
+    ProjectUrls, apply_project_url_mappings, build_python_dependency_purl, default_package_data,
     has_private_classifier, normalize_python_dependency_name, normalize_python_package_name,
     read_toml_file,
 };
@@ -33,13 +33,6 @@ const FIELD_DEPENDENCIES: &str = "dependencies";
 const FIELD_OPTIONAL_DEPENDENCIES: &str = "optional-dependencies";
 const FIELD_EXTRAS: &str = "extras";
 
-type ProjectUrls = (
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-);
 const FIELD_DEPENDENCY_GROUPS: &str = "dependency-groups";
 const FIELD_DEV_DEPENDENCIES: &str = "dev-dependencies";
 
@@ -128,8 +121,7 @@ pub(super) fn extract_from_pyproject_toml(path: &Path) -> PackageData {
     }
 
     let mut extra_data = extract_pyproject_extra_data(&toml_content).unwrap_or_default();
-    let (homepage_url, download_url, bug_tracking_url, code_view_url, repository_url) =
-        extract_urls(&project_table, &mut extra_data);
+    let urls = extract_urls(&project_table, &mut extra_data);
 
     let (dependencies, optional_dependencies) = extract_dependencies(&project_table, &toml_content);
 
@@ -184,51 +176,31 @@ pub(super) fn extract_from_pyproject_toml(path: &Path) -> PackageData {
 
     PackageData {
         package_type: Some(PythonParser::PACKAGE_TYPE),
-        namespace: None,
         name,
         version,
-        qualifiers: None,
-        subpath: None,
-        primary_language: None,
         description,
-        release_date: None,
         parties: extract_parties(&project_table),
         keywords,
-        homepage_url: homepage_url.or(pypi_homepage_url),
-        download_url: download_url
-            .or_else(|| repository_url.clone())
+        homepage_url: urls.homepage_url.or(pypi_homepage_url),
+        download_url: urls
+            .download_url
+            .or_else(|| urls.vcs_url.clone())
             .or(pypi_download_url),
-        size: None,
-        sha1: None,
-        md5: None,
-        sha256: None,
-        sha512: None,
-        bug_tracking_url,
-        code_view_url,
-        vcs_url: repository_url,
-        copyright: None,
-        holder: None,
+        bug_tracking_url: urls.bug_tracking_url,
+        code_view_url: urls.code_view_url,
+        vcs_url: urls.vcs_url,
         declared_license_expression,
         declared_license_expression_spdx,
         license_detections,
-        other_license_expression: None,
-        other_license_expression_spdx: None,
-        other_license_detections: Vec::new(),
         extracted_license_statement: extracted_license_statement
             .or_else(|| build_extracted_license_statement(None, &license_classifiers)),
-        notice_text: None,
-        source_packages: Vec::new(),
-        file_references: Vec::new(),
         is_private: has_private_classifier(&classifiers),
-        is_virtual: false,
         extra_data: if extra_data.is_empty() {
             None
         } else {
             Some(extra_data)
         },
         dependencies: [dependencies, optional_dependencies].concat(),
-        repository_homepage_url: None,
-        repository_download_url: None,
         api_data_url,
         datasource_id: Some(if is_poetry_pyproject {
             DatasourceId::PypiPoetryPyprojectToml
@@ -236,6 +208,7 @@ pub(super) fn extract_from_pyproject_toml(path: &Path) -> PackageData {
             DatasourceId::PypiPyprojectToml
         }),
         purl,
+        ..Default::default()
     }
 }
 
@@ -272,14 +245,17 @@ fn extract_urls(
     project: &TomlMap<String, TomlValue>,
     extra_data: &mut HashMap<String, serde_json::Value>,
 ) -> ProjectUrls {
-    let mut homepage_url = None;
-    let mut download_url = None;
-    let mut bug_tracking_url = None;
-    let mut code_view_url = None;
-    let mut repository_url = None;
+    let mut urls = ProjectUrls {
+        homepage_url: None,
+        download_url: None,
+        bug_tracking_url: None,
+        code_view_url: None,
+        vcs_url: None,
+        changelog_url: None,
+    };
 
-    if let Some(urls) = project.get(FIELD_URLS).and_then(|v| v.as_table()) {
-        let parsed_urls: Vec<(String, String)> = urls
+    if let Some(url_table) = project.get(FIELD_URLS).and_then(|v| v.as_table()) {
+        let parsed_urls: Vec<(String, String)> = url_table
             .iter()
             .filter_map(|(label, value)| {
                 value
@@ -287,56 +263,43 @@ fn extract_urls(
                     .map(|url| (label.to_string(), url.to_string()))
             })
             .collect();
-        apply_project_url_mappings(
-            &parsed_urls,
-            &mut homepage_url,
-            &mut bug_tracking_url,
-            &mut code_view_url,
-            &mut repository_url,
-            extra_data,
-        );
+        apply_project_url_mappings(&parsed_urls, &mut urls, extra_data);
 
-        download_url = urls
+        urls.download_url = url_table
             .get("Downloads")
-            .or_else(|| urls.get("downloads"))
+            .or_else(|| url_table.get("downloads"))
             .and_then(|v| v.as_str())
             .map(String::from);
 
-        if homepage_url.is_none() {
-            homepage_url = urls
+        if urls.homepage_url.is_none() {
+            urls.homepage_url = url_table
                 .get(FIELD_HOMEPAGE)
                 .and_then(|v| v.as_str())
                 .map(String::from);
         }
-        if repository_url.is_none() {
-            repository_url = urls
+        if urls.vcs_url.is_none() {
+            urls.vcs_url = url_table
                 .get(FIELD_REPOSITORY)
                 .and_then(|v| v.as_str())
                 .map(String::from);
         }
     }
 
-    if homepage_url.is_none() {
-        homepage_url = project
+    if urls.homepage_url.is_none() {
+        urls.homepage_url = project
             .get(FIELD_HOMEPAGE)
             .and_then(|v| v.as_str())
             .map(String::from);
     }
 
-    if repository_url.is_none() {
-        repository_url = project
+    if urls.vcs_url.is_none() {
+        urls.vcs_url = project
             .get(FIELD_REPOSITORY)
             .and_then(|v| v.as_str())
             .map(String::from);
     }
 
-    (
-        homepage_url,
-        download_url,
-        bug_tracking_url,
-        code_view_url,
-        repository_url,
-    )
+    urls
 }
 
 fn extract_parties(project: &TomlMap<String, TomlValue>) -> Vec<Party> {
@@ -346,16 +309,7 @@ fn extract_parties(project: &TomlMap<String, TomlValue>) -> Vec<Party> {
         for author in authors {
             if let Some(author_str) = author.as_str() {
                 let (name, email) = split_name_email(author_str);
-                parties.push(Party {
-                    r#type: None,
-                    role: Some("author".to_string()),
-                    name,
-                    email,
-                    url: None,
-                    organization: None,
-                    organization_url: None,
-                    timezone: None,
-                });
+                parties.push(Party::person("author", name, email));
             } else if let Some(author_table) = author.as_table() {
                 let name = author_table
                     .get("name")
@@ -366,16 +320,7 @@ fn extract_parties(project: &TomlMap<String, TomlValue>) -> Vec<Party> {
                     .and_then(|value| value.as_str())
                     .map(|value| value.to_string());
                 if name.is_some() || email.is_some() {
-                    parties.push(Party {
-                        r#type: None,
-                        role: Some("author".to_string()),
-                        name,
-                        email,
-                        url: None,
-                        organization: None,
-                        organization_url: None,
-                        timezone: None,
-                    });
+                    parties.push(Party::person("author", name, email));
                 }
             }
         }
@@ -385,16 +330,7 @@ fn extract_parties(project: &TomlMap<String, TomlValue>) -> Vec<Party> {
         for maintainer in maintainers {
             if let Some(maintainer_str) = maintainer.as_str() {
                 let (name, email) = split_name_email(maintainer_str);
-                parties.push(Party {
-                    r#type: None,
-                    role: Some("maintainer".to_string()),
-                    name,
-                    email,
-                    url: None,
-                    organization: None,
-                    organization_url: None,
-                    timezone: None,
-                });
+                parties.push(Party::person("maintainer", name, email));
             } else if let Some(maintainer_table) = maintainer.as_table() {
                 let name = maintainer_table
                     .get("name")
@@ -405,16 +341,7 @@ fn extract_parties(project: &TomlMap<String, TomlValue>) -> Vec<Party> {
                     .and_then(|value| value.as_str())
                     .map(|value| value.to_string());
                 if name.is_some() || email.is_some() {
-                    parties.push(Party {
-                        r#type: None,
-                        role: Some("maintainer".to_string()),
-                        name,
-                        email,
-                        url: None,
-                        organization: None,
-                        organization_url: None,
-                        timezone: None,
-                    });
+                    parties.push(Party::person("maintainer", name, email));
                 }
             }
         }

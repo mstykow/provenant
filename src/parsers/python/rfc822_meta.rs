@@ -3,8 +3,11 @@ use super::super::license_normalization::{
     normalize_spdx_expression,
 };
 use super::PythonParser;
-use super::archive::{parse_installed_files_txt, parse_record_csv, parse_sources_txt};
-use super::utils::{build_pypi_urls, extract_rfc822_dependencies, parse_requires_txt};
+use super::archive::{parse_file_list, parse_record_csv};
+use super::utils::{
+    ProjectUrls, apply_project_url_mappings, build_pypi_urls, extract_rfc822_dependencies,
+    parse_requires_txt,
+};
 use crate::models::{DatasourceId, FileReference, PackageData, Party};
 use crate::parser_warn as warn;
 use crate::parsers::PackageParser;
@@ -111,14 +114,14 @@ fn merge_sibling_metadata_file_references(path: &Path, package_data: &mut Packag
         if installed_files_path.exists()
             && let Ok(content) = read_file_to_string(&installed_files_path, None)
         {
-            extra_refs.extend(parse_installed_files_txt(&content));
+            extra_refs.extend(parse_file_list(&content));
         }
 
         let sources_path = parent.join("SOURCES.txt");
         if sources_path.exists()
             && let Ok(content) = read_file_to_string(&sources_path, None)
         {
-            extra_refs.extend(parse_sources_txt(&content));
+            extra_refs.extend(parse_file_list(&content));
         }
     }
 
@@ -296,7 +299,7 @@ fn build_package_data_from_rfc822(
     let name = get_header_first(&metadata.headers, "name").map(truncate_field);
     let version = get_header_first(&metadata.headers, "version").map(truncate_field);
     let summary = get_header_first(&metadata.headers, "summary").map(truncate_field);
-    let mut homepage_url = get_header_first(&metadata.headers, "home-page").map(truncate_field);
+    let homepage_url = get_header_first(&metadata.headers, "home-page").map(truncate_field);
     let author = get_header_first(&metadata.headers, "author").map(truncate_field);
     let author_email = get_header_first(&metadata.headers, "author-email").map(truncate_field);
     let license = get_header_first(&metadata.headers, "license").map(truncate_field);
@@ -317,16 +320,7 @@ fn build_package_data_from_rfc822(
 
     let mut parties = Vec::new();
     if author.is_some() || author_email.is_some() {
-        parties.push(Party {
-            r#type: Some("person".to_string()),
-            role: Some("author".to_string()),
-            name: author,
-            email: author_email,
-            url: None,
-            organization: None,
-            organization_url: None,
-            timezone: None,
-        });
+        parties.push(Party::person("author", author, author_email));
     }
 
     let (keywords, license_classifiers) = split_classifiers(&classifiers);
@@ -385,73 +379,23 @@ fn build_package_data_from_rfc822(
 
     let file_references = license_files
         .iter()
-        .map(|path| FileReference {
-            path: path.clone(),
-            size: None,
-            sha1: None,
-            md5: None,
-            sha256: None,
-            sha512: None,
-            extra_data: None,
-        })
+        .map(|path| FileReference::from_path(path.clone()))
         .collect();
 
     let project_urls = get_header_all(&metadata.headers, "project-url");
     let dependencies = extract_rfc822_dependencies(&metadata.headers);
-    let (mut bug_tracking_url, mut code_view_url, mut vcs_url) = (None, None, None);
+    let mut urls = ProjectUrls {
+        homepage_url,
+        download_url: None,
+        bug_tracking_url: None,
+        code_view_url: None,
+        vcs_url: None,
+        changelog_url: None,
+    };
 
     if !project_urls.is_empty() {
         let parsed_urls = parse_project_urls(&project_urls);
-
-        for (label, url) in &parsed_urls {
-            let label_lower = label.to_lowercase();
-
-            if bug_tracking_url.is_none()
-                && matches!(
-                    label_lower.as_str(),
-                    "tracker"
-                        | "bug reports"
-                        | "bug tracker"
-                        | "issues"
-                        | "issue tracker"
-                        | "github: issues"
-                )
-            {
-                bug_tracking_url = Some(url.clone());
-            } else if code_view_url.is_none()
-                && matches!(label_lower.as_str(), "source" | "source code" | "code")
-            {
-                code_view_url = Some(url.clone());
-            } else if vcs_url.is_none()
-                && matches!(
-                    label_lower.as_str(),
-                    "github" | "gitlab" | "github: repo" | "repository"
-                )
-            {
-                vcs_url = Some(url.clone());
-            } else if homepage_url.is_none()
-                && matches!(label_lower.as_str(), "website" | "homepage" | "home")
-            {
-                homepage_url = Some(url.clone());
-            } else if label_lower == "changelog" {
-                extra_data.insert(
-                    "changelog_url".to_string(),
-                    serde_json::Value::String(url.clone()),
-                );
-            }
-        }
-
-        let project_urls_json: serde_json::Map<String, serde_json::Value> = parsed_urls
-            .iter()
-            .map(|(label, url)| (label.clone(), serde_json::Value::String(url.clone())))
-            .collect();
-
-        if !project_urls_json.is_empty() {
-            extra_data.insert(
-                "project_urls".to_string(),
-                serde_json::Value::Object(project_urls_json),
-            );
-        }
+        apply_project_url_mappings(&parsed_urls, &mut urls, &mut extra_data);
     }
 
     let extra_data = if extra_data.is_empty() {
@@ -460,52 +404,34 @@ fn build_package_data_from_rfc822(
         Some(extra_data)
     };
 
-    let (repository_homepage_url, repository_download_url, api_data_url, purl) =
-        build_pypi_urls(name.as_deref(), version.as_deref());
+    let pypi_urls = build_pypi_urls(name.as_deref(), version.as_deref());
 
     PackageData {
         package_type: Some(PythonParser::PACKAGE_TYPE),
-        namespace: None,
         name,
         version,
-        qualifiers: None,
-        subpath: None,
         primary_language: Some("Python".to_string()),
         description,
-        release_date: None,
         parties,
         keywords,
-        homepage_url,
+        homepage_url: urls.homepage_url,
         download_url,
-        size: None,
-        sha1: None,
-        md5: None,
-        sha256: None,
-        sha512: None,
-        bug_tracking_url,
-        code_view_url,
-        vcs_url,
-        copyright: None,
-        holder: None,
+        bug_tracking_url: urls.bug_tracking_url,
+        code_view_url: urls.code_view_url,
+        vcs_url: urls.vcs_url,
         declared_license_expression,
         declared_license_expression_spdx,
         license_detections,
-        other_license_expression: None,
-        other_license_expression_spdx: None,
-        other_license_detections: Vec::new(),
         extracted_license_statement,
-        notice_text: None,
-        source_packages: Vec::new(),
         file_references,
-        is_private: false,
-        is_virtual: false,
         extra_data,
         dependencies,
-        repository_homepage_url,
-        repository_download_url,
-        api_data_url,
+        repository_homepage_url: pypi_urls.repository_homepage_url,
+        repository_download_url: pypi_urls.repository_download_url,
+        api_data_url: pypi_urls.api_data_url,
         datasource_id: Some(datasource_id),
-        purl,
+        purl: pypi_urls.purl,
+        ..Default::default()
     }
 }
 

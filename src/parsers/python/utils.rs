@@ -11,6 +11,36 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::sync::LazyLock;
+
+static EXTRA_MARKER_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"extra\s*==\s*['\"]([^'\"]+)['\"]"#).expect("extra marker regex should compile")
+});
+
+static MARKER_FIELD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(\w+)\s*(==|!=|<=|>=|<|>)\s*['\"]([^'\"]+)['\"]"#)
+        .expect("marker field regex should compile")
+});
+
+static TESTS_REQUIRE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"tests_require\s*=\s*\[([^\]]+)\]").expect("tests_require regex should compile")
+});
+
+static EXTRAS_REQUIRE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"extras_require\s*=\s*\{([^}]+)\}").expect("extras_require regex should compile")
+});
+
+static EXTRAS_ENTRY_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"['"]([^'"]+)['"]\s*:\s*\[([^\]]+)\]"#).expect("extras entry regex should compile")
+});
+
+static DEP_PATTERN_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"['"]([^'"]+)['"]"#).expect("dep pattern regex should compile"));
+
+static SETUP_VALUE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(\w+)\s*=\s*['"]([^'"]*)['"]"#).expect("setup value regex should compile")
+});
+
 use toml::Value as TomlValue;
 
 pub(super) fn default_package_data(path: &Path) -> PackageData {
@@ -72,15 +102,14 @@ fn infer_python_datasource_id(path: &Path) -> Option<DatasourceId> {
     }
 }
 
-pub(crate) fn build_pypi_urls(
-    name: Option<&str>,
-    version: Option<&str>,
-) -> (
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-) {
+pub(crate) struct PypiUrls {
+    pub repository_homepage_url: Option<String>,
+    pub repository_download_url: Option<String>,
+    pub api_data_url: Option<String>,
+    pub purl: Option<String>,
+}
+
+pub(crate) fn build_pypi_urls(name: Option<&str>, version: Option<&str>) -> PypiUrls {
     let repository_homepage_url = name.map(|value| format!("https://pypi.org/project/{}", value));
 
     let repository_download_url = name.and_then(|value| {
@@ -111,12 +140,12 @@ pub(crate) fn build_pypi_urls(
         Some(package_url.to_string())
     });
 
-    (
+    PypiUrls {
         repository_homepage_url,
         repository_download_url,
         api_data_url,
         purl,
-    )
+    }
 }
 
 pub(crate) fn read_toml_file(path: &Path) -> Result<TomlValue, String> {
@@ -165,7 +194,7 @@ pub(super) fn build_python_dependency(
 
     let name = extract_setup_cfg_dependency_name(requirement_part)?;
     let requirement = normalize_rfc822_requirement(requirement_part);
-    let (scope, is_optional, marker, marker_data) = parse_rfc822_marker(
+    let parsed = parse_rfc822_marker(
         marker_part.or(marker_override),
         default_scope,
         default_optional,
@@ -186,17 +215,17 @@ pub(super) fn build_python_dependency(
     };
 
     let mut extra_data = HashMap::new();
-    extra_data.extend(marker_data);
-    if let Some(marker) = marker {
+    extra_data.extend(parsed.extra_data);
+    if let Some(marker) = parsed.marker {
         extra_data.insert("marker".to_string(), serde_json::Value::String(marker));
     }
 
     Some(Dependency {
         purl: Some(purl),
         extracted_requirement: requirement,
-        scope: Some(scope),
+        scope: Some(parsed.scope),
         is_runtime: Some(true),
-        is_optional: Some(is_optional),
+        is_optional: Some(parsed.is_optional),
         is_pinned: Some(is_pinned),
         is_direct: Some(true),
         resolved_package: None,
@@ -273,27 +302,27 @@ pub(crate) fn extract_requires_dist_dependencies(requires_dist: &[String]) -> Ve
         .collect()
 }
 
+pub(super) struct ParsedMarker {
+    pub scope: String,
+    pub is_optional: bool,
+    pub marker: Option<String>,
+    pub extra_data: HashMap<String, serde_json::Value>,
+}
+
 fn parse_rfc822_marker(
     marker_part: Option<&str>,
     default_scope: &str,
     default_optional: bool,
-) -> (
-    String,
-    bool,
-    Option<String>,
-    HashMap<String, serde_json::Value>,
-) {
+) -> ParsedMarker {
     let Some(marker) = marker_part.filter(|marker| !marker.trim().is_empty()) else {
-        return (
-            default_scope.to_string(),
-            default_optional,
-            None,
-            HashMap::new(),
-        );
+        return ParsedMarker {
+            scope: default_scope.to_string(),
+            is_optional: default_optional,
+            marker: None,
+            extra_data: HashMap::new(),
+        };
     };
 
-    let extra_re = Regex::new(r#"extra\s*==\s*['\"]([^'\"]+)['\"]"#)
-        .expect("extra marker regex should compile");
     let mut extra_data = HashMap::new();
 
     if let Some(python_version) = extract_marker_field(marker, "python_version") {
@@ -309,34 +338,33 @@ fn parse_rfc822_marker(
         );
     }
 
-    if let Some(captures) = extra_re.captures(marker)
+    if let Some(captures) = EXTRA_MARKER_RE.captures(marker)
         && let Some(scope) = captures.get(1)
     {
-        return (
-            scope.as_str().to_string(),
-            true,
-            Some(marker.trim().to_string()),
+        return ParsedMarker {
+            scope: scope.as_str().to_string(),
+            is_optional: true,
+            marker: Some(marker.trim().to_string()),
             extra_data,
-        );
+        };
     }
 
-    (
-        default_scope.to_string(),
-        default_optional,
-        Some(marker.trim().to_string()),
+    ParsedMarker {
+        scope: default_scope.to_string(),
+        is_optional: default_optional,
+        marker: Some(marker.trim().to_string()),
         extra_data,
-    )
+    }
 }
 
 fn extract_marker_field(marker: &str, field: &str) -> Option<String> {
-    let re = Regex::new(&format!(
-        r#"{}\s*(==|!=|<=|>=|<|>)\s*['\"]([^'\"]+)['\"]"#,
-        field
-    ))
-    .ok()?;
-    let captures = re.captures(marker)?;
-    let operator = captures.get(1)?.as_str();
-    let value = captures.get(2)?.as_str();
+    let captures = MARKER_FIELD_RE.captures(marker)?;
+    let matched_field = captures.get(1)?.as_str();
+    if matched_field != field {
+        return None;
+    }
+    let operator = captures.get(2)?.as_str();
+    let value = captures.get(3)?.as_str();
     Some(format!("{} {}", operator, value))
 }
 
@@ -408,28 +436,11 @@ pub(super) fn build_setup_py_purl(name: Option<&str>, version: Option<&str>) -> 
 }
 
 pub(super) fn extract_setup_value(content: &str, key: &str) -> Option<String> {
-    let patterns = vec![
-        format!("{}=\"", key),   // name="value"
-        format!("{} =\"", key),  // name ="value"
-        format!("{}= \"", key),  // name= "value"
-        format!("{} = \"", key), // name = "value"
-        format!("{}='", key),    // name='value'
-        format!("{} ='", key),   // name ='value'
-        format!("{}= '", key),   // name= 'value'
-        format!("{} = '", key),  // name = 'value'
-    ];
-
-    for pattern in patterns {
-        if let Some(start_idx) = content.find(&pattern) {
-            let value_start = start_idx + pattern.len();
-            let remaining = &content[value_start..];
-
-            if let Some(end_idx) = remaining.find(['"', '\'']) {
-                return Some(remaining[..end_idx].to_string());
-            }
+    for captures in SETUP_VALUE_RE.captures_iter(content) {
+        if captures.get(1)?.as_str() == key {
+            return Some(captures.get(2)?.as_str().to_string());
         }
     }
-
     None
 }
 
@@ -448,9 +459,7 @@ pub(super) fn extract_setup_py_dependencies(content: &str) -> Vec<Dependency> {
 }
 
 fn extract_tests_require(content: &str) -> Option<Vec<Dependency>> {
-    let pattern = r"tests_require\s*=\s*\[([^\]]+)\]";
-    let re = Regex::new(pattern).ok()?;
-    let captures = re.captures(content)?;
+    let captures = TESTS_REQUIRE_RE.captures(content)?;
     let deps_str = captures.get(1)?.as_str();
 
     let deps = parse_setup_py_dep_list(deps_str, "test", true);
@@ -458,17 +467,12 @@ fn extract_tests_require(content: &str) -> Option<Vec<Dependency>> {
 }
 
 fn extract_extras_require(content: &str) -> Option<Vec<Dependency>> {
-    let pattern = r"extras_require\s*=\s*\{([^}]+)\}";
-    let re = Regex::new(pattern).ok()?;
-    let captures = re.captures(content)?;
+    let captures = EXTRAS_REQUIRE_RE.captures(content)?;
     let dict_content = captures.get(1)?.as_str();
 
     let mut all_deps = Vec::new();
 
-    let entry_pattern = r#"['"]([^'"]+)['"]\s*:\s*\[([^\]]+)\]"#;
-    let entry_re = Regex::new(entry_pattern).ok()?;
-
-    for entry_cap in entry_re.captures_iter(dict_content) {
+    for entry_cap in EXTRAS_ENTRY_RE.captures_iter(dict_content) {
         if let (Some(extra_name), Some(deps_str)) = (entry_cap.get(1), entry_cap.get(2)) {
             let deps = parse_setup_py_dep_list(deps_str.as_str(), extra_name.as_str(), true);
             all_deps.extend(deps);
@@ -483,13 +487,8 @@ fn extract_extras_require(content: &str) -> Option<Vec<Dependency>> {
 }
 
 fn parse_setup_py_dep_list(deps_str: &str, scope: &str, is_optional: bool) -> Vec<Dependency> {
-    let dep_pattern = r#"['"]([^'"]+)['"]"#;
-    let re = match Regex::new(dep_pattern) {
-        Ok(r) => r,
-        Err(_) => return Vec::new(),
-    };
-
-    re.captures_iter(deps_str)
+    DEP_PATTERN_RE
+        .captures_iter(deps_str)
         .filter_map(|cap| {
             let dep_str = cap.get(1)?.as_str().trim();
             if dep_str.is_empty() {
@@ -552,18 +551,24 @@ pub(super) fn extract_setup_cfg_dependency_name(req: &str) -> Option<String> {
     }
 }
 
+pub(super) struct ProjectUrls {
+    pub homepage_url: Option<String>,
+    pub download_url: Option<String>,
+    pub bug_tracking_url: Option<String>,
+    pub code_view_url: Option<String>,
+    pub vcs_url: Option<String>,
+    pub changelog_url: Option<String>,
+}
+
 pub(super) fn apply_project_url_mappings(
     parsed_urls: &[(String, String)],
-    homepage_url: &mut Option<String>,
-    bug_tracking_url: &mut Option<String>,
-    code_view_url: &mut Option<String>,
-    vcs_url: &mut Option<String>,
+    urls: &mut ProjectUrls,
     extra_data: &mut HashMap<String, serde_json::Value>,
 ) {
     for (label, url) in parsed_urls {
         let label_lower = label.to_lowercase();
 
-        if bug_tracking_url.is_none()
+        if urls.bug_tracking_url.is_none()
             && matches!(
                 label_lower.as_str(),
                 "tracker"
@@ -574,23 +579,24 @@ pub(super) fn apply_project_url_mappings(
                     | "github: issues"
             )
         {
-            *bug_tracking_url = Some(url.clone());
-        } else if code_view_url.is_none()
+            urls.bug_tracking_url = Some(url.clone());
+        } else if urls.code_view_url.is_none()
             && matches!(label_lower.as_str(), "source" | "source code" | "code")
         {
-            *code_view_url = Some(url.clone());
-        } else if vcs_url.is_none()
+            urls.code_view_url = Some(url.clone());
+        } else if urls.vcs_url.is_none()
             && matches!(
                 label_lower.as_str(),
                 "github" | "gitlab" | "github: repo" | "repository"
             )
         {
-            *vcs_url = Some(url.clone());
-        } else if homepage_url.is_none()
+            urls.vcs_url = Some(url.clone());
+        } else if urls.homepage_url.is_none()
             && matches!(label_lower.as_str(), "website" | "homepage" | "home")
         {
-            *homepage_url = Some(url.clone());
+            urls.homepage_url = Some(url.clone());
         } else if label_lower == "changelog" {
+            urls.changelog_url = Some(url.clone());
             extra_data.insert(
                 "changelog_url".to_string(),
                 serde_json::Value::String(url.clone()),

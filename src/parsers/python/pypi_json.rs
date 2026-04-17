@@ -2,7 +2,7 @@ use super::super::license_normalization::normalize_spdx_declared_license;
 use super::PythonParser;
 use super::setup_py::package_data_to_resolved;
 use super::utils::{
-    apply_project_url_mappings, build_pypi_urls, default_package_data,
+    ProjectUrls, apply_project_url_mappings, build_pypi_urls, default_package_data,
     extract_requires_dist_dependencies, has_private_classifier, parse_setup_cfg_keywords,
 };
 use crate::models::{DatasourceId, Dependency, PackageData, Party, Sha256Digest};
@@ -59,7 +59,7 @@ pub(super) fn extract_from_pypi_json(path: &Path) -> PackageData {
         .filter(|value| !value.trim().is_empty())
         .map(|v| truncate_field(v.to_owned()))
         .or(summary);
-    let mut homepage_url = info
+    let homepage_url = info
         .get("home_page")
         .and_then(|value| value.as_str())
         .map(|v| truncate_field(v.to_owned()));
@@ -96,21 +96,17 @@ pub(super) fn extract_from_pypi_json(path: &Path) -> PackageData {
 
     let mut parties = Vec::new();
     if author.is_some() || author_email.is_some() {
-        parties.push(Party {
-            r#type: Some("person".to_string()),
-            role: Some("author".to_string()),
-            name: author,
-            email: author_email,
-            url: None,
-            organization: None,
-            organization_url: None,
-            timezone: None,
-        });
+        parties.push(Party::person("author", author, author_email));
     }
 
-    let mut bug_tracking_url = None;
-    let mut code_view_url = None;
-    let mut vcs_url = None;
+    let mut project_urls = ProjectUrls {
+        homepage_url,
+        download_url: None,
+        bug_tracking_url: None,
+        code_view_url: None,
+        vcs_url: None,
+        changelog_url: None,
+    };
     let mut extra_data = HashMap::new();
 
     let parsed_project_urls = info
@@ -126,22 +122,19 @@ pub(super) fn extract_from_pypi_json(path: &Path) -> PackageData {
         })
         .unwrap_or_default();
 
-    apply_project_url_mappings(
-        &parsed_project_urls,
-        &mut homepage_url,
-        &mut bug_tracking_url,
-        &mut code_view_url,
-        &mut vcs_url,
-        &mut extra_data,
-    );
+    apply_project_url_mappings(&parsed_project_urls, &mut project_urls, &mut extra_data);
 
-    let (download_url, size, sha256) = root
+    let artifact = root
         .get("urls")
         .and_then(|value| value.as_array())
         .map(|urls| select_pypi_json_artifact(urls))
-        .unwrap_or((None, None, None));
+        .unwrap_or_else(PypiArtifact::empty);
 
-    let sha256 = sha256.and_then(|h| Sha256Digest::from_hex(&h).ok());
+    let download_url = artifact.download_url;
+    let size = artifact.size;
+    let sha256 = artifact
+        .sha256
+        .and_then(|h| Sha256Digest::from_hex(&h).ok());
 
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         normalize_spdx_declared_license(license.as_deref());
@@ -157,84 +150,83 @@ pub(super) fn extract_from_pypi_json(path: &Path) -> PackageData {
         .map(|entries| extract_requires_dist_dependencies(&entries))
         .unwrap_or_default();
 
-    let (repository_homepage_url, repository_download_url, api_data_url, purl) =
-        build_pypi_urls(name.as_deref(), version.as_deref());
+    let pypi_urls = build_pypi_urls(name.as_deref(), version.as_deref());
 
     PackageData {
         package_type: Some(PythonParser::PACKAGE_TYPE),
-        namespace: None,
         name,
         version,
-        qualifiers: None,
-        subpath: None,
-        primary_language: None,
         description,
-        release_date: None,
         parties,
         keywords,
-        homepage_url: homepage_url.or(repository_homepage_url.clone()),
+        homepage_url: project_urls
+            .homepage_url
+            .or(pypi_urls.repository_homepage_url.clone()),
         download_url,
         size,
-        sha1: None,
-        md5: None,
         sha256,
-        sha512: None,
-        bug_tracking_url,
-        code_view_url,
-        vcs_url,
-        copyright: None,
-        holder: None,
+        bug_tracking_url: project_urls.bug_tracking_url,
+        code_view_url: project_urls.code_view_url,
+        vcs_url: project_urls.vcs_url,
         declared_license_expression,
         declared_license_expression_spdx,
         license_detections,
-        other_license_expression: None,
-        other_license_expression_spdx: None,
-        other_license_detections: Vec::new(),
         extracted_license_statement: license,
-        notice_text: None,
-        source_packages: Vec::new(),
-        file_references: Vec::new(),
         is_private: has_private_classifier(&classifiers),
-        is_virtual: false,
         extra_data: if extra_data.is_empty() {
             None
         } else {
             Some(extra_data)
         },
         dependencies,
-        repository_homepage_url,
-        repository_download_url,
-        api_data_url,
+        repository_homepage_url: pypi_urls.repository_homepage_url,
+        repository_download_url: pypi_urls.repository_download_url,
+        api_data_url: pypi_urls.api_data_url,
         datasource_id: Some(DatasourceId::PypiJson),
-        purl,
+        purl: pypi_urls.purl,
+        ..Default::default()
     }
 }
 
-fn select_pypi_json_artifact(
-    urls: &[serde_json::Value],
-) -> (Option<String>, Option<u64>, Option<String>) {
+struct PypiArtifact {
+    download_url: Option<String>,
+    size: Option<u64>,
+    sha256: Option<String>,
+}
+
+impl PypiArtifact {
+    fn empty() -> Self {
+        Self {
+            download_url: None,
+            size: None,
+            sha256: None,
+        }
+    }
+}
+
+fn select_pypi_json_artifact(urls: &[serde_json::Value]) -> PypiArtifact {
     let selected = urls
         .iter()
         .find(|entry| entry.get("packagetype").and_then(|value| value.as_str()) == Some("sdist"))
         .or_else(|| urls.first());
 
     let Some(entry) = selected else {
-        return (None, None, None);
+        return PypiArtifact::empty();
     };
 
-    let download_url = entry
-        .get("url")
-        .and_then(|value| value.as_str())
-        .map(ToOwned::to_owned);
-    let size = entry.get("size").and_then(|value| value.as_u64());
-    let sha256 = entry
-        .get("digests")
-        .and_then(|value| value.as_object())
-        .and_then(|digests| digests.get("sha256"))
-        .and_then(|value| value.as_str())
-        .map(ToOwned::to_owned);
-
-    (download_url, size, sha256)
+    PypiArtifact {
+        download_url: entry
+            .get("url")
+            .and_then(|value| value.as_str())
+            .map(ToOwned::to_owned),
+        size: entry.get("size").and_then(|value| value.as_u64()),
+        sha256: entry
+            .get("digests")
+            .and_then(|value| value.as_object())
+            .and_then(|digests| digests.get("sha256"))
+            .and_then(|value| value.as_str())
+            .map(ToOwned::to_owned),
+    }
 }
 
 pub(super) fn extract_from_pip_inspect(path: &Path) -> PackageData {
@@ -336,16 +328,7 @@ pub(super) fn extract_from_pip_inspect(path: &Path) -> PackageData {
 
         let mut parties = Vec::new();
         if author.is_some() || author_email.is_some() {
-            parties.push(Party {
-                r#type: Some("person".to_string()),
-                role: Some("author".to_string()),
-                name: author,
-                email: author_email,
-                url: None,
-                organization: None,
-                organization_url: None,
-                timezone: None,
-            });
+            parties.push(Party::person("author", author, author_email));
         }
 
         let (declared_license_expression, declared_license_expression_spdx, license_detections) =
@@ -388,39 +371,17 @@ pub(super) fn extract_from_pip_inspect(path: &Path) -> PackageData {
 
             main_package = Some(PackageData {
                 package_type: Some(PythonParser::PACKAGE_TYPE),
-                namespace: None,
                 name,
                 version,
-                qualifiers: None,
-                subpath: None,
                 primary_language: Some("Python".to_string()),
                 description: description.or(summary),
-                release_date: None,
                 parties,
                 keywords,
                 homepage_url: home_page,
-                download_url: None,
-                size: None,
-                sha1: None,
-                md5: None,
-                sha256: None,
-                sha512: None,
-                bug_tracking_url: None,
-                code_view_url: None,
-                vcs_url: None,
-                copyright: None,
-                holder: None,
                 declared_license_expression,
                 declared_license_expression_spdx,
                 license_detections,
-                other_license_expression: None,
-                other_license_expression_spdx: None,
-                other_license_detections: Vec::new(),
                 extracted_license_statement,
-                notice_text: None,
-                source_packages: Vec::new(),
-                file_references: Vec::new(),
-                is_private: false,
                 is_virtual: true,
                 extra_data: if extra_data.is_empty() {
                     None
@@ -428,56 +389,29 @@ pub(super) fn extract_from_pip_inspect(path: &Path) -> PackageData {
                     Some(extra_data)
                 },
                 dependencies: parsed_dependencies,
-                repository_homepage_url: None,
-                repository_download_url: None,
-                api_data_url: None,
                 datasource_id: Some(DatasourceId::PypiInspectDeplock),
                 purl,
+                ..Default::default()
             });
         } else {
             let resolved_package = PackageData {
                 package_type: Some(PythonParser::PACKAGE_TYPE),
-                namespace: None,
                 name: name.clone(),
                 version: version.clone(),
-                qualifiers: None,
-                subpath: None,
                 primary_language: Some("Python".to_string()),
                 description: description.or(summary),
-                release_date: None,
                 parties,
                 keywords,
                 homepage_url: home_page,
-                download_url: None,
-                size: None,
-                sha1: None,
-                md5: None,
-                sha256: None,
-                sha512: None,
-                bug_tracking_url: None,
-                code_view_url: None,
-                vcs_url: None,
-                copyright: None,
-                holder: None,
                 declared_license_expression,
                 declared_license_expression_spdx,
                 license_detections,
-                other_license_expression: None,
-                other_license_expression_spdx: None,
-                other_license_detections: Vec::new(),
                 extracted_license_statement,
-                notice_text: None,
-                source_packages: Vec::new(),
-                file_references: Vec::new(),
-                is_private: false,
                 is_virtual: true,
-                extra_data: None,
                 dependencies: parsed_dependencies,
-                repository_homepage_url: None,
-                repository_download_url: None,
-                api_data_url: None,
                 datasource_id: Some(DatasourceId::PypiInspectDeplock),
                 purl: purl.clone(),
+                ..Default::default()
             };
 
             let resolved = package_data_to_resolved(&resolved_package);
