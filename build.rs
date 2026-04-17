@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -19,6 +20,38 @@ fn main() {
         .unwrap_or_else(|| derive_build_version(&package_version));
 
     println!("cargo:rustc-env=PROVENANT_BUILD_VERSION={build_version}");
+
+    generate_legalese_artifact();
+}
+
+fn generate_legalese_artifact() {
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    let data_path = Path::new(&manifest_dir).join("resources/license_detection/legalese_data.txt");
+    println!("cargo:rerun-if-changed={}", data_path.display());
+
+    let mut map = BTreeMap::new();
+    let content = fs::read_to_string(&data_path)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", data_path.display()));
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let (word, id_str) = line.split_once('\t').unwrap_or_else(|| {
+            panic!("invalid legalese data line (no tab): {line:?}");
+        });
+        let id: u16 = id_str.parse().unwrap_or_else(|e| {
+            panic!("invalid token id {id_str:?} for word {word:?}: {e}");
+        });
+        map.insert(word.to_string(), id);
+    }
+
+    let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&map).unwrap();
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let out_path = Path::new(&out_dir).join("legalese.rkyv");
+    fs::write(&out_path, &bytes).unwrap_or_else(|e| {
+        panic!("failed to write {}: {e}", out_path.display());
+    });
 }
 
 fn generate_license_overlay_manifest() {

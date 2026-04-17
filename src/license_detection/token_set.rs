@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn test_high_subset() {
         let set = TokenSet::from_u16_iter([1, 2, 5, 10]);
-        let dict = TokenDictionary::new_with_legalese(&[("one", 1), ("two", 2)]);
+        let dict = TokenDictionary::new_with_legalese_pairs(&[("one", 1), ("two", 2)]);
 
         let high_set = set.high_subset(&dict);
 

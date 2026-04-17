@@ -67,7 +67,7 @@ fn make_detection(rule_url: &str) -> InternalLicenseDetection {
 }
 
 fn create_test_index(entries: &[(&str, u16)], len_legalese: usize) -> LicenseIndex {
-    let dictionary = TokenDictionary::new_with_legalese(entries);
+    let dictionary = TokenDictionary::new_with_legalese_pairs(entries);
     let mut index = LicenseIndex::new(dictionary);
     index.len_legalese = len_legalese;
     index

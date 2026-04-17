@@ -96,7 +96,7 @@ mod tests {
     fn test_high_subset() {
         let token_ids = vec![tid(1), tid(1), tid(2), tid(5), tid(10)];
         let multiset = TokenMultiset::from_token_ids(&token_ids);
-        let dict = TokenDictionary::new_with_legalese(&[("one", 1), ("two", 2)]);
+        let dict = TokenDictionary::new_with_legalese_pairs(&[("one", 1), ("two", 2)]);
 
         let high_multiset = multiset.high_subset(&dict);
 

@@ -688,7 +688,7 @@ mod tests {
         let legalese_entries: Vec<(String, u16)> =
             (0u16..15).map(|i| (format!("legalese-{i}"), i)).collect();
         index.dictionary =
-            crate::license_detection::index::dictionary::TokenDictionary::new_with_legalese(
+            crate::license_detection::index::dictionary::TokenDictionary::new_with_legalese_pairs(
                 &legalese_entries
                     .iter()
                     .map(|(token, id)| (token.as_str(), *id))

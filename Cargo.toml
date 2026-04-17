@@ -24,6 +24,7 @@ include = [
     "/resources/license_detection/license_index.zst",
     "/resources/license_detection/index_build_policy.toml",
     "/resources/license_detection/overlay/**/*",
+    "/resources/license_detection/legalese_data.txt",
     "/Cargo.toml",
     "/Cargo.lock",
     "/ACKNOWLEDGEMENTS.md",
@@ -150,6 +151,9 @@ uuid = { version = "1.23.0", features = ["v4"] }
 yaml_serde = "0.10.4"
 zip = "8.5.1"
 zstd = { workspace = true }
+
+[build-dependencies]
+rkyv = "0.8.15"
 
 [dev-dependencies]
 

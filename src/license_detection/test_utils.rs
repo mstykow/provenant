@@ -20,7 +20,7 @@ use crate::license_detection::query::Query;
 /// # Returns
 /// A `LicenseIndex` configured with the given dictionary
 pub fn create_test_index(legalese: &[(&str, u16)], len_legalese: usize) -> LicenseIndex {
-    let dictionary = TokenDictionary::new_with_legalese(
+    let dictionary = TokenDictionary::new_with_legalese_pairs(
         &legalese.iter().map(|(s, i)| (*s, *i)).collect::<Vec<_>>(),
     );
 
