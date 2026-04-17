@@ -2040,7 +2040,7 @@ Test package description.
 
     #[test]
     fn test_parse_record_csv() {
-        use crate::parsers::python::parse_record_csv;
+        use super::super::archive::parse_record_csv;
 
         let record_content = "package/__init__.py,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0\n\
                              package/module.py,sha256=2jmj7l5rSw0yVb_vlWAYkK_YBwk1BkwQZq6ZNzJBH20,1234\n\
@@ -2065,7 +2065,7 @@ Test package description.
 
     #[test]
     fn test_parse_installed_files_txt() {
-        use crate::parsers::python::parse_installed_files_txt;
+        use super::super::archive::parse_installed_files_txt;
 
         let installed_files_content = "__init__.py\n\
                                        module.py\n\

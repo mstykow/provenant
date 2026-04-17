@@ -245,10 +245,6 @@ mod pylock_toml;
 #[cfg(test)]
 mod pylock_toml_test;
 mod python;
-#[cfg(test)]
-mod python_scan_test;
-#[cfg(test)]
-mod python_test;
 mod readme;
 #[cfg(test)]
 mod readme_test;
