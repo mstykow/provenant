@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use super::super::deb::extract_package_name_from_deb_path;
     use crate::models::DatasourceId;
     use crate::models::Md5Digest;
     use crate::models::PackageType;

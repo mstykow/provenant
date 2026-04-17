@@ -42,7 +42,7 @@ mod cpan_golden_test;
 mod cran_golden_test;
 #[path = "dart_golden_test.rs"]
 mod dart_golden_test;
-#[path = "debian_golden_test.rs"]
+#[path = "debian/golden_test.rs"]
 mod debian_golden_test;
 #[path = "deno_golden_test.rs"]
 mod deno_golden_test;
