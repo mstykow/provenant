@@ -2,10 +2,28 @@ use std::collections::HashMap;
 
 use packageurl::PackageUrl;
 
-use crate::models::Dependency;
+use crate::models::{Dependency, Party};
 use crate::parsers::utils::truncate_field;
 
 use super::PACKAGE_TYPE;
+
+pub(super) fn make_party(
+    r#type: Option<&str>,
+    role: &str,
+    name: Option<String>,
+    email: Option<String>,
+) -> Party {
+    Party {
+        r#type: r#type.map(|t| t.to_string()),
+        role: Some(role.to_string()),
+        name,
+        email,
+        url: None,
+        organization: None,
+        organization_url: None,
+        timezone: None,
+    }
+}
 use super::{
     DEP_FIELDS, DEP_RE, MAINTAINER_CLUES_DEBIAN, MAINTAINER_CLUES_UBUNTU, VERSION_CLUES_DEBIAN,
     VERSION_CLUES_UBUNTU,

@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::models::{DatasourceId, PackageData, PackageType, Party};
+use crate::models::{DatasourceId, PackageData, PackageType};
 use crate::parser_warn as warn;
 use crate::parsers::rfc822;
 use crate::parsers::utils::{
     MAX_ITERATION_COUNT, read_file_to_string, split_name_email, truncate_field,
 };
 
-use super::utils::{build_debian_purl, parse_dependency_field};
+use super::utils::{build_debian_purl, make_party, parse_dependency_field};
 use super::{PACKAGE_TYPE, default_package_data};
 use crate::parsers::PackageParser;
 
@@ -120,16 +120,9 @@ fn parse_dsc_content(content: &str) -> PackageData {
 
     if let Some(maintainer) = rfc822::get_header_first(headers, "maintainer") {
         let (name_opt, email_opt) = split_name_email(&maintainer);
-        package.parties.push(Party {
-            r#type: None,
-            role: Some("maintainer".to_string()),
-            name: name_opt,
-            email: email_opt,
-            url: None,
-            organization: None,
-            organization_url: None,
-            timezone: None,
-        });
+        package
+            .parties
+            .push(make_party(None, "maintainer", name_opt, email_opt));
     }
 
     if let Some(uploaders_str) = rfc822::get_header_first(headers, "uploaders") {
@@ -139,16 +132,9 @@ fn parse_dsc_content(content: &str) -> PackageData {
                 continue;
             }
             let (name_opt, email_opt) = split_name_email(uploader);
-            package.parties.push(Party {
-                r#type: None,
-                role: Some("uploader".to_string()),
-                name: name_opt,
-                email: email_opt,
-                url: None,
-                organization: None,
-                organization_url: None,
-                timezone: None,
-            });
+            package
+                .parties
+                .push(make_party(None, "uploader", name_opt, email_opt));
         }
     }
 
