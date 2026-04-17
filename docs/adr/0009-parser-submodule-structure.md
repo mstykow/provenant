@@ -55,25 +55,21 @@ src/parsers/<ecosystem>/
 └── ...
 ```
 
-For a concrete example, `python/` might look like:
+For the concrete `python/` example, see the actual directory at `src/parsers/python/`. At the time of
+this writing the structure is:
 
 ```text
 src/parsers/python/
 ├── mod.rs              # PythonParser impl, dispatcher, register_parser!
-├── wheel.rs            # wheel/egg/sdist archive extraction
-├── wheel_test.rs       # unit tests for wheel/egg/sdist
+├── archive.rs          # sdist/wheel/egg archive extraction, pip-origin-json parsing
+├── rfc822_meta.rs      # PKG-INFO/METADATA RFC 822 parsing
+├── pyproject.rs        # pyproject.toml + Poetry parsing
 ├── setup_py.rs         # setup.py AST + regex parsing
-├── setup_py_test.rs
-├── pyproject.rs        # pyproject.toml + Poetry
-├── pyproject_test.rs
 ├── setup_cfg.rs        # setup.cfg INI parsing
-├── setup_cfg_test.rs
-├── rfc822.rs           # PKG-INFO/METADATA parsing
-├── rfc822_test.rs
-├── pypi_json.rs        # pypi.json
-├── pip_inspect.rs      # pip-inspect.deplock
-├── utils.rs            # shared helpers (if needed)
-└── scan_test.rs        # full-pipeline scan tests
+├── pypi_json.rs        # pypi.json + pip-inspect parsing
+├── utils.rs            # shared helpers (dependency building, normalization, etc.)
+├── test.rs             # unit tests (co-located)
+└── scan_test.rs        # full-pipeline scan tests (co-located)
 ```
 
 Specific rules:
