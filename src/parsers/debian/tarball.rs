@@ -85,10 +85,10 @@ crate::register_parser!(
 
 fn parse_source_tarball_filename(filename: &str, datasource_id: DatasourceId) -> PackageData {
     let without_tar_ext = filename
-        .trim_end_matches(".gz")
-        .trim_end_matches(".xz")
-        .trim_end_matches(".bz2")
-        .trim_end_matches(".tar");
+        .strip_suffix(".tar.gz")
+        .or_else(|| filename.strip_suffix(".tar.xz"))
+        .or_else(|| filename.strip_suffix(".tar.bz2"))
+        .unwrap_or(filename);
 
     let parts: Vec<&str> = without_tar_ext.splitn(2, '_').collect();
     if parts.len() < 2 {
@@ -99,8 +99,9 @@ fn parse_source_tarball_filename(filename: &str, datasource_id: DatasourceId) ->
     let version_with_suffix = parts[1];
 
     let version = version_with_suffix
-        .trim_end_matches(".orig")
-        .trim_end_matches(".debian")
+        .strip_suffix(".orig")
+        .or_else(|| version_with_suffix.strip_suffix(".debian"))
+        .unwrap_or(version_with_suffix)
         .to_string();
     let version = truncate_field(version);
 
@@ -203,6 +204,30 @@ mod tests {
         assert_eq!(pkg_gz.version, Some("1.0".to_string()));
         assert_eq!(pkg_xz.version, Some("1.0".to_string()));
         assert_eq!(pkg_bz2.version, Some("1.0".to_string()));
+    }
+
+    #[test]
+    fn test_parse_source_tarball_filename_strips_suffix_not_chars() {
+        let pkg = parse_source_tarball_filename(
+            "star_1.0.orig.tar.gz",
+            DatasourceId::DebianOriginalSourceTarball,
+        );
+        assert_eq!(pkg.name, Some("star".to_string()));
+        assert_eq!(pkg.version, Some("1.0".to_string()));
+
+        let pkg2 = parse_source_tarball_filename(
+            "tar_2.0.orig.tar.xz",
+            DatasourceId::DebianOriginalSourceTarball,
+        );
+        assert_eq!(pkg2.name, Some("tar".to_string()));
+        assert_eq!(pkg2.version, Some("2.0".to_string()));
+
+        let pkg3 = parse_source_tarball_filename(
+            "format_3.0.debian.tar.bz2",
+            DatasourceId::DebianSourceMetadataTarball,
+        );
+        assert_eq!(pkg3.name, Some("format".to_string()));
+        assert_eq!(pkg3.version, Some("3.0".to_string()));
     }
 
     #[test]
