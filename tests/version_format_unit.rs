@@ -1,4 +1,4 @@
-#[path = "../src/version_format.rs"]
+#[path = "../build_support/version_format.rs"]
 mod version_format;
 
 use version_format::{derive_build_version, sanitize_build_version};
