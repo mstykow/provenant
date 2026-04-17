@@ -2,10 +2,10 @@ use std::path::Path;
 
 use crate::models::{DatasourceId, FileReference, Md5Digest, PackageData, PackageType};
 use crate::parser_warn as warn;
-use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
 
 use super::utils::build_debian_purl;
-use super::{IGNORED_ROOT_DIRS, PACKAGE_TYPE, default_package_data};
+use super::{IGNORED_ROOT_DIRS, PACKAGE_TYPE, default_package_data, read_or_default};
 use crate::parsers::PackageParser;
 
 /// Parser for Debian installed file lists (*.list)
@@ -30,13 +30,7 @@ impl PackageParser for DebianInstalledListParser {
             }
         };
 
-        let content = match read_file_to_string(path, None) {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Failed to read .list file {:?}: {}", path, e);
-                return vec![default_package_data(DatasourceId::DebianInstalledFilesList)];
-            }
-        };
+        let content = read_or_default!(path, ".list file", DatasourceId::DebianInstalledFilesList);
 
         vec![parse_debian_file_list(
             &content,
@@ -76,13 +70,7 @@ impl PackageParser for DebianInstalledMd5sumsParser {
             }
         };
 
-        let content = match read_file_to_string(path, None) {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Failed to read .md5sums file {:?}: {}", path, e);
-                return vec![default_package_data(DatasourceId::DebianInstalledMd5Sums)];
-            }
-        };
+        let content = read_or_default!(path, ".md5sums file", DatasourceId::DebianInstalledMd5Sums);
 
         vec![parse_debian_file_list(
             &content,

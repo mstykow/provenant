@@ -4,11 +4,11 @@ use std::path::Path;
 use crate::models::{DatasourceId, LicenseDetection, LineNumber, PackageData, PackageType};
 use crate::parser_warn as warn;
 use crate::parsers::rfc822::{self, Rfc822Metadata};
-use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
 use crate::utils::spdx::combine_license_expressions;
 
 use super::utils::{build_debian_purl, make_party};
-use super::{PACKAGE_TYPE, default_package_data};
+use super::{PACKAGE_TYPE, default_package_data, read_or_default};
 use crate::parsers::PackageParser;
 use crate::parsers::license_normalization::{
     DeclaredLicenseMatchMetadata, NormalizedDeclaredLicense, build_declared_license_detection,
@@ -40,13 +40,7 @@ impl PackageParser for DebianCopyrightParser {
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
         let datasource_id = detect_debian_copyright_datasource(path);
-        let content = match read_file_to_string(path, None) {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Failed to read copyright file {:?}: {}", path, e);
-                return vec![default_package_data(datasource_id)];
-            }
-        };
+        let content = read_or_default!(path, "copyright file", datasource_id);
 
         let package_name = extract_package_name_from_path(path)
             .or_else(|| extract_standalone_package_name_from_path(path, datasource_id));

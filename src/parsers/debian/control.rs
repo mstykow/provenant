@@ -4,14 +4,12 @@ use std::path::Path;
 use crate::models::{DatasourceId, PackageData, PackageType, Party};
 use crate::parser_warn as warn;
 use crate::parsers::rfc822::{self, Rfc822Metadata};
-use crate::parsers::utils::{
-    MAX_ITERATION_COUNT, read_file_to_string, split_name_email, truncate_field,
-};
+use crate::parsers::utils::{MAX_ITERATION_COUNT, split_name_email, truncate_field};
 
 use super::utils::{
     build_debian_purl, detect_namespace, make_party, parse_all_dependencies, parse_source_field,
 };
-use super::{PACKAGE_TYPE, default_package_data};
+use super::{PACKAGE_TYPE, default_package_data, read_or_default};
 use crate::parsers::PackageParser;
 
 // ---------------------------------------------------------------------------
@@ -35,13 +33,7 @@ impl PackageParser for DebianControlParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path, None) {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Failed to read debian/control at {:?}: {}", path, e);
-                return vec![default_package_data(DatasourceId::DebianControlInSource)];
-            }
-        };
+        let content = read_or_default!(path, "debian/control", DatasourceId::DebianControlInSource);
 
         let packages = parse_debian_control(&content);
         if packages.is_empty() {
@@ -67,13 +59,7 @@ impl PackageParser for DebianInstalledParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path, None) {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Failed to read dpkg/status at {:?}: {}", path, e);
-                return vec![default_package_data(DatasourceId::DebianInstalledStatusDb)];
-            }
-        };
+        let content = read_or_default!(path, "dpkg/status", DatasourceId::DebianInstalledStatusDb);
 
         let packages = parse_dpkg_status(&content);
         if packages.is_empty() {
@@ -95,15 +81,11 @@ impl PackageParser for DebianDistrolessInstalledParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        let content = match read_file_to_string(path, None) {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Failed to read distroless status file at {:?}: {}", path, e);
-                return vec![default_package_data(
-                    DatasourceId::DebianDistrolessInstalledDb,
-                )];
-            }
-        };
+        let content = read_or_default!(
+            path,
+            "distroless status file",
+            DatasourceId::DebianDistrolessInstalledDb
+        );
 
         vec![parse_distroless_status(&content)]
     }
