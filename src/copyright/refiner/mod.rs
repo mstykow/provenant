@@ -3209,6 +3209,7 @@ fn refine_holder_impl(s: &str, in_copyright_context: bool) -> Option<String> {
     h = remove_dupe_holder(&h);
     h = normalize_whitespace(&h);
     h = strip_trailing_url(&h);
+    h = h.trim_matches(&['/', ' ', '~'][..]).to_string();
     if in_copyright_context {
         h = strip_trailing_email_token(&h);
     }
