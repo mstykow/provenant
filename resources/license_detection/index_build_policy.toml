@@ -18,6 +18,8 @@ ignored_rules = [
   "gpl-2.0_and-unknown-license-reference_1.RULE",
   # Bare freertos.org URL references such as a00127.html false-positive as GPL-2.0+ WITH FreeRTOS exception; see ScanCode issues #4147 and #4441.
   "gpl-2.0-plus_with_freertos-exception-2.0_1.RULE",
+  # Bare CAL-1.0 tokenization false-positives on calibration macros; see ScanCode issue #4740 and PR #4759.
+  "cal-1.0_10.RULE",
 ]
 
 ignored_licenses = []
