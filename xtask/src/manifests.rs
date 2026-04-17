@@ -77,6 +77,7 @@ pub struct CommandsManifest {
 #[derive(Debug, Clone, Serialize)]
 pub struct ScancodeManifest {
     pub image: String,
+    pub docker_platform: String,
     pub submodule_path: PathBuf,
     pub runtime_revision: String,
     pub runtime_dirty: bool,
