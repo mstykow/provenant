@@ -11,7 +11,7 @@
     "release_date": null,
     "parties": [
       {
-        "type": null,
+        "type": "person",
         "role": "author",
         "name": "Test User",
         "email": "test@example.com",
