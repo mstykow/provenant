@@ -194,7 +194,9 @@ impl PackageParser for PythonParser {
 fn is_setup_py_like_path(path: &Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(|name| name == "setup.py" || name.ends_with("_setup.py"))
+        .is_some_and(|name| {
+            name == "setup.py" || name.ends_with("_setup.py") || name.ends_with("-setup.py")
+        })
 }
 
 fn is_installed_wheel_metadata_path(path: &Path) -> bool {
@@ -3273,6 +3275,7 @@ fn collect_sibling_dunder_metadata(root: &Path, content: &str) -> DunderMetadata
         candidate_paths.push(path);
     }
 
+    candidate_paths.extend(referenced_dunder_attribute_paths(root, content));
     candidate_paths.extend(referenced_dunder_init_paths(root, content));
 
     let mut seen_paths = HashSet::new();
@@ -3342,6 +3345,22 @@ fn referenced_dunder_init_paths(root: &Path, content: &str) -> Vec<PathBuf> {
             let candidate = root.join(relative_path);
             candidate.exists().then_some(candidate)
         })
+        .collect()
+}
+
+fn referenced_dunder_attribute_paths(root: &Path, content: &str) -> Vec<PathBuf> {
+    let attr_re =
+        match Regex::new(r#"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*__(?:version|author|license)__\b"#) {
+            Ok(regex) => regex,
+            Err(_) => return Vec::new(),
+        };
+
+    let mut seen_modules = HashSet::new();
+    attr_re
+        .captures_iter(content)
+        .filter_map(|captures| captures.get(1).map(|m| m.as_str().to_string()))
+        .filter(|module| seen_modules.insert(module.clone()))
+        .filter_map(|module| resolve_imported_module_path(root, &module))
         .collect()
 }
 
@@ -5350,7 +5369,9 @@ fn infer_python_datasource_id(path: &Path) -> Option<DatasourceId> {
                 Some(DatasourceId::PypiPyprojectToml)
             }
         }
-        Some(name) if name == "setup.py" || name.ends_with("_setup.py") => {
+        Some(name)
+            if name == "setup.py" || name.ends_with("_setup.py") || name.ends_with("-setup.py") =>
+        {
             Some(DatasourceId::PypiSetupPy)
         }
         Some("setup.cfg") => Some(DatasourceId::PypiSetupCfg),
@@ -5383,11 +5404,12 @@ fn infer_python_datasource_id(path: &Path) -> Option<DatasourceId> {
 }
 
 crate::register_parser!(
-    "Python package manifests (pyproject.toml, setup.py, *_setup.py, setup.cfg, pypi.json, PKG-INFO, .dist-info/METADATA, pip cache origin.json, sdist archives, .whl, .egg)",
+    "Python package manifests (pyproject.toml, setup.py, *_setup.py, *-setup.py, setup.cfg, pypi.json, PKG-INFO, .dist-info/METADATA, pip cache origin.json, sdist archives, .whl, .egg)",
     &[
         "**/pyproject.toml",
         "**/setup.py",
         "**/*_setup.py",
+        "**/*-setup.py",
         "**/setup.cfg",
         "**/pypi.json",
         "**/PKG-INFO",

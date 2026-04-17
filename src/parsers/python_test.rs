@@ -656,6 +656,24 @@ def main():
     }
 
     #[test]
+    fn test_hyphenated_setup_py_is_matched_and_emits_minimal_package() {
+        let content = r#"
+def main():
+    return "no setup call"
+"#;
+        let (_temp_dir, file_path) = create_temp_file(content, "test-script-setup.py");
+
+        assert!(PythonParser::is_match(&file_path));
+
+        let package_data = PythonParser::extract_first_package(&file_path);
+
+        assert_eq!(package_data.package_type, Some(PackageType::Pypi));
+        assert_eq!(package_data.datasource_id, Some(DatasourceId::PypiSetupPy));
+        assert!(package_data.name.is_none());
+        assert!(package_data.version.is_none());
+    }
+
+    #[test]
     fn test_setup_py_detects_setup_call_inside_called_function() {
         let content = r#"
 from setuptools import setup
@@ -3251,6 +3269,46 @@ setup(
             Some(">=2.32.4")
         );
         assert_eq!(requests_dependency.is_pinned, Some(false));
+    }
+
+    #[test]
+    fn test_setup_py_resolves_dotted_module_dunder_metadata() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let package_dir = temp_dir.path().join("examplepkg");
+        let vendor_dir = package_dir.join("_vendor").join("auxlib");
+        fs::create_dir_all(&vendor_dir).expect("Failed to create nested vendor dir");
+
+        let setup_path = temp_dir.path().join("setup.py");
+        fs::write(
+            &setup_path,
+            r#"
+import examplepkg._vendor.auxlib.packaging
+from setuptools import setup
+
+setup(name="examplepkg", version=examplepkg.__version__)
+"#,
+        )
+        .expect("Failed to write setup.py");
+
+        fs::write(
+            package_dir.join("__init__.py"),
+            r#"
+__version__ = "7.8.9"
+"#,
+        )
+        .expect("Failed to write package __init__.py");
+
+        fs::write(vendor_dir.join("packaging.py"), "# vendor helper\n")
+            .expect("Failed to write vendor helper");
+
+        let package_data = PythonParser::extract_first_package(&setup_path);
+
+        assert_eq!(package_data.name, Some("examplepkg".to_string()));
+        assert_eq!(package_data.version, Some("7.8.9".to_string()));
+        assert_eq!(
+            package_data.purl.as_deref(),
+            Some("pkg:pypi/examplepkg@7.8.9")
+        );
     }
 
     #[test]
