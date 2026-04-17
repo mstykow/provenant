@@ -9,7 +9,7 @@ use crate::parsers::utils::{
 };
 
 use super::utils::{
-    build_debian_purl, detect_namespace, parse_all_dependencies, parse_source_field,
+    build_debian_purl, detect_namespace, make_party, parse_all_dependencies, parse_source_field,
 };
 use super::{PACKAGE_TYPE, default_package_data};
 use crate::parsers::PackageParser;
@@ -225,16 +225,7 @@ fn extract_source_meta(paragraph: &Rfc822Metadata) -> SourceMeta {
     // Maintainer
     if let Some(maintainer) = rfc822::get_header_first(&paragraph.headers, "maintainer") {
         let (name, email) = split_name_email(&maintainer);
-        parties.push(Party {
-            r#type: Some("person".to_string()),
-            role: Some("maintainer".to_string()),
-            name,
-            email,
-            url: None,
-            organization: None,
-            organization_url: None,
-            timezone: None,
-        });
+        parties.push(make_party(Some("person"), "maintainer", name, email));
     }
 
     // Original-Maintainer
@@ -242,16 +233,7 @@ fn extract_source_meta(paragraph: &Rfc822Metadata) -> SourceMeta {
         rfc822::get_header_first(&paragraph.headers, "original-maintainer")
     {
         let (name, email) = split_name_email(&orig_maintainer);
-        parties.push(Party {
-            r#type: Some("person".to_string()),
-            role: Some("maintainer".to_string()),
-            name,
-            email,
-            url: None,
-            organization: None,
-            organization_url: None,
-            timezone: None,
-        });
+        parties.push(make_party(Some("person"), "maintainer", name, email));
     }
 
     // Uploaders (comma-separated)
@@ -260,16 +242,7 @@ fn extract_source_meta(paragraph: &Rfc822Metadata) -> SourceMeta {
             let trimmed = uploader.trim();
             if !trimmed.is_empty() {
                 let (name, email) = split_name_email(trimmed);
-                parties.push(Party {
-                    r#type: Some("person".to_string()),
-                    role: Some("uploader".to_string()),
-                    name,
-                    email,
-                    url: None,
-                    organization: None,
-                    organization_url: None,
-                    timezone: None,
-                });
+                parties.push(make_party(Some("person"), "uploader", name, email));
             }
         }
     }
@@ -324,16 +297,7 @@ pub(super) fn build_package_from_paragraph(
         let mut p = Vec::new();
         if let Some(m) = &maintainer_str {
             let (n, e) = split_name_email(m);
-            p.push(Party {
-                r#type: Some("person".to_string()),
-                role: Some("maintainer".to_string()),
-                name: n,
-                email: e,
-                url: None,
-                organization: None,
-                organization_url: None,
-                timezone: None,
-            });
+            p.push(make_party(Some("person"), "maintainer", n, e));
         }
         p
     };

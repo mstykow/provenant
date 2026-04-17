@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::models::{DatasourceId, LicenseDetection, LineNumber, PackageData, PackageType, Party};
+use crate::models::{DatasourceId, LicenseDetection, LineNumber, PackageData, PackageType};
 use crate::parser_warn as warn;
 use crate::parsers::rfc822::{self, Rfc822Metadata};
 use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_field};
 use crate::utils::spdx::combine_license_expressions;
 
-use super::utils::build_debian_purl;
+use super::utils::{build_debian_purl, make_party};
 use super::{PACKAGE_TYPE, default_package_data};
 use crate::parsers::PackageParser;
 use crate::parsers::license_normalization::{
@@ -142,16 +142,7 @@ pub(super) fn parse_copyright_file(content: &str, package_name: Option<&str>) ->
             {
                 for holder in parse_copyright_holders(&copyright_text) {
                     if !holder.is_empty() {
-                        parties.push(Party {
-                            r#type: None,
-                            role: Some("copyright-holder".to_string()),
-                            name: Some(holder),
-                            email: None,
-                            url: None,
-                            organization: None,
-                            organization_url: None,
-                            timezone: None,
-                        });
+                        parties.push(make_party(None, "copyright-holder", Some(holder), None));
                     }
                 }
             }
@@ -190,16 +181,7 @@ pub(super) fn parse_copyright_file(content: &str, package_name: Option<&str>) ->
         if let Some(text) = copyright_block {
             for holder in parse_copyright_holders(&text) {
                 if !holder.is_empty() {
-                    parties.push(Party {
-                        r#type: None,
-                        role: Some("copyright-holder".to_string()),
-                        name: Some(holder),
-                        email: None,
-                        url: None,
-                        organization: None,
-                        organization_url: None,
-                        timezone: None,
-                    });
+                    parties.push(make_party(None, "copyright-holder", Some(holder), None));
                 }
             }
         }
