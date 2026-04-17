@@ -2,7 +2,8 @@ what:
   - copyrights
   - holders
   - authors
-copyrights: []
+copyrights:
+  - (c) Linux Foundation 2008-2013
 holders:
   - Linux Foundation Unified
 authors: []
