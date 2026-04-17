@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use super::super::PackageParser;
-    use super::super::nuget::{
+    use super::super::super::PackageParser;
+    use super::super::{
         CentralPackageManagementPropsParser, DirectoryBuildPropsParser, DotNetDepsJsonParser,
         NupkgParser, NuspecParser, PackageReferenceProjectParser, PackagesConfigParser,
         PackagesLockParser, ProjectJsonParser, ProjectLockJsonParser,

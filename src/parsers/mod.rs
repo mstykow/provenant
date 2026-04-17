@@ -200,10 +200,6 @@ mod npm_workspace;
 #[cfg(test)]
 mod npm_workspace_test;
 mod nuget;
-#[cfg(test)]
-mod nuget_scan_test;
-#[cfg(test)]
-mod nuget_test;
 mod opam;
 #[cfg(test)]
 mod opam_scan_test;
