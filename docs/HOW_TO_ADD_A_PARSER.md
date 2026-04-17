@@ -16,7 +16,7 @@ Use these as the source of truth for project-wide guidance:
 Adding a parser usually means doing all of the following:
 
 1. research the manifest or lockfile behavior you need to preserve
-2. implement `src/parsers/<ecosystem>.rs`
+2. implement `src/parsers/<ecosystem>.rs` (or `src/parsers/<ecosystem>/mod.rs` for large ecosystems — see [ADR 0009](adr/0009-parser-submodule-structure.md))
 3. register the parser in `src/parsers/mod.rs`
 4. register parser metadata with `register_parser!`
 5. add parser-local tests and, by default, parser goldens
@@ -116,7 +116,7 @@ impl PackageParser for MyParser {
 
 Rare exceptions should stay rare, bounded, and documented:
 
-- `python.rs` currently performs bounded sibling enrichment for adjacent installed/source metadata
+- `python/` has bounded sibling enrichment for adjacent metadata
   sidecars such as `requires.txt`, `RECORD`, `installed-files.txt`, `SOURCES.txt`, and sibling
   `WHEEL` files because those files are part of the same Python metadata surface. File ownership
   resolution still belongs in assembly (`src/assembly/file_ref_resolve.rs`), and new parsers should
@@ -188,12 +188,17 @@ points in this repo:
 
 - `src/parsers/cargo.rs` for a manifest parser with declared-license normalization and dependencies
 - `src/parsers/about.rs` for file-reference handling
-- `src/parsers/npm.rs` or `src/parsers/python.rs` for more complex multi-surface ecosystems
+- `src/parsers/npm.rs` for a complex multi-surface ecosystem that stays in a single file
+- `src/parsers/python/` for a large ecosystem split into nested submodules (see [ADR 0009](adr/0009-parser-submodule-structure.md))
 
 When an ecosystem has both a manifest and a lockfile (or multiple related file formats), put all
 `PackageParser` impls in a single `src/parsers/<ecosystem>.rs` file with separate
 `register_parser!` invocations for each. This keeps related parsing logic co-located. For example,
 `src/parsers/julia.rs` contains both `JuliaProjectTomlParser` and `JuliaManifestTomlParser`.
+
+When a single-file ecosystem exceeds ~1,500 lines or has clearly separable extraction surfaces
+backed by one `PackageParser` dispatcher, convert it to a nested directory following
+[ADR 0009](adr/0009-parser-submodule-structure.md).
 
 ## 3. Register the parser in `src/parsers/mod.rs`
 
@@ -211,6 +216,23 @@ mod my_ecosystem_test;
 mod my_ecosystem_scan_test;
 
 pub use self::my_ecosystem::MyEcosystemParser;
+```
+
+For ecosystems split into a directory (per [ADR 0009](adr/0009-parser-submodule-structure.md)),
+test modules live inside the directory's `mod.rs` instead:
+
+```rust
+// src/parsers/mod.rs — only needs the directory module and public re-export
+mod my_ecosystem;
+pub use self::my_ecosystem::MyEcosystemParser;
+```
+
+```rust
+// src/parsers/my_ecosystem/mod.rs — declares its own test modules
+#[cfg(test)]
+mod test;
+#[cfg(test)]
+mod scan_test;
 ```
 
 Match the test-module style used by neighboring parsers. Do **not** add per-parser golden modules
@@ -236,7 +258,7 @@ The parser should appear in that output after registration.
 
 ### Unit tests
 
-Add `src/parsers/<ecosystem>_test.rs` and cover the parser contract directly:
+Add `src/parsers/<ecosystem>_test.rs` (or `src/parsers/<ecosystem>/test.rs` for directory-structured parsers) and cover the parser contract directly:
 
 - `is_match()`
 - basic extraction of package identity
@@ -286,7 +308,7 @@ intentionally scanner-gated.
 
 ### Parser-adjacent scan tests
 
-Add `src/parsers/<ecosystem>_scan_test.rs` when parser correctness depends on scanner wiring,
+Add `src/parsers/<ecosystem>_scan_test.rs` (or `src/parsers/<ecosystem>/scan_test.rs` for directory-structured parsers) when parser correctness depends on scanner wiring,
 assembly, topology planning, or file/package linkage rather than single-file extraction alone.
 
 Treat a scan test as effectively required when the parser emits meaningful downstream contract data,
@@ -414,7 +436,7 @@ so verification progress can be tracked alongside existing parsers.
 
 Before considering a new parser complete, make sure all of these are true:
 
-- implementation exists in `src/parsers/<ecosystem>.rs`
+- implementation exists in `src/parsers/<ecosystem>.rs` or `src/parsers/<ecosystem>/mod.rs` (per [ADR 0009](adr/0009-parser-submodule-structure.md))
 - `PackageType` variant exists in `src/models/package_type.rs`
 - `datasource_id` is correct on every production path
 - parser is exported and registered in `src/parsers/mod.rs`

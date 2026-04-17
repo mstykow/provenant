@@ -30,7 +30,7 @@ Collect representative fixtures covering:
 
 ### Step 2: Implement the parser
 
-Create `src/parsers/<ecosystem>.rs` and implement `PackageParser`.
+Create `src/parsers/<ecosystem>.rs` and implement `PackageParser`. For large ecosystems (exceeding ~1,500 lines or with clearly separable concerns), use a nested directory `src/parsers/<ecosystem>/mod.rs` per [ADR 0009](../../docs/adr/0009-parser-submodule-structure.md).
 
 Use the current parser contract from `src/parsers/mod.rs`. Template:
 
@@ -100,7 +100,7 @@ crate::register_parser!(
 
 **Rare exceptions stay rare, bounded, and documented**:
 
-- `python.rs` has bounded sibling enrichment for a few adjacent metadata sidecars; new parsers should not copy that pattern unless an explicit assembly pass is genuinely infeasible.
+- `python/` has bounded sibling enrichment for a few adjacent metadata sidecars; new parsers should not copy that pattern unless an explicit assembly pass is genuinely infeasible.
 - Some content-aware package surfaces are scanner-owned exceptions rather than `PackageParser`s. The current example is compiled-binary package extraction behind `--package-in-compiled`; do not force those surfaces through path-based parser registration.
 
 **Declared-license contract**:
@@ -116,6 +116,8 @@ crate::register_parser!(
 - Treat parser tests and parser goldens as interface-contract checks for dependency fields, not just smoke tests.
 
 **Multi-format ecosystems**: When an ecosystem has both a manifest and a lockfile, put all `PackageParser` impls in a single `src/parsers/<ecosystem>.rs` file with separate `register_parser!` invocations for each. Example: `src/parsers/julia.rs` contains both `JuliaProjectTomlParser` and `JuliaManifestTomlParser`.
+
+**Large single-dispatcher ecosystems**: When a single `PackageParser` impl dispatches to many large extraction helpers and the file exceeds ~1,500 lines, convert to a nested directory `src/parsers/<ecosystem>/mod.rs` with surface files. See [ADR 0009](../../docs/adr/0009-parser-submodule-structure.md) for the full structure, visibility rules, and conversion guide.
 
 **Security utilities** (`src/parsers/utils.rs`):
 
@@ -137,7 +139,7 @@ Every parser should use these shared helpers rather than reimplementing ADR 0004
 - `src/parsers/cargo.rs` — manifest parser with declared-license normalization, `is_pinned` version analysis, and `file_references` extraction (license-file, readme). Shows the `normalize_spdx_expression` license path and workspace-inheritance detection in `extra_data`.
 - `src/parsers/about.rs` — file-reference handling
 - `src/parsers/npm.rs` — rich manifest parser: multi-scope dependency groups via `extract_dependency_group`, VCS URL normalization (`normalize_repo_url`), SRI integrity hash parsing, party extraction (author/contributor/maintainer), and workspace/overrides metadata in `extra_data`. Good reference for ecosystems with many optional manifest surfaces.
-- `src/parsers/python.rs` — complex multi-surface ecosystem: 11 datasources in one parser, AST-based setup.py parsing (no code execution), archive safety (size/compression-ratio limits via `collect_validated_zip_entries`), bounded sibling enrichment from adjacent `.dist-info`/`.egg-info` sidecars. Demonstrates the most extensive parser structure.
+- `src/parsers/python/` — complex multi-surface ecosystem split into nested submodules: 11 datasources dispatched from `mod.rs`, AST-based setup.py parsing (no code execution), archive safety (size/compression-ratio limits via `collect_validated_zip_entries`), bounded sibling enrichment from adjacent `.dist-info`/`.egg-info` sidecars. Demonstrates the nested-submodule structure from [ADR 0009](../../docs/adr/0009-parser-submodule-structure.md).
 
 ### Step 3: Register the parser in `src/parsers/mod.rs`
 
@@ -151,6 +153,22 @@ mod my_ecosystem_test;
 mod my_ecosystem_scan_test;
 
 pub use self::my_ecosystem::MyEcosystemParser;
+```
+
+For directory-structured parsers (per [ADR 0009](../../docs/adr/0009-parser-submodule-structure.md)), test modules live inside the ecosystem's `mod.rs`:
+
+```rust
+// src/parsers/mod.rs — only the directory module and public re-export
+mod my_ecosystem;
+pub use self::my_ecosystem::MyEcosystemParser;
+```
+
+```rust
+// src/parsers/my_ecosystem/mod.rs — declares its own test modules
+#[cfg(test)]
+mod test;
+#[cfg(test)]
+mod scan_test;
 ```
 
 Do **not** add per-parser golden modules directly to `src/parsers/mod.rs`; golden wiring is centralized in `src/parsers/golden_test.rs`.
@@ -167,7 +185,7 @@ The parser should appear in the output.
 
 ### Step 4: Add tests
 
-**Unit tests** — `src/parsers/<ecosystem>_test.rs`:
+**Unit tests** — `src/parsers/<ecosystem>_test.rs` (or `src/parsers/<ecosystem>/test.rs` for directory-structured parsers):
 
 - `is_match()`
 - Basic extraction of package identity
@@ -196,7 +214,7 @@ cargo run --manifest-path xtask/Cargo.toml --bin update-parser-golden -- <Parser
 - If fixture filenames don't end in `.json`, run `npx prettier --write --parser json <files>` explicitly.
 - Commit golden `.expected` files alongside test fixtures — CI checks that they exist and match.
 
-**Parser-adjacent scan tests** — `src/parsers/<ecosystem>_scan_test.rs`:
+**Parser-adjacent scan tests** — `src/parsers/<ecosystem>_scan_test.rs` (or `src/parsers/<ecosystem>/scan_test.rs` for directory-structured parsers):
 
 - Required when parser correctness depends on scanner wiring, assembly, topology planning, or file/package linkage.
 - Effectively required when the parser emits: `for_packages` links, `datafile_paths`, dependency hoisting or manifest/lockfile interaction, `PackageData.file_references`.
@@ -258,7 +276,7 @@ cargo run --manifest-path xtask/Cargo.toml --bin generate-supported-formats -- -
 
 Before considering a parser complete, verify ALL of the following:
 
-- [ ] Implementation exists in `src/parsers/<ecosystem>.rs`
+- [ ] Implementation exists in `src/parsers/<ecosystem>.rs` or `src/parsers/<ecosystem>/mod.rs` (per [ADR 0009](../../docs/adr/0009-parser-submodule-structure.md))
 - [ ] `PackageType` variant exists in `src/models/package_type.rs`
 - [ ] `datasource_id` is correct on every production path
 - [ ] Parser is exported and registered in `src/parsers/mod.rs`
@@ -291,6 +309,7 @@ Before considering a parser complete, verify ALL of the following:
 - `docs/HOW_TO_ADD_A_PARSER.md` — full canonical guide
 - `docs/ARCHITECTURE.md` — parser/assembly subsystem rationale
 - `docs/adr/0004-security-first-parsing.md` — security-first parsing decision and threat model (no code execution, DoS limits, archive safety, input validation)
+- `docs/adr/0009-parser-submodule-structure.md` — nested submodule convention for large ecosystems
 - `docs/TESTING_STRATEGY.md` — test-layer definitions and command guidance
 - `xtask/README.md` — xtask command CLI reference
 - `AGENTS.md` — contributor guardrails and repo conventions
