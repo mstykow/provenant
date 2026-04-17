@@ -27,10 +27,6 @@
 
 extern crate self as provenance;
 
-#[path = "main.rs"]
-mod app;
-pub use app::cli_main;
-
 pub mod assembly;
 pub mod cache;
 pub mod cli;

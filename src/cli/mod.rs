@@ -1,3 +1,7 @@
+mod run;
+
+pub use run::run;
+
 use clap::{ArgGroup, Parser};
 use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 use std::fs;

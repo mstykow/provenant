@@ -1,3 +1,6 @@
-fn main() -> std::io::Result<()> {
-    provenant::cli_main()
+fn main() {
+    if let Err(err) = provenant::cli::run() {
+        eprintln!("Error: {}", err);
+        std::process::exit(1);
+    }
 }

@@ -1,22 +1,20 @@
-use super::provenance;
 use super::*;
-use clap::Parser;
-use provenance::cli::ProcessMode;
-use provenance::models::{LineNumber, MatchScore};
+use crate::cli::ProcessMode;
+use crate::models::{LineNumber, MatchScore};
 use serde_json::json;
 use std::fs;
 use std::path::Path;
 
-use provenance::cache::{CacheConfig, DEFAULT_CACHE_DIR_NAME, build_collection_exclude_patterns};
-use provenance::license_detection::LicenseDetectionEngine;
-use provenance::post_processing::{
+use crate::cache::{CacheConfig, DEFAULT_CACHE_DIR_NAME, build_collection_exclude_patterns};
+use crate::license_detection::LicenseDetectionEngine;
+use crate::post_processing::{
     DEFAULT_LICENSEDB_URL_TEMPLATE, apply_package_reference_following,
     collect_top_level_license_detections, collect_top_level_license_references,
 };
-use provenance::scan_result_shaping::json_input::{
+use crate::scan_result_shaping::json_input::{
     JsonScanInput, load_scan_from_json, normalize_loaded_json_scan,
 };
-use provenance::scanner::collect_paths;
+use crate::scanner::collect_paths;
 
 #[test]
 fn process_mode_to_i32_supports_reference_compat_values() {
@@ -35,7 +33,7 @@ fn process_mode_to_i32_supports_reference_compat_values() {
 
 #[test]
 fn configured_scan_names_only_lists_enabled_non_license_scans() {
-    let package_cli = provenance::cli::Cli::try_parse_from([
+    let package_cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -45,7 +43,7 @@ fn configured_scan_names_only_lists_enabled_non_license_scans() {
     .unwrap();
     assert_eq!(configured_scan_names(&package_cli), "packages");
 
-    let package_only_cli = provenance::cli::Cli::try_parse_from([
+    let package_only_cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -55,7 +53,7 @@ fn configured_scan_names_only_lists_enabled_non_license_scans() {
     .unwrap();
     assert_eq!(configured_scan_names(&package_only_cli), "packages");
 
-    let mixed_cli = provenance::cli::Cli::try_parse_from([
+    let mixed_cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -69,7 +67,7 @@ fn configured_scan_names_only_lists_enabled_non_license_scans() {
 
 #[test]
 fn configured_scan_names_keeps_license_first_when_enabled() {
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -84,7 +82,7 @@ fn configured_scan_names_keeps_license_first_when_enabled() {
 
 #[test]
 fn validate_scan_option_compatibility_rejects_scan_flags_with_from_json() {
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -98,7 +96,7 @@ fn validate_scan_option_compatibility_rejects_scan_flags_with_from_json() {
 
 #[test]
 fn validate_scan_option_compatibility_allows_cache_root_flags_with_from_json() {
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -114,7 +112,7 @@ fn validate_scan_option_compatibility_allows_cache_root_flags_with_from_json() {
 
 #[test]
 fn validate_scan_option_compatibility_allows_license_cache_opt_out_with_from_json() {
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -129,7 +127,7 @@ fn validate_scan_option_compatibility_allows_license_cache_opt_out_with_from_jso
 
 #[test]
 fn validate_scan_option_compatibility_rejects_incremental_with_from_json() {
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -145,7 +143,7 @@ fn validate_scan_option_compatibility_rejects_incremental_with_from_json() {
 
 #[test]
 fn validate_scan_option_compatibility_rejects_package_with_from_json() {
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -159,7 +157,7 @@ fn validate_scan_option_compatibility_rejects_package_with_from_json() {
 
 #[test]
 fn validate_scan_option_compatibility_rejects_generated_with_from_json() {
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -173,7 +171,7 @@ fn validate_scan_option_compatibility_rejects_generated_with_from_json() {
 
 #[test]
 fn validate_scan_option_compatibility_allows_strip_root_with_from_json() {
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -187,7 +185,7 @@ fn validate_scan_option_compatibility_allows_strip_root_with_from_json() {
 
 #[test]
 fn validate_scan_option_compatibility_allows_full_root_with_from_json() {
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -201,7 +199,7 @@ fn validate_scan_option_compatibility_allows_full_root_with_from_json() {
 
 #[test]
 fn validate_scan_option_compatibility_allows_scan_flags_without_from_json() {
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -214,7 +212,7 @@ fn validate_scan_option_compatibility_allows_scan_flags_without_from_json() {
 
 #[test]
 fn validate_scan_option_compatibility_allows_multiple_inputs_with_from_json() {
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -274,16 +272,16 @@ fn from_json_with_no_assemble_preserves_preloaded_package_sections() {
     let parsed = load_scan_from_json(temp_path.to_str().expect("utf-8 path"))
         .expect("from-json loading should succeed");
 
-    let packages: Vec<provenance::models::Package> = parsed
+    let packages: Vec<crate::models::Package> = parsed
         .packages
         .iter()
-        .map(provenance::models::Package::try_from)
+        .map(crate::models::Package::try_from)
         .collect::<Result<Vec<_>, _>>()
         .expect("package conversion should succeed");
-    let dependencies: Vec<provenance::models::TopLevelDependency> = parsed
+    let dependencies: Vec<crate::models::TopLevelDependency> = parsed
         .dependencies
         .iter()
-        .map(provenance::models::TopLevelDependency::try_from)
+        .map(crate::models::TopLevelDependency::try_from)
         .collect::<Result<Vec<_>, _>>()
         .expect("dependency conversion should succeed");
 
@@ -292,7 +290,7 @@ fn from_json_with_no_assemble_preserves_preloaded_package_sections() {
         dependencies,
     };
 
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -323,21 +321,16 @@ fn from_json_with_no_assemble_preserves_preloaded_package_sections() {
 
 #[test]
 fn validate_scan_option_compatibility_allows_multiple_paths_without_from_json() {
-    let cli = provenance::cli::Cli::try_parse_from([
-        "provenant",
-        "--json-pp",
-        "scan.json",
-        "dir-a",
-        "dir-b",
-    ])
-    .unwrap();
+    let cli =
+        crate::cli::Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "dir-a", "dir-b"])
+            .unwrap();
     assert!(validate_scan_option_compatibility(&cli).is_ok());
 }
 
 #[test]
 fn validate_scan_option_compatibility_rejects_mark_source_without_info() {
     let mut cli =
-        provenance::cli::Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "sample-dir"])
+        crate::cli::Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "sample-dir"])
             .unwrap();
     cli.mark_source = true;
 
@@ -347,19 +340,16 @@ fn validate_scan_option_compatibility_rejects_mark_source_without_info() {
 
 #[test]
 fn validate_scan_option_compatibility_allows_export_license_dataset_mode() {
-    let cli = provenance::cli::Cli::try_parse_from([
-        "provenant",
-        "--export-license-dataset",
-        "dataset-out",
-    ])
-    .unwrap();
+    let cli =
+        crate::cli::Cli::try_parse_from(["provenant", "--export-license-dataset", "dataset-out"])
+            .unwrap();
 
     assert!(validate_scan_option_compatibility(&cli).is_ok());
 }
 
 #[test]
 fn validate_scan_option_compatibility_rejects_scan_flags_with_export_license_dataset() {
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--export-license-dataset",
         "dataset-out",
@@ -379,9 +369,9 @@ fn validate_scan_option_compatibility_rejects_scan_flags_with_export_license_dat
 fn from_json_skips_final_native_projection_block() {
     let mut loaded = JsonScanInput {
         headers: vec![],
-        files: vec![provenance::output_schema::OutputFileInfo::from(&json_file(
+        files: vec![crate::output_schema::OutputFileInfo::from(&json_file(
             "/tmp/archive/root/src/main.rs",
-            provenance::models::FileType::File,
+            crate::models::FileType::File,
         ))],
         packages: vec![],
         dependencies: vec![],
@@ -391,7 +381,7 @@ fn from_json_skips_final_native_projection_block() {
         excluded_count: 0,
     };
 
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -404,10 +394,10 @@ fn from_json_skips_final_native_projection_block() {
     normalize_loaded_json_scan(&mut loaded, false, true);
 
     if !cli.from_json && (cli.strip_root || cli.full_root) {
-        let mut files: Vec<provenance::models::FileInfo> = loaded
+        let mut files: Vec<crate::models::FileInfo> = loaded
             .files
             .iter()
-            .map(provenance::models::FileInfo::try_from)
+            .map(crate::models::FileInfo::try_from)
             .collect::<Result<Vec<_>, _>>()
             .expect("file conversion should succeed");
         normalize_paths(
@@ -423,13 +413,13 @@ fn from_json_skips_final_native_projection_block() {
 
 #[test]
 fn from_json_loaded_manifest_detections_can_be_recomputed_into_top_level_uniques() {
-    let mut file0 = json_file("project/package.json", provenance::models::FileType::File);
-    file0.package_data = vec![provenance::models::PackageData {
-        package_type: Some(provenance::models::PackageType::Npm),
-        license_detections: vec![provenance::models::LicenseDetection {
+    let mut file0 = json_file("project/package.json", crate::models::FileType::File);
+    file0.package_data = vec![crate::models::PackageData {
+        package_type: Some(crate::models::PackageType::Npm),
+        license_detections: vec![crate::models::LicenseDetection {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
-            matches: vec![provenance::models::Match {
+            matches: vec![crate::models::Match {
                 license_expression: "mit".to_string(),
                 license_expression_spdx: "MIT".to_string(),
                 from_file: None,
@@ -473,13 +463,13 @@ fn from_json_loaded_manifest_detections_can_be_recomputed_into_top_level_uniques
 
 #[test]
 fn from_json_recomputes_top_level_uniques_even_without_shaping_flags() {
-    let mut file0 = json_file("project/package.json", provenance::models::FileType::File);
-    file0.package_data = vec![provenance::models::PackageData {
-        package_type: Some(provenance::models::PackageType::Npm),
-        other_license_detections: vec![provenance::models::LicenseDetection {
+    let mut file0 = json_file("project/package.json", crate::models::FileType::File);
+    file0.package_data = vec![crate::models::PackageData {
+        package_type: Some(crate::models::PackageType::Npm),
+        other_license_detections: vec![crate::models::LicenseDetection {
             license_expression: "gpl-2.0-only".to_string(),
             license_expression_spdx: "GPL-2.0-only".to_string(),
-            matches: vec![provenance::models::Match {
+            matches: vec![crate::models::Match {
                 license_expression: "gpl-2.0-only".to_string(),
                 license_expression_spdx: "GPL-2.0-only".to_string(),
                 from_file: None,
@@ -520,27 +510,27 @@ fn from_json_recomputes_top_level_uniques_even_without_shaping_flags() {
 
 #[test]
 fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
-    let file0 = json_file("project/Cargo.toml", provenance::models::FileType::File);
-    let file1 = json_file("project/LICENSE", provenance::models::FileType::File);
+    let file0 = json_file("project/Cargo.toml", crate::models::FileType::File);
+    let file1 = json_file("project/LICENSE", crate::models::FileType::File);
     let mut files = vec![file0, file1];
 
-    files[0].package_data = vec![provenance::models::PackageData {
-        package_type: Some(provenance::models::PackageType::Cargo),
-        datasource_id: Some(provenance::models::DatasourceId::CargoToml),
+    files[0].package_data = vec![crate::models::PackageData {
+        package_type: Some(crate::models::PackageType::Cargo),
+        datasource_id: Some(crate::models::DatasourceId::CargoToml),
         name: Some("demo".to_string()),
         version: Some("1.0.0".to_string()),
         ..Default::default()
     }];
-    let mut package = provenance::models::Package::from_package_data(
+    let mut package = crate::models::Package::from_package_data(
         &files[0].package_data[0],
         "project/Cargo.toml".to_string(),
     );
     let package_uid = package.package_uid.clone();
     files[0].for_packages = vec![package_uid.clone()];
-    files[0].license_detections = vec![provenance::models::LicenseDetection {
+    files[0].license_detections = vec![crate::models::LicenseDetection {
         license_expression: "unknown-license-reference".to_string(),
         license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
-        matches: vec![provenance::models::Match {
+        matches: vec![crate::models::Match {
             license_expression: "unknown-license-reference".to_string(),
             license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
             from_file: Some("project/Cargo.toml".to_string()),
@@ -562,10 +552,10 @@ fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
         detection_log: vec![],
         identifier: None,
     }];
-    files[1].license_detections = vec![provenance::models::LicenseDetection {
+    files[1].license_detections = vec![crate::models::LicenseDetection {
         license_expression: "mit".to_string(),
         license_expression_spdx: "MIT".to_string(),
-        matches: vec![provenance::models::Match {
+        matches: vec![crate::models::Match {
             license_expression: "mit".to_string(),
             license_expression_spdx: "MIT".to_string(),
             from_file: Some("project/LICENSE".to_string()),
@@ -627,25 +617,25 @@ fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
 fn from_json_recomputes_top_level_outputs_after_package_inheritance_following() {
     let file0 = json_file(
         "venv/lib/python3.11/site-packages/demo-1.0.dist-info/METADATA",
-        provenance::models::FileType::File,
+        crate::models::FileType::File,
     );
     let file1 = json_file(
         "venv/lib/python3.11/site-packages/locale/django.po",
-        provenance::models::FileType::File,
+        crate::models::FileType::File,
     );
     let mut files = vec![file0, file1];
 
-    files[0].package_data = vec![provenance::models::PackageData {
-        package_type: Some(provenance::models::PackageType::Pypi),
-        datasource_id: Some(provenance::models::DatasourceId::PypiWheelMetadata),
+    files[0].package_data = vec![crate::models::PackageData {
+        package_type: Some(crate::models::PackageType::Pypi),
+        datasource_id: Some(crate::models::DatasourceId::PypiWheelMetadata),
         name: Some("demo".to_string()),
         version: Some("1.0.0".to_string()),
         ..Default::default()
     }];
-    files[0].license_detections = vec![provenance::models::LicenseDetection {
+    files[0].license_detections = vec![crate::models::LicenseDetection {
         license_expression: "bsd-new".to_string(),
         license_expression_spdx: "BSD-3-Clause".to_string(),
-        matches: vec![provenance::models::Match {
+        matches: vec![crate::models::Match {
             license_expression: "bsd-new".to_string(),
             license_expression_spdx: "BSD-3-Clause".to_string(),
             from_file: Some(
@@ -667,17 +657,17 @@ fn from_json_recomputes_top_level_outputs_after_package_inheritance_following() 
         detection_log: vec![],
         identifier: None,
     }];
-    let mut package = provenance::models::Package::from_package_data(
+    let mut package = crate::models::Package::from_package_data(
         &files[0].package_data[0],
         "venv/lib/python3.11/site-packages/demo-1.0.dist-info/METADATA".to_string(),
     );
     let package_uid = package.package_uid.clone();
     files[0].for_packages = vec![package_uid.clone()];
     files[1].for_packages = vec![package_uid.clone()];
-    files[1].license_detections = vec![provenance::models::LicenseDetection {
+    files[1].license_detections = vec![crate::models::LicenseDetection {
         license_expression: "free-unknown".to_string(),
         license_expression_spdx: "LicenseRef-scancode-free-unknown".to_string(),
-        matches: vec![provenance::models::Match {
+        matches: vec![crate::models::Match {
             license_expression: "free-unknown".to_string(),
             license_expression_spdx: "LicenseRef-scancode-free-unknown".to_string(),
             from_file: Some("venv/lib/python3.11/site-packages/locale/django.po".to_string()),
@@ -756,8 +746,8 @@ fn from_json_recomputes_top_level_outputs_after_package_inheritance_following() 
     );
 }
 
-fn json_file(path: &str, file_type: provenance::models::FileType) -> provenance::models::FileInfo {
-    provenance::models::FileInfo::new(
+fn json_file(path: &str, file_type: crate::models::FileType) -> crate::models::FileInfo {
+    crate::models::FileInfo::new(
         Path::new(path)
             .file_name()
             .and_then(|name| name.to_str())
@@ -800,14 +790,14 @@ fn json_file(path: &str, file_type: provenance::models::FileType) -> provenance:
 #[test]
 fn progress_mode_from_cli_maps_quiet_verbose_default() {
     let default_cli =
-        provenance::cli::Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "sample-dir"])
+        crate::cli::Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "sample-dir"])
             .unwrap();
     assert_eq!(
         progress_mode_from_cli(&default_cli),
-        provenance::progress::ProgressMode::Default
+        crate::progress::ProgressMode::Default
     );
 
-    let quiet_cli = provenance::cli::Cli::try_parse_from([
+    let quiet_cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -817,10 +807,10 @@ fn progress_mode_from_cli_maps_quiet_verbose_default() {
     .unwrap();
     assert_eq!(
         progress_mode_from_cli(&quiet_cli),
-        provenance::progress::ProgressMode::Quiet
+        crate::progress::ProgressMode::Quiet
     );
 
-    let verbose_cli = provenance::cli::Cli::try_parse_from([
+    let verbose_cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -830,7 +820,7 @@ fn progress_mode_from_cli_maps_quiet_verbose_default() {
     .unwrap();
     assert_eq!(
         progress_mode_from_cli(&verbose_cli),
-        provenance::progress::ProgressMode::Verbose
+        crate::progress::ProgressMode::Verbose
     );
 }
 
@@ -841,7 +831,7 @@ fn prepare_cache_for_scan_defaults_to_scan_root_cache_directory_without_creating
     fs::create_dir_all(&scan_root).expect("create scan root");
 
     let cli =
-        provenance::cli::Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "sample-dir"])
+        crate::cli::Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "sample-dir"])
             .unwrap();
     let config = prepare_cache_config(Some(&scan_root), &cli).unwrap();
 
@@ -860,7 +850,7 @@ fn prepare_cache_for_scan_respects_cache_dir_and_cache_clear() {
     let stale_file = explicit_cache_dir.join("incremental").join("stale.txt");
     fs::write(&stale_file, "old").unwrap();
 
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -882,7 +872,7 @@ fn prepare_cache_for_scan_creates_incremental_dir_when_enabled() {
     let scan_root = temp_dir.path().join("scan");
     fs::create_dir_all(&scan_root).expect("create scan root");
 
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
@@ -898,7 +888,7 @@ fn prepare_cache_for_scan_creates_incremental_dir_when_enabled() {
 
 #[test]
 fn prepare_cache_config_without_scan_root_uses_non_scan_default() {
-    let cli = provenance::cli::Cli::try_parse_from([
+    let cli = crate::cli::Cli::try_parse_from([
         "provenant",
         "--json-pp",
         "scan.json",
