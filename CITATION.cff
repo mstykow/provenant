@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use Provenant in research, tooling comparisons, or publications, please cite it using the metadata below."
 title: "Provenant"
-version: "0.0.20"
+version: "0.0.21"
 type: software
 license: Apache-2.0
 repository-code: "https://github.com/mstykow/provenant"
