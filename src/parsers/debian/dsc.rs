@@ -35,10 +35,16 @@ crate::register_parser!(
     Some("https://www.debian.org/doc/debian-policy/ch-controlfields.html"),
 );
 
+enum PgpParseState {
+    Normal,
+    PgpHeader,
+    PgpBody,
+    PgpSignature,
+}
+
 fn strip_pgp_signature(content: &str) -> String {
     let mut result = String::new();
-    let mut in_pgp_block = false;
-    let mut in_signature = false;
+    let mut state = PgpParseState::Normal;
     let mut count = 0usize;
 
     for line in content.lines() {
@@ -48,28 +54,32 @@ fn strip_pgp_signature(content: &str) -> String {
             break;
         }
         if line.starts_with("-----BEGIN PGP SIGNED MESSAGE-----") {
-            in_pgp_block = true;
+            state = PgpParseState::PgpHeader;
             continue;
         }
         if line.starts_with("-----BEGIN PGP SIGNATURE-----") {
-            in_signature = true;
+            state = PgpParseState::PgpSignature;
             continue;
         }
         if line.starts_with("-----END PGP SIGNATURE-----") {
-            in_signature = false;
+            state = PgpParseState::Normal;
             continue;
         }
-        if in_pgp_block && line.starts_with("Hash:") {
-            continue;
+        match state {
+            PgpParseState::PgpHeader => {
+                if line.starts_with("Hash:") {
+                    continue;
+                }
+                if line.is_empty() && result.is_empty() {
+                    state = PgpParseState::PgpBody;
+                    continue;
+                }
+            }
+            PgpParseState::PgpSignature => continue,
+            PgpParseState::Normal | PgpParseState::PgpBody => {}
         }
-        if in_pgp_block && line.is_empty() && result.is_empty() {
-            in_pgp_block = false;
-            continue;
-        }
-        if !in_signature {
-            result.push_str(line);
-            result.push('\n');
-        }
+        result.push_str(line);
+        result.push('\n');
     }
 
     result
