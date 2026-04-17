@@ -37,6 +37,10 @@ path = "src/bin/benchmark_target.rs"
 name = "compare-outputs"
 path = "src/bin/compare_outputs.rs"
 
+[[bin]]
+name = "generate-legalese-artifact"
+path = "src/bin/generate_legalese_artifact/main.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
@@ -45,6 +49,7 @@ postcard = { workspace = true }
 provenant = { path = "..", package = "provenant-cli", features = ["golden-tests"] }
 rayon = { workspace = true }
 regex = { workspace = true }
+rkyv = "0.8.15"
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.11.0"

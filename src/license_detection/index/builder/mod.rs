@@ -327,8 +327,8 @@ pub fn ngrams<T: Clone>(items: &[T], ngram_length: usize) -> Vec<Vec<T>> {
 }
 
 pub fn build_index(rules: Vec<Rule>, licenses: Vec<License>) -> LicenseIndex {
-    let legalese_words = legalese::get_legalese_words();
-    let mut dictionary = TokenDictionary::new_with_legalese(&legalese_words);
+    let legalese = legalese::archived_legalese();
+    let mut dictionary = TokenDictionary::new_with_legalese(legalese);
     let len_legalese = dictionary.legalese_count();
 
     // Pre-assign SPDX tokens before processing rules (Python: index.py:301-314)
@@ -759,8 +759,8 @@ fn build_index_with_automatons(
     unknown_automaton: Automaton,
     pattern_id_to_rid: Vec<Vec<usize>>,
 ) -> LicenseIndex {
-    let legalese_words = legalese::get_legalese_words();
-    let mut dictionary = TokenDictionary::new_with_legalese(&legalese_words);
+    let legalese = legalese::archived_legalese();
+    let mut dictionary = TokenDictionary::new_with_legalese(legalese);
     let len_legalese = dictionary.legalese_count();
 
     {

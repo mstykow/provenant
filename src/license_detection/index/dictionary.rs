@@ -3,9 +3,10 @@
 //! TokenDictionary maps token strings to unique integer IDs. This enables
 //! efficient token-based matching and indexing.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use rkyv::Archive;
+use rkyv::Archived;
 use serde::{Deserialize, Serialize};
 
 #[derive(
@@ -185,15 +186,51 @@ impl TokenDictionary {
 
     /// Create a new token dictionary initialized with legalese tokens.
     ///
-    /// This follows the Python ScanCode TorchToolkit pattern where the dictionary
+    /// This follows the Python ScanCode Toolkit pattern where the dictionary
     /// starts with pre-defined legalese words that get low IDs (high value).
     ///
     /// # Arguments
-    /// * `legalese_entries` - Slice of (word, token_id) pairs for legalese words
+    /// * `legalese` - Archived BTreeMap of word → u16 pairs for legalese words.
+    ///   Values are bare u16 (not TokenId) because the rkyv artifact is built
+    ///   by `build.rs` which cannot depend on this crate's types.
     ///
     /// # Returns
     /// A new TokenDictionary instance with legalese tokens pre-populated
-    pub fn new_with_legalese(legalese_entries: &[(&str, u16)]) -> Self {
+    pub fn new_with_legalese(legalese: &Archived<BTreeMap<String, u16>>) -> Self {
+        let mut tokens_to_ids = HashMap::new();
+        let max_existing_id = legalese
+            .iter()
+            .map(|(_, id)| id.to_native() as usize)
+            .max()
+            .unwrap_or(0);
+        let mut token_metadata = vec![None; max_existing_id.saturating_add(1)];
+
+        for (word, id) in legalese.iter() {
+            let native_id = TokenId::new(id.to_native());
+            tokens_to_ids.insert(word.to_string(), native_id);
+            token_metadata[native_id.as_usize()] = Some(TokenMetadata {
+                kind: TokenKind::Legalese,
+                is_digit_only: word.chars().all(|c: char| c.is_ascii_digit()),
+                is_short_or_digit: word.len() == 1
+                    || word.chars().all(|c: char| c.is_ascii_digit()),
+            });
+        }
+
+        let len_legalese = legalese.len();
+        let next_id = TokenId::new((max_existing_id + 1).max(len_legalese) as u16);
+
+        Self {
+            tokens_to_ids,
+            token_metadata,
+            len_legalese,
+            next_id,
+        }
+    }
+
+    /// Create a new token dictionary initialized with legalese token pairs.
+    ///
+    /// Convenience constructor for tests that don't use the rkyv-archived legalese data.
+    pub fn new_with_legalese_pairs(legalese_entries: &[(&str, u16)]) -> Self {
         let mut tokens_to_ids = HashMap::new();
         let max_existing_id = legalese_entries
             .iter()
@@ -367,7 +404,7 @@ mod tests {
             ("permission".to_string(), 2u16),
         ];
 
-        let mut dict = TokenDictionary::new_with_legalese(
+        let mut dict = TokenDictionary::new_with_legalese_pairs(
             &legalese
                 .iter()
                 .map(|(s, i)| (s.as_str(), *i))
@@ -396,7 +433,7 @@ mod tests {
             ("permission".to_string(), 10u16),
         ];
 
-        let mut dict = TokenDictionary::new_with_legalese(
+        let mut dict = TokenDictionary::new_with_legalese_pairs(
             &legalese
                 .iter()
                 .map(|(s, i)| (s.as_str(), *i))
@@ -444,7 +481,7 @@ mod tests {
     #[test]
     fn test_get_or_assign_with_preexisting_legalese() {
         let legalese = [("license".to_string(), 0u16)];
-        let mut dict = TokenDictionary::new_with_legalese(
+        let mut dict = TokenDictionary::new_with_legalese_pairs(
             &legalese
                 .iter()
                 .map(|(s, i)| (s.as_str(), *i))
@@ -497,7 +534,7 @@ mod tests {
             ("copyright".to_string(), 1u16),
         ];
 
-        let mut dict = TokenDictionary::new_with_legalese(
+        let mut dict = TokenDictionary::new_with_legalese_pairs(
             &legalese
                 .iter()
                 .map(|(s, i)| (s.as_str(), *i))
@@ -533,14 +570,14 @@ mod tests {
     fn test_with_actual_legalese_module() {
         use crate::license_detection::rules::legalese;
 
-        let legalese_words = legalese::get_legalese_words();
-        assert!(!legalese_words.is_empty(), "Should have legalese words");
+        let legalese = legalese::archived_legalese();
+        assert!(!legalese.is_empty(), "Should have legalese words");
 
-        let mut dict = TokenDictionary::new_with_legalese(&legalese_words);
+        let mut dict = TokenDictionary::new_with_legalese(legalese);
 
         // Verify dictionary has the right structure
-        assert_eq!(dict.legalese_count(), legalese_words.len());
-        assert_eq!(dict.tokens_to_ids.len(), legalese_words.len());
+        assert_eq!(dict.legalese_count(), legalese.len());
+        assert_eq!(dict.tokens_to_ids.len(), legalese.len());
 
         // Verify some legalese words are correctly registered
         let license_id = dict.get_token_id("license");

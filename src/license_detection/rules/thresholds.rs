@@ -265,7 +265,7 @@ mod integration_tests {
         let legalese_entries: Vec<(String, u16)> = (0..len_legalese)
             .map(|i| (format!("legalese-{i}"), i as u16))
             .collect();
-        let dictionary = TokenDictionary::new_with_legalese(
+        let dictionary = TokenDictionary::new_with_legalese_pairs(
             &legalese_entries
                 .iter()
                 .map(|(token, id)| (token.as_str(), *id))
