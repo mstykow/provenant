@@ -94,17 +94,49 @@ macro_rules! read_or_default {
 
 use read_or_default;
 
-const VERSION_CLUES_DEBIAN: &[&str] = &["deb"];
-const VERSION_CLUES_UBUNTU: &[&str] = &["ubuntu"];
+use std::fmt;
 
-const MAINTAINER_CLUES_DEBIAN: &[&str] = &[
-    "packages.debian.org",
-    "lists.debian.org",
-    "lists.alioth.debian.org",
-    "@debian.org",
-    "debian-init-diversity@",
-];
-const MAINTAINER_CLUES_UBUNTU: &[&str] = &["lists.ubuntu.com", "@canonical.com"];
+enum Namespace {
+    Debian,
+    Ubuntu,
+}
+
+impl Namespace {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Debian => "debian",
+            Self::Ubuntu => "ubuntu",
+        }
+    }
+
+    fn version_clues(&self) -> &[&str] {
+        match self {
+            Self::Ubuntu => &["ubuntu"],
+            Self::Debian => &["deb"],
+        }
+    }
+
+    fn maintainer_clues(&self) -> &[&str] {
+        match self {
+            Self::Ubuntu => &["lists.ubuntu.com", "@canonical.com"],
+            Self::Debian => &[
+                "packages.debian.org",
+                "lists.debian.org",
+                "lists.alioth.debian.org",
+                "@debian.org",
+                "debian-init-diversity@",
+            ],
+        }
+    }
+}
+
+impl fmt::Display for Namespace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+const NAMESPACE_PRIORITY: &[Namespace] = &[Namespace::Ubuntu, Namespace::Debian];
 
 enum DepField {
     Depends,

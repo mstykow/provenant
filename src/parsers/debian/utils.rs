@@ -24,44 +24,36 @@ pub(super) fn make_party(
         timezone: None,
     }
 }
-use super::{
-    DEP_FIELDS, DEP_RE, MAINTAINER_CLUES_DEBIAN, MAINTAINER_CLUES_UBUNTU, VERSION_CLUES_DEBIAN,
-    VERSION_CLUES_UBUNTU,
-};
+use super::{DEP_FIELDS, DEP_RE, NAMESPACE_PRIORITY, Namespace};
 
 pub(super) fn detect_namespace(version: Option<&str>, maintainer: Option<&str>) -> Option<String> {
-    // Check version clues first
     if let Some(ver) = version {
         let ver_lower = ver.to_lowercase();
-        for clue in VERSION_CLUES_UBUNTU {
-            if ver_lower.contains(clue) {
-                return Some("ubuntu".to_string());
-            }
-        }
-        for clue in VERSION_CLUES_DEBIAN {
-            if ver_lower.contains(clue) {
-                return Some("debian".to_string());
+        for ns in NAMESPACE_PRIORITY {
+            if ns
+                .version_clues()
+                .iter()
+                .any(|clue| ver_lower.contains(clue))
+            {
+                return Some(ns.to_string());
             }
         }
     }
 
-    // Check maintainer clues
     if let Some(maint) = maintainer {
         let maint_lower = maint.to_lowercase();
-        for clue in MAINTAINER_CLUES_UBUNTU {
-            if maint_lower.contains(clue) {
-                return Some("ubuntu".to_string());
-            }
-        }
-        for clue in MAINTAINER_CLUES_DEBIAN {
-            if maint_lower.contains(clue) {
-                return Some("debian".to_string());
+        for ns in NAMESPACE_PRIORITY {
+            if ns
+                .maintainer_clues()
+                .iter()
+                .any(|clue| maint_lower.contains(clue))
+            {
+                return Some(ns.to_string());
             }
         }
     }
 
-    // Default to debian
-    Some("debian".to_string())
+    Some(Namespace::Debian.to_string())
 }
 
 pub(super) fn build_debian_purl(
