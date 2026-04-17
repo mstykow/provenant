@@ -111,11 +111,14 @@ fn generate_overlay_entries(dir: &Path, extension: &str) -> String {
                 .file_name()
                 .and_then(|name| name.to_str())
                 .unwrap_or_else(|| panic!("Overlay file has invalid name: {}", path.display()));
-            let quoted_path = format!("{:?}", path.to_string_lossy().to_string());
+            let contents = fs::read_to_string(&path).unwrap_or_else(|error| {
+                panic!("Failed to read overlay file {}: {}", path.display(), error)
+            });
+            let quoted_contents = format!("{:?}", contents);
 
             format!(
-                "    BundledOverlayFile {{ identifier: {:?}, contents: include_str!({}) }},",
-                identifier, quoted_path
+                "    BundledOverlayFile {{ identifier: {:?}, contents: {} }},",
+                identifier, quoted_contents
             )
         })
         .collect::<Vec<_>>()
