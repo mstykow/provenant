@@ -6,6 +6,7 @@ use crate::license_detection::LicenseDetection as InternalLicenseDetection;
 use crate::license_detection::LicenseDetectionEngine;
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::index::dictionary::TokenDictionary;
+use crate::license_detection::models::License;
 use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind, RuleKind};
 use crate::license_detection::query::Query;
@@ -80,7 +81,7 @@ fn test_convert_detection_to_model_preserves_rule_url() {
     );
 
     let (converted, clues) =
-        convert_detection_to_model(&detection, LicenseScanOptions::default(), "", None);
+        convert_detection_to_model(&detection, LicenseScanOptions::default(), "", None, None);
     let converted = converted.expect("detection should convert");
 
     assert_eq!(
@@ -97,7 +98,7 @@ fn test_convert_detection_to_model_emits_null_for_empty_rule_url() {
     let detection = make_detection("");
 
     let (converted, clues) =
-        convert_detection_to_model(&detection, LicenseScanOptions::default(), "", None);
+        convert_detection_to_model(&detection, LicenseScanOptions::default(), "", None, None);
     let converted = converted.expect("detection should convert");
 
     assert_eq!(converted.matches[0].rule_url, None);
@@ -111,7 +112,7 @@ fn test_convert_detection_to_model_rounds_match_coverage() {
     detection.matches[0].match_coverage = 33.334;
 
     let (converted, clues) =
-        convert_detection_to_model(&detection, LicenseScanOptions::default(), "", None);
+        convert_detection_to_model(&detection, LicenseScanOptions::default(), "", None, None);
     let converted = converted.expect("detection should convert");
 
     assert_eq!(
@@ -145,6 +146,7 @@ fn test_convert_detection_to_model_routes_expressionless_detection_to_license_cl
         },
         "clue text",
         None,
+        None,
     );
 
     assert!(converted.is_none());
@@ -160,6 +162,82 @@ fn test_convert_detection_to_model_routes_expressionless_detection_to_license_cl
     );
     assert_eq!(clues[0].matched_text.as_deref(), Some("MIT"));
     assert_eq!(clues[0].matched_text_diagnostics, None);
+}
+
+#[test]
+fn test_convert_detection_to_model_promotes_exact_reference_url_clue() {
+    let mut index = create_test_index(&[], 0);
+    index.licenses_by_key.insert(
+        "cc-by-3.0".to_string(),
+        License {
+            key: "cc-by-3.0".to_string(),
+            name: "CC BY 3.0".to_string(),
+            reference_urls: vec!["http://creativecommons.org/licenses/by/3.0/".to_string()],
+            ..License::default()
+        },
+    );
+    index.licenses_by_key.insert(
+        "cc-by-sa-3.0".to_string(),
+        License {
+            key: "cc-by-sa-3.0".to_string(),
+            name: "CC BY-SA 3.0".to_string(),
+            reference_urls: vec!["http://creativecommons.org/licenses/by-sa/3.0/".to_string()],
+            ..License::default()
+        },
+    );
+
+    let text = concat!(
+        "<rights license=\"http://creativecommons.org/licenses/by-sa/3.0/\">",
+        "This work is licensed under a Creative Commons Attribution-ShareAlike 3.0 License",
+        "</rights>",
+    );
+    let query = Query::from_extracted_text(text, &index, false).expect("query should build");
+
+    let mut weaker_match = make_internal_match("");
+    weaker_match.license_expression = "cc-by-3.0".to_string();
+    weaker_match.license_expression_spdx = Some("CC-BY-3.0".to_string());
+    weaker_match.matcher = MatcherKind::Seq;
+    weaker_match.score = MatchScore::from_percentage(52.94);
+    weaker_match.matched_length = 9;
+    weaker_match.rule_length = 9;
+    weaker_match.match_coverage = 52.94;
+    weaker_match.rule_identifier = "cc-by-3.0_7.RULE".to_string();
+    weaker_match.matched_text = None;
+
+    let mut stronger_match = make_internal_match("");
+    stronger_match.license_expression = "cc-by-sa-3.0".to_string();
+    stronger_match.license_expression_spdx = Some("CC-BY-SA-3.0".to_string());
+    stronger_match.matcher = MatcherKind::Seq;
+    stronger_match.score = MatchScore::from_percentage(50.0);
+    stronger_match.matched_length = 8;
+    stronger_match.rule_length = 8;
+    stronger_match.match_coverage = 50.0;
+    stronger_match.rule_identifier = "cc-by-sa-3.0_10.RULE".to_string();
+    stronger_match.matched_text = None;
+
+    let detection = InternalLicenseDetection {
+        license_expression: None,
+        license_expression_spdx: None,
+        matches: vec![weaker_match, stronger_match],
+        detection_log: vec![],
+        identifier: None,
+        file_regions: Vec::new(),
+    };
+
+    let (converted, clues) = convert_detection_to_model(
+        &detection,
+        LicenseScanOptions::default(),
+        text,
+        Some(&query),
+        Some(&index),
+    );
+
+    let converted = converted.expect("detection should promote from exact reference URL");
+    assert_eq!(converted.license_expression, "cc-by-sa-3.0");
+    assert_eq!(converted.license_expression_spdx, "CC-BY-SA-3.0");
+    assert_eq!(converted.matches.len(), 1);
+    assert_eq!(converted.matches[0].license_expression, "cc-by-sa-3.0");
+    assert!(clues.is_empty());
 }
 
 #[test]
@@ -223,6 +301,7 @@ fn test_convert_detection_to_model_includes_diagnostics_when_enabled() {
         },
         text,
         Some(&query),
+        None,
     );
     let converted = converted.expect("detection should convert");
 

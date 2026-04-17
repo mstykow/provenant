@@ -1,6 +1,7 @@
 use crate::license_detection::LicenseDetection as InternalLicenseDetection;
 use crate::license_detection::LicenseDetectionEngine;
 use crate::license_detection::PositionSet;
+use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::models::LicenseMatch as InternalLicenseMatch;
 use crate::license_detection::query::Query;
 use crate::models::{FileInfoBuilder, LicenseDetection as PublicLicenseDetection, Match};
@@ -102,6 +103,7 @@ pub(super) fn extract_license_information(
                     license_options,
                     &text_content,
                     query.as_ref(),
+                    Some(engine.index()),
                 );
 
                 if let Some(public_detection) = public_detection {
@@ -161,6 +163,7 @@ fn convert_detection_to_model(
     license_options: LicenseScanOptions,
     text_content: &str,
     query: Option<&Query<'_>>,
+    index: Option<&LicenseIndex>,
 ) -> (Option<PublicLicenseDetection>, Vec<Match>) {
     let matches: Vec<Match> = detection
         .matches
@@ -186,9 +189,94 @@ fn convert_detection_to_model(
             }),
             Vec::new(),
         )
+    } else if let Some(public_detection) = index.and_then(|index| {
+        promote_reference_url_clue_detection(detection, license_options, text_content, query, index)
+    }) {
+        (Some(public_detection), Vec::new())
     } else {
         (None, matches)
     }
+}
+
+fn promote_reference_url_clue_detection(
+    detection: &InternalLicenseDetection,
+    license_options: LicenseScanOptions,
+    text_content: &str,
+    query: Option<&Query<'_>>,
+    index: &LicenseIndex,
+) -> Option<PublicLicenseDetection> {
+    let query = query?;
+
+    let promoted_matches: Vec<&InternalLicenseMatch> = detection
+        .matches
+        .iter()
+        .filter(|license_match| match_has_exact_reference_url(query, license_match, index))
+        .collect();
+
+    if promoted_matches.is_empty() {
+        return None;
+    }
+
+    let license_expression = crate::utils::spdx::combine_license_expressions(
+        promoted_matches
+            .iter()
+            .map(|license_match| license_match.license_expression.clone()),
+    )?;
+    let license_expression_spdx = crate::utils::spdx::combine_license_expressions(
+        promoted_matches
+            .iter()
+            .filter_map(|license_match| license_match.license_expression_spdx.clone()),
+    )
+    .unwrap_or_default();
+    let matches = promoted_matches
+        .into_iter()
+        .map(|license_match| {
+            convert_match_to_model(license_match, license_options, text_content, Some(query))
+        })
+        .collect();
+
+    Some(PublicLicenseDetection {
+        license_expression,
+        license_expression_spdx,
+        matches,
+        detection_log: if license_options.include_diagnostics {
+            vec!["promoted-reference-url-license-clue".to_string()]
+        } else {
+            Vec::new()
+        },
+        identifier: detection.identifier.clone(),
+    })
+}
+
+fn match_has_exact_reference_url(
+    query: &Query<'_>,
+    license_match: &InternalLicenseMatch,
+    index: &LicenseIndex,
+) -> bool {
+    let Some(license) = index.licenses_by_key.get(&license_match.license_expression) else {
+        return false;
+    };
+
+    if license.reference_urls.is_empty() {
+        return false;
+    }
+
+    let matched_text = license_match.matched_text.clone().unwrap_or_else(|| {
+        query.matched_text(license_match.start_line.get(), license_match.end_line.get())
+    });
+    let normalized_text = normalize_reference_url_candidate(&matched_text);
+    if normalized_text.is_empty() {
+        return false;
+    }
+
+    license.reference_urls.iter().any(|reference_url| {
+        let normalized_reference = normalize_reference_url_candidate(reference_url);
+        !normalized_reference.is_empty() && normalized_text.contains(&normalized_reference)
+    })
+}
+
+fn normalize_reference_url_candidate(text: &str) -> String {
+    text.trim().trim_end_matches('/').to_ascii_lowercase()
 }
 
 fn convert_match_to_model(
