@@ -53,6 +53,53 @@ pub(crate) use self::utils::build_pypi_urls;
 pub(crate) use self::utils::extract_requires_dist_dependencies;
 pub(crate) use self::utils::read_toml_file;
 
+enum PythonFileKind {
+    PyprojectToml,
+    SetupCfg,
+    SetupPy,
+    PkgInfo,
+    WheelMetadata,
+    PipOriginJson,
+    PypiJson,
+    PipInspectDeplock,
+    SdistArchive,
+    WheelArchive,
+    EggArchive,
+}
+
+fn classify_python_file(path: &Path) -> Option<PythonFileKind> {
+    let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    Some(match filename {
+        "pyproject.toml" => PythonFileKind::PyprojectToml,
+        "setup.cfg" => PythonFileKind::SetupCfg,
+        _ if is_setup_py_like_path(path) => PythonFileKind::SetupPy,
+        "PKG-INFO" => PythonFileKind::PkgInfo,
+        "METADATA" if is_installed_wheel_metadata_path(path) => PythonFileKind::WheelMetadata,
+        "pypi.json" => PythonFileKind::PypiJson,
+        "pip-inspect.deplock" => PythonFileKind::PipInspectDeplock,
+        _ => {
+            if archive::is_pip_cache_origin_json(path) {
+                PythonFileKind::PipOriginJson
+            } else if archive::is_python_sdist_archive_path(path) {
+                PythonFileKind::SdistArchive
+            } else if path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+                && archive::is_valid_wheel_archive_path(path)
+            {
+                PythonFileKind::WheelArchive
+            } else if path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("egg"))
+            {
+                PythonFileKind::EggArchive
+            } else {
+                return None;
+            }
+        }
+    })
+}
+
 /// Python package parser supporting 11 manifest formats.
 ///
 /// Extracts metadata from Python package files including pyproject.toml, setup.py,
@@ -68,69 +115,32 @@ impl PackageParser for PythonParser {
     const PACKAGE_TYPE: PackageType = PackageType::Pypi;
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        vec![
-            if path.file_name().unwrap_or_default() == "pyproject.toml" {
-                pyproject::extract_from_pyproject_toml(path)
-            } else if path.file_name().unwrap_or_default() == "setup.cfg" {
-                setup_cfg::extract_from_setup_cfg(path)
-            } else if is_setup_py_like_path(path) {
-                return setup_py::extract_setup_py_packages(path);
-            } else if path.file_name().unwrap_or_default() == "PKG-INFO" {
-                rfc822_meta::extract_from_rfc822_metadata(
+        match classify_python_file(path) {
+            Some(PythonFileKind::SetupPy) => setup_py::extract_setup_py_packages(path),
+            Some(kind) => vec![match kind {
+                PythonFileKind::PyprojectToml => pyproject::extract_from_pyproject_toml(path),
+                PythonFileKind::SetupCfg => setup_cfg::extract_from_setup_cfg(path),
+                PythonFileKind::PkgInfo => rfc822_meta::extract_from_rfc822_metadata(
                     path,
                     utils::detect_pkg_info_datasource_id(path),
-                )
-            } else if is_installed_wheel_metadata_path(path) {
-                rfc822_meta::extract_from_rfc822_metadata(path, DatasourceId::PypiWheelMetadata)
-            } else if archive::is_pip_cache_origin_json(path) {
-                archive::extract_from_pip_origin_json(path)
-            } else if path.file_name().unwrap_or_default() == "pypi.json" {
-                pypi_json::extract_from_pypi_json(path)
-            } else if path.file_name().unwrap_or_default() == "pip-inspect.deplock" {
-                pypi_json::extract_from_pip_inspect(path)
-            } else if archive::is_python_sdist_archive_path(path) {
-                archive::extract_from_sdist_archive(path)
-            } else if path
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-            {
-                archive::extract_from_wheel_archive(path)
-            } else if path
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("egg"))
-            {
-                archive::extract_from_egg_archive(path)
-            } else {
-                utils::default_package_data(path)
-            },
-        ]
+                ),
+                PythonFileKind::WheelMetadata => {
+                    rfc822_meta::extract_from_rfc822_metadata(path, DatasourceId::PypiWheelMetadata)
+                }
+                PythonFileKind::PipOriginJson => archive::extract_from_pip_origin_json(path),
+                PythonFileKind::PypiJson => pypi_json::extract_from_pypi_json(path),
+                PythonFileKind::PipInspectDeplock => pypi_json::extract_from_pip_inspect(path),
+                PythonFileKind::SdistArchive => archive::extract_from_sdist_archive(path),
+                PythonFileKind::WheelArchive => archive::extract_from_wheel_archive(path),
+                PythonFileKind::EggArchive => archive::extract_from_egg_archive(path),
+                PythonFileKind::SetupPy => unreachable!(),
+            }],
+            None => vec![utils::default_package_data(path)],
+        }
     }
 
     fn is_match(path: &Path) -> bool {
-        if let Some(filename) = path.file_name()
-            && (filename == "pyproject.toml"
-                || filename == "setup.cfg"
-                || is_setup_py_like_path(path)
-                || filename == "PKG-INFO"
-                || (filename == "METADATA" && is_installed_wheel_metadata_path(path))
-                || filename == "pypi.json"
-                || filename == "pip-inspect.deplock"
-                || archive::is_pip_cache_origin_json(path))
-        {
-            return true;
-        }
-
-        if let Some(extension) = path.extension() {
-            let ext = extension.to_string_lossy().to_lowercase();
-            if (ext == "whl" && archive::is_valid_wheel_archive_path(path))
-                || ext == "egg"
-                || archive::is_python_sdist_archive_path(path)
-            {
-                return true;
-            }
-        }
-
-        false
+        classify_python_file(path).is_some()
     }
 }
 

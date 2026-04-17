@@ -1,8 +1,9 @@
 use super::super::license_normalization::normalize_spdx_declared_license;
 use super::PythonParser;
 use super::utils::{
-    apply_project_url_mappings, build_python_dependency, build_setup_py_purl, default_package_data,
-    extract_setup_py_dependencies, extract_setup_value, has_private_classifier,
+    ProjectUrls, apply_project_url_mappings, build_python_dependency, build_setup_py_purl,
+    default_package_data, extract_setup_py_dependencies, extract_setup_value,
+    has_private_classifier,
 };
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 use crate::parser_warn as warn;
@@ -13,20 +14,100 @@ use ruff_python_ast as ast;
 use ruff_python_parser::parse_module;
 use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
+use std::sync::LazyLock;
 
 pub(super) const MAX_SETUP_PY_BYTES: usize = 1_048_576;
 pub(super) const MAX_SETUP_PY_AST_NODES: usize = 10_000;
 pub(super) const MAX_SETUP_PY_AST_DEPTH: usize = 50;
+
+static VERSION_DUNDER_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?m)^\s*__version__\s*=\s*['\"]([^'\"]+)['\"]"#)
+        .expect("__version__ regex should compile")
+});
+static AUTHOR_DUNDER_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?m)^\s*__author__\s*=\s*['\"]([^'\"]+)['\"]"#)
+        .expect("__author__ regex should compile")
+});
+static LICENSE_DUNDER_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?m)^\s*__license__\s*=\s*['\"]([^'\"]+)['\"]"#)
+        .expect("__license__ regex should compile")
+});
+static OPEN_INIT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"open\(\s*['\"]([^'\"]+__init__\.py)['\"]"#)
+        .expect("open __init__.py regex should compile")
+});
+static DUNDER_ATTR_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*__(?:version|author|license)__\b"#)
+        .expect("dunder attribute regex should compile")
+});
+
+fn regex_capture(regex: &Regex, text: &str) -> Option<String> {
+    regex
+        .captures(text)
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str().to_string())
+}
 
 #[derive(Debug, Clone)]
 enum Value {
     String(String),
     Number(f64),
     Bool(bool),
-    None,
     List(Vec<Value>),
     Tuple(Vec<Value>),
     Dict(HashMap<String, Value>),
+}
+
+#[derive(Default)]
+struct SetupKeywords {
+    name: Option<String>,
+    version: Option<String>,
+    description: Option<String>,
+    summary: Option<String>,
+    url: Option<String>,
+    home_page: Option<String>,
+    author: Option<String>,
+    author_email: Option<String>,
+    maintainer: Option<String>,
+    maintainer_email: Option<String>,
+    license: Option<String>,
+    classifiers: Option<Vec<String>>,
+    install_requires: Option<Vec<String>>,
+    tests_require: Option<Vec<String>>,
+    extras_require: Option<HashMap<String, Value>>,
+    project_urls: Option<HashMap<String, Value>>,
+}
+
+impl SetupKeywords {
+    fn set_field(&mut self, name: &str, value: Value) {
+        match name {
+            "name" => self.name = value_to_string(&value),
+            "version" => self.version = value_to_string(&value),
+            "description" => self.description = value_to_string(&value),
+            "summary" => self.summary = value_to_string(&value),
+            "url" => self.url = value_to_string(&value),
+            "home_page" => self.home_page = value_to_string(&value),
+            "author" => self.author = value_to_string(&value),
+            "author_email" => self.author_email = value_to_string(&value),
+            "maintainer" => self.maintainer = value_to_string(&value),
+            "maintainer_email" => self.maintainer_email = value_to_string(&value),
+            "license" => self.license = value_to_string(&value),
+            "classifiers" => self.classifiers = value_to_string_list(&value),
+            "install_requires" => self.install_requires = value_to_string_list(&value),
+            "tests_require" => self.tests_require = value_to_string_list(&value),
+            "extras_require" => {
+                if let Value::Dict(dict) = value {
+                    self.extras_require = Some(dict);
+                }
+            }
+            "project_urls" => {
+                if let Value::Dict(dict) = value {
+                    self.project_urls = Some(dict);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 struct LiteralEvaluator {
@@ -66,7 +147,7 @@ impl LiteralEvaluator {
             ast::Expr::NumberLiteral(ast::ExprNumberLiteral { value, .. }) => {
                 self.evaluate_number(value)
             }
-            ast::Expr::NoneLiteral(_) => Some(Value::None),
+            ast::Expr::NoneLiteral(_) => None,
             ast::Expr::Name(ast::ExprName { id, .. }) => self.constants.get(id.as_str()).cloned(),
             ast::Expr::List(ast::ExprList { elts, .. }) => {
                 let mut values = Vec::new();
@@ -168,27 +249,31 @@ struct SetupAliases {
 }
 
 pub(super) fn extract_setup_py_packages(path: &Path) -> Vec<PackageData> {
-    extract_from_setup_py(path).into_iter().collect()
+    vec![extract_from_setup_py(path)]
 }
 
-fn extract_from_setup_py(path: &Path) -> Option<PackageData> {
+fn extract_from_setup_py(path: &Path) -> PackageData {
     let content = match read_file_to_string(path, None) {
         Ok(content) => content,
         Err(e) => {
             warn!("Failed to read setup.py at {:?}: {}", path, e);
-            return Some(default_package_data(path));
+            return default_package_data(path);
         }
     };
 
     if content.len() > MAX_SETUP_PY_BYTES {
         warn!("setup.py too large at {:?}: {} bytes", path, content.len());
         let package_data = extract_from_setup_py_regex(&content);
-        return should_emit_setup_py_package(&package_data).then_some(package_data);
+        return if should_emit_setup_py_package(&package_data) {
+            package_data
+        } else {
+            default_package_data(path)
+        };
     }
 
     let mut package_data = match extract_from_setup_py_ast(&content) {
         Ok(Some(data)) => data,
-        Ok(None) => return Some(default_package_data(path)),
+        Ok(None) => return default_package_data(path),
         Err(e) => {
             warn!("Failed to parse setup.py AST at {:?}: {}", path, e);
             extract_from_setup_py_regex(&content)
@@ -218,9 +303,9 @@ fn extract_from_setup_py(path: &Path) -> Option<PackageData> {
     );
 
     if should_emit_setup_py_package(&package_data) {
-        Some(package_data)
+        package_data
     } else {
-        Some(default_package_data(path))
+        default_package_data(path)
     }
 }
 
@@ -270,16 +355,9 @@ fn fill_from_sibling_dunder_metadata(path: &Path, content: &str, package_data: &
         .any(|party| party.role.as_deref() == Some("author") && party.name.is_some());
 
     if !has_author && let Some(author) = dunder_metadata.author {
-        package_data.parties.push(Party {
-            r#type: Some("person".to_string()),
-            role: Some("author".to_string()),
-            name: Some(author),
-            email: None,
-            url: None,
-            organization: None,
-            organization_url: None,
-            timezone: None,
-        });
+        package_data
+            .parties
+            .push(Party::person("author", Some(author), None));
     }
 }
 
@@ -296,9 +374,6 @@ fn collect_sibling_dunder_metadata(root: &Path, content: &str) -> DunderMetadata
         Err(_) => return DunderMetadata::default(),
     };
 
-    let version_re = Regex::new(r#"(?m)^\s*__version__\s*=\s*['\"]([^'\"]+)['\"]"#).ok();
-    let author_re = Regex::new(r#"(?m)^\s*__author__\s*=\s*['\"]([^'\"]+)['\"]"#).ok();
-    let license_re = Regex::new(r#"(?m)^\s*__license__\s*=\s*['\"]([^'\"]+)['\"]"#).ok();
     let mut metadata = DunderMetadata::default();
     let mut candidate_paths = Vec::new();
 
@@ -324,27 +399,15 @@ fn collect_sibling_dunder_metadata(root: &Path, content: &str) -> DunderMetadata
         };
 
         if metadata.version.is_none() {
-            metadata.version = version_re
-                .as_ref()
-                .and_then(|regex| regex.captures(&module_content))
-                .and_then(|captures| captures.get(1))
-                .map(|match_| match_.as_str().to_string());
+            metadata.version = regex_capture(&VERSION_DUNDER_RE, &module_content);
         }
 
         if metadata.author.is_none() {
-            metadata.author = author_re
-                .as_ref()
-                .and_then(|regex| regex.captures(&module_content))
-                .and_then(|captures| captures.get(1))
-                .map(|match_| match_.as_str().to_string());
+            metadata.author = regex_capture(&AUTHOR_DUNDER_RE, &module_content);
         }
 
         if metadata.license.is_none() {
-            metadata.license = license_re
-                .as_ref()
-                .and_then(|regex| regex.captures(&module_content))
-                .and_then(|captures| captures.get(1))
-                .map(|match_| match_.as_str().to_string());
+            metadata.license = regex_capture(&LICENSE_DUNDER_RE, &module_content);
         }
 
         if metadata.version.is_some() && metadata.author.is_some() && metadata.license.is_some() {
@@ -356,12 +419,7 @@ fn collect_sibling_dunder_metadata(root: &Path, content: &str) -> DunderMetadata
 }
 
 fn referenced_dunder_init_paths(root: &Path, content: &str) -> Vec<PathBuf> {
-    let open_re = match Regex::new(r#"open\(\s*['\"]([^'\"]+__init__\.py)['\"]"#) {
-        Ok(regex) => regex,
-        Err(_) => return Vec::new(),
-    };
-
-    open_re
+    OPEN_INIT_RE
         .captures_iter(content)
         .filter_map(|captures| captures.get(1).map(|m| m.as_str()))
         .filter_map(|relative| {
@@ -384,14 +442,8 @@ fn referenced_dunder_init_paths(root: &Path, content: &str) -> Vec<PathBuf> {
 }
 
 fn referenced_dunder_attribute_paths(root: &Path, content: &str) -> Vec<PathBuf> {
-    let attr_re =
-        match Regex::new(r#"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*__(?:version|author|license)__\b"#) {
-            Ok(regex) => regex,
-            Err(_) => return Vec::new(),
-        };
-
     let mut seen_modules = HashSet::new();
-    attr_re
+    DUNDER_ATTR_RE
         .captures_iter(content)
         .filter_map(|captures| captures.get(1).map(|m| m.as_str().to_string()))
         .filter(|module| seen_modules.insert(module.clone()))
@@ -448,8 +500,8 @@ fn extract_from_setup_py_ast(content: &str) -> Result<Option<PackageData>, Strin
         return Ok(None);
     };
 
-    let setup_values = extract_setup_keywords(call_expr, &mut evaluator);
-    Ok(Some(build_setup_py_package_data(&setup_values)))
+    let setup_keywords = extract_setup_keywords(call_expr, &mut evaluator);
+    Ok(Some(build_setup_py_package_data(&setup_keywords)))
 }
 
 fn build_setup_py_constants(statements: &[ast::Stmt], evaluator: &mut LiteralEvaluator) {
@@ -755,92 +807,74 @@ fn resolve_module_alias(module: &str, aliases: &SetupAliases) -> String {
 fn extract_setup_keywords(
     call_expr: &ast::Expr,
     evaluator: &mut LiteralEvaluator,
-) -> HashMap<String, Value> {
-    let mut values = HashMap::new();
+) -> SetupKeywords {
+    let mut keywords = SetupKeywords::default();
     let ast::Expr::Call(ast::ExprCall { arguments, .. }) = call_expr else {
-        return values;
+        return keywords;
     };
 
-    for keyword in arguments.keywords.iter() {
-        if let Some(arg) = keyword.arg.as_ref().map(ast::Identifier::as_str) {
-            if let Some(value) = evaluator.evaluate_expr(&keyword.value, 0) {
-                values.insert(arg.to_string(), value);
+    for kw in arguments.keywords.iter() {
+        if let Some(arg) = kw.arg.as_ref().map(ast::Identifier::as_str) {
+            if let Some(value) = evaluator.evaluate_expr(&kw.value, 0) {
+                keywords.set_field(arg, value);
             }
-        } else if let Some(Value::Dict(dict)) = evaluator.evaluate_expr(&keyword.value, 0) {
+        } else if let Some(Value::Dict(dict)) = evaluator.evaluate_expr(&kw.value, 0) {
             for (key, value) in dict {
-                values.insert(key, value);
+                keywords.set_field(&key, value);
             }
         }
     }
 
-    values
+    keywords
 }
 
-fn build_setup_py_package_data(values: &HashMap<String, Value>) -> PackageData {
-    let name = get_value_string(values, "name").map(truncate_field);
-    let version = get_value_string(values, "version").map(truncate_field);
-    let description = get_value_string(values, "description")
-        .or_else(|| get_value_string(values, "summary"))
+fn build_setup_py_package_data(kw: &SetupKeywords) -> PackageData {
+    let name = kw.name.clone().map(truncate_field);
+    let version = kw.version.clone().map(truncate_field);
+    let description = kw
+        .description
+        .clone()
+        .or_else(|| kw.summary.clone())
         .map(truncate_field);
-    let homepage_url = get_value_string(values, "url")
-        .or_else(|| get_value_string(values, "home_page"))
+    let homepage_url = kw
+        .url
+        .clone()
+        .or_else(|| kw.home_page.clone())
         .map(truncate_field);
-    let author = get_value_string(values, "author").map(truncate_field);
-    let author_email = get_value_string(values, "author_email");
-    let maintainer = get_value_string(values, "maintainer").map(truncate_field);
-    let maintainer_email = get_value_string(values, "maintainer_email");
-    let license = get_value_string(values, "license").map(truncate_field);
-    let classifiers = values
-        .get("classifiers")
-        .and_then(value_to_string_list)
-        .unwrap_or_default();
+    let author = kw.author.clone().map(truncate_field);
+    let author_email = kw.author_email.clone();
+    let maintainer = kw.maintainer.clone().map(truncate_field);
+    let maintainer_email = kw.maintainer_email.clone();
+    let license = kw.license.clone().map(truncate_field);
+    let classifiers = kw.classifiers.clone().unwrap_or_default();
 
     let mut parties = Vec::new();
     if author.is_some() || author_email.is_some() {
-        parties.push(Party {
-            r#type: Some("person".to_string()),
-            role: Some("author".to_string()),
-            name: author,
-            email: author_email,
-            url: None,
-            organization: None,
-            organization_url: None,
-            timezone: None,
-        });
+        parties.push(Party::person("author", author, author_email));
     }
 
     if maintainer.is_some() || maintainer_email.is_some() {
-        parties.push(Party {
-            r#type: Some("person".to_string()),
-            role: Some("maintainer".to_string()),
-            name: maintainer,
-            email: maintainer_email,
-            url: None,
-            organization: None,
-            organization_url: None,
-            timezone: None,
-        });
+        parties.push(Party::person("maintainer", maintainer, maintainer_email));
     }
 
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         normalize_spdx_declared_license(license.as_deref());
     let extracted_license_statement = license.clone();
 
-    let dependencies = build_setup_py_dependencies(values);
+    let dependencies = build_setup_py_dependencies(kw);
     let purl = build_setup_py_purl(name.as_deref(), version.as_deref());
-    let mut homepage_from_project_urls = None;
-    let (mut bug_tracking_url, mut code_view_url, mut vcs_url) = (None, None, None);
+    let mut project_urls = ProjectUrls {
+        homepage_url: None,
+        download_url: None,
+        bug_tracking_url: None,
+        code_view_url: None,
+        vcs_url: None,
+        changelog_url: None,
+    };
     let mut extra_data = HashMap::new();
 
-    if let Some(parsed_project_urls) = values.get("project_urls").and_then(value_to_string_pairs) {
-        apply_project_url_mappings(
-            &parsed_project_urls,
-            &mut homepage_from_project_urls,
-            &mut bug_tracking_url,
-            &mut code_view_url,
-            &mut vcs_url,
-            &mut extra_data,
-        );
+    if let Some(parsed_project_urls) = kw.project_urls.as_ref().and_then(value_to_string_pairs) {
+        apply_project_url_mappings(&parsed_project_urls, &mut project_urls, &mut extra_data);
     }
 
     let extra_data = if extra_data.is_empty() {
@@ -851,65 +885,40 @@ fn build_setup_py_package_data(values: &HashMap<String, Value>) -> PackageData {
 
     PackageData {
         package_type: Some(PythonParser::PACKAGE_TYPE),
-        namespace: None,
         name,
         version,
-        qualifiers: None,
-        subpath: None,
         primary_language: Some("Python".to_string()),
         description,
-        release_date: None,
         parties,
-        keywords: Vec::new(),
-        homepage_url: homepage_url.or(homepage_from_project_urls),
-        download_url: None,
-        size: None,
-        sha1: None,
-        md5: None,
-        sha256: None,
-        sha512: None,
-        bug_tracking_url,
-        code_view_url,
-        vcs_url,
-        copyright: None,
-        holder: None,
+        homepage_url: homepage_url.or(project_urls.homepage_url),
+        bug_tracking_url: project_urls.bug_tracking_url,
+        code_view_url: project_urls.code_view_url,
+        vcs_url: project_urls.vcs_url,
         declared_license_expression,
         declared_license_expression_spdx,
         license_detections,
-        other_license_expression: None,
-        other_license_expression_spdx: None,
-        other_license_detections: Vec::new(),
         extracted_license_statement,
-        notice_text: None,
-        source_packages: Vec::new(),
-        file_references: Vec::new(),
         is_private: has_private_classifier(&classifiers),
-        is_virtual: false,
         extra_data,
         dependencies,
-        repository_homepage_url: None,
-        repository_download_url: None,
-        api_data_url: None,
         datasource_id: Some(DatasourceId::PypiSetupPy),
         purl,
+        ..Default::default()
     }
 }
 
-fn build_setup_py_dependencies(values: &HashMap<String, Value>) -> Vec<Dependency> {
+fn build_setup_py_dependencies(kw: &SetupKeywords) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
 
-    if let Some(reqs) = values
-        .get("install_requires")
-        .and_then(value_to_string_list)
-    {
-        dependencies.extend(build_setup_py_dependency_list(&reqs, "install", false));
+    if let Some(reqs) = &kw.install_requires {
+        dependencies.extend(build_setup_py_dependency_list(reqs, "install", false));
     }
 
-    if let Some(reqs) = values.get("tests_require").and_then(value_to_string_list) {
-        dependencies.extend(build_setup_py_dependency_list(&reqs, "test", true));
+    if let Some(reqs) = &kw.tests_require {
+        dependencies.extend(build_setup_py_dependency_list(reqs, "test", true));
     }
 
-    if let Some(Value::Dict(extras)) = values.get("extras_require") {
+    if let Some(extras) = &kw.extras_require {
         let mut extra_items: Vec<_> = extras.iter().collect();
         extra_items.sort_by_key(|(name, _)| *name);
         for (extra_name, extra_value) in extra_items {
@@ -936,10 +945,6 @@ fn build_setup_py_dependency_list(
         .collect()
 }
 
-fn get_value_string(values: &HashMap<String, Value>, key: &str) -> Option<String> {
-    values.get(key).and_then(value_to_string)
-}
-
 fn value_to_string(value: &Value) -> Option<String> {
     match value {
         Value::String(value) => Some(value.clone()),
@@ -963,11 +968,7 @@ fn value_to_string_list(value: &Value) -> Option<Vec<String>> {
     }
 }
 
-fn value_to_string_pairs(value: &Value) -> Option<Vec<(String, String)>> {
-    let Value::Dict(dict) = value else {
-        return None;
-    };
-
+fn value_to_string_pairs(dict: &HashMap<String, Value>) -> Option<Vec<(String, String)>> {
     let mut pairs: Vec<(String, String)> = dict
         .iter()
         .map(|(key, value)| Some((key.clone(), value_to_string(value)?)))
@@ -991,47 +992,18 @@ fn extract_from_setup_py_regex(content: &str) -> PackageData {
 
     PackageData {
         package_type: Some(PythonParser::PACKAGE_TYPE),
-        namespace: None,
         name,
         version,
-        qualifiers: None,
-        subpath: None,
         primary_language: Some("Python".to_string()),
-        description: None,
-        release_date: None,
-        parties: Vec::new(),
-        keywords: Vec::new(),
         homepage_url,
-        download_url: None,
-        size: None,
-        sha1: None,
-        md5: None,
-        sha256: None,
-        sha512: None,
-        bug_tracking_url: None,
-        code_view_url: None,
-        vcs_url: None,
-        copyright: None,
-        holder: None,
         declared_license_expression,
         declared_license_expression_spdx,
         license_detections,
-        other_license_expression: None,
-        other_license_expression_spdx: None,
-        other_license_detections: Vec::new(),
         extracted_license_statement,
-        notice_text: None,
-        source_packages: Vec::new(),
-        file_references: Vec::new(),
-        is_private: false,
-        is_virtual: false,
-        extra_data: None,
         dependencies,
-        repository_homepage_url: None,
-        repository_download_url: None,
-        api_data_url: None,
         datasource_id: Some(DatasourceId::PypiSetupPy),
         purl,
+        ..Default::default()
     }
 }
 

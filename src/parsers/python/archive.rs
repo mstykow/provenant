@@ -30,6 +30,48 @@ enum PythonSdistArchiveFormat {
     Zip,
 }
 
+impl PythonSdistArchiveFormat {
+    fn label(&self) -> &'static str {
+        match self {
+            Self::TarGz => "tar.gz",
+            Self::Tgz => "tgz",
+            Self::TarBz2 => "tar.bz2",
+            Self::TarXz => "tar.xz",
+            Self::Zip => "zip",
+        }
+    }
+
+    fn contains_pkg_info(&self, path: &Path) -> bool {
+        if !path.is_file() {
+            return true;
+        }
+        let Some(compressed_size) = compressed_archive_size(path) else {
+            return false;
+        };
+        let Ok(file) = File::open(path) else {
+            return false;
+        };
+        match self {
+            Self::TarGz | Self::Tgz => {
+                tar_sdist_contains_pkg_info(path, GzDecoder::new(file), *self, compressed_size)
+            }
+            Self::TarBz2 => {
+                tar_sdist_contains_pkg_info(path, BzDecoder::new(file), *self, compressed_size)
+            }
+            Self::TarXz => {
+                tar_sdist_contains_pkg_info(path, XzDecoder::new(file), *self, compressed_size)
+            }
+            Self::Zip => zip_sdist_contains_pkg_info(path),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct SdistEntry {
+    path: String,
+    content: String,
+}
+
 #[derive(Clone, Debug)]
 struct ValidatedZipEntry {
     index: usize,
@@ -40,64 +82,108 @@ pub(super) const MAX_ARCHIVE_SIZE: u64 = 100 * 1024 * 1024;
 pub(super) const MAX_FILE_SIZE: u64 = 50 * 1024 * 1024;
 pub(super) const MAX_COMPRESSION_RATIO: f64 = 100.0;
 
+struct ArchiveEntryValidator {
+    total_extracted: u64,
+    entry_count: usize,
+}
+
+impl ArchiveEntryValidator {
+    fn new() -> Self {
+        Self {
+            total_extracted: 0,
+            entry_count: 0,
+        }
+    }
+
+    fn check_entry_count(&mut self, label: &str) -> bool {
+        self.entry_count += 1;
+        if self.entry_count > MAX_ITERATION_COUNT {
+            warn!(
+                "{}: too many entries, stopping at {}",
+                label, self.entry_count
+            );
+            return false;
+        }
+        true
+    }
+
+    fn check_file_size(&self, size: u64, label: &str) -> bool {
+        if size > MAX_FILE_SIZE {
+            warn!(
+                "{}: entry exceeds max file size ({} > {})",
+                label, size, MAX_FILE_SIZE
+            );
+            false
+        } else {
+            true
+        }
+    }
+
+    fn check_cumulative_size(&mut self, entry_size: u64, label: &str) -> bool {
+        self.total_extracted += entry_size;
+        if self.total_extracted > MAX_ARCHIVE_SIZE {
+            warn!(
+                "{}: cumulative size exceeds max archive size ({} > {})",
+                label, self.total_extracted, MAX_ARCHIVE_SIZE
+            );
+            false
+        } else {
+            true
+        }
+    }
+
+    fn check_compression_ratio(&self, uncompressed: u64, compressed: u64, label: &str) -> bool {
+        if compressed > 0 {
+            let ratio = uncompressed as f64 / compressed as f64;
+            if ratio > MAX_COMPRESSION_RATIO {
+                warn!(
+                    "{}: compression ratio exceeds limit ({:.2}:1 > {:.0}:1)",
+                    label, ratio, MAX_COMPRESSION_RATIO
+                );
+                return false;
+            }
+        }
+        true
+    }
+
+    fn total_extracted(&self) -> u64 {
+        self.total_extracted
+    }
+}
+
 fn collect_validated_zip_entries<R: Read + std::io::Seek>(
     archive: &mut ZipArchive<R>,
     path: &Path,
-    archive_type: &str,
 ) -> Result<Vec<ValidatedZipEntry>, String> {
-    let mut total_extracted = 0u64;
+    let label = format!("zip {:?}", path);
+    let mut validator = ArchiveEntryValidator::new();
     let mut entries = Vec::new();
-    let mut entry_count = 0usize;
 
     for i in 0..archive.len() {
-        entry_count += 1;
-        if entry_count > MAX_ITERATION_COUNT {
-            warn!(
-                "Exceeded max entry count in {} {:?}; stopping at {} entries",
-                archive_type, path, MAX_ITERATION_COUNT
-            );
+        if !validator.check_entry_count(&label) {
             break;
         }
         if let Ok(file) = archive.by_index_raw(i) {
             let compressed_size = file.compressed_size();
             let uncompressed_size = file.size();
             let Some(entry_name) = normalize_archive_entry_path(file.name()) else {
-                warn!(
-                    "Skipping unsafe path in {} {:?}: {}",
-                    archive_type,
-                    path,
-                    file.name()
-                );
+                warn!("Skipping unsafe path in zip {:?}: {}", path, file.name());
                 continue;
             };
 
-            if compressed_size > 0 {
-                let ratio = uncompressed_size as f64 / compressed_size as f64;
-                if ratio > MAX_COMPRESSION_RATIO {
-                    warn!(
-                        "Suspicious compression ratio in {} {:?}: {:.2}:1",
-                        archive_type, path, ratio
-                    );
-                    continue;
-                }
-            }
-
-            if uncompressed_size > MAX_FILE_SIZE {
-                warn!(
-                    "File too large in {} {:?}: {} bytes (limit: {} bytes)",
-                    archive_type, path, uncompressed_size, MAX_FILE_SIZE
-                );
+            if !validator.check_compression_ratio(uncompressed_size, compressed_size, &label) {
                 continue;
             }
 
-            total_extracted += uncompressed_size;
-            if total_extracted > MAX_ARCHIVE_SIZE {
-                let msg = format!(
-                    "Total extracted size exceeds limit for {} {:?}",
-                    archive_type, path
-                );
-                warn!("{}", msg);
-                return Err(msg);
+            if !validator.check_file_size(uncompressed_size, &label) {
+                continue;
+            }
+
+            if !validator.check_cumulative_size(uncompressed_size, &label) {
+                return Err(format!(
+                    "Total extracted size exceeds limit for zip {:?}",
+                    path
+                ));
             }
 
             entries.push(ValidatedZipEntry {
@@ -128,7 +214,7 @@ pub(super) fn is_valid_wheel_archive_path(path: &Path) -> bool {
         Err(_) => return false,
     };
 
-    let validated_entries = match collect_validated_zip_entries(&mut archive, path, "wheel") {
+    let validated_entries = match collect_validated_zip_entries(&mut archive, path) {
         Ok(entries) => entries,
         Err(_) => return false,
     };
@@ -143,89 +229,38 @@ fn detect_python_sdist_archive_format(path: &Path) -> Option<PythonSdistArchiveF
         return None;
     }
 
-    if file_name.ends_with(".tar.gz") {
-        tar_gz_sdist_contains_pkg_info(path).then_some(PythonSdistArchiveFormat::TarGz)
+    let format = if file_name.ends_with(".tar.gz") {
+        PythonSdistArchiveFormat::TarGz
     } else if file_name.ends_with(".tgz") {
-        tgz_sdist_contains_pkg_info(path).then_some(PythonSdistArchiveFormat::Tgz)
+        PythonSdistArchiveFormat::Tgz
     } else if file_name.ends_with(".tar.bz2") {
-        tar_bz2_sdist_contains_pkg_info(path).then_some(PythonSdistArchiveFormat::TarBz2)
+        PythonSdistArchiveFormat::TarBz2
     } else if file_name.ends_with(".tar.xz") {
-        tar_xz_sdist_contains_pkg_info(path).then_some(PythonSdistArchiveFormat::TarXz)
+        PythonSdistArchiveFormat::TarXz
     } else if file_name.ends_with(".zip") {
-        zip_sdist_contains_pkg_info(path).then_some(PythonSdistArchiveFormat::Zip)
+        PythonSdistArchiveFormat::Zip
     } else {
-        None
-    }
-}
+        return None;
+    };
 
-fn tar_gz_sdist_contains_pkg_info(path: &Path) -> bool {
-    let Some(compressed_size) = compressed_archive_size(path) else {
-        return false;
-    };
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(_) => return false,
-    };
-    let decoder = GzDecoder::new(file);
-    tar_sdist_contains_pkg_info(path, decoder, "tar.gz", compressed_size)
-}
-
-fn tar_bz2_sdist_contains_pkg_info(path: &Path) -> bool {
-    let Some(compressed_size) = compressed_archive_size(path) else {
-        return false;
-    };
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(_) => return false,
-    };
-    let decoder = BzDecoder::new(file);
-    tar_sdist_contains_pkg_info(path, decoder, "tar.bz2", compressed_size)
-}
-
-fn tar_xz_sdist_contains_pkg_info(path: &Path) -> bool {
-    let Some(compressed_size) = compressed_archive_size(path) else {
-        return false;
-    };
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(_) => return false,
-    };
-    let decoder = XzDecoder::new(file);
-    tar_sdist_contains_pkg_info(path, decoder, "tar.xz", compressed_size)
-}
-
-fn compressed_archive_size(path: &Path) -> Option<u64> {
-    std::fs::metadata(path).ok().map(|metadata| metadata.len())
+    format.contains_pkg_info(path).then_some(format)
 }
 
 fn tar_sdist_contains_pkg_info<R: Read>(
     path: &Path,
     reader: R,
-    archive_type: &str,
+    format: PythonSdistArchiveFormat,
     compressed_size: u64,
 ) -> bool {
-    let Some(entries) = collect_tar_sdist_entries(path, reader, archive_type, compressed_size)
-    else {
+    let Some(entries) = collect_tar_sdist_entries(path, reader, format, compressed_size) else {
         return false;
     };
 
     select_sdist_pkginfo_entry(path, &entries).is_some()
 }
 
-fn tgz_sdist_contains_pkg_info(path: &Path) -> bool {
-    if !path.is_file() {
-        return true;
-    }
-
-    let Some(compressed_size) = compressed_archive_size(path) else {
-        return false;
-    };
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(_) => return false,
-    };
-    let decoder = GzDecoder::new(file);
-    tar_sdist_contains_pkg_info(path, decoder, "tgz", compressed_size)
+fn compressed_archive_size(path: &Path) -> Option<u64> {
+    std::fs::metadata(path).ok().map(|metadata| metadata.len())
 }
 
 fn zip_sdist_contains_pkg_info(path: &Path) -> bool {
@@ -242,7 +277,7 @@ fn zip_sdist_contains_pkg_info(path: &Path) -> bool {
         Err(_) => return false,
     };
 
-    let validated_entries = match collect_validated_zip_entries(&mut archive, path, "sdist zip") {
+    let validated_entries = match collect_validated_zip_entries(&mut archive, path) {
         Ok(entries) => entries,
         Err(_) => return false,
     };
@@ -250,9 +285,12 @@ fn zip_sdist_contains_pkg_info(path: &Path) -> bool {
         .iter()
         .filter(|entry| entry.name.ends_with("/PKG-INFO"))
         .filter_map(|entry| {
-            read_validated_zip_entry(&mut archive, entry, path, "sdist zip")
+            read_validated_zip_entry(&mut archive, entry, path)
                 .ok()
-                .map(|content| (entry.name.clone(), content))
+                .map(|content| SdistEntry {
+                    path: entry.name.clone(),
+                    content,
+                })
         })
         .collect();
 
@@ -302,7 +340,10 @@ pub(super) fn extract_from_sdist_archive(path: &Path) -> PackageData {
     };
 
     let mut package_data = match format {
-        PythonSdistArchiveFormat::TarGz | PythonSdistArchiveFormat::Tgz => {
+        PythonSdistArchiveFormat::TarGz
+        | PythonSdistArchiveFormat::Tgz
+        | PythonSdistArchiveFormat::TarBz2
+        | PythonSdistArchiveFormat::TarXz => {
             let file = match File::open(path) {
                 Ok(file) => file,
                 Err(e) => {
@@ -310,30 +351,15 @@ pub(super) fn extract_from_sdist_archive(path: &Path) -> PackageData {
                     return default_package_data(path);
                 }
             };
-            let decoder = GzDecoder::new(file);
-            extract_from_tar_sdist_archive(path, decoder, "tar.gz", metadata.len())
-        }
-        PythonSdistArchiveFormat::TarBz2 => {
-            let file = match File::open(path) {
-                Ok(file) => file,
-                Err(e) => {
-                    warn!("Failed to open sdist archive {:?}: {}", path, e);
-                    return default_package_data(path);
+            let decoder: Box<dyn Read> = match format {
+                PythonSdistArchiveFormat::TarGz | PythonSdistArchiveFormat::Tgz => {
+                    Box::new(GzDecoder::new(file))
                 }
+                PythonSdistArchiveFormat::TarBz2 => Box::new(BzDecoder::new(file)),
+                PythonSdistArchiveFormat::TarXz => Box::new(XzDecoder::new(file)),
+                PythonSdistArchiveFormat::Zip => unreachable!(),
             };
-            let decoder = BzDecoder::new(file);
-            extract_from_tar_sdist_archive(path, decoder, "tar.bz2", metadata.len())
-        }
-        PythonSdistArchiveFormat::TarXz => {
-            let file = match File::open(path) {
-                Ok(file) => file,
-                Err(e) => {
-                    warn!("Failed to open sdist archive {:?}: {}", path, e);
-                    return default_package_data(path);
-                }
-            };
-            let decoder = XzDecoder::new(file);
-            extract_from_tar_sdist_archive(path, decoder, "tar.xz", metadata.len())
+            extract_from_tar_sdist_archive(path, decoder, format, metadata.len())
         }
         PythonSdistArchiveFormat::Zip => extract_from_zip_sdist_archive(path),
     };
@@ -350,11 +376,10 @@ pub(super) fn extract_from_sdist_archive(path: &Path) -> PackageData {
 fn extract_from_tar_sdist_archive<R: Read>(
     path: &Path,
     reader: R,
-    archive_type: &str,
+    format: PythonSdistArchiveFormat,
     compressed_size: u64,
 ) -> PackageData {
-    let Some(entries) = collect_tar_sdist_entries(path, reader, archive_type, compressed_size)
-    else {
+    let Some(entries) = collect_tar_sdist_entries(path, reader, format, compressed_size) else {
         return default_package_data(path);
     };
 
@@ -364,32 +389,29 @@ fn extract_from_tar_sdist_archive<R: Read>(
 fn collect_tar_sdist_entries<R: Read>(
     path: &Path,
     reader: R,
-    archive_type: &str,
+    format: PythonSdistArchiveFormat,
     compressed_size: u64,
-) -> Option<Vec<(String, String)>> {
+) -> Option<Vec<SdistEntry>> {
     let mut archive = Archive::new(reader);
     let archive_entries = match archive.entries() {
         Ok(entries) => entries,
         Err(e) => {
             warn!(
                 "Failed to read {} sdist archive {:?}: {}",
-                archive_type, path, e
+                format.label(),
+                path,
+                e
             );
             return None;
         }
     };
 
-    let mut total_extracted = 0u64;
+    let label = format!("{} sdist {:?}", format.label(), path);
+    let mut validator = ArchiveEntryValidator::new();
     let mut entries = Vec::new();
-    let mut entry_count = 0usize;
 
     for entry_result in archive_entries {
-        entry_count += 1;
-        if entry_count > MAX_ITERATION_COUNT {
-            warn!(
-                "Exceeded max entry count in {} sdist {:?}; stopping at {} entries",
-                archive_type, path, MAX_ITERATION_COUNT
-            );
+        if !validator.check_entry_count(&label) {
             break;
         }
 
@@ -398,39 +420,26 @@ fn collect_tar_sdist_entries<R: Read>(
             Err(e) => {
                 warn!(
                     "Failed to read {} sdist entry from {:?}: {}",
-                    archive_type, path, e
+                    format.label(),
+                    path,
+                    e
                 );
                 continue;
             }
         };
 
         let entry_size = entry.size();
-        if entry_size > MAX_FILE_SIZE {
-            warn!(
-                "File too large in {} sdist {:?}: {} bytes (limit: {} bytes)",
-                archive_type, path, entry_size, MAX_FILE_SIZE
-            );
+        if !validator.check_file_size(entry_size, &label) {
             continue;
         }
 
-        total_extracted += entry_size;
-        if total_extracted > MAX_ARCHIVE_SIZE {
-            warn!(
-                "Total extracted size exceeds limit for {} sdist {:?}",
-                archive_type, path
-            );
+        if !validator.check_cumulative_size(entry_size, &label) {
             return None;
         }
 
-        if compressed_size > 0 {
-            let ratio = total_extracted as f64 / compressed_size as f64;
-            if ratio > MAX_COMPRESSION_RATIO {
-                warn!(
-                    "Suspicious compression ratio in {} sdist {:?}: {:.2}:1",
-                    archive_type, path, ratio
-                );
-                return None;
-            }
+        if !validator.check_compression_ratio(validator.total_extracted(), compressed_size, &label)
+        {
+            return None;
         }
 
         let entry_path = match entry.path() {
@@ -438,14 +447,20 @@ fn collect_tar_sdist_entries<R: Read>(
             Err(e) => {
                 warn!(
                     "Failed to get {} sdist entry path from {:?}: {}",
-                    archive_type, path, e
+                    format.label(),
+                    path,
+                    e
                 );
                 continue;
             }
         };
 
         let Some(entry_path) = normalize_archive_entry_path(&entry_path) else {
-            warn!("Skipping unsafe {} sdist path in {:?}", archive_type, path);
+            warn!(
+                "Skipping unsafe {} sdist path in {:?}",
+                format.label(),
+                path
+            );
             continue;
         };
 
@@ -456,9 +471,12 @@ fn collect_tar_sdist_entries<R: Read>(
         if let Ok(content) = read_limited_utf8(
             &mut entry,
             MAX_FILE_SIZE,
-            &format!("{} entry {}", archive_type, entry_path),
+            &format!("{} entry {}", format.label(), entry_path),
         ) {
-            entries.push((entry_path, content));
+            entries.push(SdistEntry {
+                path: entry_path,
+                content,
+            });
         }
     }
 
@@ -482,7 +500,7 @@ fn extract_from_zip_sdist_archive(path: &Path) -> PackageData {
         }
     };
 
-    let validated_entries = match collect_validated_zip_entries(&mut archive, path, "sdist zip") {
+    let validated_entries = match collect_validated_zip_entries(&mut archive, path) {
         Ok(entries) => entries,
         Err(_) => return default_package_data(path),
     };
@@ -493,8 +511,11 @@ fn extract_from_zip_sdist_archive(path: &Path) -> PackageData {
             continue;
         }
 
-        if let Ok(content) = read_validated_zip_entry(&mut archive, entry, path, "sdist zip") {
-            entries.push((entry.name.clone(), content));
+        if let Ok(content) = read_validated_zip_entry(&mut archive, entry, path) {
+            entries.push(SdistEntry {
+                path: entry.name.clone(),
+                content,
+            });
         }
     }
 
@@ -507,58 +528,57 @@ fn is_relevant_sdist_text_entry(entry_path: &str) -> bool {
         || entry_path.ends_with("/SOURCES.txt")
 }
 
-fn build_sdist_package_data(path: &Path, entries: Vec<(String, String)>) -> PackageData {
-    let Some((metadata_path, metadata_content)) = select_sdist_pkginfo_entry(path, &entries) else {
+fn build_sdist_package_data(path: &Path, entries: Vec<SdistEntry>) -> PackageData {
+    let Some(metadata_entry) = select_sdist_pkginfo_entry(path, &entries) else {
         warn!("No PKG-INFO file found in sdist archive {:?}", path);
         return default_package_data(path);
     };
 
     let mut package_data = super::rfc822_meta::python_parse_rfc822_content(
-        &metadata_content,
+        &metadata_entry.content,
         DatasourceId::PypiSdistPkginfo,
     );
-    merge_sdist_archive_dependencies(&entries, &metadata_path, &mut package_data);
-    merge_sdist_archive_file_references(&entries, &metadata_path, &mut package_data);
+    merge_sdist_archive_dependencies(&entries, &metadata_entry.path, &mut package_data);
+    merge_sdist_archive_file_references(&entries, &metadata_entry.path, &mut package_data);
     apply_sdist_name_version_fallback(path, &mut package_data);
     package_data.datasource_id = Some(DatasourceId::PypiSdist);
     package_data
 }
 
-fn select_sdist_pkginfo_entry(
-    archive_path: &Path,
-    entries: &[(String, String)],
-) -> Option<(String, String)> {
+fn select_sdist_pkginfo_entry(archive_path: &Path, entries: &[SdistEntry]) -> Option<SdistEntry> {
     let expected_name = sdist_archive_expected_name(archive_path);
 
     entries
         .iter()
-        .filter(|(entry_path, _)| entry_path.ends_with("/PKG-INFO"))
-        .min_by_key(|(entry_path, content)| {
-            let components: Vec<_> = entry_path
+        .filter(|entry| entry.path.ends_with("/PKG-INFO"))
+        .min_by_key(|entry| {
+            let components: Vec<_> = entry
+                .path
                 .split('/')
                 .filter(|part| !part.is_empty())
                 .collect();
-            let candidate_name = sdist_pkginfo_candidate_name(content);
+            let candidate_name = sdist_pkginfo_candidate_name(&entry.content);
             let name_rank = if candidate_name == expected_name {
                 0
             } else {
                 1
             };
-            let kind_rank = sdist_pkginfo_kind_rank(entry_path);
+            let kind_rank = sdist_pkginfo_kind_rank(&entry.path);
 
-            (name_rank, kind_rank, components.len(), entry_path.clone())
+            (name_rank, kind_rank, components.len(), entry.path.clone())
         })
-        .map(|(entry_path, content)| (entry_path.clone(), content.clone()))
+        .cloned()
 }
 
-fn has_matching_sdist_pkginfo_candidate(archive_path: &Path, entries: &[(String, String)]) -> bool {
+fn has_matching_sdist_pkginfo_candidate(archive_path: &Path, entries: &[SdistEntry]) -> bool {
     let Some(expected_name) = sdist_archive_expected_name(archive_path) else {
         return false;
     };
 
-    entries.iter().any(|(entry_path, content)| {
-        sdist_pkginfo_kind_rank(entry_path) < 3
-            && sdist_pkginfo_candidate_name(content).as_deref() == Some(expected_name.as_str())
+    entries.iter().any(|entry| {
+        sdist_pkginfo_kind_rank(&entry.path) < 3
+            && sdist_pkginfo_candidate_name(&entry.content).as_deref()
+                == Some(expected_name.as_str())
     })
 }
 
@@ -597,30 +617,48 @@ fn sdist_pkginfo_kind_rank(entry_path: &str) -> usize {
     }
 }
 
-fn merge_sdist_archive_dependencies(
-    entries: &[(String, String)],
+fn find_sdist_entries_by_suffix<'a>(
+    entries: &'a [SdistEntry],
     metadata_path: &str,
-    package_data: &mut PackageData,
-) {
+    package_name: Option<&str>,
+    suffix: &str,
+) -> Vec<&'a SdistEntry> {
     let metadata_dir = metadata_path
         .rsplit_once('/')
         .map(|(dir, _)| dir)
         .unwrap_or("");
     let archive_root = metadata_path.split('/').next().unwrap_or("");
     let matched_egg_info_dir =
-        select_matching_sdist_egg_info_dir(entries, archive_root, package_data.name.as_deref());
+        select_matching_sdist_egg_info_dir(entries, archive_root, package_name);
+
+    entries
+        .iter()
+        .filter(|entry| {
+            let is_direct =
+                !metadata_dir.is_empty() && entry.path == format!("{metadata_dir}/{suffix}");
+            let is_egg_info = matched_egg_info_dir.as_ref().is_some_and(|egg_info_dir| {
+                entry.path == format!("{archive_root}/{egg_info_dir}/{suffix}")
+            });
+            is_direct || is_egg_info
+        })
+        .collect()
+}
+
+fn merge_sdist_archive_dependencies(
+    entries: &[SdistEntry],
+    metadata_path: &str,
+    package_data: &mut PackageData,
+) {
+    let matching_entries = find_sdist_entries_by_suffix(
+        entries,
+        metadata_path,
+        package_data.name.as_deref(),
+        "requires.txt",
+    );
     let mut extra_dependencies = Vec::new();
 
-    for (entry_path, content) in entries {
-        let is_direct_requires =
-            !metadata_dir.is_empty() && entry_path == &format!("{metadata_dir}/requires.txt");
-        let is_egg_info_requires = matched_egg_info_dir.as_ref().is_some_and(|egg_info_dir| {
-            entry_path == &format!("{archive_root}/{egg_info_dir}/requires.txt")
-        });
-
-        if is_direct_requires || is_egg_info_requires {
-            extra_dependencies.extend(parse_requires_txt(content));
-        }
+    for entry in matching_entries {
+        extra_dependencies.extend(parse_requires_txt(&entry.content));
     }
 
     for dependency in extra_dependencies {
@@ -636,29 +674,20 @@ fn merge_sdist_archive_dependencies(
 }
 
 fn merge_sdist_archive_file_references(
-    entries: &[(String, String)],
+    entries: &[SdistEntry],
     metadata_path: &str,
     package_data: &mut PackageData,
 ) {
-    let metadata_dir = metadata_path
-        .rsplit_once('/')
-        .map(|(dir, _)| dir)
-        .unwrap_or("");
-    let archive_root = metadata_path.split('/').next().unwrap_or("");
-    let matched_egg_info_dir =
-        select_matching_sdist_egg_info_dir(entries, archive_root, package_data.name.as_deref());
+    let matching_entries = find_sdist_entries_by_suffix(
+        entries,
+        metadata_path,
+        package_data.name.as_deref(),
+        "SOURCES.txt",
+    );
     let mut extra_refs = Vec::new();
 
-    for (entry_path, content) in entries {
-        let is_direct_sources =
-            !metadata_dir.is_empty() && entry_path == &format!("{metadata_dir}/SOURCES.txt");
-        let is_egg_info_sources = matched_egg_info_dir.as_ref().is_some_and(|egg_info_dir| {
-            entry_path == &format!("{archive_root}/{egg_info_dir}/SOURCES.txt")
-        });
-
-        if is_direct_sources || is_egg_info_sources {
-            extra_refs.extend(parse_sources_txt(content));
-        }
+    for entry in matching_entries {
+        extra_refs.extend(parse_file_list(&entry.content));
     }
 
     for file_ref in extra_refs {
@@ -673,7 +702,7 @@ fn merge_sdist_archive_file_references(
 }
 
 fn select_matching_sdist_egg_info_dir(
-    entries: &[(String, String)],
+    entries: &[SdistEntry],
     archive_root: &str,
     package_name: Option<&str>,
 ) -> Option<String> {
@@ -681,8 +710,9 @@ fn select_matching_sdist_egg_info_dir(
 
     entries
         .iter()
-        .filter_map(|(entry_path, _)| {
-            let components: Vec<_> = entry_path
+        .filter_map(|entry| {
+            let components: Vec<_> = entry
+                .path
                 .split('/')
                 .filter(|part| !part.is_empty())
                 .collect();
@@ -733,67 +763,46 @@ fn apply_sdist_name_version_fallback(path: &Path, package_data: &mut PackageData
         || package_data.repository_download_url.is_none()
         || package_data.api_data_url.is_none()
     {
-        let (repository_homepage_url, repository_download_url, api_data_url, purl) =
-            build_pypi_urls(
-                package_data.name.as_deref(),
-                package_data.version.as_deref(),
-            );
+        let urls = build_pypi_urls(
+            package_data.name.as_deref(),
+            package_data.version.as_deref(),
+        );
 
         if package_data.repository_homepage_url.is_none() {
-            package_data.repository_homepage_url = repository_homepage_url;
+            package_data.repository_homepage_url = urls.repository_homepage_url;
         }
         if package_data.repository_download_url.is_none() {
-            package_data.repository_download_url = repository_download_url;
+            package_data.repository_download_url = urls.repository_download_url;
         }
         if package_data.api_data_url.is_none() {
-            package_data.api_data_url = api_data_url;
+            package_data.api_data_url = urls.api_data_url;
         }
         if package_data.purl.is_none() {
-            package_data.purl = purl;
+            package_data.purl = urls.purl;
         }
     }
 }
 
-pub(super) fn extract_from_wheel_archive(path: &Path) -> PackageData {
-    let metadata = match std::fs::metadata(path) {
-        Ok(m) => m,
-        Err(e) => {
-            warn!(
-                "Failed to read metadata for wheel archive {:?}: {}",
-                path, e
-            );
-            return default_package_data(path);
-        }
-    };
-
+fn open_validated_zip_archive(path: &Path) -> Option<(ZipArchive<File>, Vec<ValidatedZipEntry>)> {
+    let metadata = std::fs::metadata(path).ok()?;
     if metadata.len() > MAX_ARCHIVE_SIZE {
         warn!(
-            "Wheel archive too large: {} bytes (limit: {} bytes)",
+            "zip archive {:?} exceeds max size ({} > {})",
+            path,
             metadata.len(),
             MAX_ARCHIVE_SIZE
         );
-        return default_package_data(path);
+        return None;
     }
+    let file = File::open(path).ok()?;
+    let mut archive = ZipArchive::new(file).ok()?;
+    let entries = collect_validated_zip_entries(&mut archive, path).ok()?;
+    Some((archive, entries))
+}
 
-    let file = match File::open(path) {
-        Ok(f) => f,
-        Err(e) => {
-            warn!("Failed to open wheel archive {:?}: {}", path, e);
-            return default_package_data(path);
-        }
-    };
-
-    let mut archive = match ZipArchive::new(file) {
-        Ok(a) => a,
-        Err(e) => {
-            warn!("Failed to read wheel archive {:?}: {}", path, e);
-            return default_package_data(path);
-        }
-    };
-
-    let validated_entries = match collect_validated_zip_entries(&mut archive, path, "wheel") {
-        Ok(entries) => entries,
-        Err(_) => return default_package_data(path),
+pub(super) fn extract_from_wheel_archive(path: &Path) -> PackageData {
+    let Some((mut archive, validated_entries)) = open_validated_zip_archive(path) else {
+        return default_package_data(path);
     };
 
     let metadata_entry =
@@ -805,7 +814,7 @@ pub(super) fn extract_from_wheel_archive(path: &Path) -> PackageData {
             }
         };
 
-    let content = match read_validated_zip_entry(&mut archive, metadata_entry, path, "wheel") {
+    let content = match read_validated_zip_entry(&mut archive, metadata_entry, path) {
         Ok(c) => c,
         Err(e) => {
             warn!("Failed to read METADATA from {:?}: {}", path, e);
@@ -822,8 +831,7 @@ pub(super) fn extract_from_wheel_archive(path: &Path) -> PackageData {
 
     if let Some(record_entry) =
         find_validated_zip_entry_by_suffix(&validated_entries, ".dist-info/RECORD")
-        && let Ok(record_content) =
-            read_validated_zip_entry(&mut archive, record_entry, path, "wheel")
+        && let Ok(record_content) = read_validated_zip_entry(&mut archive, record_entry, path)
     {
         package_data.file_references = parse_record_csv(&record_content);
     }
@@ -870,42 +878,8 @@ pub(super) fn extract_from_wheel_archive(path: &Path) -> PackageData {
 }
 
 pub(super) fn extract_from_egg_archive(path: &Path) -> PackageData {
-    let metadata = match std::fs::metadata(path) {
-        Ok(m) => m,
-        Err(e) => {
-            warn!("Failed to read metadata for egg archive {:?}: {}", path, e);
-            return default_package_data(path);
-        }
-    };
-
-    if metadata.len() > MAX_ARCHIVE_SIZE {
-        warn!(
-            "Egg archive too large: {} bytes (limit: {} bytes)",
-            metadata.len(),
-            MAX_ARCHIVE_SIZE
-        );
+    let Some((mut archive, validated_entries)) = open_validated_zip_archive(path) else {
         return default_package_data(path);
-    }
-
-    let file = match File::open(path) {
-        Ok(f) => f,
-        Err(e) => {
-            warn!("Failed to open egg archive {:?}: {}", path, e);
-            return default_package_data(path);
-        }
-    };
-
-    let mut archive = match ZipArchive::new(file) {
-        Ok(a) => a,
-        Err(e) => {
-            warn!("Failed to read egg archive {:?}: {}", path, e);
-            return default_package_data(path);
-        }
-    };
-
-    let validated_entries = match collect_validated_zip_entries(&mut archive, path, "egg") {
-        Ok(entries) => entries,
-        Err(_) => return default_package_data(path),
     };
 
     let pkginfo_entry = match find_validated_zip_entry_by_any_suffix(
@@ -919,7 +893,7 @@ pub(super) fn extract_from_egg_archive(path: &Path) -> PackageData {
         }
     };
 
-    let content = match read_validated_zip_entry(&mut archive, pkginfo_entry, path, "egg") {
+    let content = match read_validated_zip_entry(&mut archive, pkginfo_entry, path) {
         Ok(c) => c,
         Err(e) => {
             warn!("Failed to read PKG-INFO from {:?}: {}", path, e);
@@ -941,9 +915,9 @@ pub(super) fn extract_from_egg_archive(path: &Path) -> PackageData {
             ".egg-info/installed-files.txt",
         ],
     ) && let Ok(installed_files_content) =
-        read_validated_zip_entry(&mut archive, installed_files_entry, path, "egg")
+        read_validated_zip_entry(&mut archive, installed_files_entry, path)
     {
-        package_data.file_references = parse_installed_files_txt(&installed_files_content);
+        package_data.file_references = parse_file_list(&installed_files_content);
     }
 
     if let Some(egg_info) = parse_egg_filename(path) {
@@ -992,7 +966,6 @@ fn read_validated_zip_entry<R: Read + std::io::Seek>(
     archive: &mut ZipArchive<R>,
     entry: &ValidatedZipEntry,
     path: &Path,
-    archive_type: &str,
 ) -> Result<String, String> {
     let mut file = archive
         .by_index(entry.index)
@@ -1005,23 +978,23 @@ fn read_validated_zip_entry<R: Read + std::io::Seek>(
         let ratio = uncompressed_size as f64 / compressed_size as f64;
         if ratio > MAX_COMPRESSION_RATIO {
             return Err(format!(
-                "Rejected suspicious compression ratio in {} {:?}: {:.2}:1",
-                archive_type, path, ratio
+                "Rejected suspicious compression ratio in zip {:?}: {:.2}:1",
+                path, ratio
             ));
         }
     }
 
     if uncompressed_size > MAX_FILE_SIZE {
         return Err(format!(
-            "Rejected oversized entry in {} {:?}: {} bytes",
-            archive_type, path, uncompressed_size
+            "Rejected oversized entry in zip {:?}: {} bytes",
+            path, uncompressed_size
         ));
     }
 
     read_limited_utf8(
         &mut file,
         MAX_FILE_SIZE,
-        &format!("{} entry {}", archive_type, entry.name),
+        &format!("zip entry {}", entry.name),
     )
 }
 
@@ -1152,39 +1125,13 @@ pub(super) fn parse_record_csv(content: &str) -> Vec<FileReference> {
     file_references
 }
 
-pub(super) fn parse_installed_files_txt(content: &str) -> Vec<FileReference> {
-    content
-        .lines()
-        .take(MAX_ITERATION_COUNT)
-        .map(|line| line.trim())
-        .filter(|line| !line.is_empty())
-        .map(|path| FileReference {
-            path: path.to_string(),
-            size: None,
-            sha1: None,
-            md5: None,
-            sha256: None,
-            sha512: None,
-            extra_data: None,
-        })
-        .collect()
-}
-
-pub(super) fn parse_sources_txt(content: &str) -> Vec<FileReference> {
+pub(super) fn parse_file_list(content: &str) -> Vec<FileReference> {
     content
         .lines()
         .take(MAX_ITERATION_COUNT)
         .map(str::trim)
         .filter(|line| !line.is_empty())
-        .map(|path| FileReference {
-            path: path.to_string(),
-            size: None,
-            sha1: None,
-            md5: None,
-            sha256: None,
-            sha512: None,
-            extra_data: None,
-        })
+        .map(|path| FileReference::from_path(path.to_string()))
         .collect()
 }
 
@@ -1315,12 +1262,11 @@ pub(super) fn extract_from_pip_origin_json(path: &Path) -> PackageData {
         return default_package_data(path);
     };
 
-    let (repository_homepage_url, repository_download_url, api_data_url, plain_purl) =
-        build_pypi_urls(Some(&name), Some(&version));
+    let urls = build_pypi_urls(Some(&name), Some(&version));
     let purl = sibling_wheel
         .as_ref()
         .and_then(|wheel_info| build_wheel_purl(Some(&name), Some(&version), wheel_info))
-        .or(plain_purl);
+        .or(urls.purl);
 
     PackageData {
         package_type: Some(PythonParser::PACKAGE_TYPE),
@@ -1331,9 +1277,9 @@ pub(super) fn extract_from_pip_origin_json(path: &Path) -> PackageData {
         download_url: Some(truncate_field(download_url.to_string())),
         sha256: extract_sha256_from_origin_json(&root)
             .and_then(|h| Sha256Digest::from_hex(&h).ok()),
-        repository_homepage_url,
-        repository_download_url,
-        api_data_url,
+        repository_homepage_url: urls.repository_homepage_url,
+        repository_download_url: urls.repository_download_url,
+        api_data_url: urls.api_data_url,
         purl,
         ..Default::default()
     }

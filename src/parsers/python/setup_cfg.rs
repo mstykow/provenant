@@ -1,7 +1,8 @@
 use super::PythonParser;
 use super::utils::{
-    apply_project_url_mappings, default_package_data, extract_setup_cfg_dependency_name,
-    has_private_classifier, parse_setup_cfg_keywords, parse_setup_cfg_project_urls,
+    ProjectUrls, apply_project_url_mappings, default_package_data,
+    extract_setup_cfg_dependency_name, has_private_classifier, parse_setup_cfg_keywords,
+    parse_setup_cfg_project_urls,
 };
 use crate::models::{DatasourceId, Dependency, PackageData, Party};
 use crate::parser_warn as warn;
@@ -31,40 +32,29 @@ pub(super) fn extract_from_setup_cfg(path: &Path) -> PackageData {
     let maintainer = get_ini_value(&sections, "metadata", "maintainer").map(truncate_field);
     let maintainer_email = get_ini_value(&sections, "metadata", "maintainer_email");
     let license = get_ini_value(&sections, "metadata", "license").map(truncate_field);
-    let mut homepage_url = get_ini_value(&sections, "metadata", "url").map(truncate_field);
+    let homepage_url = get_ini_value(&sections, "metadata", "url").map(truncate_field);
     let classifiers = get_ini_values(&sections, "metadata", "classifiers");
     let keywords = parse_setup_cfg_keywords(get_ini_value(&sections, "metadata", "keywords"));
     let python_requires = get_ini_value(&sections, "options", "python_requires");
     let parsed_project_urls =
         parse_setup_cfg_project_urls(&get_ini_values(&sections, "metadata", "project_urls"));
-    let (mut bug_tracking_url, mut code_view_url, mut vcs_url) = (None, None, None);
+    let mut urls = ProjectUrls {
+        homepage_url,
+        download_url: None,
+        bug_tracking_url: None,
+        code_view_url: None,
+        vcs_url: None,
+        changelog_url: None,
+    };
     let mut extra_data = HashMap::new();
 
     let mut parties = Vec::new();
     if author.is_some() || author_email.is_some() {
-        parties.push(Party {
-            r#type: Some("person".to_string()),
-            role: Some("author".to_string()),
-            name: author,
-            email: author_email,
-            url: None,
-            organization: None,
-            organization_url: None,
-            timezone: None,
-        });
+        parties.push(Party::person("author", author, author_email));
     }
 
     if maintainer.is_some() || maintainer_email.is_some() {
-        parties.push(Party {
-            r#type: Some("person".to_string()),
-            role: Some("maintainer".to_string()),
-            name: maintainer,
-            email: maintainer_email,
-            url: None,
-            organization: None,
-            organization_url: None,
-            timezone: None,
-        });
+        parties.push(Party::person("maintainer", maintainer, maintainer_email));
     }
 
     let declared_license_expression = None;
@@ -81,14 +71,7 @@ pub(super) fn extract_from_setup_cfg(path: &Path) -> PackageData {
         );
     }
 
-    apply_project_url_mappings(
-        &parsed_project_urls,
-        &mut homepage_url,
-        &mut bug_tracking_url,
-        &mut code_view_url,
-        &mut vcs_url,
-        &mut extra_data,
-    );
+    apply_project_url_mappings(&parsed_project_urls, &mut urls, &mut extra_data);
 
     let extra_data = if extra_data.is_empty() {
         None
@@ -106,47 +89,26 @@ pub(super) fn extract_from_setup_cfg(path: &Path) -> PackageData {
 
     PackageData {
         package_type: Some(PythonParser::PACKAGE_TYPE),
-        namespace: None,
         name,
         version,
-        qualifiers: None,
-        subpath: None,
         primary_language: Some("Python".to_string()),
         description,
-        release_date: None,
         parties,
         keywords,
-        homepage_url,
-        download_url: None,
-        size: None,
-        sha1: None,
-        md5: None,
-        sha256: None,
-        sha512: None,
-        bug_tracking_url,
-        code_view_url,
-        vcs_url,
-        copyright: None,
-        holder: None,
+        homepage_url: urls.homepage_url,
+        bug_tracking_url: urls.bug_tracking_url,
+        code_view_url: urls.code_view_url,
+        vcs_url: urls.vcs_url,
         declared_license_expression,
         declared_license_expression_spdx,
         license_detections,
-        other_license_expression: None,
-        other_license_expression_spdx: None,
-        other_license_detections: Vec::new(),
         extracted_license_statement,
-        notice_text: None,
-        source_packages: Vec::new(),
-        file_references: Vec::new(),
         is_private: has_private_classifier(&classifiers),
-        is_virtual: false,
         extra_data,
         dependencies,
-        repository_homepage_url: None,
-        repository_download_url: None,
-        api_data_url: None,
         datasource_id: Some(DatasourceId::PypiSetupCfg),
         purl,
+        ..Default::default()
     }
 }
 

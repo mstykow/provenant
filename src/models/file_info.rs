@@ -762,6 +762,21 @@ pub struct Party {
     pub timezone: Option<String>,
 }
 
+impl Party {
+    pub(crate) fn person(role: &str, name: Option<String>, email: Option<String>) -> Self {
+        Self {
+            r#type: Some("person".to_string()),
+            role: Some(role.to_string()),
+            name,
+            email,
+            url: None,
+            organization: None,
+            organization_url: None,
+            timezone: None,
+        }
+    }
+}
+
 /// Reference to a file within a package archive with checksums.
 ///
 /// Used in SBOM generation to track files within distribution archives.
@@ -774,6 +789,20 @@ pub struct FileReference {
     pub sha256: Option<Sha256Digest>,
     pub sha512: Option<Sha512Digest>,
     pub extra_data: Option<std::collections::HashMap<String, serde_json::Value>>,
+}
+
+impl FileReference {
+    pub(crate) fn from_path(path: String) -> Self {
+        Self {
+            path,
+            size: None,
+            sha1: None,
+            md5: None,
+            sha256: None,
+            sha512: None,
+            extra_data: None,
+        }
+    }
 }
 
 /// Top-level assembled package, created by merging one or more `PackageData`
