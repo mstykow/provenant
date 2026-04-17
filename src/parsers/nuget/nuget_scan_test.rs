@@ -3,7 +3,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use super::super::scan_test_utils::{
+    use super::super::super::scan_test_utils::{
         assert_dependency_present, assert_file_links_to_package, scan_and_assemble,
     };
     use crate::models::{DatasourceId, PackageType};
@@ -44,7 +44,7 @@ mod tests {
         let temp_dir = tempfile::TempDir::new().expect("create temp dir");
         fs::write(
             temp_dir.path().join("Contoso.Utility.csproj"),
-            include_str!("../../testdata/assembly-golden/nuget-basic/Contoso.Utility.csproj"),
+            include_str!("../../../testdata/assembly-golden/nuget-basic/Contoso.Utility.csproj"),
         )
         .expect("write csproj");
         fs::write(

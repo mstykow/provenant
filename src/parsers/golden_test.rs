@@ -78,7 +78,7 @@ mod microsoft_update_manifest_golden_test;
 mod nix_golden_test;
 #[path = "npm_golden_test.rs"]
 mod npm_golden_test;
-#[path = "nuget_golden_test.rs"]
+#[path = "nuget/nuget_golden_test.rs"]
 mod nuget_golden_test;
 #[path = "opam_golden_test.rs"]
 mod opam_golden_test;
