@@ -3564,9 +3564,7 @@ fn strip_trailing_single_digit_token(s: &str) -> String {
     prefix.to_string()
 }
 
-#[path = "refiner_author.rs"]
 mod author;
-#[path = "refiner_utils.rs"]
 mod utils;
 
 pub(crate) use author::looks_like_name_with_parenthesized_url;
@@ -3588,5 +3586,4 @@ use self::utils::{
 };
 
 #[cfg(test)]
-#[path = "refiner_test.rs"]
 mod tests;
