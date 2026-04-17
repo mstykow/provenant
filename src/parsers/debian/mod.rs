@@ -1,0 +1,171 @@
+//! Parser for Debian package metadata files.
+//!
+//! Extracts package metadata from Debian package management files using RFC 822
+//! format parsing for control files and installed package databases.
+//!
+//! # Supported Formats
+//! - `debian/control` (Source package control files - multi-paragraph)
+//! - `/var/lib/dpkg/status` (Installed package database - multi-paragraph)
+//! - `/var/lib/dpkg/status.d/*` (Distroless installed packages)
+//! - `*.dsc` (Debian source control files)
+//! - `*.orig.tar.*` (Original upstream tarballs)
+//! - `*.debian.tar.*` (Debian packaging tarballs)
+//! - `/var/lib/dpkg/info/*.list` (Installed file lists)
+//! - `/var/lib/dpkg/info/*.md5sums` (Installed file checksums)
+//! - `debian/copyright` (Copyright/license declarations)
+//! - `*.deb` (Debian binary package archives)
+//! - `control` (extracted from .deb archives)
+//! - `md5sums` (extracted from .deb archives)
+//!
+//! # Key Features
+//! - RFC 822 format parsing for control files
+//! - Dependency extraction with scope tracking (Depends, Build-Depends, etc.)
+//! - Debian vs Ubuntu namespace detection from version and maintainer fields
+//! - Multi-paragraph record parsing for package databases
+//! - License and copyright information extraction
+//! - Package URL (purl) generation with namespace
+//!
+//! # Implementation Notes
+//! - Uses RFC 822 parser from `crate::parsers::rfc822` module
+//! - Multi-paragraph records separated by blank lines
+//! - Graceful error handling with `warn!()` logs
+
+mod control;
+mod copyright;
+mod deb;
+mod dsc;
+mod file_list;
+mod tarball;
+mod utils;
+
+#[cfg(test)]
+mod deb_extra_test;
+#[cfg(test)]
+mod scan_test;
+
+pub use self::control::{
+    DebianControlParser, DebianDistrolessInstalledParser, DebianInstalledParser,
+};
+pub use self::copyright::DebianCopyrightParser;
+pub use self::deb::{
+    DebianControlInExtractedDebParser, DebianDebParser, DebianMd5sumInPackageParser,
+};
+pub use self::dsc::DebianDscParser;
+pub use self::file_list::{DebianInstalledListParser, DebianInstalledMd5sumsParser};
+pub use self::tarball::{DebianDebianTarParser, DebianOrigTarParser};
+
+use std::sync::LazyLock;
+
+use crate::models::{DatasourceId, PackageData, PackageType};
+use regex::Regex;
+
+const PACKAGE_TYPE: PackageType = PackageType::Deb;
+
+const MAX_ARCHIVE_SIZE: u64 = 1024 * 1024 * 1024;
+const MAX_FILE_SIZE: u64 = 50 * 1024 * 1024;
+const MAX_COMPRESSION_RATIO: usize = 100;
+
+static DEP_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"^\s*([a-zA-Z0-9][a-zA-Z0-9.+\-]+)\s*(?:\(([<>=!]+)\s*([^)]+)\))?\s*(?:\[.*\])?\s*$",
+    )
+    .expect("compile-time constant dependency regex")
+});
+
+fn default_package_data(datasource_id: DatasourceId) -> PackageData {
+    PackageData {
+        package_type: Some(PACKAGE_TYPE),
+        datasource_id: Some(datasource_id),
+        ..Default::default()
+    }
+}
+
+const VERSION_CLUES_DEBIAN: &[&str] = &["deb"];
+const VERSION_CLUES_UBUNTU: &[&str] = &["ubuntu"];
+
+const MAINTAINER_CLUES_DEBIAN: &[&str] = &[
+    "packages.debian.org",
+    "lists.debian.org",
+    "lists.alioth.debian.org",
+    "@debian.org",
+    "debian-init-diversity@",
+];
+const MAINTAINER_CLUES_UBUNTU: &[&str] = &["lists.ubuntu.com", "@canonical.com"];
+
+struct DepFieldSpec {
+    field: &'static str,
+    scope: &'static str,
+    is_runtime: bool,
+    is_optional: bool,
+}
+
+const DEP_FIELDS: &[DepFieldSpec] = &[
+    DepFieldSpec {
+        field: "depends",
+        scope: "depends",
+        is_runtime: true,
+        is_optional: false,
+    },
+    DepFieldSpec {
+        field: "pre-depends",
+        scope: "pre-depends",
+        is_runtime: true,
+        is_optional: false,
+    },
+    DepFieldSpec {
+        field: "recommends",
+        scope: "recommends",
+        is_runtime: true,
+        is_optional: true,
+    },
+    DepFieldSpec {
+        field: "suggests",
+        scope: "suggests",
+        is_runtime: true,
+        is_optional: true,
+    },
+    DepFieldSpec {
+        field: "breaks",
+        scope: "breaks",
+        is_runtime: false,
+        is_optional: false,
+    },
+    DepFieldSpec {
+        field: "conflicts",
+        scope: "conflicts",
+        is_runtime: false,
+        is_optional: false,
+    },
+    DepFieldSpec {
+        field: "replaces",
+        scope: "replaces",
+        is_runtime: false,
+        is_optional: false,
+    },
+    DepFieldSpec {
+        field: "provides",
+        scope: "provides",
+        is_runtime: false,
+        is_optional: false,
+    },
+    DepFieldSpec {
+        field: "build-depends",
+        scope: "build-depends",
+        is_runtime: false,
+        is_optional: false,
+    },
+    DepFieldSpec {
+        field: "build-depends-indep",
+        scope: "build-depends-indep",
+        is_runtime: false,
+        is_optional: false,
+    },
+    DepFieldSpec {
+        field: "build-conflicts",
+        scope: "build-conflicts",
+        is_runtime: false,
+        is_optional: false,
+    },
+];
+
+const IGNORED_ROOT_DIRS: &[&str] = &["/.", "/bin", "/etc", "/lib", "/sbin", "/usr", "/var"];

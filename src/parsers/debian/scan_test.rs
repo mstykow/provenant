@@ -3,7 +3,7 @@ mod tests {
     use crate::models::DatasourceId;
     use std::path::PathBuf;
 
-    use super::super::scan_test_utils::scan_and_assemble;
+    use crate::parsers::scan_test_utils::scan_and_assemble;
 
     #[test]
     fn test_debian_deb_scan_promotes_top_level_package() {

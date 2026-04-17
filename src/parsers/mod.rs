@@ -98,10 +98,6 @@ mod dart_scan_test;
 #[cfg(test)]
 mod dart_test;
 mod debian;
-#[cfg(test)]
-mod debian_scan_test;
-#[cfg(test)]
-mod debian_test;
 mod deno;
 mod deno_lock;
 #[cfg(test)]
