@@ -248,11 +248,11 @@ struct SetupAliases {
     module_aliases: HashMap<String, String>,
 }
 
-pub(super) fn extract_setup_py_packages(path: &Path) -> Vec<PackageData> {
-    vec![extract_from_setup_py(path)]
+pub(super) fn extract(path: &Path) -> Vec<PackageData> {
+    extract_from_setup_py(path)
 }
 
-fn extract_from_setup_py(path: &Path) -> PackageData {
+fn extract_from_setup_py(path: &Path) -> Vec<PackageData> {
     let content = match read_file_to_string(path, None) {
         Ok(content) => content,
         Err(e) => {
@@ -265,7 +265,7 @@ fn extract_from_setup_py(path: &Path) -> PackageData {
         warn!("setup.py too large at {:?}: {} bytes", path, content.len());
         let package_data = extract_from_setup_py_regex(&content);
         return if should_emit_setup_py_package(&package_data) {
-            package_data
+            vec![package_data]
         } else {
             default_package_data(path)
         };
@@ -303,7 +303,7 @@ fn extract_from_setup_py(path: &Path) -> PackageData {
     );
 
     if should_emit_setup_py_package(&package_data) {
-        package_data
+        vec![package_data]
     } else {
         default_package_data(path)
     }

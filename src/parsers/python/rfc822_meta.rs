@@ -29,7 +29,7 @@ struct InstalledWheelMetadata {
 pub(super) fn extract_from_rfc822_metadata(
     path: &Path,
     datasource_id: DatasourceId,
-) -> PackageData {
+) -> Vec<PackageData> {
     let content = match read_file_to_string(path, None) {
         Ok(content) => content,
         Err(e) => {
@@ -45,7 +45,7 @@ pub(super) fn extract_from_rfc822_metadata(
     if datasource_id == DatasourceId::PypiWheelMetadata {
         merge_sibling_wheel_metadata(path, &mut package_data);
     }
-    package_data
+    vec![package_data]
 }
 
 fn merge_sibling_metadata_dependencies(path: &Path, package_data: &mut PackageData) {

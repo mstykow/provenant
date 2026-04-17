@@ -314,7 +314,7 @@ pub(super) fn is_likely_python_sdist_filename(file_name: &str) -> bool {
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
 }
 
-pub(super) fn extract_from_sdist_archive(path: &Path) -> PackageData {
+pub(super) fn extract_from_sdist_archive(path: &Path) -> Vec<PackageData> {
     let metadata = match std::fs::metadata(path) {
         Ok(m) => m,
         Err(e) => {
@@ -339,7 +339,7 @@ pub(super) fn extract_from_sdist_archive(path: &Path) -> PackageData {
         return default_package_data(path);
     };
 
-    let mut package_data = match format {
+    let mut packages = match format {
         PythonSdistArchiveFormat::TarGz
         | PythonSdistArchiveFormat::Tgz
         | PythonSdistArchiveFormat::TarBz2
@@ -364,13 +364,15 @@ pub(super) fn extract_from_sdist_archive(path: &Path) -> PackageData {
         PythonSdistArchiveFormat::Zip => extract_from_zip_sdist_archive(path),
     };
 
-    if package_data.package_type.is_some() {
+    if let Some(package_data) = packages.first_mut()
+        && package_data.package_type.is_some()
+    {
         let (size, sha256) = calculate_file_checksums(path);
         package_data.size = size;
         package_data.sha256 = sha256;
     }
 
-    package_data
+    packages
 }
 
 fn extract_from_tar_sdist_archive<R: Read>(
@@ -378,7 +380,7 @@ fn extract_from_tar_sdist_archive<R: Read>(
     reader: R,
     format: PythonSdistArchiveFormat,
     compressed_size: u64,
-) -> PackageData {
+) -> Vec<PackageData> {
     let Some(entries) = collect_tar_sdist_entries(path, reader, format, compressed_size) else {
         return default_package_data(path);
     };
@@ -483,7 +485,7 @@ fn collect_tar_sdist_entries<R: Read>(
     Some(entries)
 }
 
-fn extract_from_zip_sdist_archive(path: &Path) -> PackageData {
+fn extract_from_zip_sdist_archive(path: &Path) -> Vec<PackageData> {
     let file = match File::open(path) {
         Ok(file) => file,
         Err(e) => {
@@ -528,7 +530,7 @@ fn is_relevant_sdist_text_entry(entry_path: &str) -> bool {
         || entry_path.ends_with("/SOURCES.txt")
 }
 
-fn build_sdist_package_data(path: &Path, entries: Vec<SdistEntry>) -> PackageData {
+fn build_sdist_package_data(path: &Path, entries: Vec<SdistEntry>) -> Vec<PackageData> {
     let Some(metadata_entry) = select_sdist_pkginfo_entry(path, &entries) else {
         warn!("No PKG-INFO file found in sdist archive {:?}", path);
         return default_package_data(path);
@@ -542,7 +544,7 @@ fn build_sdist_package_data(path: &Path, entries: Vec<SdistEntry>) -> PackageDat
     merge_sdist_archive_file_references(&entries, &metadata_entry.path, &mut package_data);
     apply_sdist_name_version_fallback(path, &mut package_data);
     package_data.datasource_id = Some(DatasourceId::PypiSdist);
-    package_data
+    vec![package_data]
 }
 
 fn select_sdist_pkginfo_entry(archive_path: &Path, entries: &[SdistEntry]) -> Option<SdistEntry> {
@@ -800,7 +802,7 @@ fn open_validated_zip_archive(path: &Path) -> Option<(ZipArchive<File>, Vec<Vali
     Some((archive, entries))
 }
 
-pub(super) fn extract_from_wheel_archive(path: &Path) -> PackageData {
+pub(super) fn extract_from_wheel_archive(path: &Path) -> Vec<PackageData> {
     let Some((mut archive, validated_entries)) = open_validated_zip_archive(path) else {
         return default_package_data(path);
     };
@@ -874,10 +876,10 @@ pub(super) fn extract_from_wheel_archive(path: &Path) -> PackageData {
         package_data.extra_data = Some(extra_data);
     }
 
-    package_data
+    vec![package_data]
 }
 
-pub(super) fn extract_from_egg_archive(path: &Path) -> PackageData {
+pub(super) fn extract_from_egg_archive(path: &Path) -> Vec<PackageData> {
     let Some((mut archive, validated_entries)) = open_validated_zip_archive(path) else {
         return default_package_data(path);
     };
@@ -943,7 +945,7 @@ pub(super) fn extract_from_egg_archive(path: &Path) -> PackageData {
         package_data.version.as_deref(),
     );
 
-    package_data
+    vec![package_data]
 }
 
 fn find_validated_zip_entry_by_suffix<'a>(
@@ -1225,7 +1227,7 @@ pub(super) fn is_pip_cache_origin_json(path: &Path) -> bool {
         })
 }
 
-pub(super) fn extract_from_pip_origin_json(path: &Path) -> PackageData {
+pub(super) fn extract_from_pip_origin_json(path: &Path) -> Vec<PackageData> {
     let content = match read_file_to_string(path, None) {
         Ok(content) => content,
         Err(e) => {
@@ -1268,7 +1270,7 @@ pub(super) fn extract_from_pip_origin_json(path: &Path) -> PackageData {
         .and_then(|wheel_info| build_wheel_purl(Some(&name), Some(&version), wheel_info))
         .or(urls.purl);
 
-    PackageData {
+    vec![PackageData {
         package_type: Some(PythonParser::PACKAGE_TYPE),
         primary_language: Some("Python".to_string()),
         name: Some(truncate_field(name)),
@@ -1282,7 +1284,7 @@ pub(super) fn extract_from_pip_origin_json(path: &Path) -> PackageData {
         api_data_url: urls.api_data_url,
         purl,
         ..Default::default()
-    }
+    }]
 }
 
 fn find_sibling_cached_wheel(path: &Path) -> Option<WheelInfo> {

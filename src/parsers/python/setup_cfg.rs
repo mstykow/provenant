@@ -14,7 +14,7 @@ use std::path::Path;
 
 type IniSections = HashMap<String, HashMap<String, Vec<String>>>;
 
-pub(super) fn extract_from_setup_cfg(path: &Path) -> PackageData {
+pub(super) fn extract(path: &Path) -> Vec<PackageData> {
     let content = match read_file_to_string(path, None) {
         Ok(content) => content,
         Err(e) => {
@@ -87,7 +87,7 @@ pub(super) fn extract_from_setup_cfg(path: &Path) -> PackageData {
         Some(package_url.to_string())
     });
 
-    PackageData {
+    vec![PackageData {
         package_type: Some(PythonParser::PACKAGE_TYPE),
         name,
         version,
@@ -109,7 +109,7 @@ pub(super) fn extract_from_setup_cfg(path: &Path) -> PackageData {
         datasource_id: Some(DatasourceId::PypiSetupCfg),
         purl,
         ..Default::default()
-    }
+    }]
 }
 
 fn parse_setup_cfg(content: &str) -> IniSections {

@@ -116,26 +116,23 @@ impl PackageParser for PythonParser {
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
         match classify_python_file(path) {
-            Some(PythonFileKind::SetupPy) => setup_py::extract_setup_py_packages(path),
-            Some(kind) => vec![match kind {
-                PythonFileKind::PyprojectToml => pyproject::extract_from_pyproject_toml(path),
-                PythonFileKind::SetupCfg => setup_cfg::extract_from_setup_cfg(path),
-                PythonFileKind::PkgInfo => rfc822_meta::extract_from_rfc822_metadata(
-                    path,
-                    utils::detect_pkg_info_datasource_id(path),
-                ),
-                PythonFileKind::WheelMetadata => {
-                    rfc822_meta::extract_from_rfc822_metadata(path, DatasourceId::PypiWheelMetadata)
-                }
-                PythonFileKind::PipOriginJson => archive::extract_from_pip_origin_json(path),
-                PythonFileKind::PypiJson => pypi_json::extract_from_pypi_json(path),
-                PythonFileKind::PipInspectDeplock => pypi_json::extract_from_pip_inspect(path),
-                PythonFileKind::SdistArchive => archive::extract_from_sdist_archive(path),
-                PythonFileKind::WheelArchive => archive::extract_from_wheel_archive(path),
-                PythonFileKind::EggArchive => archive::extract_from_egg_archive(path),
-                PythonFileKind::SetupPy => unreachable!(),
-            }],
-            None => vec![utils::default_package_data(path)],
+            Some(PythonFileKind::PyprojectToml) => pyproject::extract(path),
+            Some(PythonFileKind::SetupCfg) => setup_cfg::extract(path),
+            Some(PythonFileKind::SetupPy) => setup_py::extract(path),
+            Some(PythonFileKind::PkgInfo) => rfc822_meta::extract_from_rfc822_metadata(
+                path,
+                utils::detect_pkg_info_datasource_id(path),
+            ),
+            Some(PythonFileKind::WheelMetadata) => {
+                rfc822_meta::extract_from_rfc822_metadata(path, DatasourceId::PypiWheelMetadata)
+            }
+            Some(PythonFileKind::PipOriginJson) => archive::extract_from_pip_origin_json(path),
+            Some(PythonFileKind::PypiJson) => pypi_json::extract_from_pypi_json(path),
+            Some(PythonFileKind::PipInspectDeplock) => pypi_json::extract_from_pip_inspect(path),
+            Some(PythonFileKind::SdistArchive) => archive::extract_from_sdist_archive(path),
+            Some(PythonFileKind::WheelArchive) => archive::extract_from_wheel_archive(path),
+            Some(PythonFileKind::EggArchive) => archive::extract_from_egg_archive(path),
+            None => utils::default_package_data(path),
         }
     }
 
