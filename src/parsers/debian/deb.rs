@@ -1,16 +1,17 @@
 use std::path::Path;
 
-use crate::models::{DatasourceId, FileReference, Md5Digest, PackageData, PackageType};
+use crate::models::{DatasourceId, PackageData, PackageType};
 use crate::parser_warn as warn;
 use crate::parsers::rfc822;
-use crate::parsers::utils::{MAX_ITERATION_COUNT, truncate_field};
+use crate::parsers::utils::truncate_field;
 
 use super::control::build_package_from_paragraph;
 use super::copyright::parse_copyright_file;
+use super::file_list::parse_file_entries;
 use super::utils::build_debian_purl;
 use super::{
-    IGNORED_ROOT_DIRS, MAX_ARCHIVE_SIZE, MAX_COMPRESSION_RATIO, MAX_FILE_SIZE, PACKAGE_TYPE,
-    default_package_data, read_or_default,
+    MAX_ARCHIVE_SIZE, MAX_COMPRESSION_RATIO, MAX_FILE_SIZE, PACKAGE_TYPE, default_package_data,
+    read_or_default,
 };
 use crate::parsers::PackageParser;
 
@@ -512,45 +513,7 @@ pub(crate) fn extract_package_name_from_deb_path(path: &Path) -> Option<String> 
 }
 
 fn parse_md5sums_in_package(content: &str, package_name: Option<&str>) -> PackageData {
-    let mut file_references = Vec::new();
-    let mut count = 0usize;
-
-    for line in content.lines() {
-        count += 1;
-        if count > MAX_ITERATION_COUNT {
-            warn!("parse_md5sums_in_package: exceeded MAX_ITERATION_COUNT lines, stopping");
-            break;
-        }
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-
-        let (md5sum, filepath): (Option<Md5Digest>, &str) = if let Some(idx) = line.find("  ") {
-            (
-                Md5Digest::from_hex(line[..idx].trim()).ok(),
-                line[idx + 2..].trim(),
-            )
-        } else if let Some((hash, path)) = line.split_once(' ') {
-            (Md5Digest::from_hex(hash.trim()).ok(), path.trim())
-        } else {
-            (None, line)
-        };
-
-        if IGNORED_ROOT_DIRS.contains(&filepath) {
-            continue;
-        }
-
-        file_references.push(FileReference {
-            path: filepath.to_string(),
-            size: None,
-            sha1: None,
-            md5: md5sum,
-            sha256: None,
-            sha512: None,
-            extra_data: None,
-        });
-    }
+    let file_references = parse_file_entries(content, "parse_md5sums_in_package");
 
     if file_references.is_empty() {
         return default_package_data(DatasourceId::DebianMd5SumsInExtractedDeb);

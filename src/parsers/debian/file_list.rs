@@ -88,29 +88,14 @@ crate::register_parser!(
     Some("https://www.debian.org/doc/debian-policy/ch-files.html"),
 );
 
-fn parse_debian_file_list(
-    content: &str,
-    filename: &str,
-    datasource_id: DatasourceId,
-) -> PackageData {
-    let (name, arch_qualifier) = if let Some((pkg, arch)) = filename.split_once(':') {
-        (
-            Some(truncate_field(pkg.to_string())),
-            Some(arch.to_string()),
-        )
-    } else if filename == "md5sums" {
-        (None, None)
-    } else {
-        (Some(truncate_field(filename.to_string())), None)
-    };
-
+pub(crate) fn parse_file_entries(content: &str, log_label: &str) -> Vec<FileReference> {
     let mut file_references = Vec::new();
     let mut count = 0usize;
 
     for line in content.lines() {
         count += 1;
         if count > MAX_ITERATION_COUNT {
-            warn!("parse_debian_file_list: exceeded MAX_ITERATION_COUNT lines, stopping");
+            warn!("{log_label}: exceeded MAX_ITERATION_COUNT lines, stopping");
             break;
         }
         let line = line.trim();
@@ -118,7 +103,12 @@ fn parse_debian_file_list(
             continue;
         }
 
-        let (md5sum, path) = if let Some((hash, p)) = line.split_once(' ') {
+        let (md5sum, path): (Option<Md5Digest>, &str) = if let Some(idx) = line.find("  ") {
+            (
+                Md5Digest::from_hex(line[..idx].trim()).ok(),
+                line[idx + 2..].trim(),
+            )
+        } else if let Some((hash, p)) = line.split_once(' ') {
             (Md5Digest::from_hex(hash.trim()).ok(), p.trim())
         } else {
             (None, line)
@@ -138,6 +128,27 @@ fn parse_debian_file_list(
             extra_data: None,
         });
     }
+
+    file_references
+}
+
+fn parse_debian_file_list(
+    content: &str,
+    filename: &str,
+    datasource_id: DatasourceId,
+) -> PackageData {
+    let (name, arch_qualifier) = if let Some((pkg, arch)) = filename.split_once(':') {
+        (
+            Some(truncate_field(pkg.to_string())),
+            Some(arch.to_string()),
+        )
+    } else if filename == "md5sums" {
+        (None, None)
+    } else {
+        (Some(truncate_field(filename.to_string())), None)
+    };
+
+    let file_references = parse_file_entries(content, "parse_debian_file_list");
 
     if file_references.is_empty() {
         return default_package_data(datasource_id);
