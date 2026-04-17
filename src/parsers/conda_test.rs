@@ -27,6 +27,12 @@ mod tests {
     }
 
     #[test]
+    fn test_conda_meta_yaml_is_match_recipe_yaml() {
+        let valid_path = PathBuf::from("/some/path/recipe/recipe.yaml");
+        assert!(CondaMetaYamlParser::is_match(&valid_path));
+    }
+
+    #[test]
     fn test_conda_meta_yaml_is_match_invalid() {
         let invalid_path = PathBuf::from("/some/path/metadata.yaml");
         assert!(!CondaMetaYamlParser::is_match(&invalid_path));
@@ -700,6 +706,24 @@ spec:
     }
 
     #[test]
+    fn test_apply_jinja2_substitutions_quotes_numeric_version_scalars() {
+        let mut variables = HashMap::new();
+        variables.insert("version".to_string(), "0.80".to_string());
+
+        let content = r#"{% set version = "0.80" %}
+package:
+  version: {{ version }}
+outputs:
+  - version: 1.10
+"#;
+
+        let result = apply_jinja2_substitutions(content, &variables);
+
+        assert!(result.contains("version: \"0.80\""));
+        assert!(result.contains("version: \"1.10\""));
+    }
+
+    #[test]
     fn test_apply_jinja2_substitutions_skips_selector_commented_jinja_statement() {
         let content = r#"{% set markers = ["not slow"] %}  # [linux]
 test:
@@ -753,6 +777,33 @@ about:
     }
 
     #[test]
+    fn test_extract_meta_yaml_preserves_float_like_version_strings() {
+        let temp_dir = TempDir::new().unwrap();
+        let meta_path = temp_dir.path().join("meta.yaml");
+        fs::write(
+            &meta_path,
+            r#"
+package:
+  name: test_floating_point_version
+  version: 1.10
+"#,
+        )
+        .unwrap();
+
+        let package_data = CondaMetaYamlParser::extract_first_package(&meta_path);
+
+        assert_eq!(
+            package_data.name.as_deref(),
+            Some("test_floating_point_version")
+        );
+        assert_eq!(package_data.version.as_deref(), Some("1.10"));
+        assert_eq!(
+            package_data.purl.as_deref(),
+            Some("pkg:conda/test_floating_point_version@1.10")
+        );
+    }
+
+    #[test]
     fn test_parse_conda_requirement_empty_version() {
         let dep = parse_conda_requirement("package=", "run");
 
@@ -776,5 +827,132 @@ about:
         let dep = dep.unwrap();
         assert_eq!(dep.extracted_requirement, Some("==1.2.3".to_string()));
         assert_eq!(dep.is_pinned, Some(false));
+    }
+
+    #[test]
+    fn test_extract_recipe_yaml_schema_v1_feedstock() {
+        let temp_dir = TempDir::new().unwrap();
+        let recipe_dir = temp_dir.path().join("recipe");
+        fs::create_dir_all(&recipe_dir).unwrap();
+        let recipe_path = recipe_dir.join("recipe.yaml");
+        fs::write(
+            &recipe_path,
+            r#"
+schema_version: 1
+
+context:
+  version: "3.0.2"
+
+package:
+  name: pandas
+  version: ${{ version }}
+
+source:
+  url: https://github.com/pandas-dev/pandas/releases/download/v${{ version }}/pandas-${{ version }}.tar.gz
+  sha256: f4753e73e34c8d83221ba58f232433fca2748be8b18dbca02d242ed153945043
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+  host:
+    - python
+    - numpy =2.3
+  run:
+    - python
+    - numpy >=1.26.0
+    - python-dateutil >=2.8.2
+    - if: win
+      then: python-tzdata
+
+about:
+  license: BSD-3-Clause
+  license_file: LICENSE
+  summary: >-
+    Powerful data structures for data analysis, time series, and statistics
+  homepage: http://pandas.pydata.org
+  repository: https://github.com/pandas-dev/pandas
+  documentation: https://pandas.pydata.org/docs/
+"#,
+        )
+        .unwrap();
+
+        let package_data = CondaMetaYamlParser::extract_first_package(&recipe_path);
+
+        assert_eq!(package_data.package_type, Some(PackageType::Conda));
+        assert_eq!(package_data.name.as_deref(), Some("pandas"));
+        assert_eq!(package_data.version.as_deref(), Some("3.0.2"));
+        assert_eq!(
+            package_data.download_url.as_deref(),
+            Some(
+                "https://github.com/pandas-dev/pandas/releases/download/v3.0.2/pandas-3.0.2.tar.gz"
+            )
+        );
+        assert_eq!(
+            package_data.homepage_url.as_deref(),
+            Some("http://pandas.pydata.org")
+        );
+        assert_eq!(
+            package_data.vcs_url.as_deref(),
+            Some("https://github.com/pandas-dev/pandas")
+        );
+        assert_eq!(
+            package_data.extracted_license_statement.as_deref(),
+            Some("BSD-3-Clause")
+        );
+        assert_eq!(
+            package_data.description.as_deref(),
+            Some("Powerful data structures for data analysis, time series, and statistics")
+        );
+
+        let dependency_purls: Vec<&str> = package_data
+            .dependencies
+            .iter()
+            .filter_map(|dep| dep.purl.as_deref())
+            .collect();
+        assert!(dependency_purls.contains(&"pkg:conda/numpy"));
+        assert!(dependency_purls.contains(&"pkg:conda/python-dateutil"));
+        assert!(dependency_purls.contains(&"pkg:conda/python-tzdata"));
+        assert!(
+            !dependency_purls
+                .iter()
+                .any(|purl| purl.contains("compiler"))
+        );
+
+        let extra_data = package_data
+            .extra_data
+            .as_ref()
+            .expect("extra_data missing");
+        assert_eq!(
+            extra_data
+                .get("schema_version")
+                .and_then(|value| value.as_i64()),
+            Some(1)
+        );
+        assert_eq!(
+            extra_data
+                .get("license_file")
+                .and_then(|value| value.as_str()),
+            Some("LICENSE")
+        );
+        assert_eq!(
+            extra_data
+                .get("documentation")
+                .and_then(|value| value.as_str()),
+            Some("https://pandas.pydata.org/docs/")
+        );
+        assert_eq!(
+            extra_data
+                .get("host")
+                .and_then(|value| value.as_array())
+                .map(|items| items.len()),
+            Some(1)
+        );
+        assert_eq!(
+            extra_data
+                .get("run")
+                .and_then(|value| value.as_array())
+                .map(|items| items.len()),
+            Some(1)
+        );
     }
 }

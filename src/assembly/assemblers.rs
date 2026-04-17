@@ -555,6 +555,8 @@ pub static ASSEMBLERS: &[AssemblerConfig] = &[
         sibling_file_patterns: &[
             "meta.yaml",
             "meta.yml",
+            "recipe.yaml",
+            "recipe.yml",
             "environment.yml",
             "environment.yaml",
             "conda.yaml",
