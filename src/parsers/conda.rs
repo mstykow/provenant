@@ -49,6 +49,19 @@ fn default_package_data(datasource_id: Option<DatasourceId>) -> PackageData {
     }
 }
 
+fn is_conda_recipe_yaml_path(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    if name != "recipe.yaml" && name != "recipe.yml" {
+        return false;
+    }
+    path.parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == "recipe")
+}
+
 /// Build a PURL (Package URL) for Conda or PyPI packages
 pub(crate) fn build_purl(
     package_type: &str,
@@ -143,6 +156,7 @@ impl PackageParser for CondaMetaYamlParser {
         // Match */meta.yaml following Python reference logic
         path.file_name()
             .is_some_and(|name| name == "meta.yaml" || name == "meta.yml")
+            || is_conda_recipe_yaml_path(path)
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
@@ -153,6 +167,22 @@ impl PackageParser for CondaMetaYamlParser {
                 return vec![default_package_data(Some(DatasourceId::CondaMetaYaml))];
             }
         };
+
+        if is_conda_recipe_yaml_path(path) {
+            let yaml: Value = match yaml_serde::from_str(&contents) {
+                Ok(y) => y,
+                Err(e) => {
+                    warn!("Failed to parse YAML in {}: {}", path.display(), e);
+                    return vec![default_package_data(Some(DatasourceId::CondaMetaYaml))];
+                }
+            };
+
+            if !looks_like_conda_recipe_yaml(&yaml) {
+                return Vec::new();
+            }
+
+            return vec![parse_conda_recipe_yaml(&yaml)];
+        }
 
         // Extract Jinja2 variables and apply crude substitution
         let variables = extract_jinja2_variables(&contents);
@@ -277,6 +307,232 @@ impl PackageParser for CondaMetaYamlParser {
         }
         vec![pkg]
     }
+}
+
+fn looks_like_conda_recipe_yaml(yaml: &Value) -> bool {
+    yaml.get("schema_version")
+        .and_then(|value| value.as_u64())
+        .is_some_and(|value| value == 1)
+        && (yaml
+            .get("package")
+            .and_then(|value| value.as_mapping())
+            .is_some()
+            || yaml
+                .get("recipe")
+                .and_then(|value| value.as_mapping())
+                .is_some())
+}
+
+fn parse_conda_recipe_yaml(yaml: &Value) -> PackageData {
+    let context = extract_recipe_yaml_context(yaml);
+    let package = yaml
+        .get("package")
+        .or_else(|| yaml.get("recipe"))
+        .and_then(|value| value.as_mapping());
+    let source = yaml.get("source").and_then(|value| value.as_mapping());
+    let about = yaml.get("about").and_then(|value| value.as_mapping());
+
+    let name = package
+        .and_then(|pkg| pkg.get("name"))
+        .and_then(|value| recipe_yaml_value_to_string(value, &context));
+    let version = package
+        .and_then(|pkg| pkg.get("version"))
+        .and_then(|value| recipe_yaml_value_to_string(value, &context));
+
+    let download_url = source
+        .and_then(|src| src.get("url"))
+        .and_then(|value| recipe_yaml_value_to_string(value, &context));
+    let sha256 = source
+        .and_then(|src| src.get("sha256"))
+        .and_then(|value| recipe_yaml_value_to_string(value, &context))
+        .and_then(|value| Sha256Digest::from_hex(&value).ok());
+
+    let extracted_license_statement = about
+        .and_then(|section| section.get("license"))
+        .and_then(|value| recipe_yaml_value_to_string(value, &context));
+    let (declared_license_expression, declared_license_expression_spdx, license_detections) =
+        normalize_conda_declared_license(extracted_license_statement.as_deref());
+
+    let description = about
+        .and_then(|section| section.get("summary"))
+        .and_then(|value| recipe_yaml_value_to_string(value, &context));
+    let homepage_url = about
+        .and_then(|section| section.get("homepage").or_else(|| section.get("home")))
+        .and_then(|value| recipe_yaml_value_to_string(value, &context));
+    let vcs_url = about
+        .and_then(|section| {
+            section
+                .get("repository")
+                .or_else(|| section.get("dev_url"))
+                .or_else(|| section.get("repository_url"))
+        })
+        .and_then(|value| recipe_yaml_value_to_string(value, &context));
+    let documentation_url = about
+        .and_then(|section| section.get("documentation"))
+        .and_then(|value| recipe_yaml_value_to_string(value, &context));
+    let license_file = about
+        .and_then(|section| section.get("license_file"))
+        .and_then(|value| recipe_yaml_value_to_string(value, &context));
+
+    let mut dependencies = Vec::new();
+    let mut extra_data: HashMap<String, serde_json::Value> = HashMap::new();
+    if let Some(requirements) = yaml
+        .get("requirements")
+        .and_then(|value| value.as_mapping())
+    {
+        for (scope_key, reqs_value) in requirements {
+            let Some(scope) = scope_key.as_str() else {
+                continue;
+            };
+            let recipe_requirements = extract_recipe_yaml_requirement_strings(reqs_value, &context);
+            if recipe_requirements.is_empty() {
+                continue;
+            }
+
+            for req in &recipe_requirements {
+                if extract_conda_requirement_name(req)
+                    .is_some_and(|name| name == "pip" || name == "python")
+                {
+                    if let Some(arr) = extra_data
+                        .entry(scope.to_string())
+                        .or_insert_with(|| serde_json::Value::Array(vec![]))
+                        .as_array_mut()
+                    {
+                        arr.push(serde_json::Value::String(truncate_field(req.clone())));
+                    }
+                    continue;
+                }
+
+                if let Some(dep) = parse_conda_requirement(req, scope) {
+                    dependencies.push(dep);
+                }
+            }
+        }
+    }
+
+    if let Some(documentation_url) = documentation_url {
+        extra_data.insert(
+            "documentation".to_string(),
+            serde_json::Value::String(documentation_url),
+        );
+    }
+    if let Some(license_file) = license_file {
+        extra_data.insert(
+            "license_file".to_string(),
+            serde_json::Value::String(license_file),
+        );
+    }
+    extra_data.insert("schema_version".to_string(), serde_json::json!(1));
+
+    let mut pkg = default_package_data(Some(DatasourceId::CondaMetaYaml));
+    pkg.package_type = Some(CondaMetaYamlParser::PACKAGE_TYPE);
+    pkg.datasource_id = Some(DatasourceId::CondaMetaYaml);
+    pkg.name = name;
+    pkg.version = version;
+    pkg.purl = build_conda_package_purl(pkg.name.as_deref(), pkg.version.as_deref());
+    pkg.download_url = download_url;
+    pkg.homepage_url = homepage_url;
+    pkg.declared_license_expression = declared_license_expression.map(truncate_field);
+    pkg.declared_license_expression_spdx = declared_license_expression_spdx.map(truncate_field);
+    pkg.license_detections = license_detections;
+    pkg.extracted_license_statement = extracted_license_statement.map(truncate_field);
+    pkg.description = description;
+    pkg.vcs_url = vcs_url;
+    pkg.sha256 = sha256;
+    pkg.dependencies = dependencies;
+    pkg.extra_data = Some(extra_data);
+    pkg
+}
+
+fn extract_recipe_yaml_context(yaml: &Value) -> HashMap<String, String> {
+    let mut context = HashMap::new();
+    let Some(context_mapping) = yaml.get("context").and_then(|value| value.as_mapping()) else {
+        return context;
+    };
+
+    for (key, value) in context_mapping {
+        let Some(key) = key.as_str() else {
+            continue;
+        };
+        if let Some(value) = yaml_value_to_string(value) {
+            context.insert(truncate_field(key.to_string()), truncate_field(value));
+        }
+    }
+
+    context
+}
+
+fn recipe_yaml_value_to_string(value: &Value, context: &HashMap<String, String>) -> Option<String> {
+    let value = yaml_value_to_string(value)?;
+    Some(resolve_recipe_yaml_expressions(&value, context))
+}
+
+fn resolve_recipe_yaml_expressions(value: &str, context: &HashMap<String, String>) -> String {
+    let Some(re) = Regex::new(r#"\$\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}"#).ok() else {
+        return truncate_field(value.to_string());
+    };
+
+    let resolved = re.replace_all(value, |caps: &regex::Captures| {
+        context
+            .get(&caps[1])
+            .cloned()
+            .unwrap_or_else(|| caps[0].to_string())
+    });
+    truncate_field(resolved.into_owned())
+}
+
+fn extract_recipe_yaml_requirement_strings(
+    value: &Value,
+    context: &HashMap<String, String>,
+) -> Vec<String> {
+    let mut requirements = Vec::new();
+    collect_recipe_yaml_requirement_strings(value, context, &mut requirements);
+    requirements
+}
+
+fn collect_recipe_yaml_requirement_strings(
+    value: &Value,
+    context: &HashMap<String, String>,
+    requirements: &mut Vec<String>,
+) {
+    if let Some(req) = value.as_str() {
+        let resolved = resolve_recipe_yaml_expressions(req, context);
+        if should_keep_recipe_yaml_requirement(&resolved) {
+            requirements.push(resolved);
+        }
+        return;
+    }
+
+    if let Some(items) = value.as_sequence() {
+        for item in items.iter().take(MAX_ITERATION_COUNT) {
+            collect_recipe_yaml_requirement_strings(item, context, requirements);
+        }
+        return;
+    }
+
+    if let Some(mapping) = value.as_mapping() {
+        if let Some(then_value) = mapping.get("then") {
+            collect_recipe_yaml_requirement_strings(then_value, context, requirements);
+        }
+        if let Some(else_value) = mapping.get("else") {
+            collect_recipe_yaml_requirement_strings(else_value, context, requirements);
+        }
+    }
+}
+
+fn should_keep_recipe_yaml_requirement(req: &str) -> bool {
+    let trimmed = req.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    !(trimmed.contains("${{")
+        || trimmed.contains("compiler('")
+        || trimmed.contains("compiler(\"")
+        || trimmed.contains("pin_subpackage(")
+        || trimmed.contains("pin_compatible(")
+        || trimmed.contains("stdlib('")
+        || trimmed.contains("stdlib(\""))
 }
 
 fn normalize_conda_declared_license(
@@ -462,7 +718,27 @@ pub fn apply_jinja2_substitutions(content: &str, variables: &HashMap<String, Str
         result.push(processed_line);
     }
 
-    result.join("\n")
+    quote_plain_numeric_version_scalars(&result.join("\n"))
+}
+
+fn quote_plain_numeric_version_scalars(content: &str) -> String {
+    let Some(version_re) =
+        Regex::new(r#"^(\s*(?:-\s*)?version:\s*)([0-9]+(?:\.[0-9]+)+)(\s*)$"#).ok()
+    else {
+        return content.to_string();
+    };
+
+    content
+        .lines()
+        .map(|line| {
+            version_re
+                .replace(line, |caps: &regex::Captures| {
+                    format!(r#"{}"{}"{}"#, &caps[1], &caps[2], &caps[3])
+                })
+                .into_owned()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Parse a Conda requirement string into a Dependency
@@ -775,6 +1051,8 @@ crate::register_parser!(
     &[
         "**/meta.yaml",
         "**/meta.yml",
+        "**/recipe/recipe.yaml",
+        "**/recipe/recipe.yml",
         "**/environment.yml",
         "**/environment.yaml",
         "**/env.yaml",
