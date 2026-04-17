@@ -5404,7 +5404,7 @@ fn infer_python_datasource_id(path: &Path) -> Option<DatasourceId> {
 }
 
 crate::register_parser!(
-    "Python package manifests (pyproject.toml, setup.py, *_setup.py, *-setup.py, setup.cfg, pypi.json, PKG-INFO, .dist-info/METADATA, pip cache origin.json, sdist archives, .whl, .egg)",
+    "Python package manifests (pyproject.toml, setup.py, suffixed setup.py variants, setup.cfg, pypi.json, PKG-INFO, .dist-info/METADATA, pip cache origin.json, sdist archives, .whl, .egg)",
     &[
         "**/pyproject.toml",
         "**/setup.py",

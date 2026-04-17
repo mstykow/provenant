@@ -48,6 +48,6 @@ Coverage spans chart metadata extraction, declared and locked dependency handlin
 
 - [Helm chart format docs](https://helm.sh/docs/topics/charts/)
 - [Helm overview](https://helm.sh/docs/overview/)
-- [Helm changelog](https://helm.sh/docs/changelog/)
+- [Helm releases](https://github.com/helm/helm/releases)
 - [Helm dependency update](https://helm.sh/docs/helm/helm_dependency_update/)
 - [Helm dependency build](https://helm.sh/docs/helm/helm_dependency_build/)
