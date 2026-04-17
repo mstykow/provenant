@@ -16,6 +16,8 @@
 ignored_rules = [
   # Android-generated header boilerplate says this text contains no copyrightable information; see ScanCode PR #4683.
   "gpl-2.0_and-unknown-license-reference_1.RULE",
+  # Bare freertos.org URL references such as a00127.html false-positive as GPL-2.0+ WITH FreeRTOS exception; see ScanCode issues #4147 and #4441.
+  "gpl-2.0-plus_with_freertos-exception-2.0_1.RULE",
 ]
 
 ignored_licenses = []
