@@ -70,9 +70,12 @@ struct ContextState {
     provenant_runtime_dirty: bool,
     provenant_runtime_diff_hash: Option<String>,
     scancode_image: String,
+    scancode_platform: String,
     scancode_runtime_revision: String,
     scancode_runtime_dirty: bool,
     scancode_runtime_diff_hash: Option<String>,
+    scancode_docker_memory_limit: Option<String>,
+    scancode_docker_memory_swap_limit: Option<String>,
     scancode_cache_root: PathBuf,
     scancode_cache_dir: Option<PathBuf>,
     scancode_cache_key: Option<String>,
@@ -143,6 +146,7 @@ struct ScancodeCacheEntryManifest {
 
 const SCANCODE_PLACEHOLDER_LOG_MESSAGE: &str = "ScanCode stdout was not captured for this cache entry. Reused cached scancode.json without a corresponding log file.\n";
 const COMMON_PROFILE_SCANCODE_MEMORY_LIMIT: &str = "12g";
+const COMMON_PROFILE_SCANCODE_MEMORY_LIMIT_BYTES: u64 = 12 * 1024 * 1024 * 1024;
 
 fn main() -> Result<()> {
     let args = Args::parse();
@@ -206,6 +210,8 @@ fn main() -> Result<()> {
     if let Some(revision) = &context.provenant_runtime_revision {
         println!("  Provenant rev: {revision}");
     }
+    println!("  ScanCode image: {}", context.scancode_image);
+    println!("  ScanCode platform: {}", context.scancode_platform);
     println!("  Scan args:     {}\n", context.scan_args.join(" "));
     if let Some(cache_dir) = &context.scancode_cache_dir {
         println!(
@@ -379,9 +385,12 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
         scancode_json: raw_dir.join("scancode.json"),
         scancode_stdout: raw_dir.join("scancode-stdout.txt"),
         scancode_image: String::new(),
+        scancode_platform: String::new(),
         scancode_runtime_revision: String::new(),
         scancode_runtime_dirty: false,
         scancode_runtime_diff_hash: None,
+        scancode_docker_memory_limit: None,
+        scancode_docker_memory_swap_limit: None,
         scancode_cache_root,
         scancode_cache_dir: None,
         scancode_cache_key: None,
@@ -439,20 +448,101 @@ fn resolve_scancode_runtime_identity(context: &mut ContextState) -> Result<()> {
     let commit = identity
         .revision
         .context("failed to resolve ScanCode submodule revision")?;
+    let docker_info = resolve_docker_server_info();
+    let platform = effective_scancode_docker_platform(docker_info.as_ref());
+    let platform_label = sanitize_docker_platform_for_tag(&platform);
+    let docker_memory_limit = effective_scancode_docker_memory_limit(
+        context.profile_name.as_deref(),
+        docker_info.as_ref().and_then(|info| info.mem_total_bytes),
+    );
     let short_commit: String = commit.chars().take(10).collect();
     let dirty = identity.dirty;
-    let mut image = format!("provenant-scancode-local:{short_commit}");
+    let mut image = format!("provenant-scancode-local:{short_commit}-{platform_label}");
     let diff_hash = identity.diff_hash;
     if dirty {
         let digest = diff_hash.clone().unwrap_or_default();
-        image = format!("provenant-scancode-local:{short_commit}-dirty-{digest}");
+        image = format!("provenant-scancode-local:{short_commit}-{platform_label}-dirty-{digest}");
         image.truncate(128);
     }
+    context.scancode_platform = platform;
     context.scancode_runtime_revision = commit;
     context.scancode_runtime_dirty = dirty;
     context.scancode_runtime_diff_hash = diff_hash;
     context.scancode_image = image;
+    context.scancode_docker_memory_limit = docker_memory_limit.clone();
+    context.scancode_docker_memory_swap_limit = docker_memory_limit;
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct DockerServerInfo {
+    architecture: String,
+    mem_total_bytes: Option<u64>,
+}
+
+fn resolve_docker_server_info() -> Option<DockerServerInfo> {
+    let output = Command::new("docker")
+        .args(["info", "--format", "{{.Architecture}}\t{{.MemTotal}}"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    let mut parts = stdout.trim().split('\t');
+    let architecture = parts.next()?.trim().to_string();
+    let mem_total_bytes = parts
+        .next()
+        .and_then(|value| value.trim().parse::<u64>().ok());
+    Some(DockerServerInfo {
+        architecture,
+        mem_total_bytes,
+    })
+}
+
+fn effective_scancode_docker_platform(docker_info: Option<&DockerServerInfo>) -> String {
+    if let Some(platform) = std::env::var("PROVENANT_SCANCODE_DOCKER_PLATFORM")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        return platform;
+    }
+
+    match docker_info
+        .map(|info| info.architecture.as_str())
+        .unwrap_or(std::env::consts::ARCH)
+    {
+        "arm64" | "aarch64" => "linux/arm64/v8".to_string(),
+        _ => "linux/amd64".to_string(),
+    }
+}
+
+fn sanitize_docker_platform_for_tag(platform: &str) -> String {
+    platform
+        .chars()
+        .map(|ch| match ch {
+            '/' | ':' | '.' => '-',
+            _ => ch,
+        })
+        .collect()
+}
+
+fn effective_scancode_docker_memory_limit(
+    profile_name: Option<&str>,
+    docker_mem_total_bytes: Option<u64>,
+) -> Option<String> {
+    if !matches!(profile_name, Some("common")) {
+        return None;
+    }
+
+    if docker_mem_total_bytes
+        .is_some_and(|mem_total_bytes| mem_total_bytes < COMMON_PROFILE_SCANCODE_MEMORY_LIMIT_BYTES)
+    {
+        return None;
+    }
+
+    Some(COMMON_PROFILE_SCANCODE_MEMORY_LIMIT.to_string())
 }
 
 fn resolve_provenant_runtime_identity(context: &mut ContextState) -> Result<()> {
@@ -589,7 +679,7 @@ fn ensure_scancode_runtime(context: &ContextState) -> Result<()> {
             .args([
                 "build",
                 "--platform",
-                "linux/amd64",
+                &context.scancode_platform,
                 "-t",
                 &context.scancode_image,
                 ".",
@@ -1565,6 +1655,7 @@ fn write_manifest(context: &ContextState) -> Result<()> {
         },
         scancode: ScancodeManifest {
             image: context.scancode_image.clone(),
+            docker_platform: context.scancode_platform.clone(),
             submodule_path: context.scancode_submodule_dir.clone(),
             runtime_revision: context.scancode_runtime_revision.clone(),
             runtime_dirty: context.scancode_runtime_dirty,
@@ -1595,7 +1686,7 @@ fn build_scancode_docker_args(context: &ContextState) -> Vec<String> {
         "run".to_string(),
         "--rm".to_string(),
         "--platform".to_string(),
-        "linux/amd64".to_string(),
+        context.scancode_platform.clone(),
     ];
     if let Some(limit) = scancode_docker_memory_limit(context) {
         args.push("--memory".to_string());
@@ -1659,13 +1750,12 @@ fn effective_scancode_cache_identity(context: &ContextState) -> Option<&str> {
         .or(context.target_scancode_cache_identity.as_deref())
 }
 
-fn scancode_docker_memory_limit(context: &ContextState) -> Option<&'static str> {
-    matches!(context.profile_name.as_deref(), Some("common"))
-        .then_some(COMMON_PROFILE_SCANCODE_MEMORY_LIMIT)
+fn scancode_docker_memory_limit(context: &ContextState) -> Option<&str> {
+    context.scancode_docker_memory_limit.as_deref()
 }
 
-fn scancode_docker_memory_swap_limit(context: &ContextState) -> Option<&'static str> {
-    scancode_docker_memory_limit(context)
+fn scancode_docker_memory_swap_limit(context: &ContextState) -> Option<&str> {
+    context.scancode_docker_memory_swap_limit.as_deref()
 }
 
 fn build_scancode_cache_key(context: &ContextState) -> Result<String> {
@@ -1678,6 +1768,7 @@ fn build_scancode_cache_key(context: &ContextState) -> Result<String> {
         "scancode_runtime_revision": context.scancode_runtime_revision,
         "scancode_runtime_dirty": context.scancode_runtime_dirty,
         "scancode_runtime_diff_hash": context.scancode_runtime_diff_hash,
+        "scancode_platform": context.scancode_platform,
         "docker_memory_limit": scancode_docker_memory_limit(context),
         "docker_memory_swap_limit": scancode_docker_memory_swap_limit(context),
         "scancode_cli_args": build_scancode_cli_args(context),
@@ -1982,9 +2073,12 @@ mod tests {
                 "/tmp/project/.provenant/compare-runs/run-id/raw/scancode-stdout.txt",
             ),
             scancode_image: "provenant-scancode-local:test".to_string(),
+            scancode_platform: "linux/amd64".to_string(),
             scancode_runtime_revision: "runtime-rev".to_string(),
             scancode_runtime_dirty: false,
             scancode_runtime_diff_hash: None,
+            scancode_docker_memory_limit: Some("12g".to_string()),
+            scancode_docker_memory_swap_limit: Some("12g".to_string()),
             scancode_cache_root: PathBuf::from("/tmp/project/.provenant/scancode-cache"),
             scancode_cache_dir: None,
             scancode_cache_key: None,
@@ -2075,6 +2169,38 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!("compare-outputs-{name}-{nanos}"))
+    }
+
+    #[test]
+    fn arm64_docker_hosts_use_native_scancode_platform() {
+        let docker_info = DockerServerInfo {
+            architecture: "aarch64".to_string(),
+            mem_total_bytes: Some(8 * 1024 * 1024 * 1024),
+        };
+
+        assert_eq!(
+            effective_scancode_docker_platform(Some(&docker_info)),
+            "linux/arm64/v8"
+        );
+        assert_eq!(
+            sanitize_docker_platform_for_tag("linux/arm64/v8"),
+            "linux-arm64-v8"
+        );
+    }
+
+    #[test]
+    fn common_profile_skips_memory_cap_when_docker_engine_is_smaller() {
+        assert_eq!(
+            effective_scancode_docker_memory_limit(Some("common"), Some(8 * 1024 * 1024 * 1024)),
+            None
+        );
+        assert_eq!(
+            effective_scancode_docker_memory_limit(
+                Some("common"),
+                Some(COMMON_PROFILE_SCANCODE_MEMORY_LIMIT_BYTES),
+            ),
+            Some("12g".to_string())
+        );
     }
 
     #[test]
