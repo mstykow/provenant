@@ -50,6 +50,35 @@ crate::register_parser!(
     Some("https://www.debian.org/doc/debian-policy/ch-binary.html"),
 );
 
+fn is_path_traversal(path: &std::path::Path) -> bool {
+    path.components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+}
+
+#[derive(PartialEq)]
+enum ExtractionLimit {
+    Ok,
+    Exceeded,
+}
+
+fn check_extraction_limits(
+    total_extracted: &mut usize,
+    new_bytes: usize,
+    compressed_size: usize,
+    context: &str,
+) -> ExtractionLimit {
+    *total_extracted += new_bytes;
+    if compressed_size > 0 && *total_extracted / compressed_size > MAX_COMPRESSION_RATIO {
+        warn!("{context}: compression ratio exceeded MAX_COMPRESSION_RATIO, stopping");
+        ExtractionLimit::Exceeded
+    } else if *total_extracted > MAX_ARCHIVE_SIZE as usize {
+        warn!("{context}: cumulative extracted size exceeded MAX_ARCHIVE_SIZE, stopping");
+        ExtractionLimit::Exceeded
+    } else {
+        ExtractionLimit::Ok
+    }
+}
+
 fn extract_deb_archive(path: &Path) -> Result<PackageData, String> {
     use flate2::read::GzDecoder;
     use liblzma::read::XzDecoder;
@@ -99,17 +128,13 @@ fn extract_deb_archive(path: &Path) -> Result<PackageData, String> {
                 .read_to_end(&mut control_data)
                 .map_err(|e| format!("Failed to read control.tar.gz: {}", e))?;
 
-            total_extracted += control_data.len();
-            if compressed_size > 0 && total_extracted / compressed_size > MAX_COMPRESSION_RATIO {
-                warn!(
-                    "extract_deb_archive: compression ratio exceeded MAX_COMPRESSION_RATIO, stopping"
-                );
-                break;
-            }
-            if total_extracted > MAX_ARCHIVE_SIZE as usize {
-                warn!(
-                    "extract_deb_archive: cumulative extracted size exceeded MAX_ARCHIVE_SIZE, stopping"
-                );
+            if check_extraction_limits(
+                &mut total_extracted,
+                control_data.len(),
+                compressed_size,
+                "extract_deb_archive",
+            ) == ExtractionLimit::Exceeded
+            {
                 break;
             }
 
@@ -143,17 +168,13 @@ fn extract_deb_archive(path: &Path) -> Result<PackageData, String> {
                 .read_to_end(&mut data)
                 .map_err(|e| format!("Failed to read data archive: {}", e))?;
 
-            total_extracted += data.len();
-            if compressed_size > 0 && total_extracted / compressed_size > MAX_COMPRESSION_RATIO {
-                warn!(
-                    "extract_deb_archive: compression ratio exceeded MAX_COMPRESSION_RATIO, stopping"
-                );
-                break;
-            }
-            if total_extracted > MAX_ARCHIVE_SIZE as usize {
-                warn!(
-                    "extract_deb_archive: cumulative extracted size exceeded MAX_ARCHIVE_SIZE, stopping"
-                );
+            if check_extraction_limits(
+                &mut total_extracted,
+                data.len(),
+                compressed_size,
+                "extract_deb_archive",
+            ) == ExtractionLimit::Exceeded
+            {
                 break;
             }
 
@@ -203,10 +224,7 @@ fn parse_control_tar_archive<R: std::io::Read>(
             .path()
             .map_err(|e| format!("Failed to get tar path: {}", e))?;
 
-        if tar_path
-            .components()
-            .any(|c| matches!(c, std::path::Component::ParentDir))
-        {
+        if is_path_traversal(&tar_path) {
             warn!(
                 "parse_control_tar_archive: skipping tar entry with path traversal: {:?}",
                 tar_path
@@ -229,17 +247,13 @@ fn parse_control_tar_archive<R: std::io::Read>(
                 .read_to_string(&mut control_content)
                 .map_err(|e| format!("Failed to read control file: {}", e))?;
 
-            *total_extracted += control_content.len();
-            if compressed_size > 0 && *total_extracted / compressed_size > MAX_COMPRESSION_RATIO {
-                warn!(
-                    "parse_control_tar_archive: compression ratio exceeded MAX_COMPRESSION_RATIO, stopping"
-                );
-                return Ok(None);
-            }
-            if *total_extracted > MAX_ARCHIVE_SIZE as usize {
-                warn!(
-                    "parse_control_tar_archive: cumulative extracted size exceeded MAX_ARCHIVE_SIZE, stopping"
-                );
+            if check_extraction_limits(
+                total_extracted,
+                control_content.len(),
+                compressed_size,
+                "parse_control_tar_archive",
+            ) == ExtractionLimit::Exceeded
+            {
                 return Ok(None);
             }
 
@@ -282,10 +296,7 @@ fn merge_deb_data_archive<R: std::io::Read>(
             .path()
             .map_err(|e| format!("Failed to get data tar path: {}", e))?;
 
-        if tar_path
-            .components()
-            .any(|c| matches!(c, std::path::Component::ParentDir))
-        {
+        if is_path_traversal(&tar_path) {
             warn!(
                 "merge_deb_data_archive: skipping tar entry with path traversal: {:?}",
                 tar_path
@@ -316,17 +327,13 @@ fn merge_deb_data_archive<R: std::io::Read>(
                 .read_to_string(&mut copyright_content)
                 .map_err(|e| format!("Failed to read copyright file from data tar: {}", e))?;
 
-            *total_extracted += copyright_content.len();
-            if compressed_size > 0 && *total_extracted / compressed_size > MAX_COMPRESSION_RATIO {
-                warn!(
-                    "merge_deb_data_archive: compression ratio exceeded MAX_COMPRESSION_RATIO, stopping"
-                );
-                return Ok(());
-            }
-            if *total_extracted > MAX_ARCHIVE_SIZE as usize {
-                warn!(
-                    "merge_deb_data_archive: cumulative extracted size exceeded MAX_ARCHIVE_SIZE, stopping"
-                );
+            if check_extraction_limits(
+                total_extracted,
+                copyright_content.len(),
+                compressed_size,
+                "merge_deb_data_archive",
+            ) == ExtractionLimit::Exceeded
+            {
                 return Ok(());
             }
 
