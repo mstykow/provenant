@@ -750,7 +750,7 @@ impl ResolvedPackage {
 /// Author, maintainer, or contributor information.
 ///
 /// Represents a person or organization associated with a package.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Party {
     pub r#type: Option<String>,
     pub role: Option<String>,

@@ -375,16 +375,7 @@ pub(super) fn merge_debian_copyright_into_package(
     }
 
     for party in &copyright.parties {
-        if !target.parties.iter().any(|existing| {
-            existing.r#type == party.r#type
-                && existing.role == party.role
-                && existing.name == party.name
-                && existing.email == party.email
-                && existing.url == party.url
-                && existing.organization == party.organization
-                && existing.organization_url == party.organization_url
-                && existing.timezone == party.timezone
-        }) {
+        if !target.parties.iter().any(|existing| existing == party) {
             target.parties.push(party.clone());
         }
     }
