@@ -86,6 +86,28 @@ fn test_multiline_leading_dash_suffix_is_extended() {
 }
 
 #[test]
+fn test_standalone_c_holder_year_range_with_trailing_period_is_extracted() {
+    let input = "(c) The University of Glasgow 2004-2009.";
+
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        copyrights
+            .iter()
+            .any(|c| c.copyright == "(c) The University of Glasgow 2004-2009"),
+        "copyrights: {:?}",
+        copyrights.iter().map(|c| &c.copyright).collect::<Vec<_>>()
+    );
+    assert!(
+        holders
+            .iter()
+            .any(|h| h.holder == "The University of Glasgow"),
+        "holders: {:?}",
+        holders.iter().map(|h| &h.holder).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn test_obfuscated_angle_email_is_kept_in_copyright() {
     let input = "(C)opyright MMIV-MMV Anselm R. Garbe <garbeam at gmail dot com>";
 

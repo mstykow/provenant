@@ -1061,7 +1061,7 @@ pub fn extract_standalone_c_holder_year_lines(
 ) {
     static STANDALONE_C_HOLDER_YEAR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
-            r"^\(c\)\s+(?P<holder>[A-Z0-9][A-Za-z0-9 ,&'\-\.]*?)\s+(?P<years>(?:19\d{2}|20\d{2})(?:\s*,\s*(?:19\d{2}|20\d{2}))*)\s*(?:[Aa]ll\s+[Rr]ights\s+[Rr]eserved)?\s*$",
+            r"^\(c\)\s+(?P<holder>[A-Z0-9][A-Za-z0-9 ,&'\-\.]*?)\s+(?P<years>(?:19\d{2}|20\d{2})(?:\s*[-–]\s*(?:19\d{2}|20\d{2}|\d{2}))?(?:\s*,\s*(?:19\d{2}|20\d{2}))*)\s*\.?\s*(?:[Aa]ll\s+[Rr]ights\s+[Rr]eserved)?\s*$",
         )
         .unwrap()
     });
