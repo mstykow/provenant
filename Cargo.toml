@@ -21,6 +21,7 @@ include = [
     "!src/**/*test_utils.rs",
     "!src/**/test_fixtures.rs",
     "/build.rs",
+    "/build_support/**/*",
     "/resources/license_detection/license_index.zst",
     "/resources/license_detection/index_build_policy.toml",
     "/resources/license_detection/overlay/**/*",
