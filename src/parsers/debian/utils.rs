@@ -94,12 +94,12 @@ pub(super) fn parse_all_dependencies(
     let mut dependencies = Vec::new();
 
     for spec in DEP_FIELDS {
-        if let Some(dep_str) = crate::parsers::rfc822::get_header_first(headers, spec.field) {
+        if let Some(dep_str) = crate::parsers::rfc822::get_header_first(headers, spec.field()) {
             dependencies.extend(parse_dependency_field(
                 &dep_str,
-                spec.scope,
-                spec.is_runtime,
-                spec.is_optional,
+                spec.scope(),
+                spec.is_runtime(),
+                spec.is_optional(),
                 namespace,
             ));
         }

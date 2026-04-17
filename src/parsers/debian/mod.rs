@@ -106,80 +106,65 @@ const MAINTAINER_CLUES_DEBIAN: &[&str] = &[
 ];
 const MAINTAINER_CLUES_UBUNTU: &[&str] = &["lists.ubuntu.com", "@canonical.com"];
 
-struct DepFieldSpec {
-    field: &'static str,
-    scope: &'static str,
-    is_runtime: bool,
-    is_optional: bool,
+enum DepField {
+    Depends,
+    PreDepends,
+    Recommends,
+    Suggests,
+    Breaks,
+    Conflicts,
+    Replaces,
+    Provides,
+    BuildDepends,
+    BuildDependsIndep,
+    BuildConflicts,
 }
 
-const DEP_FIELDS: &[DepFieldSpec] = &[
-    DepFieldSpec {
-        field: "depends",
-        scope: "depends",
-        is_runtime: true,
-        is_optional: false,
-    },
-    DepFieldSpec {
-        field: "pre-depends",
-        scope: "pre-depends",
-        is_runtime: true,
-        is_optional: false,
-    },
-    DepFieldSpec {
-        field: "recommends",
-        scope: "recommends",
-        is_runtime: true,
-        is_optional: true,
-    },
-    DepFieldSpec {
-        field: "suggests",
-        scope: "suggests",
-        is_runtime: true,
-        is_optional: true,
-    },
-    DepFieldSpec {
-        field: "breaks",
-        scope: "breaks",
-        is_runtime: false,
-        is_optional: false,
-    },
-    DepFieldSpec {
-        field: "conflicts",
-        scope: "conflicts",
-        is_runtime: false,
-        is_optional: false,
-    },
-    DepFieldSpec {
-        field: "replaces",
-        scope: "replaces",
-        is_runtime: false,
-        is_optional: false,
-    },
-    DepFieldSpec {
-        field: "provides",
-        scope: "provides",
-        is_runtime: false,
-        is_optional: false,
-    },
-    DepFieldSpec {
-        field: "build-depends",
-        scope: "build-depends",
-        is_runtime: false,
-        is_optional: false,
-    },
-    DepFieldSpec {
-        field: "build-depends-indep",
-        scope: "build-depends-indep",
-        is_runtime: false,
-        is_optional: false,
-    },
-    DepFieldSpec {
-        field: "build-conflicts",
-        scope: "build-conflicts",
-        is_runtime: false,
-        is_optional: false,
-    },
+impl DepField {
+    fn field(&self) -> &'static str {
+        match self {
+            Self::Depends => "depends",
+            Self::PreDepends => "pre-depends",
+            Self::Recommends => "recommends",
+            Self::Suggests => "suggests",
+            Self::Breaks => "breaks",
+            Self::Conflicts => "conflicts",
+            Self::Replaces => "replaces",
+            Self::Provides => "provides",
+            Self::BuildDepends => "build-depends",
+            Self::BuildDependsIndep => "build-depends-indep",
+            Self::BuildConflicts => "build-conflicts",
+        }
+    }
+
+    fn scope(&self) -> &'static str {
+        self.field()
+    }
+
+    fn is_runtime(&self) -> bool {
+        matches!(
+            self,
+            Self::Depends | Self::PreDepends | Self::Recommends | Self::Suggests
+        )
+    }
+
+    fn is_optional(&self) -> bool {
+        matches!(self, Self::Recommends | Self::Suggests)
+    }
+}
+
+const DEP_FIELDS: &[DepField] = &[
+    DepField::Depends,
+    DepField::PreDepends,
+    DepField::Recommends,
+    DepField::Suggests,
+    DepField::Breaks,
+    DepField::Conflicts,
+    DepField::Replaces,
+    DepField::Provides,
+    DepField::BuildDepends,
+    DepField::BuildDependsIndep,
+    DepField::BuildConflicts,
 ];
 
 const IGNORED_ROOT_DIRS: &[&str] = &["/.", "/bin", "/etc", "/lib", "/sbin", "/usr", "/var"];
