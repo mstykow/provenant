@@ -1,0 +1,11 @@
+what:
+  - copyrights
+  - holders
+  - holders_summary
+copyrights:
+  - Copyright (c) from 2022 The Play Framework Contributors https://github.com/playframework, 2011-2021 Lightbend Inc. https://www.lightbend.com
+holders:
+  - The Play Framework Contributors, Lightbend Inc.
+holders_summary:
+  - value: The Play Framework Contributors, Lightbend Inc.
+    count: 1
