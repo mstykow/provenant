@@ -3,6 +3,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+use crate::copyright::candidates::versioned_banner_holder_from_prepared;
 use crate::copyright::line_tracking::{LineNumberIndex, PreparedLineCache};
 use crate::copyright::refiner::{
     refine_copyright, refine_holder, refine_holder_in_copyright_context,
@@ -1247,6 +1248,69 @@ pub fn extract_c_holder_without_year_lines(
             {
                 holders.push(HolderDetection {
                     holder,
+                    start_line: LineNumber::new(*ln).expect("invalid line number"),
+                    end_line: LineNumber::new(*ln).expect("invalid line number"),
+                });
+            }
+        }
+    }
+}
+
+pub fn extract_versioned_project_c_holder_banner_lines(
+    groups: &[Vec<(usize, String)>],
+    copyrights: &mut Vec<CopyrightDetection>,
+    holders: &mut Vec<HolderDetection>,
+) {
+    let mut seen_c: HashSet<(usize, String)> = copyrights
+        .iter()
+        .map(|c| (c.start_line.get(), c.copyright.clone()))
+        .collect();
+    let mut seen_h: HashSet<(usize, String)> = holders
+        .iter()
+        .map(|h| (h.start_line.get(), h.holder.clone()))
+        .collect();
+
+    for group in groups {
+        for (ln, line) in group {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let Some(holder_raw) = versioned_banner_holder_from_prepared(trimmed) else {
+                continue;
+            };
+
+            let first_token = holder_raw.split_whitespace().next().unwrap_or("");
+            let starts_upper = holder_raw
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_uppercase());
+            let starts_mixed_case_brand = holder_raw
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_lowercase())
+                && first_token.chars().skip(1).any(|c| c.is_ascii_uppercase());
+            if !(starts_upper || starts_mixed_case_brand) {
+                continue;
+            }
+
+            let raw = format!("(c) {holder_raw}");
+            let Some(cr) = refine_copyright(&raw) else {
+                continue;
+            };
+            if seen_c.insert((*ln, cr.clone())) {
+                copyrights.push(CopyrightDetection {
+                    copyright: cr,
+                    start_line: LineNumber::new(*ln).expect("invalid line number"),
+                    end_line: LineNumber::new(*ln).expect("invalid line number"),
+                });
+            }
+
+            if let Some(h) = refine_holder_in_copyright_context(&holder_raw)
+                && seen_h.insert((*ln, h.clone()))
+            {
+                holders.push(HolderDetection {
+                    holder: h,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
                     end_line: LineNumber::new(*ln).expect("invalid line number"),
                 });

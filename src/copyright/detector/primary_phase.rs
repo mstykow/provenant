@@ -92,6 +92,9 @@ pub(super) fn run_phase_primary_extractions(
     super::pattern_extract::extract_standalone_c_holder_year_lines(groups, copyrights, holders);
     super::pattern_extract::extract_c_years_then_holder_lines(groups, copyrights, holders);
     super::pattern_extract::extract_copyright_c_years_holder_lines(groups, copyrights, holders);
+    super::pattern_extract::extract_versioned_project_c_holder_banner_lines(
+        groups, copyrights, holders,
+    );
     super::pattern_extract::extract_c_holder_without_year_lines(
         content, groups, copyrights, holders,
     );

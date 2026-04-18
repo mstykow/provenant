@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use regex::Regex;
 
+use crate::copyright::candidates::is_raw_versioned_project_banner_line;
 use crate::copyright::line_tracking::{LineNumberIndex, PreparedLineCache};
 use crate::copyright::refiner::{
     refine_author, refine_copyright, refine_holder, refine_holder_in_copyright_context,
@@ -28,6 +29,74 @@ pub fn refine_final_copyrights(copyrights: &mut Vec<CopyrightDetection>) {
         });
     }
     *copyrights = refined;
+}
+
+fn strip_trailing_license_tail(s: &str) -> Option<String> {
+    let lower = s.to_ascii_lowercase();
+    if !(lower.contains("/license")
+        || lower.contains("/licenses")
+        || lower.contains(" licensed")
+        || lower.contains(" license")
+        || lower.contains(" released under"))
+    {
+        return None;
+    }
+
+    let tokens: Vec<&str> = s.split_whitespace().collect();
+    let license_token_idx = tokens.iter().enumerate().find_map(|(idx, token)| {
+        let lower = token.to_ascii_lowercase();
+        if lower.contains("/license") || lower.contains("/licenses") {
+            return Some(idx);
+        }
+        if lower == "license" || lower == "licenses" || lower == "licensed" {
+            return Some(idx);
+        }
+        if lower == "released"
+            && tokens
+                .get(idx + 1)
+                .is_some_and(|next| next.eq_ignore_ascii_case("under"))
+        {
+            return Some(idx);
+        }
+        None
+    })?;
+
+    let trimmed = tokens[..license_token_idx]
+        .join(" ")
+        .trim()
+        .trim_matches(|c: char| c == '|' || c == ';' || c == ',' || c.is_whitespace())
+        .to_string();
+    if trimmed.is_empty() || trimmed == s {
+        return None;
+    }
+    Some(trimmed)
+}
+
+pub fn drop_same_span_license_tail_variants(
+    copyrights: &mut Vec<CopyrightDetection>,
+    holders: &mut Vec<HolderDetection>,
+) {
+    let copyright_keys: HashSet<(usize, usize, String)> = copyrights
+        .iter()
+        .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
+        .collect();
+    copyrights.retain(|c| {
+        let Some(cleaned) = strip_trailing_license_tail(&c.copyright) else {
+            return true;
+        };
+        !copyright_keys.contains(&(c.start_line.get(), c.end_line.get(), cleaned))
+    });
+
+    let holder_keys: HashSet<(usize, usize, String)> = holders
+        .iter()
+        .map(|h| (h.start_line.get(), h.end_line.get(), h.holder.clone()))
+        .collect();
+    holders.retain(|h| {
+        let Some(cleaned) = strip_trailing_license_tail(&h.holder) else {
+            return true;
+        };
+        !holder_keys.contains(&(h.start_line.get(), h.end_line.get(), cleaned))
+    });
 }
 
 pub fn deadline_exceeded(deadline: Option<Instant>) -> bool {
@@ -2134,6 +2203,14 @@ pub fn drop_json_description_metadata_copyrights_and_holders(
 
     let mut retained_spans: HashSet<(usize, usize)> = HashSet::new();
     copyrights.retain(|copyright| {
+        if copyright.start_line == copyright.end_line
+            && raw_lines
+                .get(copyright.start_line.get().saturating_sub(1))
+                .is_some_and(|line| is_raw_versioned_project_banner_line(line))
+        {
+            retained_spans.insert((copyright.start_line.get(), copyright.end_line.get()));
+            return true;
+        }
         let Some(window) = json_window_for_span(
             raw_lines,
             copyright.start_line.get(),
@@ -2162,6 +2239,13 @@ pub fn drop_json_description_metadata_copyrights_and_holders(
 
     holders.retain(|holder| {
         if retained_spans.contains(&(holder.start_line.get(), holder.end_line.get())) {
+            return true;
+        }
+        if holder.start_line == holder.end_line
+            && raw_lines
+                .get(holder.start_line.get().saturating_sub(1))
+                .is_some_and(|line| is_raw_versioned_project_banner_line(line))
+        {
             return true;
         }
         let Some(window) =

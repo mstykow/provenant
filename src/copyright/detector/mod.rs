@@ -307,6 +307,7 @@ pub fn detect_copyrights_from_text_with_deadline(
     );
 
     refine_final_copyrights(&mut copyrights);
+    postprocess_transforms::drop_same_span_license_tail_variants(&mut copyrights, &mut holders);
     drop_path_fragment_holders_from_bare_c_code_lines(&raw_lines, &copyrights, &mut holders);
     drop_scan_only_holders_from_copyright_scan_lines(&raw_lines, &copyrights, &mut holders);
 
