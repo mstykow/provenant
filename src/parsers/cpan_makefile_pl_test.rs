@@ -533,4 +533,39 @@ WriteMakefile(
         assert_eq!(pkg.parties[0].name.as_deref(), Some("John Doe"));
         assert_eq!(pkg.parties[0].email, None);
     }
+
+    #[test]
+    fn test_parse_makefile_skips_unresolved_template_placeholders() {
+        let content = r#"
+use strict;
+use warnings;
+use ExtUtils::MakeMaker;
+
+WriteMakefile(
+    NAME         => '[d2% appname %2d]',
+    AUTHOR       => q{YOUR NAME <youremail@example.com>},
+    VERSION_FROM => '[d2% appfile %2d]',
+    ABSTRACT     => 'YOUR APPLICATION ABSTRACT',
+    PREREQ_PM    => {
+        'Test::More' => 0,
+        'YAML'       => 0,
+        'Dancer2'    => [d2% dancer_version %2d],
+    },
+);
+"#;
+
+        let pkg = parse_makefile_pl(content);
+
+        assert_eq!(pkg.name, None);
+        assert_eq!(pkg.description, None);
+        assert!(pkg.parties.is_empty());
+        assert_eq!(pkg.purl, None);
+        assert!(pkg.extra_data.is_none());
+        assert_eq!(pkg.dependencies.len(), 2);
+        assert_eq!(
+            pkg.dependencies[0].purl.as_deref(),
+            Some("pkg:cpan/Test::More")
+        );
+        assert_eq!(pkg.dependencies[1].purl.as_deref(), Some("pkg:cpan/YAML"));
+    }
 }

@@ -101,18 +101,18 @@ pub(crate) fn parse_makefile_pl_with_base(content: &str, base_dir: Option<&Path>
 
     let fields = parse_hash_fields(&makefile_block);
 
-    let name = fields.get("NAME").map(|n| truncate_field(n.to_string()));
+    let name = fields.get("NAME").and_then(|n| sanitize_scalar_field(n));
     let resolved_metadata = resolve_referenced_metadata(&fields, base_dir);
 
     let version = fields
         .get("VERSION")
-        .map(|v| truncate_field(v.to_string()))
+        .and_then(|v| sanitize_scalar_field(v))
         .or_else(|| resolved_metadata.version.clone());
     let description = fields
         .get("ABSTRACT")
-        .map(|d| truncate_field(d.to_string()))
+        .and_then(|d| sanitize_scalar_field(d))
         .or_else(|| resolved_metadata.abstract_text.clone());
-    let extracted_license_statement = fields.get("LICENSE").map(|l| truncate_field(l.to_string()));
+    let extracted_license_statement = fields.get("LICENSE").and_then(|l| sanitize_scalar_field(l));
     let (declared_license_expression, declared_license_expression_spdx, license_detections) =
         extracted_license_statement
             .as_deref()
@@ -131,23 +131,23 @@ pub(crate) fn parse_makefile_pl_with_base(content: &str, base_dir: Option<&Path>
     let dependencies = parse_dependencies(&fields);
 
     let mut extra_data = HashMap::new();
-    if let Some(min_perl) = fields.get("MIN_PERL_VERSION") {
-        extra_data.insert(
-            "MIN_PERL_VERSION".to_string(),
-            json!(truncate_field(min_perl.to_string())),
-        );
+    if let Some(min_perl) = fields
+        .get("MIN_PERL_VERSION")
+        .and_then(|value| sanitize_scalar_field(value))
+    {
+        extra_data.insert("MIN_PERL_VERSION".to_string(), json!(min_perl));
     }
-    if let Some(version_from) = fields.get("VERSION_FROM") {
-        extra_data.insert(
-            "VERSION_FROM".to_string(),
-            json!(truncate_field(version_from.to_string())),
-        );
+    if let Some(version_from) = fields
+        .get("VERSION_FROM")
+        .and_then(|value| sanitize_scalar_field(value))
+    {
+        extra_data.insert("VERSION_FROM".to_string(), json!(version_from));
     }
-    if let Some(abstract_from) = fields.get("ABSTRACT_FROM") {
-        extra_data.insert(
-            "ABSTRACT_FROM".to_string(),
-            json!(truncate_field(abstract_from.to_string())),
-        );
+    if let Some(abstract_from) = fields
+        .get("ABSTRACT_FROM")
+        .and_then(|value| sanitize_scalar_field(value))
+    {
+        extra_data.insert("ABSTRACT_FROM".to_string(), json!(abstract_from));
     }
 
     // Build PURL: convert Foo::Bar to Foo-Bar for CPAN naming convention
@@ -215,6 +215,33 @@ fn normalize_cpan_makefile_license(value: &str) -> Option<NormalizedDeclaredLice
     }
 }
 
+fn sanitize_scalar_field(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || looks_like_unresolved_template_value(trimmed) {
+        return None;
+    }
+
+    Some(truncate_field(trimmed.to_string()))
+}
+
+fn looks_like_unresolved_template_value(value: &str) -> bool {
+    let trimmed = value.trim();
+    let uppercase = trimmed.to_ascii_uppercase();
+
+    trimmed.contains("[%")
+        || trimmed.contains("%]")
+        || trimmed.contains("<%")
+        || trimmed.contains("%>")
+        || (trimmed.contains("{{") && trimmed.contains("}}"))
+        || trimmed.contains("${{")
+        || trimmed.contains("[d2%")
+        || trimmed.contains("%2d]")
+        || matches!(
+            uppercase.as_str(),
+            "YOUR NAME" | "YOUR APPLICATION ABSTRACT" | "YOUREMAIL@EXAMPLE.COM"
+        )
+}
+
 fn resolve_referenced_metadata(
     fields: &HashMap<String, String>,
     base_dir: Option<&Path>,
@@ -227,12 +254,14 @@ fn resolve_referenced_metadata(
     let mut cache: HashMap<String, Option<String>> = HashMap::new();
 
     if let Some(version_from) = fields.get("VERSION_FROM")
+        && !looks_like_unresolved_template_value(version_from)
         && let Some(content) = load_referenced_metadata_file(base_dir, version_from, &mut cache)
     {
         resolved.version = extract_version_from_module_content(content);
     }
 
     if let Some(abstract_from) = fields.get("ABSTRACT_FROM")
+        && !looks_like_unresolved_template_value(abstract_from)
         && let Some(content) = load_referenced_metadata_file(base_dir, abstract_from, &mut cache)
     {
         resolved.abstract_text = extract_abstract_from_module_content(content);
@@ -425,35 +454,34 @@ fn parse_author(fields: &HashMap<String, String>) -> Vec<Party> {
                     return None;
                 }
                 let (name, email) = parse_author_string(author_str);
-                Some(Party {
-                    role: Some("author".to_string()),
-                    name,
-                    email,
-                    r#type: Some("person".to_string()),
-                    url: None,
-                    organization: None,
-                    organization_url: None,
-                    timezone: None,
-                })
+                build_author_party(name, email)
             })
             .collect();
     }
 
     if let Some(author_str) = fields.get("AUTHOR") {
         let (name, email) = parse_author_string(author_str);
-        return vec![Party {
-            role: Some("author".to_string()),
-            name,
-            email,
-            r#type: Some("person".to_string()),
-            url: None,
-            organization: None,
-            organization_url: None,
-            timezone: None,
-        }];
+        return build_author_party(name, email).into_iter().collect();
     }
 
     Vec::new()
+}
+
+fn build_author_party(name: Option<String>, email: Option<String>) -> Option<Party> {
+    if name.is_none() && email.is_none() {
+        return None;
+    }
+
+    Some(Party {
+        role: Some("author".to_string()),
+        name,
+        email,
+        r#type: Some("person".to_string()),
+        url: None,
+        organization: None,
+        organization_url: None,
+        timezone: None,
+    })
 }
 
 fn parse_author_string(s: &str) -> (Option<String>, Option<String>) {
@@ -463,20 +491,9 @@ fn parse_author_string(s: &str) -> (Option<String>, Option<String>) {
     {
         let name = s[..start].trim();
         let email = s[start + 1..end].trim();
-        return (
-            if name.is_empty() {
-                None
-            } else {
-                Some(truncate_field(name.to_string()))
-            },
-            if email.is_empty() {
-                None
-            } else {
-                Some(truncate_field(email.to_string()))
-            },
-        );
+        return (sanitize_scalar_field(name), sanitize_scalar_field(email));
     }
-    (Some(truncate_field(s.trim().to_string())), None)
+    (sanitize_scalar_field(s), None)
 }
 
 fn parse_dependencies(fields: &HashMap<String, String>) -> Vec<Dependency> {
