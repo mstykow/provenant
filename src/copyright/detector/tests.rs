@@ -1302,6 +1302,29 @@ fn test_detect_versioned_project_banner_with_mixed_case_brand_holder() {
 }
 
 #[test]
+fn test_play_header_does_not_emit_bare_c_from_year_shadow() {
+    let content = "Copyright (C) from 2022 The Play Framework Contributors <https://github.com/playframework>, 2011-2021 Lightbend Inc. <https://www.lightbend.com>\n";
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
+
+    assert!(
+        copyrights
+            .iter()
+            .any(|c| c.copyright.contains("The Play Framework Contributors")),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        !copyrights.iter().any(|c| c.copyright == "(c) from 2022"),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        holders
+            .iter()
+            .any(|h| h.holder.contains("The Play Framework Contributors")),
+        "holders: {holders:?}"
+    );
+}
+
+#[test]
 fn test_extract_html_meta_name_copyright_content() {
     let content = concat!(
         r#"<meta name="copyright" content="copyright 2005-2006 Cedrik LIME"/>"#,

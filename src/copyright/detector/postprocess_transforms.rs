@@ -99,6 +99,60 @@ pub fn drop_same_span_license_tail_variants(
     });
 }
 
+pub fn drop_shadowed_bare_c_from_year_fragments(
+    copyrights: &mut Vec<CopyrightDetection>,
+    holders: &mut Vec<HolderDetection>,
+) {
+    static BARE_C_FROM_YEAR_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)^\(c\)\s+from\s+(?:19\d{2}|20\d{2})\b$").unwrap());
+    static HOLDER_FROM_YEAR_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)^from\s+(?:19\d{2}|20\d{2})\b$").unwrap());
+
+    let copyright_keys: HashSet<(usize, usize, String)> = copyrights
+        .iter()
+        .map(|c| {
+            (
+                c.start_line.get(),
+                c.end_line.get(),
+                c.copyright.to_ascii_lowercase(),
+            )
+        })
+        .collect();
+
+    copyrights.retain(|c| {
+        if !BARE_C_FROM_YEAR_RE.is_match(&c.copyright) {
+            return true;
+        }
+        let shadow_prefix = format!("copyright {}", c.copyright.to_ascii_lowercase());
+        !copyright_keys.iter().any(|(start, end, other)| {
+            *start == c.start_line.get()
+                && *end == c.end_line.get()
+                && other.len() > shadow_prefix.len()
+                && other.starts_with(&shadow_prefix)
+        })
+    });
+
+    let holder_keys: HashSet<(usize, usize, String)> = holders
+        .iter()
+        .map(|h| {
+            (
+                h.start_line.get(),
+                h.end_line.get(),
+                h.holder.to_ascii_lowercase(),
+            )
+        })
+        .collect();
+
+    holders.retain(|h| {
+        if !HOLDER_FROM_YEAR_RE.is_match(&h.holder) {
+            return true;
+        }
+        !holder_keys.iter().any(|(start, end, other)| {
+            *start == h.start_line.get() && *end == h.end_line.get() && other.len() > h.holder.len()
+        })
+    });
+}
+
 pub fn deadline_exceeded(deadline: Option<Instant>) -> bool {
     deadline.is_some_and(|d| Instant::now() >= d)
 }
