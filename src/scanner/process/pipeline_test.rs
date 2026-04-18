@@ -147,3 +147,61 @@ fn test_cap_non_source_json_license_text_keeps_npm_shrinkwrap_intact() {
 
     assert_eq!(capped.as_ref(), large_json);
 }
+
+#[test]
+fn test_process_file_detects_versioned_project_banner_on_minified_js() {
+    let dir = tempdir().expect("tempdir");
+    let path = dir.path().join("jquery-3.7.1.min.js");
+    let mut content = String::from(
+        "/*! jQuery v3.7.1 | (c) OpenJS Foundation and other contributors | jquery.org/license */\n",
+    );
+    content.push_str(
+        &r#"!function(){var meta={"description":"demo","url":"https://example.com"};return meta;}"#
+            .repeat(40),
+    );
+    fs::write(&path, content).expect("write minified jquery fixture");
+    let metadata = fs::metadata(&path).expect("metadata");
+    let progress = ScanProgress::new(ProgressMode::Quiet);
+
+    let file_info = process_file(
+        &path,
+        &metadata,
+        &progress,
+        None,
+        LicenseScanOptions::default(),
+        &TextDetectionOptions::default(),
+    );
+
+    assert!(
+        file_info
+            .copyrights
+            .iter()
+            .any(|c| c.copyright == "(c) OpenJS Foundation and other contributors"),
+        "copyrights: {:?}",
+        file_info.copyrights
+    );
+    assert!(
+        !file_info
+            .copyrights
+            .iter()
+            .any(|c| c.copyright.contains("jquery.org/license")),
+        "copyrights: {:?}",
+        file_info.copyrights
+    );
+    assert!(
+        file_info
+            .holders
+            .iter()
+            .any(|h| h.holder == "OpenJS Foundation and other contributors"),
+        "holders: {:?}",
+        file_info.holders
+    );
+    assert!(
+        !file_info
+            .holders
+            .iter()
+            .any(|h| h.holder.contains("jquery.org/license")),
+        "holders: {:?}",
+        file_info.holders
+    );
+}

@@ -1237,6 +1237,71 @@ fn test_detect_spdx_filecopyrighttext_c_without_year() {
 }
 
 #[test]
+fn test_detect_versioned_project_banner_with_bare_license_path() {
+    let line1 =
+        "/*! jQuery v3.7.1 | (c) OpenJS Foundation and other contributors | jquery.org/license */";
+    let line2 =
+        r#"!function(){var meta={"description":"demo","url":"https://example.com"};return meta;}"#
+            .repeat(40);
+    let content = format!("{line1}\n{line2}");
+    let numbered_lines: Vec<(usize, String)> = content
+        .lines()
+        .enumerate()
+        .map(|(i, line)| (i + 1, line.to_string()))
+        .collect();
+    let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(&content);
+
+    assert!(
+        copyrights
+            .iter()
+            .any(|c| c.copyright == "(c) OpenJS Foundation and other contributors"),
+        "copyrights: {copyrights:?}\ngroups: {groups:?}"
+    );
+    assert!(
+        !copyrights
+            .iter()
+            .any(|c| c.copyright.contains("jquery.org/license")),
+        "copyrights: {copyrights:?}\ngroups: {groups:?}"
+    );
+    assert!(
+        holders
+            .iter()
+            .any(|h| h.holder == "OpenJS Foundation and other contributors"),
+        "holders: {holders:?}\ngroups: {groups:?}"
+    );
+    assert!(
+        !holders
+            .iter()
+            .any(|h| h.holder.contains("jquery.org/license")),
+        "holders: {holders:?}\ngroups: {groups:?}"
+    );
+}
+
+#[test]
+fn test_detect_versioned_project_banner_with_mixed_case_brand_holder() {
+    let content = "/*! jQuery v2.2.0 | (c) jQuery Foundation | jquery.org/license */\n";
+    let numbered_lines: Vec<(usize, String)> = content
+        .lines()
+        .enumerate()
+        .map(|(i, line)| (i + 1, line.to_string()))
+        .collect();
+    let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
+
+    assert!(
+        copyrights
+            .iter()
+            .any(|c| c.copyright == "(c) jQuery Foundation"),
+        "copyrights: {copyrights:?}\ngroups: {groups:?}"
+    );
+    assert!(
+        holders.iter().any(|h| h.holder == "jQuery Foundation"),
+        "holders: {holders:?}\ngroups: {groups:?}"
+    );
+}
+
+#[test]
 fn test_extract_html_meta_name_copyright_content() {
     let content = concat!(
         r#"<meta name="copyright" content="copyright 2005-2006 Cedrik LIME"/>"#,

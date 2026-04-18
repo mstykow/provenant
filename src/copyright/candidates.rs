@@ -244,6 +244,73 @@ fn is_end_of_statement(chars: &str) -> bool {
     END_SUFFIXES.iter().any(|suffix| chars.ends_with(suffix))
 }
 
+pub(crate) fn versioned_banner_holder_from_prepared(prepared: &str) -> Option<String> {
+    let trimmed = prepared.trim().trim_start_matches('!').trim_start();
+    let c_idx = trimmed.find("(c)")?;
+    let (head, tail_with_c) = trimmed.split_at(c_idx);
+    let tail = tail_with_c["(c)".len()..].trim_start();
+
+    let head_tokens: Vec<&str> = head.split_whitespace().collect();
+    let has_version_token = head_tokens.iter().any(|token| {
+        let token =
+            token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '_');
+        let stripped = token.strip_prefix('v').unwrap_or(token);
+        !stripped.is_empty()
+            && stripped.chars().next().is_some_and(|c| c.is_ascii_digit())
+            && stripped.chars().any(|c| c == '.' || c == '-')
+    });
+    let has_project_token = head_tokens
+        .iter()
+        .any(|token| token.chars().any(|c| c.is_ascii_alphabetic()));
+    if !(has_version_token && has_project_token) {
+        return None;
+    }
+
+    let tail_lower = tail.to_ascii_lowercase();
+    if !(tail_lower.contains(".org/license")
+        || tail_lower.contains(".com/license")
+        || tail_lower.contains(" licensed")
+        || tail_lower.contains(" license")
+        || tail_lower.contains(" released under"))
+    {
+        return None;
+    }
+
+    let tokens: Vec<&str> = tail.split_whitespace().collect();
+    let license_token_idx = tokens.iter().enumerate().find_map(|(idx, token)| {
+        let lower = token.to_ascii_lowercase();
+        if lower.contains("/license") || lower.contains("/licenses") {
+            return Some(idx);
+        }
+        if lower == "license" || lower == "licenses" || lower == "licensed" {
+            return Some(idx);
+        }
+        if lower == "released"
+            && tokens
+                .get(idx + 1)
+                .is_some_and(|next| next.eq_ignore_ascii_case("under"))
+        {
+            return Some(idx);
+        }
+        None
+    })?;
+
+    let holder_raw = tokens[..license_token_idx]
+        .join(" ")
+        .trim()
+        .trim_matches(|c: char| c == '|' || c == ';' || c == ',' || c.is_whitespace())
+        .to_string();
+    if holder_raw.split_whitespace().count() < 2 {
+        return None;
+    }
+    Some(holder_raw)
+}
+
+pub(crate) fn is_raw_versioned_project_banner_line(line: &str) -> bool {
+    line.trim_start().starts_with("/*!")
+        && versioned_banner_holder_from_prepared(&prepare_text_line(line)).is_some()
+}
+
 /// Check if a chars-only previous line ends with a continuation marker
 /// (copyright, copyrights, and, by, comma) or a trailing year.
 fn ends_with_continuation(chars: &str) -> bool {
@@ -411,7 +478,10 @@ where
             in_copyright = 0;
             previous_chars = None;
             prev_prepared_is_copy_start_with_year = prepared_is_copy_start_with_year;
-        } else if hints::is_candidate(line) || co.contains("http") {
+        } else if hints::is_candidate(line)
+            || co.contains("http")
+            || is_raw_versioned_project_banner_line(line)
+        {
             if is_code_line_with_false_c(line) {
                 continue;
             }
@@ -458,6 +528,17 @@ where
                     .is_some_and(|(_, prev)| is_copy_marker_start(prev.trim_start()))
             {
                 groups.push(std::mem::take(&mut candidates));
+            }
+
+            if is_standalone_comment_line(line)
+                && versioned_banner_holder_from_prepared(&prepared).is_some()
+            {
+                candidates.push((ln, prepared));
+                groups.push(std::mem::take(&mut candidates));
+                in_copyright = 0;
+                previous_chars = None;
+                prev_prepared_is_copy_start_with_year = prepared_is_copy_start_with_year;
+                continue;
             }
 
             if (prepared_chars == "copyright" || prepared_chars == "copyrights")
@@ -1299,5 +1380,26 @@ mod tests {
         let groups = collect_candidate_lines(lines);
         assert!(!groups.is_empty(), "Should detect copyright header");
         assert_eq!(groups[0].len(), 2, "Copyright group should have 2 lines");
+    }
+
+    #[test]
+    fn test_collect_keeps_versioned_project_banner_with_mixed_case_brand_holder() {
+        let lines = vec![(
+            1,
+            "/*! jQuery v2.2.0 | (c) jQuery Foundation | jquery.org/license */".to_string(),
+        )];
+        let groups = collect_candidate_lines(lines);
+        assert_eq!(groups.len(), 1, "groups: {groups:?}");
+        assert_eq!(groups[0].len(), 1, "groups: {groups:?}");
+    }
+
+    #[test]
+    fn test_versioned_banner_holder_from_prepared_extracts_holder() {
+        let prepared =
+            "! jQuery v3.7.1 (c) OpenJS Foundation and other contributors jquery.org/license";
+        assert_eq!(
+            versioned_banner_holder_from_prepared(prepared),
+            Some("OpenJS Foundation and other contributors".to_string())
+        );
     }
 }
