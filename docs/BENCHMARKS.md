@@ -5,9 +5,18 @@
 
 This document records explicit `compare-outputs` runs with high-level timing metrics and notable end-state Provenant-vs-ScanCode outcomes on recorded targets.
 
+## Scan duration vs. file count
+
+The chart below uses a log-log scatter plot: file count on the x-axis, wall-clock duration in seconds on the y-axis, and both scanners on the same numeric axes. That keeps tiny artifact snapshots and very large repository scans readable in one view without flattening the smaller runs.
+
+![Scan duration vs. file count for Provenant and ScanCode](benchmarks/scan-duration-vs-files.svg)
+
+> Provenant is faster on 110 of 112 recorded runs, with a **10.7× median speedup** and **9.3× geometric-mean speedup** overall; the median gap grows from **3.7×** on sub-100-file targets to **16.2×** on 10k+ file targets.
+> Generated from the benchmark timing rows in this document via `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart`.
+
 ## Current benchmark examples
 
-Start with the tables below. Each row is one recorded `compare-outputs` run; the Run context column shows the benchmark date plus run ID suffix and machine information, and the Timing snapshot column shows same-host wall-clock timings with the relative result in **bold**.
+The tables below provide the per-target detail behind the chart. Each row is one recorded `compare-outputs` run; the Run context column shows the benchmark date plus run ID suffix and machine information, and the Timing snapshot column shows same-host wall-clock timings with the relative result in **bold**.
 
 ### Repository-backed targets
 
@@ -226,6 +235,8 @@ Start with the tables below. Each row is one recorded `compare-outputs` run; the
 - Good: `Broader Python dependency extraction from uv.lock and nested requirements inputs, with safer URL credential stripping.`
 
 ## How to extend this document
+
+After adding or editing benchmark rows in this document, rerun `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart` so the checked-in SVG reflects the latest timing data.
 
 For each new benchmark example, record:
 
