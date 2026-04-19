@@ -291,6 +291,11 @@ pub(super) fn run_phase_postprocess(
     super::postprocess_transforms::restore_url_slash_before_closing_paren_from_raw_lines(
         raw_lines, copyrights,
     );
+    super::postprocess_transforms::add_missing_holders_from_preceding_name_lines(
+        prepared_cache,
+        copyrights,
+        holders,
+    );
     super::postprocess_transforms::add_first_angle_email_only_variants(copyrights);
     super::postprocess_transforms::drop_shadowed_angle_email_prefix_copyrights_same_span(
         copyrights,

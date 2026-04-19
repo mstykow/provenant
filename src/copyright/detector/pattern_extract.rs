@@ -4261,6 +4261,7 @@ pub fn drop_non_copyright_like_copyrights(copyrights: &mut Vec<CopyrightDetectio
             || lower.contains("holder is"))
             && !lower.contains("associated with software")
             && !lower.contains("api description")
+            && !lower.contains("protected or trademarked materials")
             && lower != "(c) rest"
     });
 }
