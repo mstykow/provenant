@@ -30,7 +30,7 @@ struct Args {
     #[arg(long)]
     repo_url: Option<String>,
     #[arg(long)]
-    target_path: Option<PathBuf>,
+    target_path: Vec<PathBuf>,
     #[arg(long, requires = "target_path")]
     scancode_cache_identity: Option<String>,
     #[arg(long)]
@@ -40,6 +40,7 @@ struct Args {
     scan_args: Vec<String>,
 }
 
+#[derive(Debug)]
 struct ContextState {
     project_root: PathBuf,
     scancode_submodule_dir: PathBuf,
@@ -52,6 +53,9 @@ struct ContextState {
     summary_json: PathBuf,
     summary_tsv: PathBuf,
     target_dir: PathBuf,
+    target_resolved_paths: Vec<PathBuf>,
+    target_input_args: Vec<String>,
+    target_uses_staged_inputs: bool,
     target_label: String,
     target_source_label: String,
     target_revision: String,
@@ -124,6 +128,13 @@ struct ValueDifferenceEntry {
     provenant: usize,
     missing_in_provenant: Vec<ValueCountEntry>,
     extra_in_provenant: Vec<ValueCountEntry>,
+}
+
+#[derive(Debug, Serialize)]
+struct ScalarDifferenceEntry {
+    path: String,
+    scancode: Option<String>,
+    provenant: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -269,16 +280,17 @@ fn main() -> Result<()> {
 }
 
 fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> {
-    if args.repo_url.is_some() == args.target_path.is_some() {
+    let has_target_paths = !args.target_path.is_empty();
+    if args.repo_url.is_some() == has_target_paths {
         bail!("specify exactly one of --repo-url or --target-path");
     }
-    if args.target_path.is_some() && args.repo_ref.is_some() {
+    if has_target_paths && args.repo_ref.is_some() {
         bail!("--repo-ref can only be used with --repo-url");
     }
     if args.repo_url.is_some() && args.repo_ref.is_none() {
         bail!("--repo-url requires --repo-ref (commit SHA, tag, or branch)");
     }
-    if args.scancode_cache_identity.is_some() && args.target_path.is_none() {
+    if args.scancode_cache_identity.is_some() && !has_target_paths {
         bail!("--scancode-cache-identity can only be used with --target-path");
     }
     let target_scancode_cache_identity = args
@@ -293,6 +305,25 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
         bail!("--scancode-cache-identity must not be blank");
     }
 
+    let target_resolved_paths = if has_target_paths {
+        args.target_path
+            .iter()
+            .map(|path| realpath(path))
+            .collect::<Result<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
+    if target_resolved_paths.len() > 1 && target_resolved_paths.iter().any(|path| path.is_dir()) {
+        bail!("multiple --target-path values currently support files only");
+    }
+    let target_uses_staged_inputs = !target_resolved_paths.is_empty()
+        && target_resolved_paths.iter().all(|path| path.is_file());
+    let target_input_args = if target_uses_staged_inputs {
+        staged_input_names(&target_resolved_paths)
+    } else {
+        vec![".".to_string()]
+    };
+
     let project_root = project_root();
     let artifact_root = project_root.join(".provenant/compare-runs");
     let scancode_cache_root = project_root.join(".provenant/scancode-cache");
@@ -303,14 +334,18 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
             scancode_submodule_dir.display()
         );
     }
-    let slug = if let Some(target_path) = &args.target_path {
-        sanitize_label(
-            target_path
-                .file_name()
-                .and_then(|v| v.to_str())
-                .unwrap_or("compare-target"),
-            "compare-target",
-        )
+    let slug = if has_target_paths {
+        if target_resolved_paths.len() == 1 {
+            sanitize_label(
+                target_resolved_paths[0]
+                    .file_name()
+                    .and_then(|v| v.to_str())
+                    .unwrap_or("compare-target"),
+                "compare-target",
+            )
+        } else {
+            "multi-target".to_string()
+        }
     } else {
         sanitize_label(
             &derive_repo_name_from_url(args.repo_url.as_deref().unwrap(), "compare-target"),
@@ -324,24 +359,34 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
     let samples_dir = comparison_dir.join("samples");
     fs::create_dir_all(&raw_dir)?;
     fs::create_dir_all(&samples_dir)?;
-    let target_dir = if let Some(target_path) = &args.target_path {
-        let resolved_target = realpath(target_path)?;
-        if resolved_target.is_file() {
+    let target_dir = if has_target_paths {
+        if target_uses_staged_inputs {
             run_dir.join("input")
         } else {
-            resolved_target
+            target_resolved_paths
+                .first()
+                .cloned()
+                .unwrap_or_else(|| run_dir.join("input"))
         }
     } else {
         run_dir.join(&slug)
     };
-    let target_source_label = if args.target_path.is_some() {
-        "Target path"
+    let target_source_label = if has_target_paths {
+        if target_resolved_paths.len() > 1 {
+            "Target paths"
+        } else {
+            "Target path"
+        }
     } else {
         "Repo URL"
     }
     .to_string();
-    let target_label = if let Some(target_path) = &args.target_path {
-        realpath(target_path)?.display().to_string()
+    let target_label = if has_target_paths {
+        target_resolved_paths
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
     } else {
         args.repo_url.clone().unwrap()
     };
@@ -365,12 +410,15 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
         summary_json: comparison_dir.join("summary.json"),
         summary_tsv: comparison_dir.join("summary.tsv"),
         target_dir,
+        target_resolved_paths,
+        target_input_args,
+        target_uses_staged_inputs,
         target_label,
         target_source_label,
         target_revision: String::new(),
         target_scancode_cache_identity,
         repo_manifest,
-        worktree_retained_after_run: args.target_path.is_some(),
+        worktree_retained_after_run: has_target_paths,
         profile_name: args
             .profile
             .map(|profile| profile.display_name().to_string()),
@@ -399,20 +447,32 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
 }
 
 fn prepare_target(context: &mut ContextState, args: &Args) -> Result<CheckoutGuard> {
-    if let Some(target_path) = &args.target_path {
-        let resolved_target = realpath(target_path)?;
-        if let Some(log_line) = current_git_log_line(&resolved_target) {
-            println!("{log_line}");
-        } else {
-            println!(
-                "  Using local path without git metadata: {}",
-                resolved_target.display()
-            );
+    if !args.target_path.is_empty() {
+        for resolved_target in &context.target_resolved_paths {
+            if let Some(log_line) = current_git_log_line(resolved_target) {
+                println!("{log_line}");
+            } else {
+                println!(
+                    "  Using local path without git metadata: {}",
+                    resolved_target.display()
+                );
+            }
         }
-        context.target_revision = current_git_revision(&resolved_target)
-            .unwrap_or_else(|| "current local checkout".to_string());
-        if resolved_target.is_file() {
-            materialize_file(&resolved_target, &context.target_dir)?;
+        context.target_revision = local_target_revision(&context.target_resolved_paths);
+        if context.target_uses_staged_inputs {
+            fs::create_dir_all(&context.target_dir).with_context(|| {
+                format!(
+                    "failed to create staged input directory {}",
+                    context.target_dir.display()
+                )
+            })?;
+            for (resolved_target, staged_name) in context
+                .target_resolved_paths
+                .iter()
+                .zip(context.target_input_args.iter())
+            {
+                materialize_file(resolved_target, &context.target_dir.join(staged_name))?;
+            }
         }
         return Ok(CheckoutGuard {
             cache_dir: None,
@@ -868,21 +928,14 @@ fn normalize_scancode_error_path(path: &str) -> String {
         .to_string()
 }
 
-fn build_provenant_invocation(context: &ContextState) -> (PathBuf, String) {
-    if context.target_dir.is_file() {
-        let working_dir = context
-            .target_dir
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .to_path_buf();
-        let input_arg = context
-            .target_dir
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| ".".to_string());
-        (working_dir, input_arg)
+fn build_provenant_invocation(context: &ContextState) -> (PathBuf, Vec<String>) {
+    if context.target_uses_staged_inputs {
+        (
+            context.target_dir.clone(),
+            context.target_input_args.clone(),
+        )
     } else {
-        (context.target_dir.clone(), ".".to_string())
+        (context.target_dir.clone(), vec![".".to_string()])
     }
 }
 
@@ -890,7 +943,7 @@ fn run_provenant(context: &ContextState) -> Result<()> {
     println!("------------------------------------------");
     println!("Running Provenant");
     println!("------------------------------------------");
-    let (working_dir, _input_arg) = build_provenant_invocation(context);
+    let (working_dir, _input_args) = build_provenant_invocation(context);
     let args = build_provenant_args(context);
     println!(
         "  {}",
@@ -919,10 +972,18 @@ fn run_provenant(context: &ContextState) -> Result<()> {
 fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
     let scancode: Value = serde_json::from_str(&fs::read_to_string(&context.scancode_json)?)?;
     let provenant: Value = serde_json::from_str(&fs::read_to_string(&context.provenant_json)?)?;
+    let info_mode = context
+        .scan_args
+        .iter()
+        .any(|arg| matches!(arg.as_str(), "--info" | "--mark-source"));
     let scancode_files = files_by_path(&scancode);
     let provenant_files = files_by_path(&provenant);
+    let scancode_resources = resources_by_path(&scancode);
+    let provenant_resources = resources_by_path(&provenant);
     let scancode_paths: BTreeSet<String> = scancode_files.keys().cloned().collect();
     let provenant_paths: BTreeSet<String> = provenant_files.keys().cloned().collect();
+    let scancode_resource_paths: BTreeSet<String> = scancode_resources.keys().cloned().collect();
+    let provenant_resource_paths: BTreeSet<String> = provenant_resources.keys().cloned().collect();
     let common_paths: Vec<String> = scancode_paths
         .intersection(&provenant_paths)
         .cloned()
@@ -935,6 +996,18 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
         .difference(&scancode_paths)
         .cloned()
         .collect();
+    let common_resource_paths: Vec<String> = scancode_resource_paths
+        .intersection(&provenant_resource_paths)
+        .cloned()
+        .collect();
+    let only_scancode_resource_paths: Vec<String> = scancode_resource_paths
+        .difference(&provenant_resource_paths)
+        .cloned()
+        .collect();
+    let only_provenant_resource_paths: Vec<String> = provenant_resource_paths
+        .difference(&scancode_resource_paths)
+        .cloned()
+        .collect();
     let metrics = [
         "license_detections",
         "package_data",
@@ -945,6 +1018,25 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
         "urls",
         "scan_errors",
     ];
+    let info_metrics = [
+        "mime_type",
+        "file_type",
+        "programming_language",
+        "sha1",
+        "md5",
+        "sha256",
+        "sha1_git",
+        "is_binary",
+        "is_text",
+        "is_archive",
+        "is_media",
+        "is_source",
+        "is_script",
+        "files_count",
+        "dirs_count",
+        "size_count",
+        "source_count",
+    ];
     let mut lower_counts: BTreeMap<String, Vec<CountDeltaEntry>> = metrics
         .iter()
         .map(|m| ((*m).to_string(), Vec::new()))
@@ -954,6 +1046,10 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
         .map(|m| ((*m).to_string(), Vec::new()))
         .collect();
     let mut value_differences: BTreeMap<String, Vec<ValueDifferenceEntry>> = metrics
+        .iter()
+        .map(|m| ((*m).to_string(), Vec::new()))
+        .collect();
+    let mut info_value_differences: BTreeMap<String, Vec<ScalarDifferenceEntry>> = info_metrics
         .iter()
         .map(|m| ((*m).to_string(), Vec::new()))
         .collect();
@@ -1007,6 +1103,25 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
         }
     }
 
+    for path in &common_resource_paths {
+        let scancode_resource = scancode_resources.get(path).unwrap();
+        let provenant_resource = provenant_resources.get(path).unwrap();
+        for metric in info_metrics {
+            let scancode_value = scalar_field_value(scancode_resource, metric);
+            let provenant_value = scalar_field_value(provenant_resource, metric);
+            if scancode_value != provenant_value {
+                info_value_differences
+                    .get_mut(metric)
+                    .unwrap()
+                    .push(ScalarDifferenceEntry {
+                        path: path.clone(),
+                        scancode: scancode_value,
+                        provenant: provenant_value,
+                    });
+            }
+        }
+    }
+
     let sc_top = top_level_counts(&scancode);
     let pr_top = top_level_counts(&provenant);
     let license_deltas = top_level_license_deltas(&scancode, &provenant);
@@ -1052,9 +1167,34 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
         only_provenant_paths.len() as i64,
         "paths seen only in Provenant output",
     ));
+    rows.push(tsv_row(
+        "common_resource_paths",
+        common_resource_paths.len() as i64,
+        common_resource_paths.len() as i64,
+        0,
+        "resource paths present in both outputs",
+    ));
+    rows.push(tsv_row(
+        "only_scancode_resource_paths",
+        only_scancode_resource_paths.len() as i64,
+        0,
+        -(only_scancode_resource_paths.len() as i64),
+        "resource paths seen only in ScanCode output",
+    ));
+    rows.push(tsv_row(
+        "only_provenant_resource_paths",
+        0,
+        only_provenant_resource_paths.len() as i64,
+        only_provenant_resource_paths.len() as i64,
+        "resource paths seen only in Provenant output",
+    ));
 
     let mut potential_regressions = only_scancode_paths.len() + top_level_regressions_map.len();
     let mut potential_higher = only_provenant_paths.len() + top_level_higher_counts.len();
+    if info_mode {
+        potential_regressions += only_scancode_resource_paths.len();
+        potential_higher += only_provenant_resource_paths.len();
+    }
     for metric in metrics {
         let missing = value_differences[metric]
             .iter()
@@ -1110,6 +1250,26 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
             extra as i64,
             extra as i64,
             "paths where normalized values exist only in Provenant output",
+        ));
+    }
+    let mut info_metric_summary = Map::new();
+    for metric in info_metrics {
+        let differences = info_value_differences[metric].len();
+        info_metric_summary.insert(
+            metric.to_string(),
+            json!({
+                "value_differences": differences,
+            }),
+        );
+        if info_mode {
+            potential_regressions += differences;
+        }
+        rows.push(tsv_row(
+            &format!("info_{metric}_value_differences"),
+            differences as i64,
+            differences as i64,
+            0,
+            "common-path resources where info values differ",
         ));
     }
     let dependency_value_differences = dependency_differences(&scancode, &provenant);
@@ -1195,6 +1355,10 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
                 .samples_dir
                 .join("dependency_value_differences.json"),
         ),
+        (
+            "info_value_differences",
+            context.samples_dir.join("info_value_differences.json"),
+        ),
     ];
     write_pretty_json(&sample_paths[0].1, &only_scancode_paths)?;
     write_pretty_json(&sample_paths[1].1, &only_provenant_paths)?;
@@ -1203,6 +1367,7 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
     write_pretty_json(&sample_paths[4].1, &value_differences)?;
     write_pretty_json(&sample_paths[5].1, &license_deltas)?;
     write_pretty_json(&sample_paths[6].1, &dependency_value_differences)?;
+    write_pretty_json(&sample_paths[7].1, &info_value_differences)?;
 
     let summary = json!({
         "comparison_status": comparison_status,
@@ -1223,7 +1388,13 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
             "only_scancode_paths": only_scancode_paths.len(),
             "only_provenant_paths": only_provenant_paths.len(),
         },
+        "resource_path_comparison": {
+            "common_paths": common_resource_paths.len(),
+            "only_scancode_paths": only_scancode_resource_paths.len(),
+            "only_provenant_paths": only_provenant_resource_paths.len(),
+        },
         "file_metric_summary": file_metric_summary,
+        "info_metric_summary": info_metric_summary,
         "top_level_regressions": top_level_regressions_map,
         "top_level_higher_counts": top_level_higher_counts,
         "top_level_license_expression_delta_count": license_deltas.len(),
@@ -1248,6 +1419,21 @@ fn files_by_path(value: &Value) -> BTreeMap<String, Value> {
             if entry.get("type").and_then(Value::as_str) != Some("file") {
                 return None;
             }
+            entry
+                .get("path")
+                .and_then(Value::as_str)
+                .map(|path| (normalize_compare_path(path), entry.clone()))
+        })
+        .collect()
+}
+
+fn resources_by_path(value: &Value) -> BTreeMap<String, Value> {
+    value
+        .get("files")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
             entry
                 .get("path")
                 .and_then(Value::as_str)
@@ -1374,6 +1560,18 @@ fn normalize_license_expression(value: &str) -> String {
     } else {
         normalized.replace(['(', ')'], "")
     }
+}
+
+fn scalar_field_value(entry: &Value, key: &str) -> Option<String> {
+    let value = entry.get(key)?;
+    let normalized = match value {
+        Value::Null => return None,
+        Value::String(text) => normalize_text(text),
+        Value::Bool(flag) => flag.to_string(),
+        Value::Number(number) => number.to_string(),
+        _ => normalize_text(&value.to_string()),
+    };
+    (!normalized.is_empty()).then_some(normalized)
 }
 
 fn sample_values(values: &[String]) -> Vec<String> {
@@ -1607,7 +1805,7 @@ fn tsv_row(metric: &str, scancode: i64, provenant: i64, delta: i64, notes: &str)
 fn write_manifest(context: &ContextState) -> Result<()> {
     let scancode_args = build_scancode_docker_args(context);
     let provenant_args = build_provenant_args(context);
-    let (provenant_working_dir, _provenant_input_arg) = build_provenant_invocation(context);
+    let (provenant_working_dir, _provenant_input_args) = build_provenant_invocation(context);
     let manifest = CompareRunManifest {
         run_id: context.run_id.clone(),
         target: TargetManifest::new(
@@ -1677,7 +1875,16 @@ fn build_scancode_cli_args(context: &ContextState) -> Vec<String> {
     let mut args = vec!["--json-pp".to_string(), "/out/scancode.json".to_string()];
     args.extend(context.scan_args.clone());
     args.extend(scancode_ignore_args());
-    args.push("/input".to_string());
+    if context.target_uses_staged_inputs {
+        args.extend(
+            context
+                .target_input_args
+                .iter()
+                .map(|input| format!("/input/{input}")),
+        );
+    } else {
+        args.push("/input".to_string());
+    }
     args
 }
 
@@ -1716,7 +1923,7 @@ fn build_scancode_docker_args(context: &ContextState) -> Vec<String> {
 }
 
 fn build_provenant_args(context: &ContextState) -> Vec<String> {
-    let (_working_dir, input_arg) = build_provenant_invocation(context);
+    let (_working_dir, input_args) = build_provenant_invocation(context);
     let mut args = vec![
         "--json-pp".to_string(),
         context.provenant_json.display().to_string(),
@@ -1724,8 +1931,44 @@ fn build_provenant_args(context: &ContextState) -> Vec<String> {
     ];
     args.extend(context.scan_args.clone());
     args.extend(provenant_ignore_args());
-    args.push(input_arg);
+    args.extend(input_args);
     args
+}
+
+fn staged_input_names(paths: &[PathBuf]) -> Vec<String> {
+    let total = paths.len();
+    paths
+        .iter()
+        .enumerate()
+        .map(|(index, path)| {
+            let file_name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("input.json");
+            if total == 1 {
+                file_name.to_string()
+            } else {
+                format!("{index:02}-{file_name}")
+            }
+        })
+        .collect()
+}
+
+fn local_target_revision(paths: &[PathBuf]) -> String {
+    if paths.len() == 1 {
+        return current_git_revision(&paths[0])
+            .unwrap_or_else(|| "current local checkout".to_string());
+    }
+
+    let revisions: BTreeSet<String> = paths
+        .iter()
+        .filter_map(|path| current_git_revision(path))
+        .collect();
+    if revisions.len() == 1 {
+        revisions.into_iter().next().unwrap()
+    } else {
+        "multiple local inputs".to_string()
+    }
 }
 
 fn scancode_ignore_args() -> Vec<String> {
@@ -2041,6 +2284,9 @@ mod tests {
                 "/tmp/project/.provenant/compare-runs/run-id/comparison/summary.tsv",
             ),
             target_dir: PathBuf::from("/tmp/target"),
+            target_resolved_paths: Vec::new(),
+            target_input_args: vec![".".to_string()],
+            target_uses_staged_inputs: false,
             target_label: "/tmp/target".to_string(),
             target_source_label: "Target path".to_string(),
             target_revision: "current local checkout".to_string(),
@@ -2467,14 +2713,17 @@ mod tests {
         let temp_root = unique_temp_dir("single-file-provenant-args");
         fs::create_dir_all(&temp_root).unwrap();
         let staged_input = temp_root.join("input");
-        fs::write(&staged_input, "fixture").unwrap();
+        fs::create_dir_all(&staged_input).unwrap();
+        fs::write(staged_input.join("fixture.txt"), "fixture").unwrap();
 
         let mut context = test_context();
         context.target_dir = staged_input;
+        context.target_input_args = vec!["fixture.txt".to_string()];
+        context.target_uses_staged_inputs = true;
 
         let args = build_provenant_args(&context);
 
-        assert_eq!(args.last().map(String::as_str), Some("input"));
+        assert_eq!(args.last().map(String::as_str), Some("fixture.txt"));
 
         let _ = fs::remove_dir_all(&temp_root);
     }
@@ -2484,17 +2733,20 @@ mod tests {
         let temp_root = unique_temp_dir("single-file-provenant-invocation");
         fs::create_dir_all(&temp_root).unwrap();
         let staged_input = temp_root.join("input");
-        fs::write(&staged_input, "fixture").unwrap();
+        fs::create_dir_all(&staged_input).unwrap();
+        fs::write(staged_input.join("fixture.txt"), "fixture").unwrap();
 
         let mut context = test_context();
-        context.target_dir = staged_input;
+        context.target_dir = staged_input.clone();
+        context.target_input_args = vec!["fixture.txt".to_string()];
+        context.target_uses_staged_inputs = true;
 
-        let (working_dir, input_arg) = build_provenant_invocation(&context);
+        let (working_dir, input_args) = build_provenant_invocation(&context);
 
-        assert_eq!(working_dir, temp_root);
-        assert_eq!(input_arg, "input");
+        assert_eq!(working_dir, staged_input);
+        assert_eq!(input_args, vec!["fixture.txt"]);
 
-        let _ = fs::remove_dir_all(&working_dir);
+        let _ = fs::remove_dir_all(&temp_root);
     }
 
     #[test]
@@ -2506,7 +2758,7 @@ mod tests {
 
         let args = Args {
             repo_url: None,
-            target_path: Some(fixture.clone()),
+            target_path: vec![fixture.clone()],
             scancode_cache_identity: Some("fixture@rev".to_string()),
             repo_ref: None,
             profile: None,
@@ -2526,6 +2778,7 @@ mod tests {
                 .and_then(|name| name.to_str()),
             Some("input")
         );
+        assert_eq!(context.target_input_args, vec!["fixture.txt"]);
         assert_ne!(context.target_dir, fixture);
 
         let _ = fs::remove_dir_all(&temp_root);
@@ -2541,9 +2794,12 @@ mod tests {
 
         let mut context = test_context();
         context.target_dir = temp_root.join("run/input");
+        context.target_resolved_paths = vec![fixture.clone()];
+        context.target_input_args = vec!["fixture.txt".to_string()];
+        context.target_uses_staged_inputs = true;
         let args = Args {
             repo_url: None,
-            target_path: Some(fixture.clone()),
+            target_path: vec![fixture.clone()],
             scancode_cache_identity: Some("fixture@rev".to_string()),
             repo_ref: None,
             profile: None,
@@ -2552,9 +2808,9 @@ mod tests {
 
         let _guard = prepare_target(&mut context, &args).unwrap();
 
-        assert!(context.target_dir.is_file());
+        assert!(context.target_dir.is_dir());
         assert_eq!(
-            fs::read_to_string(&context.target_dir).unwrap(),
+            fs::read_to_string(context.target_dir.join("fixture.txt")).unwrap(),
             "fixture contents"
         );
 
@@ -2591,7 +2847,7 @@ mod tests {
     fn prepare_context_rejects_blank_scancode_cache_identity() {
         let args = Args {
             repo_url: None,
-            target_path: Some(PathBuf::from("/tmp/chromium")),
+            target_path: vec![PathBuf::from("/tmp/chromium")],
             scancode_cache_identity: Some("   ".to_string()),
             repo_ref: None,
             profile: None,
@@ -2603,5 +2859,122 @@ mod tests {
             .unwrap()
             .to_string();
         assert!(error.contains("must not be blank"));
+    }
+
+    #[test]
+    fn prepare_context_stages_multi_file_targets_with_numbered_inputs() {
+        let temp_root = unique_temp_dir("multi-file-target-context");
+        fs::create_dir_all(&temp_root).unwrap();
+        let first = temp_root.join("first.json");
+        let second = temp_root.join("second.json");
+        fs::write(&first, "first").unwrap();
+        fs::write(&second, "second").unwrap();
+
+        let args = Args {
+            repo_url: None,
+            target_path: vec![first.clone(), second.clone()],
+            scancode_cache_identity: Some("pair@rev".to_string()),
+            repo_ref: None,
+            profile: None,
+            scan_args: Vec::new(),
+        };
+
+        let context = prepare_context(&args, vec!["--from-json".to_string()]).unwrap();
+
+        assert!(context.target_uses_staged_inputs);
+        assert_eq!(
+            context.target_input_args,
+            vec!["00-first.json", "01-second.json"]
+        );
+        assert_eq!(
+            context
+                .target_dir
+                .file_name()
+                .and_then(|name| name.to_str()),
+            Some("input")
+        );
+
+        let _ = fs::remove_dir_all(&temp_root);
+        let _ = fs::remove_dir_all(&context.run_dir);
+    }
+
+    #[test]
+    fn prepare_target_materializes_multi_file_targets_into_staged_input_dir() {
+        let temp_root = unique_temp_dir("multi-file-target-prepare");
+        fs::create_dir_all(&temp_root).unwrap();
+        let first = temp_root.join("first.json");
+        let second = temp_root.join("second.json");
+        fs::write(&first, "first contents").unwrap();
+        fs::write(&second, "second contents").unwrap();
+
+        let mut context = test_context();
+        context.target_dir = temp_root.join("run/input");
+        context.target_resolved_paths = vec![first.clone(), second.clone()];
+        context.target_input_args = vec!["00-first.json".to_string(), "01-second.json".to_string()];
+        context.target_uses_staged_inputs = true;
+        let args = Args {
+            repo_url: None,
+            target_path: vec![first.clone(), second.clone()],
+            scancode_cache_identity: Some("pair@rev".to_string()),
+            repo_ref: None,
+            profile: None,
+            scan_args: Vec::new(),
+        };
+
+        let _guard = prepare_target(&mut context, &args).unwrap();
+
+        assert!(context.target_dir.is_dir());
+        assert_eq!(
+            fs::read_to_string(context.target_dir.join("00-first.json")).unwrap(),
+            "first contents"
+        );
+        assert_eq!(
+            fs::read_to_string(context.target_dir.join("01-second.json")).unwrap(),
+            "second contents"
+        );
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn build_scancode_and_provenant_args_include_all_staged_multi_inputs() {
+        let mut context = test_context();
+        context.target_dir = PathBuf::from("/tmp/staged-inputs");
+        context.target_input_args = vec!["00-first.json".to_string(), "01-second.json".to_string()];
+        context.target_uses_staged_inputs = true;
+
+        let scancode_args = build_scancode_cli_args(&context);
+        let provenant_args = build_provenant_args(&context);
+
+        assert!(scancode_args.ends_with(&[
+            "/input/00-first.json".to_string(),
+            "/input/01-second.json".to_string(),
+        ]));
+        assert!(
+            provenant_args.ends_with(&["00-first.json".to_string(), "01-second.json".to_string(),])
+        );
+    }
+
+    #[test]
+    fn prepare_context_rejects_multiple_directory_targets() {
+        let temp_root = unique_temp_dir("multi-directory-target-context");
+        fs::create_dir_all(temp_root.join("a")).unwrap();
+        fs::create_dir_all(temp_root.join("b")).unwrap();
+
+        let args = Args {
+            repo_url: None,
+            target_path: vec![temp_root.join("a"), temp_root.join("b")],
+            scancode_cache_identity: Some("dirs@rev".to_string()),
+            repo_ref: None,
+            profile: None,
+            scan_args: Vec::new(),
+        };
+
+        let error = prepare_context(&args, vec!["--from-json".to_string()])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("multiple --target-path values currently support files only"));
+
+        let _ = fs::remove_dir_all(&temp_root);
     }
 }
