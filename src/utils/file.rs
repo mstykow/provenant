@@ -46,6 +46,7 @@ const MAX_IMAGE_METADATA_VALUES: usize = 64;
 const MAX_IMAGE_METADATA_TEXT_BYTES: usize = 32 * 1024;
 const BINARY_CONTROL_CHAR_THRESHOLD_DIVISOR: usize = 10;
 const LARGE_OPAQUE_BINARY_SKIP_BYTES: usize = 512 * 1024;
+const JSON_VALIDATION_MAX_BYTES: usize = 4 * 1024 * 1024;
 const PLAIN_TEXT_EXTENSIONS: &[&str] = &[
     "rst", "rest", "md", "txt", "log", "json", "xml", "yaml", "yml", "toml", "ini",
 ];
@@ -362,6 +363,37 @@ fn is_utf8_text(bytes: &[u8]) -> bool {
     std::str::from_utf8(bytes).is_ok()
 }
 
+fn decode_utf16_bom_text(bytes: &[u8]) -> Option<String> {
+    if bytes.len() < 2 || !bytes.len().is_multiple_of(2) {
+        return None;
+    }
+
+    let (is_le, body) = match bytes {
+        [0xFF, 0xFE, rest @ ..] => (true, rest),
+        [0xFE, 0xFF, rest @ ..] => (false, rest),
+        _ => return None,
+    };
+
+    if body.is_empty() || body.len() % 2 != 0 {
+        return None;
+    }
+
+    let code_units: Vec<u16> = body
+        .chunks_exact(2)
+        .map(|chunk| {
+            if is_le {
+                u16::from_le_bytes([chunk[0], chunk[1]])
+            } else {
+                u16::from_be_bytes([chunk[0], chunk[1]])
+            }
+        })
+        .collect();
+
+    std::char::decode_utf16(code_units)
+        .collect::<Result<String, _>>()
+        .ok()
+}
+
 fn has_binary_control_chars(bytes: &[u8]) -> bool {
     let control_count = bytes
         .iter()
@@ -371,12 +403,20 @@ fn has_binary_control_chars(bytes: &[u8]) -> bool {
 }
 
 fn has_decodable_text(bytes: &[u8]) -> bool {
-    bytes.is_empty() || is_utf8_text(bytes) || !has_binary_control_chars(bytes)
+    bytes.is_empty()
+        || is_utf8_text(bytes)
+        || decode_utf16_bom_text(bytes).is_some()
+        || !has_binary_control_chars(bytes)
 }
 
 fn looks_like_textual_bytes(bytes: &[u8]) -> bool {
     if bytes.is_empty() || is_utf8_text(bytes) {
         return true;
+    }
+    if let Some(decoded) = decode_utf16_bom_text(bytes) {
+        return decoded
+            .chars()
+            .any(|ch| !ch.is_control() || matches!(ch, '\n' | '\r' | '\t'));
     }
 
     let printable_count = bytes
@@ -414,6 +454,25 @@ pub fn detect_mime_type(
 ) -> String {
     if bytes.is_empty() {
         return "inode/x-empty".to_string();
+    }
+
+    if lower_extension(path).as_deref() == Some("json") {
+        if let Some(is_binary) = json_binary_override(bytes) {
+            if is_binary {
+                return "application/octet-stream".to_string();
+            }
+            if has_valid_json_text(bytes) {
+                return "application/json".to_string();
+            }
+            return "text/plain".to_string();
+        }
+        if has_valid_json_text(bytes) {
+            return "application/json".to_string();
+        }
+        if has_decodable_text(bytes) && looks_like_textual_bytes(bytes) {
+            return "text/plain".to_string();
+        }
+        return "application/octet-stream".to_string();
     }
 
     if is_zip_archive(bytes) {
@@ -482,12 +541,57 @@ fn should_prefer_text_mime(
         && (mime_type.starts_with("video/") || mime_type == "application/octet-stream")
 }
 
+fn has_valid_json_text(bytes: &[u8]) -> bool {
+    if bytes.len() > JSON_VALIDATION_MAX_BYTES {
+        return false;
+    }
+
+    serde_json::from_slice::<serde_json::Value>(bytes).is_ok()
+        || decode_utf16_bom_text(bytes)
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+            .is_some()
+}
+
+fn is_wrapped_invalid_json_string_text(bytes: &[u8]) -> bool {
+    !bytes.contains(&0)
+        && !bytes.contains(&0xFF)
+        && bytes.starts_with(b"[\"")
+        && bytes.ends_with(b"\"]")
+        && bytes.len() >= 8
+}
+
+fn json_binary_override(bytes: &[u8]) -> Option<bool> {
+    if has_valid_json_text(bytes) || decode_utf16_bom_text(bytes).is_some() {
+        return Some(false);
+    }
+
+    if bytes.contains(&0) {
+        return Some(true);
+    }
+
+    if bytes.contains(&0xFF) && (bytes.len() <= 5 || bytes.len() > 1024) {
+        return Some(true);
+    }
+
+    if is_wrapped_invalid_json_string_text(bytes) {
+        return Some(false);
+    }
+
+    None
+}
+
 fn detect_is_binary(
     path: &Path,
     bytes: &[u8],
     detected_format: FileFormat,
     programming_language: Option<&str>,
 ) -> bool {
+    if lower_extension(path).as_deref() == Some("json")
+        && let Some(is_binary) = json_binary_override(bytes)
+    {
+        return is_binary;
+    }
+
     if is_textual_format(detected_format) {
         return false;
     }
@@ -589,7 +693,19 @@ fn detect_is_script(
         })
         || matches!(
             programming_language,
-            Some("Shell" | "Python" | "Ruby" | "Perl" | "PHP" | "PowerShell" | "Awk")
+            Some(
+                "Shell"
+                    | "Bash"
+                    | "Zsh"
+                    | "Fish"
+                    | "Ksh"
+                    | "Python"
+                    | "Ruby"
+                    | "Perl"
+                    | "PHP"
+                    | "PowerShell"
+                    | "Awk"
+            )
         )
 }
 
@@ -645,7 +761,10 @@ fn detect_file_type(
 
     if is_text {
         if lower_extension(path).as_deref() == Some("json") {
-            return "JSON text data".to_string();
+            if has_valid_json_text(bytes) {
+                return "JSON text data".to_string();
+            }
+            return text_file_type(bytes);
         }
         if lower_extension(path).as_deref() == Some("xml") {
             return "XML text data".to_string();
@@ -669,7 +788,7 @@ fn detect_file_type(
             return text_file_type(bytes);
         }
         if programming_language.is_some() && !is_media {
-            return text_file_type(bytes);
+            return source_file_type(programming_language, bytes);
         }
         return text_file_type(bytes);
     }
@@ -697,6 +816,8 @@ fn is_textual_source_candidate(path: &Path, programming_language: Option<&str>) 
             | "containerfile.core"
             | "apkbuild"
             | "podfile"
+            | "jamfile"
+            | "jamroot"
             | "meson.build"
             | "build"
             | "workspace"
@@ -825,6 +946,7 @@ fn is_source_like_language(language: &str) -> bool {
             | "TeX"
             | "Dockerfile"
             | "Makefile"
+            | "Jamfile"
     )
 }
 
@@ -1121,11 +1243,39 @@ fn script_file_type(programming_language: Option<&str>, bytes: &[u8]) -> String 
         Some("Perl") => format!("perl script, {suffix}"),
         Some("PHP") => format!("php script, {suffix}"),
         Some("Shell") => format!("shell script, {suffix}"),
+        Some("Bash") => format!("bash script, {suffix}"),
+        Some("Zsh") => format!("zsh script, {suffix}"),
+        Some("Fish") => format!("fish script, {suffix}"),
+        Some("Ksh") => format!("ksh script, {suffix}"),
         Some("JavaScript") => format!("javascript script, {suffix}"),
         Some("TypeScript") => format!("typescript script, {suffix}"),
         Some("PowerShell") => format!("powershell script, {suffix}"),
         Some("Awk") => format!("awk script, {suffix}"),
         _ => format!("script, {suffix}"),
+    }
+}
+
+fn source_file_type(programming_language: Option<&str>, bytes: &[u8]) -> String {
+    let suffix = text_label(bytes);
+    match programming_language {
+        Some("C") => format!("C source, {suffix}"),
+        Some("C++") => format!("C++ source, {suffix}"),
+        Some("Java") => format!("Java source, {suffix}"),
+        Some("C#") => format!("C# source, {suffix}"),
+        Some("F#") => format!("F# source, {suffix}"),
+        Some("Go") => format!("Go source, {suffix}"),
+        Some("Rust") => format!("Rust source, {suffix}"),
+        Some("Starlark") => format!("Starlark source, {suffix}"),
+        Some("CMake") => format!("CMake source, {suffix}"),
+        Some("Meson") => format!("Meson source, {suffix}"),
+        Some("Nix") => format!("Nix source, {suffix}"),
+        Some("Groovy") => format!("Groovy source, {suffix}"),
+        Some("Makefile") => format!("Makefile source, {suffix}"),
+        Some("Dockerfile") => format!("Dockerfile source, {suffix}"),
+        Some("Jamfile") => format!("Jamfile source, {suffix}"),
+        Some("Batchfile") => format!("Batchfile source, {suffix}"),
+        Some(language) => format!("{language} source, {suffix}"),
+        None => text_file_type(bytes),
     }
 }
 
@@ -2217,6 +2367,91 @@ mod tests {
     }
 
     #[test]
+    fn test_classify_file_info_does_not_label_invalid_json_text_as_json() {
+        let classification =
+            classify_file_info(Path::new("broken.json"), b"{ definitely not json\n");
+
+        assert_eq!(classification.mime_type, "text/plain");
+        assert_eq!(classification.file_type, "UTF-8 Unicode text");
+        assert!(classification.is_text);
+        assert!(!classification.is_binary);
+    }
+
+    #[test]
+    fn test_classify_file_info_does_not_label_binary_json_garbage_as_json() {
+        let classification =
+            classify_file_info(Path::new("broken.json"), &[0xff, 0x00, 0x01, 0x02]);
+
+        assert_eq!(classification.mime_type, "application/octet-stream");
+        assert_eq!(classification.file_type, "data");
+        assert!(classification.is_binary);
+        assert!(!classification.is_text);
+    }
+
+    #[test]
+    fn test_classify_file_info_treats_valid_utf16_json_with_bom_as_text() {
+        let classification = classify_file_info(
+            Path::new("utf16.json"),
+            &[
+                0xFF, 0xFE, 0x5B, 0x00, 0x22, 0x00, 0xE9, 0x00, 0x22, 0x00, 0x5D, 0x00,
+            ],
+        );
+
+        assert!(!classification.is_binary);
+        assert!(classification.is_text);
+        assert_eq!(classification.mime_type, "application/json");
+        assert_eq!(classification.file_type, "JSON text data");
+    }
+
+    #[test]
+    fn test_classify_file_info_treats_small_valid_json_literals_as_text() {
+        let classification = classify_file_info(Path::new("true.json"), b"true");
+
+        assert!(!classification.is_binary);
+        assert!(classification.is_text);
+        assert_eq!(classification.mime_type, "application/json");
+        assert_eq!(classification.file_type, "JSON text data");
+    }
+
+    #[test]
+    fn test_classify_file_info_treats_json_wrapped_invalid_utf8_sequences_as_text() {
+        let classification = classify_file_info(
+            Path::new("wrapped.json"),
+            &[0x5B, 0x22, 0xE6, 0x97, 0xA5, 0xD1, 0x88, 0xFA, 0x22, 0x5D],
+        );
+
+        assert!(!classification.is_binary);
+        assert!(classification.is_text);
+        assert_eq!(classification.mime_type, "text/plain");
+        assert_eq!(classification.file_type, "text, with no line terminators");
+    }
+
+    #[test]
+    fn test_classify_file_info_keeps_lone_ff_json_byte_binary() {
+        let classification =
+            classify_file_info(Path::new("lone-ff.json"), &[0x5B, 0x22, 0xFF, 0x22, 0x5D]);
+
+        assert!(classification.is_binary);
+        assert!(!classification.is_text);
+        assert_eq!(classification.mime_type, "application/octet-stream");
+        assert_eq!(classification.file_type, "data");
+    }
+
+    #[test]
+    fn test_classify_file_info_keeps_nul_heavy_crash_json_binary() {
+        let classification = classify_file_info(
+            Path::new("crash.json"),
+            &[
+                0xFE, 0x90, 0x00, 0x00, 0x00, 0x93, 0x5B, 0x5B, 0x32, 0x38, 0x36,
+            ],
+        );
+
+        assert!(classification.is_binary);
+        assert!(!classification.is_text);
+        assert_eq!(classification.mime_type, "application/octet-stream");
+    }
+
+    #[test]
     fn test_classify_file_info_treats_dockerfile_as_source() {
         let classification = classify_file_info(Path::new("Dockerfile"), b"FROM scratch\n");
 
@@ -2226,7 +2461,10 @@ mod tests {
         );
         assert!(classification.is_source);
         assert!(!classification.is_script);
-        assert_eq!(classification.file_type, "UTF-8 Unicode text");
+        assert_eq!(
+            classification.file_type,
+            "Dockerfile source, UTF-8 Unicode text"
+        );
     }
 
     #[test]
@@ -2309,6 +2547,10 @@ mod tests {
     fn test_classify_file_info_classifies_common_build_manifests() {
         let gradle = classify_file_info(Path::new("build.gradle"), b"plugins { id 'java' }\n");
         let flake = classify_file_info(Path::new("flake.nix"), b"{ inputs, ... }: {}\n");
+        let cmake = classify_file_info(
+            Path::new("toolchain.cmake"),
+            b"set(CMAKE_CXX_STANDARD 20)\n",
+        );
         let gitmodules = classify_file_info(
             Path::new(".gitmodules"),
             b"[submodule \"demo\"]\n\tpath = vendor/demo\n",
@@ -2317,15 +2559,62 @@ mod tests {
         assert_eq!(gradle.programming_language.as_deref(), Some("Groovy"));
         assert!(gradle.is_source);
         assert_eq!(gradle.mime_type, "text/plain");
+        assert_eq!(gradle.file_type, "Groovy source, UTF-8 Unicode text");
 
         assert_eq!(flake.programming_language.as_deref(), Some("Nix"));
         assert!(flake.is_source);
         assert_eq!(flake.mime_type, "text/plain");
+        assert_eq!(flake.file_type, "Nix source, UTF-8 Unicode text");
+
+        assert_eq!(cmake.programming_language.as_deref(), Some("CMake"));
+        assert!(cmake.is_source);
+        assert_eq!(cmake.file_type, "CMake source, UTF-8 Unicode text");
 
         assert_eq!(gitmodules.programming_language, None);
         assert!(gitmodules.is_text);
         assert!(!gitmodules.is_source);
         assert_eq!(gitmodules.file_type, "Git configuration text");
+    }
+
+    #[test]
+    fn test_classify_file_info_labels_cpp_headers_and_ipp_separately() {
+        let header = classify_file_info(
+            Path::new("include/demo.hpp"),
+            b"#pragma once\nclass Demo {};\n",
+        );
+        let ipp = classify_file_info(
+            Path::new("include/detail/demo.ipp"),
+            b"template <class T> void parse() {}\n",
+        );
+
+        assert_eq!(header.programming_language.as_deref(), Some("C++"));
+        assert!(header.is_source);
+        assert!(!header.is_script);
+        assert_eq!(header.file_type, "C++ source, UTF-8 Unicode text");
+
+        assert_eq!(ipp.programming_language, None);
+        assert!(!ipp.is_source);
+        assert!(!ipp.is_script);
+        assert_eq!(ipp.file_type, "UTF-8 Unicode text");
+    }
+
+    #[test]
+    fn test_classify_file_info_preserves_specific_shell_family_labels() {
+        let bash = classify_file_info(Path::new("bin/run"), b"#!/usr/bin/env bash\necho hi\n");
+
+        assert_eq!(bash.programming_language.as_deref(), Some("Bash"));
+        assert!(bash.is_script);
+        assert_eq!(bash.file_type, "bash script, UTF-8 Unicode text executable");
+    }
+
+    #[test]
+    fn test_classify_file_info_marks_jamfile_as_source() {
+        let jamfile = classify_file_info(Path::new("Jamfile"), b"lib boost_json ;\n");
+
+        assert_eq!(jamfile.programming_language.as_deref(), Some("Jamfile"));
+        assert!(jamfile.is_source);
+        assert!(!jamfile.is_script);
+        assert_eq!(jamfile.file_type, "Jamfile source, UTF-8 Unicode text");
     }
 
     #[test]
