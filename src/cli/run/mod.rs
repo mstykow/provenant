@@ -352,7 +352,7 @@ pub fn run() -> Result<()> {
     if cli.only_findings {
         progress.post_scan_step("Filtering to files with findings...");
         record_detail_timing(&progress, "output-filter:only-findings", || {
-            apply_only_findings_filter(&mut scan_result.files);
+            apply_only_findings_for_mode(&mut scan_result.files, cli.from_json);
         });
     }
 
@@ -476,12 +476,14 @@ pub fn run() -> Result<()> {
 
     progress.finalize_step("Collecting license detections...");
     let license_detections = record_detail_timing(&progress, "finalize:license-detections", || {
-        if cli.from_json {
-            let _ = preloaded_license_detections;
-            collect_top_level_license_detections(&scan_result.files)
-        } else {
-            collect_top_level_license_detections(&scan_result.files)
-        }
+        let preserve_preloaded_top_level_detections = cli.from_json
+            && (cli.only_findings || !cli.include.is_empty() || !cli.exclude.is_empty());
+        collect_top_level_license_detections_for_mode(
+            &scan_result.files,
+            preloaded_license_detections,
+            preserve_preloaded_top_level_detections,
+            cli.from_json && cli.dir_path.len() > 1,
+        )
     });
 
     let should_recompute_license_references = cli.from_json
@@ -603,6 +605,29 @@ pub fn run() -> Result<()> {
     );
 
     Ok(())
+}
+
+fn apply_only_findings_for_mode(files: &mut Vec<FileInfo>, from_json: bool) {
+    if from_json {
+        files.clear();
+    } else {
+        apply_only_findings_filter(files);
+    }
+}
+
+fn collect_top_level_license_detections_for_mode(
+    files: &[FileInfo],
+    preloaded: Vec<crate::models::TopLevelLicenseDetection>,
+    preserve_preloaded: bool,
+    clear_for_multi_input_replay: bool,
+) -> Vec<crate::models::TopLevelLicenseDetection> {
+    if clear_for_multi_input_replay {
+        Vec::new()
+    } else if preserve_preloaded {
+        preloaded
+    } else {
+        collect_top_level_license_detections(files)
+    }
 }
 
 #[cfg(feature = "golden-tests")]
