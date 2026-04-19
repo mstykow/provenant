@@ -15,14 +15,18 @@ use super::url::OutputURL;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct OutputFileInfo {
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub base_name: String,
+    #[serde(default)]
     pub extension: String,
     pub path: String,
     #[serde(rename = "type")]
     pub file_type: crate::models::FileType,
     pub mime_type: Option<String>,
     pub file_type_label: Option<String>,
+    #[serde(default)]
     pub size: u64,
     pub date: Option<String>,
     pub sha1: Option<String>,
