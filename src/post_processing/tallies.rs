@@ -326,7 +326,7 @@ fn compute_direct_file_tallies(file: &FileInfo) -> Tallies {
         copyrights: build_direct_tally_entries(copyright_values(file), true),
         holders: build_direct_tally_entries(holder_values(file), true),
         authors: build_direct_tally_entries(author_values(file), true),
-        programming_language: build_direct_tally_entries(programming_language_values(file), true),
+        programming_language: build_direct_tally_entries(programming_language_values(file), false),
     }
 }
 
