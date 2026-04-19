@@ -257,8 +257,32 @@ fn normalize_loaded_json_scan_prefixes_multi_resource_relative_replay_with_virtu
     let paths: Vec<_> = loaded.files.iter().map(|file| file.path.as_str()).collect();
     assert_eq!(
         paths,
-        vec!["virtual_root/README.md", "virtual_root/src/lib.rs"]
+        vec![
+            "virtual_root/README.md",
+            "virtual_root/src/lib.rs",
+            "virtual_root",
+            "virtual_root/src",
+        ]
     );
+}
+
+#[test]
+fn normalize_loaded_json_scan_adds_virtual_root_directory_for_relative_replay() {
+    let mut loaded = JsonScanInput {
+        headers: vec![],
+        files: vec![output_json_file("README.md", crate::models::FileType::File)],
+        packages: vec![],
+        dependencies: vec![],
+        license_detections: vec![],
+        license_references: vec![],
+        license_rule_references: vec![],
+        excluded_count: 0,
+    };
+
+    normalize_loaded_json_scan(&mut loaded, false, false);
+
+    let paths: Vec<_> = loaded.files.iter().map(|file| file.path.as_str()).collect();
+    assert_eq!(paths, vec!["README.md"]);
 }
 
 #[test]
@@ -317,12 +341,47 @@ fn load_and_merge_json_inputs_namespaces_multiple_replay_inputs() {
             "virtual_root/codebase-1/README",
             "virtual_root/codebase-2/README.adoc",
             "virtual_root/codebase-2/bench/data/gsoc-2018.json",
+            "virtual_root/codebase-2/bench",
+            "virtual_root/codebase-2/bench/data",
+            "virtual_root/codebase-2",
         ]
     );
 
     let _ = fs::remove_file(first);
     let _ = fs::remove_file(second);
     let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn load_scan_from_json_synthesizes_missing_ancestor_directories() {
+    let temp_path = std::env::temp_dir().join("provenant-from-json-missing-dirs-test.json");
+    let content = json!({
+        "files": [
+            {
+                "path": "virtual_root/.github/actions/build/action.yml",
+                "type": "file",
+                "scan_errors": []
+            }
+        ],
+        "packages": [],
+        "dependencies": [],
+        "license_detections": [],
+        "license_references": [],
+        "license_rule_references": []
+    });
+    fs::write(&temp_path, content.to_string()).expect("write json fixture");
+
+    let parsed = load_scan_from_json(temp_path.to_str().expect("utf-8 path"))
+        .expect("from-json loading should synthesize ancestor directories");
+
+    let paths: Vec<_> = parsed.files.iter().map(|file| file.path.as_str()).collect();
+    assert!(paths.contains(&"virtual_root"));
+    assert!(paths.contains(&"virtual_root/.github"));
+    assert!(paths.contains(&"virtual_root/.github/actions"));
+    assert!(paths.contains(&"virtual_root/.github/actions/build"));
+    assert!(paths.contains(&"virtual_root/.github/actions/build/action.yml"));
+
+    let _ = fs::remove_file(temp_path);
 }
 
 #[test]

@@ -1,5 +1,6 @@
 use anyhow::{Result, anyhow};
 use serde::Deserialize;
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -285,6 +286,7 @@ pub(crate) fn load_scan_from_json(path: &str) -> Result<JsonScanInput> {
         .map_err(|e| anyhow!("Input JSON scan file is not valid JSON: {path}: {e}"))?;
 
     backfill_imported_file_identity_fields(&mut parsed);
+    synthesize_missing_directory_entries(&mut parsed);
 
     Ok(parsed)
 }
@@ -319,6 +321,115 @@ fn backfill_imported_file_identity_fields(scan: &mut JsonScanInput) {
     }
 }
 
+fn synthesize_missing_directory_entries(scan: &mut JsonScanInput) {
+    let mut seen_paths: HashSet<String> = scan.files.iter().map(|file| file.path.clone()).collect();
+    let mut missing_dirs = Vec::new();
+
+    for file in &scan.files {
+        let mut current = Path::new(&file.path).parent();
+        while let Some(parent) = current.and_then(|parent| parent.to_str()) {
+            if parent.is_empty() || parent == "." {
+                break;
+            }
+            if seen_paths.insert(parent.to_string()) {
+                missing_dirs.push(parent.to_string());
+            }
+            current = Path::new(parent).parent();
+        }
+    }
+
+    missing_dirs.sort_by_key(|path| path.matches('/').count());
+    for dir_path in missing_dirs {
+        scan.files.push(directory_output_json_file(&dir_path));
+    }
+
+    ensure_replay_root_directories(scan);
+}
+
+fn ensure_replay_root_directories(scan: &mut JsonScanInput) {
+    let mut seen_paths: HashSet<String> = scan.files.iter().map(|file| file.path.clone()).collect();
+    let mut replay_roots = HashSet::new();
+
+    for file in &scan.files {
+        let path = file.path.as_str();
+        if path == "virtual_root" || path.starts_with("virtual_root/") {
+            replay_roots.insert("virtual_root".to_string());
+            if let Some(rest) = path.strip_prefix("virtual_root/")
+                && let Some((first_component, _)) = rest.split_once('/')
+                && first_component.starts_with("codebase-")
+            {
+                replay_roots.insert(format!("virtual_root/{first_component}"));
+            }
+        }
+    }
+
+    let mut replay_roots: Vec<_> = replay_roots.into_iter().collect();
+    replay_roots.sort_by_key(|path| path.matches('/').count());
+    for root in replay_roots {
+        if seen_paths.insert(root.clone()) {
+            scan.files.push(directory_output_json_file(&root));
+        }
+    }
+}
+
+fn directory_output_json_file(path: &str) -> OutputFileInfo {
+    let path_obj = Path::new(path);
+    let name = path_obj
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(path)
+        .to_string();
+
+    OutputFileInfo {
+        name: name.clone(),
+        base_name: name,
+        extension: String::new(),
+        path: path.to_string(),
+        file_type: FileType::Directory,
+        mime_type: None,
+        file_type_label: None,
+        size: 0,
+        date: None,
+        sha1: None,
+        md5: None,
+        sha256: None,
+        sha1_git: None,
+        programming_language: None,
+        package_data: Vec::new(),
+        license_expression: None,
+        license_detections: Vec::new(),
+        license_clues: Vec::new(),
+        percentage_of_license_text: None,
+        copyrights: Vec::new(),
+        holders: Vec::new(),
+        authors: Vec::new(),
+        emails: Vec::new(),
+        urls: Vec::new(),
+        for_packages: Vec::new(),
+        scan_errors: Vec::new(),
+        license_policy: None,
+        is_generated: None,
+        is_binary: None,
+        is_text: None,
+        is_archive: None,
+        is_media: None,
+        is_source: None,
+        is_script: None,
+        files_count: None,
+        dirs_count: None,
+        size_count: None,
+        source_count: None,
+        is_legal: false,
+        is_manifest: false,
+        is_readme: false,
+        is_top_level: false,
+        is_key_file: false,
+        is_community: false,
+        facets: Vec::new(),
+        tallies: None,
+    }
+}
+
 pub(crate) fn normalize_loaded_json_scan(
     loaded: &mut JsonScanInput,
     strip_root: bool,
@@ -346,6 +457,8 @@ pub(crate) fn normalize_loaded_json_scan(
     if full_root {
         trim_loaded_json_full_root_paths(loaded);
     }
+
+    synthesize_missing_directory_entries(loaded);
 
     normalize_loaded_header_errors(loaded, &original_paths);
 }

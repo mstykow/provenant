@@ -32,6 +32,11 @@ where
         .filter(|entry| entry.file_type == crate::models::FileType::File && keep_file(entry))
         .map(|entry| entry.path.clone())
         .collect();
+    let kept_directory_paths: HashSet<String> = files
+        .iter()
+        .filter(|entry| entry.file_type == crate::models::FileType::Directory && keep_file(entry))
+        .map(|entry| entry.path.clone())
+        .collect();
 
     let tree = directory_tree::DirectoryTree::build(files);
 
@@ -58,7 +63,10 @@ where
 
     files.retain(|entry| match entry.file_type {
         crate::models::FileType::File => kept_file_paths.contains(&entry.path),
-        crate::models::FileType::Directory => dir_has_kept_descendant.contains(&entry.path),
+        crate::models::FileType::Directory => {
+            kept_directory_paths.contains(&entry.path)
+                || dir_has_kept_descendant.contains(&entry.path)
+        }
     });
 }
 
