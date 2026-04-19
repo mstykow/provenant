@@ -66,7 +66,7 @@ These topics are implemented. Some remain useful as completed historical records
   - Status: 🟢 Complete — the current ScanCode-facing CLI surface and explicit `Won't do` scope decisions are implemented and recorded in [CLI_PLAN.md](infrastructure/CLI_PLAN.md); workflow-level verification follow-up is tracked separately in [CLI_VERIFICATION_SCORECARD.md](infrastructure/CLI_VERIFICATION_SCORECARD.md)
 
 - **[CLI_VERIFICATION_SCORECARD.md](infrastructure/CLI_VERIFICATION_SCORECARD.md)** - Maintained end-to-end CLI workflow verification checklist
-  - Status: ⚪ Initial canonical reference — use this for current high-value CLI workflow compare targets, especially imported-JSON replay, file-info parity, and post-scan workflow verification beyond parser-family and output-format scorecards
+  - Status: 🟢 Complete maintained checklist/reference — the current high-value CLI workflow rows are verified, and this file remains the canonical place to track future CLI workflow compare targets, regressions, and newly added shared ScanCode-facing workflow surfaces
 
 - **[PROGRESS_TRACKING_PLAN.md](infrastructure/PROGRESS_TRACKING_PLAN.md)** - Enhanced progress reporting
   - Status: 🟢 Implemented — progress manager, mode handling, summary/reporting, and integration tests are tracked in the plan document
