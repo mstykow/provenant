@@ -53,9 +53,11 @@ struct ContextState {
     summary_json: PathBuf,
     summary_tsv: PathBuf,
     target_dir: PathBuf,
+    auxiliary_dir: PathBuf,
     target_resolved_paths: Vec<PathBuf>,
     target_input_args: Vec<String>,
     target_uses_staged_inputs: bool,
+    auxiliary_scan_inputs: Vec<AuxiliaryScanInput>,
     target_label: String,
     target_source_label: String,
     target_revision: String,
@@ -84,6 +86,13 @@ struct ContextState {
     scancode_cache_dir: Option<PathBuf>,
     scancode_cache_key: Option<String>,
     scancode_cache_hit: bool,
+}
+
+#[derive(Debug, Clone)]
+struct AuxiliaryScanInput {
+    original_arg: String,
+    resolved_path: PathBuf,
+    staged_name: String,
 }
 
 struct CommandRunOutput {
@@ -330,6 +339,7 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
     } else {
         vec![".".to_string()]
     };
+    let auxiliary_scan_inputs = auxiliary_scan_inputs(&scan_args)?;
 
     let project_root = project_root();
     let artifact_root = project_root.join(".provenant/compare-runs");
@@ -378,6 +388,7 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
     } else {
         run_dir.join(&slug)
     };
+    let auxiliary_dir = run_dir.join("auxiliary-inputs");
     let target_source_label = if has_target_paths {
         if target_resolved_paths.len() > 1 {
             "Target paths"
@@ -417,9 +428,11 @@ fn prepare_context(args: &Args, scan_args: Vec<String>) -> Result<ContextState> 
         summary_json: comparison_dir.join("summary.json"),
         summary_tsv: comparison_dir.join("summary.tsv"),
         target_dir,
+        auxiliary_dir,
         target_resolved_paths,
         target_input_args,
         target_uses_staged_inputs,
+        auxiliary_scan_inputs,
         target_label,
         target_source_label,
         target_revision: String::new(),
@@ -481,6 +494,7 @@ fn prepare_target(context: &mut ContextState, args: &Args) -> Result<CheckoutGua
                 materialize_file(resolved_target, &context.target_dir.join(staged_name))?;
             }
         }
+        materialize_auxiliary_scan_inputs(context)?;
         return Ok(CheckoutGuard {
             cache_dir: None,
             target_dir: context.target_dir.clone(),
@@ -504,6 +518,7 @@ fn prepare_target(context: &mut ContextState, args: &Args) -> Result<CheckoutGua
     }
     context.target_revision = resolved_sha.clone();
     context.repo_manifest.resolved_sha = Some(resolved_sha);
+    materialize_auxiliary_scan_inputs(context)?;
     Ok(CheckoutGuard {
         cache_dir: Some(cache_dir),
         target_dir: context.target_dir.clone(),
@@ -1030,6 +1045,8 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
         .collect();
     let metrics = [
         "license_detections",
+        "license_clues",
+        "license_policy",
         "package_data",
         "copyrights",
         "holders",
@@ -1622,6 +1639,7 @@ fn metric_values(entry: &Value, metric: &str) -> Vec<String> {
                     .or_else(|| item.get("identifier"))
                     .and_then(Value::as_str)
                     .map(normalize_license_expression),
+                "license_clues" | "license_policy" => Some(canonical_value_string(item)),
                 "package_data" => package_identity(item)
                     .map(str::to_string)
                     .or_else(|| package_fallback_identity(item)),
@@ -2271,7 +2289,7 @@ fn write_manifest(context: &ContextState) -> Result<()> {
 
 fn build_scancode_cli_args(context: &ContextState) -> Vec<String> {
     let mut args = vec!["--json-pp".to_string(), "/out/scancode.json".to_string()];
-    args.extend(context.scan_args.clone());
+    args.extend(rewrite_scan_args(context, AuxiliaryPathFlavor::Scancode));
     args.extend(scancode_ignore_args());
     if context.target_uses_staged_inputs {
         args.extend(
@@ -2314,8 +2332,12 @@ fn build_scancode_docker_args(context: &ContextState) -> Vec<String> {
         format!("{}:/input:ro", context.target_dir.display()),
         "-v".to_string(),
         format!("{}:/out", context.raw_dir.display()),
-        context.scancode_image.clone(),
     ]);
+    if !context.auxiliary_scan_inputs.is_empty() {
+        args.push("-v".to_string());
+        args.push(format!("{}:/aux:ro", context.auxiliary_dir.display()));
+    }
+    args.push(context.scancode_image.clone());
     args.extend(build_scancode_cli_args(context));
     args
 }
@@ -2327,10 +2349,105 @@ fn build_provenant_args(context: &ContextState) -> Vec<String> {
         context.provenant_json.display().to_string(),
         "--no-license-index-cache".to_string(),
     ];
-    args.extend(context.scan_args.clone());
+    args.extend(rewrite_scan_args(context, AuxiliaryPathFlavor::Provenant));
     args.extend(provenant_ignore_args());
     args.extend(input_args);
     args
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AuxiliaryPathFlavor {
+    Provenant,
+    Scancode,
+}
+
+fn materialize_auxiliary_scan_inputs(context: &ContextState) -> Result<()> {
+    if context.auxiliary_scan_inputs.is_empty() {
+        return Ok(());
+    }
+    fs::create_dir_all(&context.auxiliary_dir).with_context(|| {
+        format!(
+            "failed to create staged auxiliary input directory {}",
+            context.auxiliary_dir.display()
+        )
+    })?;
+    for input in &context.auxiliary_scan_inputs {
+        materialize_file(
+            &input.resolved_path,
+            &context.auxiliary_dir.join(&input.staged_name),
+        )?;
+    }
+    Ok(())
+}
+
+fn rewrite_scan_args(context: &ContextState, flavor: AuxiliaryPathFlavor) -> Vec<String> {
+    context
+        .scan_args
+        .iter()
+        .map(|arg| rewrite_auxiliary_scan_arg(arg, context, flavor))
+        .collect()
+}
+
+fn rewrite_auxiliary_scan_arg(
+    arg: &str,
+    context: &ContextState,
+    flavor: AuxiliaryPathFlavor,
+) -> String {
+    let Some(aux) = context.auxiliary_scan_inputs.iter().find(|input| {
+        input.original_arg == arg || input.resolved_path.display().to_string() == arg
+    }) else {
+        return arg.to_string();
+    };
+
+    match flavor {
+        AuxiliaryPathFlavor::Provenant => context
+            .auxiliary_dir
+            .join(&aux.staged_name)
+            .display()
+            .to_string(),
+        AuxiliaryPathFlavor::Scancode => format!("/aux/{}", aux.staged_name),
+    }
+}
+
+fn auxiliary_scan_inputs(scan_args: &[String]) -> Result<Vec<AuxiliaryScanInput>> {
+    let mut path_args = Vec::new();
+    let mut index = 0;
+    while index < scan_args.len() {
+        let arg = &scan_args[index];
+        if scan_arg_uses_local_path(arg) {
+            let Some(raw_value) = scan_args.get(index + 1) else {
+                bail!("scan flag {arg} requires a path argument");
+            };
+            let candidate_path = PathBuf::from(raw_value);
+            if candidate_path.exists() {
+                path_args.push((raw_value.clone(), realpath(&candidate_path)?));
+            }
+            index += 2;
+            continue;
+        }
+        index += 1;
+    }
+
+    let resolved_paths: Vec<PathBuf> = path_args.iter().map(|(_, path)| path.clone()).collect();
+    let staged_names = staged_input_names(&resolved_paths);
+    Ok(path_args
+        .into_iter()
+        .zip(staged_names)
+        .map(
+            |((original_arg, resolved_path), staged_name)| AuxiliaryScanInput {
+                original_arg,
+                resolved_path,
+                staged_name,
+            },
+        )
+        .collect())
+}
+
+fn scan_arg_uses_local_path(arg: &str) -> bool {
+    matches!(
+        arg,
+        "--license-policy" | "--license-rules-path" | "--custom-template"
+    )
 }
 
 fn staged_input_names(paths: &[PathBuf]) -> Vec<String> {
@@ -2682,9 +2799,13 @@ mod tests {
                 "/tmp/project/.provenant/compare-runs/run-id/comparison/summary.tsv",
             ),
             target_dir: PathBuf::from("/tmp/target"),
+            auxiliary_dir: PathBuf::from(
+                "/tmp/project/.provenant/compare-runs/run-id/auxiliary-inputs",
+            ),
             target_resolved_paths: Vec::new(),
             target_input_args: vec![".".to_string()],
             target_uses_staged_inputs: false,
+            auxiliary_scan_inputs: Vec::new(),
             target_label: "/tmp/target".to_string(),
             target_source_label: "Target path".to_string(),
             target_revision: "current local checkout".to_string(),
@@ -3351,6 +3472,92 @@ mod tests {
         assert!(
             provenant_args.ends_with(&["00-first.json".to_string(), "01-second.json".to_string(),])
         );
+    }
+
+    #[test]
+    fn build_scancode_and_provenant_args_rewrite_auxiliary_policy_path() {
+        let mut context = test_context();
+        context.scan_args = vec![
+            "--from-json".to_string(),
+            "--license-policy".to_string(),
+            "/tmp/original/policy.yml".to_string(),
+            "--filter-clues".to_string(),
+        ];
+        context.auxiliary_dir = PathBuf::from("/tmp/run/auxiliary-inputs");
+        context.auxiliary_scan_inputs = vec![AuxiliaryScanInput {
+            original_arg: "/tmp/original/policy.yml".to_string(),
+            resolved_path: PathBuf::from("/tmp/original/policy.yml"),
+            staged_name: "policy.yml".to_string(),
+        }];
+
+        let scancode_args = build_scancode_cli_args(&context);
+        let provenant_args = build_provenant_args(&context);
+
+        assert!(scancode_args.contains(&"/aux/policy.yml".to_string()));
+        assert!(provenant_args.contains(&"/tmp/run/auxiliary-inputs/policy.yml".to_string()));
+    }
+
+    #[test]
+    fn prepare_target_materializes_auxiliary_scan_inputs() {
+        let temp_root = unique_temp_dir("auxiliary-scan-inputs");
+        fs::create_dir_all(&temp_root).unwrap();
+        let fixture = temp_root.join("fixture.json");
+        let policy = temp_root.join("policy.yml");
+        fs::write(&fixture, "fixture contents").unwrap();
+        fs::write(&policy, "license_policies: []\n").unwrap();
+
+        let mut context = test_context();
+        context.target_dir = temp_root.join("run/input");
+        context.auxiliary_dir = temp_root.join("run/auxiliary-inputs");
+        context.target_resolved_paths = vec![fixture.clone()];
+        context.target_input_args = vec!["fixture.json".to_string()];
+        context.target_uses_staged_inputs = true;
+        context.auxiliary_scan_inputs = vec![AuxiliaryScanInput {
+            original_arg: policy.display().to_string(),
+            resolved_path: policy.clone(),
+            staged_name: "policy.yml".to_string(),
+        }];
+        let args = Args {
+            repo_url: None,
+            target_path: vec![fixture.clone()],
+            scancode_cache_identity: Some("fixture@rev".to_string()),
+            repo_ref: None,
+            profile: None,
+            scan_args: vec![
+                "--from-json".to_string(),
+                "--license-policy".to_string(),
+                policy.display().to_string(),
+            ],
+        };
+
+        let _guard = prepare_target(&mut context, &args).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(context.auxiliary_dir.join("policy.yml")).unwrap(),
+            "license_policies: []\n"
+        );
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn metric_values_support_license_policy_and_license_clues() {
+        let entry = json!({
+            "license_policy": [
+                {"icon": "ok", "license_key": "boost-1.0", "label": "Approved"}
+            ],
+            "license_clues": [
+                {"license_expression": "boost-1.0", "start_line": 1, "end_line": 2}
+            ]
+        });
+
+        let policy_values = metric_values(&entry, "license_policy");
+        let clue_values = metric_values(&entry, "license_clues");
+
+        assert_eq!(policy_values.len(), 1);
+        assert!(policy_values[0].contains("boost-1.0"));
+        assert_eq!(clue_values.len(), 1);
+        assert!(clue_values[0].contains("license_expression"));
     }
 
     #[test]
