@@ -18,6 +18,7 @@ cargo run --manifest-path xtask/Cargo.toml --bin <command> -- ...
 | `update-license-golden`      | Maintain license golden YAML fixtures with parity-gated or Rust-owned update modes.            |
 | `validate-urls`              | Validate URLs in production docs and Rust docstrings.                                          |
 | `generate-supported-formats` | Regenerate `docs/SUPPORTED_FORMATS.md` from parser metadata.                                   |
+| `generate-benchmark-chart`   | Regenerate the benchmark duration-vs-files SVG from timing rows in `docs/BENCHMARKS.md`.       |
 | `generate-index-artifact`    | Regenerate the embedded license index artifact from ScanCode rules and licenses.               |
 
 ## `benchmark-target`
@@ -320,6 +321,17 @@ Examples:
 ```bash
 cargo run --manifest-path xtask/Cargo.toml --bin generate-supported-formats
 cargo run --manifest-path xtask/Cargo.toml --bin generate-supported-formats -- --check
+```
+
+## `generate-benchmark-chart`
+
+`generate-benchmark-chart` regenerates `docs/benchmarks/scan-duration-vs-files.svg` from the benchmark timing rows in `docs/BENCHMARKS.md`.
+
+Examples:
+
+```bash
+cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart
+cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart -- --check
 ```
 
 ## `generate-index-artifact`
