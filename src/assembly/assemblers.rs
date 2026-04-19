@@ -577,7 +577,7 @@ pub static ASSEMBLERS: &[AssemblerConfig] = &[
     AssemblerConfig {
         datasource_ids: &[DatasourceId::RpmSpecfile],
         sibling_file_patterns: &["*.spec"],
-        mode: AssemblyMode::SiblingMerge,
+        mode: AssemblyMode::OnePerPackageData,
     },
     // Debian source packages (nested merge via debian/ directory)
     AssemblerConfig {
@@ -780,6 +780,11 @@ pub static ASSEMBLERS: &[AssemblerConfig] = &[
         sibling_file_patterns: &["Packages", "Packages.db", "rpmdb.sqlite"],
         mode: AssemblyMode::OnePerPackageData,
     },
+    AssemblerConfig {
+        datasource_ids: &[DatasourceId::RpmArchive],
+        sibling_file_patterns: &["*.rpm", "*.srpm"],
+        mode: AssemblyMode::OnePerPackageData,
+    },
     // Debian installed package databases
     AssemblerConfig {
         datasource_ids: &[DatasourceId::DebianDeb],
@@ -842,7 +847,6 @@ pub static UNASSEMBLED_DATASOURCE_IDS: &[DatasourceId] = &[
     DatasourceId::MicrosoftCabinet,
     DatasourceId::MozillaXpi,
     DatasourceId::NsisInstaller,
-    DatasourceId::RpmArchive,
     DatasourceId::SharShellArchive,
     DatasourceId::SquashfsDiskImage,
     // Supplementary metadata (not primary package definitions)
