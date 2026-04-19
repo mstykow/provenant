@@ -915,6 +915,14 @@ pub(super) fn extract_author_colon_blocks(
         }
 
         let tail = cap.name("tail").map(|m| m.as_str()).unwrap_or("").trim();
+        let label_lower = line
+            .split(':')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
+        let single_line_original_or_primary = !tail.is_empty()
+            && (label_lower.contains("original") || label_lower.contains("primary"));
 
         let label_raw = line.split(':').next().unwrap_or("").trim();
         let label_is_all_caps = !label_raw.is_empty()
@@ -935,7 +943,7 @@ pub(super) fn extract_author_colon_blocks(
         }
         let mut j = i + 1;
         let mut added = 0usize;
-        while j < prepared_cache.len() {
+        while !single_line_original_or_primary && j < prepared_cache.len() {
             let Some(next_prepared) = prepared_cache.get_by_index(j) else {
                 break;
             };
@@ -1666,6 +1674,13 @@ pub(super) fn extract_created_by_authors(
             continue;
         }
 
+        let who_lower = who.to_ascii_lowercase();
+        let has_email_like =
+            who.contains('@') || (who_lower.contains(" at ") && who_lower.contains(" dot "));
+        if !has_email_like {
+            continue;
+        }
+
         let Some(author) = refine_author_with_optional_handle_suffix(who) else {
             continue;
         };
@@ -1710,14 +1725,32 @@ pub(super) fn extract_toml_author_assignment_authors(
         if rhs.is_empty() {
             continue;
         }
+        let rhs_lower = rhs.to_ascii_lowercase();
+        if rhs_lower.contains("new author") || rhs_lower.contains("name:") {
+            continue;
+        }
 
-        for value_cap in QUOTED_VALUE_RE.captures_iter(rhs) {
-            let value = value_cap.name("value").map(|m| m.as_str()).unwrap_or("");
-            if value.is_empty() {
-                continue;
-            }
+        let values: Vec<String> = QUOTED_VALUE_RE
+            .captures_iter(rhs)
+            .filter_map(|value_cap| {
+                value_cap
+                    .name("value")
+                    .map(|m| m.as_str().trim().to_string())
+            })
+            .filter(|value| !value.is_empty())
+            .collect();
+        if values.is_empty() {
+            continue;
+        }
 
-            let Some(author) = refine_author_with_optional_handle_suffix(value) else {
+        let candidates: Vec<String> = if values.len() == 1 {
+            values
+        } else {
+            vec![values.join(" ")]
+        };
+
+        for candidate in candidates {
+            let Some(author) = refine_author_with_optional_handle_suffix(&candidate) else {
                 continue;
             };
             if seen.insert(author.clone()) {

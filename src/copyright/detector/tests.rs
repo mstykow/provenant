@@ -5142,3 +5142,30 @@ fn test_extract_original_author_before_maintained_by_clause() {
         "authors: {authors:?}"
     );
 }
+
+#[test]
+fn test_created_by_without_handle_or_email_is_rejected() {
+    let (_copyrights, _holders, authors) =
+        detect_copyrights_from_text("Created by IntelliJ IDEA\n");
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_created_by_tool_banner_is_rejected() {
+    let (_copyrights, _holders, authors) =
+        detect_copyrights_from_text("created by Grunt and NPM.\n");
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_extract_toml_authors_array_as_single_combined_detection() {
+    let input = "authors = [\"The Rand Project Developers\", \"The Rust Project Developers\"]\n";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors
+            .iter()
+            .any(|a| a.author == "The Rand Project Developers The Rust Project Developers"),
+        "authors: {authors:?}"
+    );
+}
