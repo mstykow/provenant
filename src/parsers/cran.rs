@@ -276,7 +276,7 @@ fn parse_dependencies(deps_str: &str, scope: Option<&str>) -> Vec<Dependency> {
 }
 
 static VERSION_CONSTRAINT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^([a-zA-Z0-9.]+)\s*\(([><=]+)\s*([0-9.]+)\)\s*$").expect("valid regex")
+    Regex::new(r"^([a-zA-Z0-9.]+)\s*\(([><=]+)\s*([^)]+)\)\s*$").expect("valid regex")
 });
 
 /// Examples:
