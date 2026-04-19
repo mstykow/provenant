@@ -7,45 +7,167 @@
     "qualifiers": {
       "arch": "x86_64"
     },
+    "subpath": null,
+    "primary_language": null,
+    "description": null,
+    "release_date": null,
     "parties": [],
+    "keywords": [],
+    "homepage_url": null,
+    "download_url": null,
     "size": 235748,
+    "sha1": null,
+    "md5": null,
+    "sha256": null,
+    "sha512": null,
+    "bug_tracking_url": null,
+    "code_view_url": null,
+    "vcs_url": null,
+    "copyright": null,
+    "holder": null,
+    "declared_license_expression": "bsd-3-clause AND gpl-2.0-or-later AND gpl-3.0-or-later AND lgpl-2.0-or-later",
+    "declared_license_expression_spdx": "BSD-3-Clause AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.0-or-later",
+    "license_detections": [
+      {
+        "license_expression": "bsd-3-clause AND gpl-2.0-or-later AND gpl-3.0-or-later AND lgpl-2.0-or-later",
+        "license_expression_spdx": "BSD-3-Clause AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.0-or-later",
+        "matches": [
+          {
+            "license_expression": "bsd-3-clause AND gpl-2.0-or-later AND gpl-3.0-or-later AND lgpl-2.0-or-later",
+            "license_expression_spdx": "BSD-3-Clause AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.0-or-later",
+            "from_file": null,
+            "start_line": 1,
+            "end_line": 1,
+            "matcher": "parser-declared-license",
+            "score": 100.0,
+            "matched_length": 13,
+            "match_coverage": 100.0,
+            "rule_relevance": 100,
+            "rule_identifier": "parser-declared-license",
+            "rule_url": null,
+            "matched_text": "GPLv3+ and GPLv3+ with exceptions and GPLv2+ with exceptions and LGPLv2+ and BSD",
+            "matched_text_diagnostics": null,
+            "referenced_filenames": null
+          }
+        ],
+        "detection_log": [],
+        "identifier": null
+      }
+    ],
+    "other_license_expression": null,
+    "other_license_expression_spdx": null,
+    "other_license_detections": [],
     "extracted_license_statement": "GPLv3+ and GPLv3+ with exceptions and GPLv2+ with exceptions and LGPLv2+ and BSD",
+    "notice_text": null,
     "source_packages": ["gcc-13.1.1-2.fc38.src.rpm"],
     "file_references": [
       {
-        "path": "/lib64/libgcc_s-13-20230511.so.1"
+        "path": "/lib64/libgcc_s-13-20230511.so.1",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/lib64/libgcc_s.so.1"
+        "path": "/lib64/libgcc_s.so.1",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/usr/lib/.build-id"
+        "path": "/usr/lib/.build-id",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/usr/lib/.build-id/d8"
+        "path": "/usr/lib/.build-id/d8",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/usr/lib/.build-id/d8/b84f24cd65c389cb4c8346e2118daef1dccfee"
+        "path": "/usr/lib/.build-id/d8/b84f24cd65c389cb4c8346e2118daef1dccfee",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/usr/share/licenses/libgcc"
+        "path": "/usr/share/licenses/libgcc",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/usr/share/licenses/libgcc/COPYING"
+        "path": "/usr/share/licenses/libgcc/COPYING",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/usr/share/licenses/libgcc/COPYING.LIB"
+        "path": "/usr/share/licenses/libgcc/COPYING.LIB",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/usr/share/licenses/libgcc/COPYING.RUNTIME"
+        "path": "/usr/share/licenses/libgcc/COPYING.RUNTIME",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/usr/share/licenses/libgcc/COPYING3"
+        "path": "/usr/share/licenses/libgcc/COPYING3",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/usr/share/licenses/libgcc/COPYING3.LIB"
+        "path": "/usr/share/licenses/libgcc/COPYING3.LIB",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       }
     ],
+    "is_private": false,
+    "is_virtual": false,
+    "extra_data": null,
+    "dependencies": [],
+    "repository_homepage_url": null,
+    "repository_download_url": null,
+    "api_data_url": null,
     "datasource_id": "rpm_installed_database_sqlite",
     "purl": "pkg:rpm/fedora/libgcc@13.1.1-2.fc38?arch=x86_64"
   }

@@ -25,9 +25,35 @@
     "vcs_url": null,
     "copyright": null,
     "holder": null,
-    "declared_license_expression": null,
-    "declared_license_expression_spdx": null,
-    "license_detections": [],
+    "declared_license_expression": "mit",
+    "declared_license_expression_spdx": "MIT",
+    "license_detections": [
+      {
+        "license_expression": "mit",
+        "license_expression_spdx": "MIT",
+        "matches": [
+          {
+            "license_expression": "mit",
+            "license_expression_spdx": "MIT",
+            "from_file": null,
+            "start_line": 1,
+            "end_line": 1,
+            "matcher": "parser-declared-license",
+            "score": 100.0,
+            "matched_length": 1,
+            "match_coverage": 100.0,
+            "rule_relevance": 100,
+            "rule_identifier": "parser-declared-license",
+            "rule_url": null,
+            "matched_text": "MIT",
+            "matched_text_diagnostics": null,
+            "referenced_filenames": null
+          }
+        ],
+        "detection_log": [],
+        "identifier": null
+      }
+    ],
     "other_license_expression": null,
     "other_license_expression_spdx": null,
     "other_license_detections": [],
@@ -36,108 +62,306 @@
     "source_packages": ["fedora-modular-repos-26-0.4.module_39876f37.src.rpm"],
     "file_references": [
       {
-        "path": "/etc/pki/rpm-gpg"
+        "path": "/etc/pki/rpm-gpg",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-26-fedora"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-26-fedora",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-aarch64"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-aarch64",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-armhfp"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-armhfp",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-i386"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-i386",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-ppc64"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-ppc64",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-ppc64le"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-ppc64le",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-primary"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-primary",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-s390x"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-s390x",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-secondary"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-secondary",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-x86_64"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-25-x86_64",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-aarch64"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-aarch64",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-armhfp"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-armhfp",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-i386"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-i386",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-ppc64"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-ppc64",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-ppc64le"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-ppc64le",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-primary"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-primary",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-s390x"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-s390x",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-secondary"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-secondary",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-x86_64"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-26-x86_64",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-aarch64"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-aarch64",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-armhfp"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-armhfp",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-i386"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-i386",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-ppc64"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-ppc64",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-ppc64le"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-ppc64le",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-primary"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-primary",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-s390x"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-s390x",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-x86_64"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-27-x86_64",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-modularity"
+        "path": "/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-modularity",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/yum.repos.d"
+        "path": "/etc/yum.repos.d",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/etc/yum.repos.d/fedora-modular.repo"
+        "path": "/etc/yum.repos.d/fedora-modular.repo",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/usr/share/licenses/fedora-modular-repos"
+        "path": "/usr/share/licenses/fedora-modular-repos",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       },
       {
-        "path": "/usr/share/licenses/fedora-modular-repos/LICENSE"
+        "path": "/usr/share/licenses/fedora-modular-repos/LICENSE",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": null
       }
     ],
     "is_private": false,
     "is_virtual": false,
-    "extra_data": {},
+    "extra_data": null,
     "dependencies": [
       {
         "purl": "pkg:rpm/system-modular-release(26)",
@@ -148,7 +372,7 @@
         "is_pinned": false,
         "is_direct": true,
         "resolved_package": null,
-        "extra_data": {}
+        "extra_data": null
       }
     ],
     "repository_homepage_url": null,

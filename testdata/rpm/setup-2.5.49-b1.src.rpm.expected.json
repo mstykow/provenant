@@ -1,45 +1,107 @@
 [
   {
     "type": "rpm",
+    "namespace": null,
     "name": "setup",
     "version": "2.5.49-b1",
     "qualifiers": {
-      "arch": "noarch",
-      "source": "true"
+      "source": "true",
+      "arch": "noarch"
     },
+    "subpath": null,
+    "primary_language": null,
     "description": "The setup package contains a set of important system configuration and\nsetup files, such as passwd, group, and profile.",
+    "release_date": null,
     "parties": [
       {
         "type": "person",
         "role": "packager",
         "name": "yui",
-        "email": "yui@po.yui.mine.nu"
+        "email": "yui@po.yui.mine.nu",
+        "url": null,
+        "organization": null,
+        "organization_url": null,
+        "timezone": null
       }
     ],
     "keywords": ["System Environment/Base"],
+    "homepage_url": null,
+    "download_url": null,
     "size": 111295,
+    "sha1": null,
+    "md5": null,
+    "sha256": null,
+    "sha512": null,
+    "bug_tracking_url": null,
+    "code_view_url": null,
+    "vcs_url": null,
+    "copyright": null,
+    "holder": null,
+    "declared_license_expression": "licenseref-provenant-public-domain",
+    "declared_license_expression_spdx": "licenseref-provenant-public-domain",
+    "license_detections": [
+      {
+        "license_expression": "licenseref-provenant-public-domain",
+        "license_expression_spdx": "licenseref-provenant-public-domain",
+        "matches": [
+          {
+            "license_expression": "licenseref-provenant-public-domain",
+            "license_expression_spdx": "licenseref-provenant-public-domain",
+            "from_file": null,
+            "start_line": 1,
+            "end_line": 1,
+            "matcher": "parser-declared-license",
+            "score": 100.0,
+            "matched_length": 2,
+            "match_coverage": 100.0,
+            "rule_relevance": 100,
+            "rule_identifier": "parser-declared-license",
+            "rule_url": null,
+            "matched_text": "public domain",
+            "matched_text_diagnostics": null,
+            "referenced_filenames": null
+          }
+        ],
+        "detection_log": [],
+        "identifier": null
+      }
+    ],
+    "other_license_expression": null,
+    "other_license_expression_spdx": null,
+    "other_license_detections": [],
     "extracted_license_statement": "public domain",
+    "notice_text": null,
+    "source_packages": [],
+    "file_references": [],
+    "is_private": false,
+    "is_virtual": false,
     "extra_data": {
-      "build_host": "mai.yui.mine.nu",
       "build_time": 1143601083,
-      "source_urls": ["setup-2.5.49.tar.bz2"]
+      "source_urls": ["setup-2.5.49.tar.bz2"],
+      "build_host": "mai.yui.mine.nu"
     },
     "dependencies": [
       {
         "purl": "pkg:rpm/bash",
+        "extracted_requirement": null,
         "scope": "install",
         "is_runtime": true,
         "is_optional": false,
         "is_pinned": false,
-        "is_direct": true
+        "is_direct": true,
+        "resolved_package": null,
+        "extra_data": null
       },
       {
         "purl": "pkg:rpm/tcsh",
+        "extracted_requirement": null,
         "scope": "install",
         "is_runtime": true,
         "is_optional": false,
         "is_pinned": false,
-        "is_direct": true
+        "is_direct": true,
+        "resolved_package": null,
+        "extra_data": null
       },
       {
         "purl": "pkg:rpm/rpmlib(CompressedFileNames)@3.0.4-1",
@@ -48,9 +110,14 @@
         "is_runtime": true,
         "is_optional": false,
         "is_pinned": true,
-        "is_direct": true
+        "is_direct": true,
+        "resolved_package": null,
+        "extra_data": null
       }
     ],
+    "repository_homepage_url": null,
+    "repository_download_url": null,
+    "api_data_url": null,
     "datasource_id": "rpm_archive",
     "purl": "pkg:rpm/setup@2.5.49-b1?arch=noarch&source=true"
   }
