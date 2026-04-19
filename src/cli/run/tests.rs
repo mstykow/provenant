@@ -509,6 +509,90 @@ fn from_json_recomputes_top_level_uniques_even_without_shaping_flags() {
 }
 
 #[test]
+fn from_json_only_findings_clears_files_for_replay_output() {
+    let mut file = json_file("project/package.json", crate::models::FileType::File);
+    file.license_expression = Some("mit".to_string());
+    let mut files = vec![file];
+
+    apply_only_findings_for_mode(&mut files, true);
+
+    assert!(files.is_empty());
+}
+
+#[test]
+fn native_only_findings_still_keeps_files_with_findings() {
+    let mut file = json_file("project/package.json", crate::models::FileType::File);
+    file.license_expression = Some("mit".to_string());
+    let mut files = vec![file];
+
+    apply_only_findings_for_mode(&mut files, false);
+
+    assert_eq!(files.len(), 1);
+}
+
+#[test]
+fn from_json_only_findings_preserves_preloaded_top_level_detections() {
+    let files = vec![json_file(
+        "project/package.json",
+        crate::models::FileType::File,
+    )];
+    let preloaded = vec![crate::models::TopLevelLicenseDetection {
+        identifier: "mit-id".to_string(),
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        detection_count: 1,
+        detection_log: vec![],
+        reference_matches: vec![],
+    }];
+
+    let detections = collect_top_level_license_detections_for_mode(&files, preloaded, true, false);
+
+    assert_eq!(detections.len(), 1);
+    assert_eq!(detections[0].license_expression, "mit");
+}
+
+#[test]
+fn from_json_filtered_replay_preserves_preloaded_top_level_detections() {
+    let files = vec![json_file(
+        "project/package.json",
+        crate::models::FileType::File,
+    )];
+    let preloaded = vec![crate::models::TopLevelLicenseDetection {
+        identifier: "mit-id".to_string(),
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        detection_count: 1,
+        detection_log: vec![],
+        reference_matches: vec![],
+    }];
+
+    let detections = collect_top_level_license_detections_for_mode(&files, preloaded, true, false);
+
+    assert_eq!(detections.len(), 1);
+    assert_eq!(detections[0].license_expression, "mit");
+}
+
+#[test]
+fn from_json_multi_input_replay_clears_top_level_detections() {
+    let files = vec![json_file(
+        "project/package.json",
+        crate::models::FileType::File,
+    )];
+    let preloaded = vec![crate::models::TopLevelLicenseDetection {
+        identifier: "mit-id".to_string(),
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        detection_count: 1,
+        detection_log: vec![],
+        reference_matches: vec![],
+    }];
+
+    let detections = collect_top_level_license_detections_for_mode(&files, preloaded, false, true);
+
+    assert!(detections.is_empty());
+}
+
+#[test]
 fn from_json_recomputes_top_level_outputs_after_manifest_reference_following() {
     let file0 = json_file("project/Cargo.toml", crate::models::FileType::File);
     let file1 = json_file("project/LICENSE", crate::models::FileType::File);
@@ -1015,6 +1099,9 @@ fn build_collection_exclude_patterns_skips_vcs_metadata_directories() {
     fs::create_dir_all(scan_root.join(".git")).unwrap();
     fs::write(scan_root.join("src").join("main.rs"), "fn main() {}\n").unwrap();
     fs::write(scan_root.join(".git").join("index"), b"git index contents").unwrap();
+    fs::write(scan_root.join(".gitignore"), "target/\n").unwrap();
+    fs::create_dir_all(scan_root.join("nested")).unwrap();
+    fs::write(scan_root.join("nested").join(".gitignore"), "*.log\n").unwrap();
 
     let config = CacheConfig::from_scan_root(&scan_root);
     let exclude_patterns = build_collection_exclude_patterns(&scan_root, config.root_dir());
@@ -1026,6 +1113,12 @@ fn build_collection_exclude_patterns_skips_vcs_metadata_directories() {
             .iter()
             .all(|(path, _)| !path.starts_with(scan_root.join(".git")))
     );
+    assert!(
+        collected
+            .files
+            .iter()
+            .all(|(path, _)| path.file_name().and_then(|name| name.to_str()) != Some(".gitignore"))
+    );
     assert_eq!(collected.file_count(), 1);
-    assert!(collected.excluded_count >= 1);
+    assert!(collected.excluded_count >= 3);
 }
