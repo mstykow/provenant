@@ -1084,7 +1084,7 @@ mod tests {
         );
         assert_eq!(
             pkg.declared_license_expression_spdx.as_deref(),
-            Some("licenseref-provenant-public-domain")
+            Some("LicenseRef-provenant-public-domain")
         );
         assert_eq!(pkg.license_detections.len(), 1);
     }

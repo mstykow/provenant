@@ -197,7 +197,7 @@ pub(crate) fn normalize_spdx_expression(statement: &str) -> Option<NormalizedDec
 
     Some(NormalizedDeclaredLicense::new(
         render_canonical_expression(&declared_ast),
-        render_canonical_expression(&declared_spdx_ast),
+        render_canonical_spdx_expression(&declared_spdx_ast),
     ))
 }
 
@@ -632,6 +632,36 @@ fn render_canonical_expression(expression: &LicenseExpression) -> String {
     }
 }
 
+fn render_canonical_spdx_expression(expression: &LicenseExpression) -> String {
+    match expression {
+        LicenseExpression::License(key) => key.clone(),
+        LicenseExpression::LicenseRef(key) => render_spdx_license_ref(key),
+        LicenseExpression::With { left, right } => format!(
+            "{} WITH {}",
+            render_canonical_spdx_expression(left),
+            render_canonical_spdx_expression(right)
+        ),
+        LicenseExpression::And { .. } => {
+            render_flat_boolean_chain_spdx(expression, BooleanOperator::And)
+        }
+        LicenseExpression::Or { .. } => {
+            render_flat_boolean_chain_spdx(expression, BooleanOperator::Or)
+        }
+    }
+}
+
+fn render_spdx_license_ref(key: &str) -> String {
+    const LICENSE_REF_PREFIX_LEN: usize = "licenseref-".len();
+
+    if key.len() >= LICENSE_REF_PREFIX_LEN
+        && key[..LICENSE_REF_PREFIX_LEN].eq_ignore_ascii_case("licenseref-")
+    {
+        format!("LicenseRef-{}", &key[LICENSE_REF_PREFIX_LEN..])
+    } else {
+        key.to_string()
+    }
+}
+
 fn render_flat_boolean_chain(expression: &LicenseExpression, operator: BooleanOperator) -> String {
     let mut parts = Vec::new();
     collect_boolean_chain(
@@ -690,6 +720,47 @@ fn render_boolean_operand(
             BooleanOperator::And => format!("({})", render_canonical_expression(expression)),
         },
         _ => render_canonical_expression(expression),
+    }
+}
+
+fn render_flat_boolean_chain_spdx(
+    expression: &LicenseExpression,
+    operator: BooleanOperator,
+) -> String {
+    let mut parts = Vec::new();
+    collect_boolean_chain(
+        expression,
+        operator,
+        &mut parts,
+        &mut RecursionGuard::depth_only(),
+    );
+
+    let separator = match operator {
+        BooleanOperator::And => " AND ",
+        BooleanOperator::Or => " OR ",
+    };
+
+    parts
+        .into_iter()
+        .map(|part| render_boolean_operand_spdx(part, operator))
+        .collect::<Vec<_>>()
+        .join(separator)
+}
+
+fn render_boolean_operand_spdx(
+    expression: &LicenseExpression,
+    parent_operator: BooleanOperator,
+) -> String {
+    match expression {
+        LicenseExpression::And { .. } => match parent_operator {
+            BooleanOperator::And => render_canonical_spdx_expression(expression),
+            BooleanOperator::Or => format!("({})", render_canonical_spdx_expression(expression)),
+        },
+        LicenseExpression::Or { .. } => match parent_operator {
+            BooleanOperator::Or => render_canonical_spdx_expression(expression),
+            BooleanOperator::And => format!("({})", render_canonical_spdx_expression(expression)),
+        },
+        _ => render_canonical_spdx_expression(expression),
     }
 }
 
@@ -769,6 +840,22 @@ mod tests {
 
         assert_eq!(combined.declared_license_expression, "mit");
         assert_eq!(combined.declared_license_expression_spdx, "MIT");
+    }
+
+    #[test]
+    fn test_normalize_spdx_declared_license_preserves_licenseref_prefix_case() {
+        let (declared, declared_spdx, detections) =
+            normalize_spdx_declared_license(Some("LicenseRef-scancode-custom-1 OR MIT"));
+
+        assert_eq!(
+            declared.as_deref(),
+            Some("licenseref-scancode-custom-1 OR mit")
+        );
+        assert_eq!(
+            declared_spdx.as_deref(),
+            Some("LicenseRef-scancode-custom-1 OR MIT")
+        );
+        assert_eq!(detections.len(), 1);
     }
 
     #[test]
