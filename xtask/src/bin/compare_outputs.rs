@@ -137,6 +137,13 @@ struct ScalarDifferenceEntry {
     provenant: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+struct TopLevelSectionDifferenceEntry {
+    section: String,
+    scancode: Option<Value>,
+    provenant: Option<Value>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct ScancodeCacheEntryManifest {
     cache_key: String,
@@ -976,6 +983,19 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
         .scan_args
         .iter()
         .any(|arg| matches!(arg.as_str(), "--info" | "--mark-source"));
+    let row2_mode = context.scan_args.iter().any(|arg| {
+        matches!(
+            arg.as_str(),
+            "--classify"
+                | "--summary"
+                | "--license-clarity-score"
+                | "--tallies"
+                | "--tallies-key-files"
+                | "--tallies-with-details"
+                | "--tallies-by-facet"
+                | "--facet"
+        )
+    });
     let scancode_files = files_by_path(&scancode);
     let provenant_files = files_by_path(&provenant);
     let scancode_resources = resources_by_path(&scancode);
@@ -1037,6 +1057,21 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
         "size_count",
         "source_count",
     ];
+    let classify_metrics = [
+        "is_legal",
+        "is_manifest",
+        "is_readme",
+        "is_top_level",
+        "is_key_file",
+        "is_community",
+    ];
+    let row2_value_metrics = ["facets", "tallies"];
+    let row2_top_level_sections = [
+        "summary",
+        "tallies",
+        "tallies_of_key_files",
+        "tallies_by_facet",
+    ];
     let mut lower_counts: BTreeMap<String, Vec<CountDeltaEntry>> = metrics
         .iter()
         .map(|m| ((*m).to_string(), Vec::new()))
@@ -1053,6 +1088,17 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
         .iter()
         .map(|m| ((*m).to_string(), Vec::new()))
         .collect();
+    let mut classify_value_differences: BTreeMap<String, Vec<ScalarDifferenceEntry>> =
+        classify_metrics
+            .iter()
+            .map(|m| ((*m).to_string(), Vec::new()))
+            .collect();
+    let mut row2_value_differences: BTreeMap<String, Vec<ScalarDifferenceEntry>> =
+        row2_value_metrics
+            .iter()
+            .map(|m| ((*m).to_string(), Vec::new()))
+            .collect();
+    let mut row2_top_level_differences = Vec::new();
 
     for path in &common_paths {
         let scancode_file = scancode_files.get(path).unwrap();
@@ -1119,6 +1165,46 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
                         provenant: provenant_value,
                     });
             }
+        }
+        for metric in classify_metrics {
+            let scancode_value = classify_scalar_value(scancode_resource, metric);
+            let provenant_value = classify_scalar_value(provenant_resource, metric);
+            if scancode_value != provenant_value {
+                classify_value_differences
+                    .get_mut(metric)
+                    .unwrap()
+                    .push(ScalarDifferenceEntry {
+                        path: path.clone(),
+                        scancode: scancode_value,
+                        provenant: provenant_value,
+                    });
+            }
+        }
+        for metric in row2_value_metrics {
+            let scancode_value = structured_field_value(scancode_resource, metric);
+            let provenant_value = structured_field_value(provenant_resource, metric);
+            if scancode_value != provenant_value {
+                row2_value_differences
+                    .get_mut(metric)
+                    .unwrap()
+                    .push(ScalarDifferenceEntry {
+                        path: path.clone(),
+                        scancode: scancode_value,
+                        provenant: provenant_value,
+                    });
+            }
+        }
+    }
+
+    for section in row2_top_level_sections {
+        let scancode_value = canonical_section_value(&scancode, section);
+        let provenant_value = canonical_section_value(&provenant, section);
+        if scancode_value != provenant_value {
+            row2_top_level_differences.push(TopLevelSectionDifferenceEntry {
+                section: section.to_string(),
+                scancode: scancode_value,
+                provenant: provenant_value,
+            });
         }
     }
 
@@ -1194,6 +1280,9 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
     if info_mode {
         potential_regressions += only_scancode_resource_paths.len();
         potential_higher += only_provenant_resource_paths.len();
+    }
+    if row2_mode {
+        potential_regressions += row2_top_level_differences.len();
     }
     for metric in metrics {
         let missing = value_differences[metric]
@@ -1272,6 +1361,53 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
             "common-path resources where info values differ",
         ));
     }
+    let mut classify_metric_summary = Map::new();
+    for metric in classify_metrics {
+        let differences = classify_value_differences[metric].len();
+        classify_metric_summary.insert(
+            metric.to_string(),
+            json!({
+                "value_differences": differences,
+            }),
+        );
+        if row2_mode {
+            potential_regressions += differences;
+        }
+        rows.push(tsv_row(
+            &format!("classify_{metric}_value_differences"),
+            differences as i64,
+            differences as i64,
+            0,
+            "common-path resources where classify values differ",
+        ));
+    }
+    let mut row2_metric_summary = Map::new();
+    for metric in row2_value_metrics {
+        let differences = row2_value_differences[metric].len();
+        row2_metric_summary.insert(
+            metric.to_string(),
+            json!({
+                "value_differences": differences,
+            }),
+        );
+        if row2_mode {
+            potential_regressions += differences;
+        }
+        rows.push(tsv_row(
+            &format!("row2_{metric}_value_differences"),
+            differences as i64,
+            differences as i64,
+            0,
+            "common-path resources where row-2 workflow values differ",
+        ));
+    }
+    rows.push(tsv_row(
+        "row2_top_level_section_differences",
+        row2_top_level_differences.len() as i64,
+        row2_top_level_differences.len() as i64,
+        0,
+        "top-level row-2 workflow sections with normalized JSON differences",
+    ));
     let dependency_value_differences = dependency_differences(&scancode, &provenant);
     let dependency_missing = dependency_value_differences
         .iter()
@@ -1359,6 +1495,18 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
             "info_value_differences",
             context.samples_dir.join("info_value_differences.json"),
         ),
+        (
+            "classify_value_differences",
+            context.samples_dir.join("classify_value_differences.json"),
+        ),
+        (
+            "row2_value_differences",
+            context.samples_dir.join("row2_value_differences.json"),
+        ),
+        (
+            "row2_top_level_differences",
+            context.samples_dir.join("row2_top_level_differences.json"),
+        ),
     ];
     write_pretty_json(&sample_paths[0].1, &only_scancode_paths)?;
     write_pretty_json(&sample_paths[1].1, &only_provenant_paths)?;
@@ -1368,6 +1516,9 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
     write_pretty_json(&sample_paths[5].1, &license_deltas)?;
     write_pretty_json(&sample_paths[6].1, &dependency_value_differences)?;
     write_pretty_json(&sample_paths[7].1, &info_value_differences)?;
+    write_pretty_json(&sample_paths[8].1, &classify_value_differences)?;
+    write_pretty_json(&sample_paths[9].1, &row2_value_differences)?;
+    write_pretty_json(&sample_paths[10].1, &row2_top_level_differences)?;
 
     let summary = json!({
         "comparison_status": comparison_status,
@@ -1395,6 +1546,9 @@ fn generate_comparison_artifacts(context: &ContextState) -> Result<()> {
         },
         "file_metric_summary": file_metric_summary,
         "info_metric_summary": info_metric_summary,
+        "classify_metric_summary": classify_metric_summary,
+        "row2_metric_summary": row2_metric_summary,
+        "row2_top_level_section_difference_count": row2_top_level_differences.len(),
         "top_level_regressions": top_level_regressions_map,
         "top_level_higher_counts": top_level_higher_counts,
         "top_level_license_expression_delta_count": license_deltas.len(),
@@ -1557,6 +1711,15 @@ fn normalize_license_expression(value: &str) -> String {
         || normalized.contains(" with ")
     {
         normalized
+    } else if normalized.contains(" AND ") {
+        let stripped = normalized.replace(['(', ')'], "");
+        let mut parts: Vec<_> = stripped
+            .split(" AND ")
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+            .collect();
+        parts.sort_unstable();
+        parts.join(" AND ")
     } else {
         normalized.replace(['(', ')'], "")
     }
@@ -1572,6 +1735,241 @@ fn scalar_field_value(entry: &Value, key: &str) -> Option<String> {
         _ => normalize_text(&value.to_string()),
     };
     (!normalized.is_empty()).then_some(normalized)
+}
+
+fn structured_field_value(entry: &Value, key: &str) -> Option<String> {
+    let value = entry.get(key)?;
+    if value.is_null() {
+        return None;
+    }
+    match key {
+        "facets" if value.as_array().is_some_and(|items| items.is_empty()) => None,
+        "tallies" => canonical_tallies_field_string(value),
+        _ => Some(canonical_value_string(value)),
+    }
+}
+
+fn classify_scalar_value(entry: &Value, key: &str) -> Option<String> {
+    match entry.get(key) {
+        Some(Value::Bool(flag)) => Some(flag.to_string()),
+        Some(Value::Null) | None => Some("false".to_string()),
+        Some(other) => scalar_field_value(&json!({ key: other }), key),
+    }
+}
+
+fn canonical_section_value(value: &Value, key: &str) -> Option<Value> {
+    let section = value.get(key)?;
+    match key {
+        "summary" => Some(canonicalize_summary_section(section)),
+        "tallies" | "tallies_of_key_files" => canonical_tallies_section(section),
+        "tallies_by_facet" => canonical_tallies_by_facet_section(section),
+        _ => Some(canonicalize_json_value(section)),
+    }
+}
+
+fn canonical_value_string(value: &Value) -> String {
+    serde_json::to_string(&canonicalize_json_value(value)).unwrap_or_else(|_| value.to_string())
+}
+
+fn canonicalize_json_value(value: &Value) -> Value {
+    match value {
+        Value::Array(values) => {
+            let mut normalized: Vec<Value> = values.iter().map(canonicalize_json_value).collect();
+            normalized.sort_by_cached_key(canonical_value_string);
+            Value::Array(normalized)
+        }
+        Value::Object(map) => {
+            let mut entries: Vec<_> = map.iter().collect();
+            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+            Value::Object(
+                entries
+                    .into_iter()
+                    .map(|(key, value)| (key.clone(), canonicalize_json_value(value)))
+                    .collect(),
+            )
+        }
+        _ => value.clone(),
+    }
+}
+
+fn is_empty_tallies_value(value: &Value) -> bool {
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    object
+        .values()
+        .all(|entry| entry.as_array().is_some_and(|items| items.is_empty()))
+}
+
+fn canonical_tallies_field_string(value: &Value) -> Option<String> {
+    canonical_tallies_section(value).map(|value| canonical_value_string(&value))
+}
+
+fn canonicalize_summary_section(value: &Value) -> Value {
+    let Some(object) = value.as_object() else {
+        return canonicalize_json_value(value);
+    };
+
+    let mut normalized = serde_json::Map::new();
+    for (key, section_value) in object {
+        let normalized_value = match key.as_str() {
+            "other_license_expressions" => {
+                canonicalize_tally_entry_array(section_value, "detected_license_expression")
+            }
+            "other_holders" => canonicalize_tally_entry_array(section_value, "holders"),
+            "other_languages" => {
+                canonicalize_tally_entry_array(section_value, "programming_language")
+            }
+            _ => canonicalize_json_value(section_value),
+        };
+        normalized.insert(key.clone(), normalized_value);
+    }
+
+    for key in [
+        "other_license_expressions",
+        "other_holders",
+        "other_languages",
+    ] {
+        normalized
+            .entry(key.to_string())
+            .or_insert_with(|| Value::Array(Vec::new()));
+    }
+
+    Value::Object(normalized)
+}
+
+fn canonical_tallies_section(value: &Value) -> Option<Value> {
+    let Some(object) = value.as_object() else {
+        return Some(canonicalize_json_value(value));
+    };
+
+    let mut normalized = serde_json::Map::new();
+    for key in [
+        "detected_license_expression",
+        "copyrights",
+        "holders",
+        "authors",
+        "programming_language",
+    ] {
+        let normalized_entries = object
+            .get(key)
+            .map(|entries| canonicalize_tally_entry_array(entries, key))
+            .unwrap_or_else(|| Value::Array(Vec::new()));
+        normalized.insert(key.to_string(), normalized_entries);
+    }
+
+    let normalized_value = Value::Object(normalized);
+    (!is_empty_tallies_value(&normalized_value)).then_some(normalized_value)
+}
+
+fn canonical_tallies_by_facet_section(value: &Value) -> Option<Value> {
+    let Some(array) = value.as_array() else {
+        return Some(canonicalize_json_value(value));
+    };
+
+    let mut normalized: Vec<Value> = array
+        .iter()
+        .map(|entry| {
+            let facet = entry
+                .get("facet")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let tallies = canonical_tallies_section(entry.get("tallies").unwrap_or(&Value::Null))
+                .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
+            json!({
+                "facet": facet,
+                "tallies": tallies,
+            })
+        })
+        .collect();
+    normalized.sort_by_cached_key(canonical_value_string);
+    Some(Value::Array(normalized))
+}
+
+fn canonicalize_tally_entry_array(value: &Value, kind: &str) -> Value {
+    let Some(array) = value.as_array() else {
+        return Value::Array(Vec::new());
+    };
+
+    let mut normalized: Vec<Value> = array
+        .iter()
+        .map(|entry| {
+            let count = entry.get("count").and_then(Value::as_u64).unwrap_or(0);
+            let normalized_value = entry
+                .get("value")
+                .and_then(Value::as_str)
+                .map(|text| normalize_tally_value(kind, text));
+            json!({
+                "count": count,
+                "value": normalized_value,
+            })
+        })
+        .collect();
+    normalized.sort_by_cached_key(canonical_value_string);
+    Value::Array(normalized)
+}
+
+fn normalize_tally_value(kind: &str, value: &str) -> String {
+    match kind {
+        "detected_license_expression" => normalize_license_expression(value),
+        "copyrights" => normalize_tally_copyright_value(value),
+        "holders" => normalize_text(value),
+        "authors" => normalize_text(value),
+        "programming_language" => normalize_text(value),
+        _ => normalize_text(value),
+    }
+}
+
+fn normalize_tally_copyright_value(value: &str) -> String {
+    let trimmed = value
+        .trim()
+        .trim_end_matches(" as indicated by the @authors tag");
+
+    if let Some(rest) = trimmed.strip_prefix("(c) ") {
+        let normalized_rest = rest.trim_start_matches(|ch: char| {
+            ch.is_ascii_digit() || ch == ' ' || ch == ',' || ch == '-'
+        });
+
+        if !normalized_rest.is_empty() && normalized_rest != rest {
+            return format!("(c) {}", normalized_rest.trim());
+        }
+    }
+
+    if let Some(rest) = trimmed.strip_prefix("Copyright (c) ") {
+        let normalized_rest = rest.trim_start_matches(|ch: char| {
+            ch.is_ascii_digit() || ch == ' ' || ch == ',' || ch == '-'
+        });
+
+        if !normalized_rest.is_empty() && normalized_rest != rest {
+            return format!("Copyright (c) {}", normalized_rest.trim());
+        }
+    }
+
+    if let Some(rest) = trimmed.strip_prefix("Copyright ")
+        && let Some((yearish, remainder)) = rest.split_once(',')
+        && !yearish.is_empty()
+        && yearish
+            .chars()
+            .all(|ch| ch.is_ascii_digit() || ch == ' ' || ch == ',' || ch == '-')
+    {
+        return format!("Copyright {}", remainder.trim());
+    }
+
+    if let Some(rest) = trimmed.strip_prefix("Copyright ") {
+        let mut parts = rest.rsplitn(2, ' ');
+        let trailing = parts.next().unwrap_or_default();
+        let leading = parts.next().unwrap_or_default();
+        if !leading.is_empty()
+            && trailing
+                .chars()
+                .all(|ch| ch.is_ascii_digit() || ch == ',' || ch == '-')
+        {
+            return format!("Copyright {}", leading.trim());
+        }
+    }
+
+    trimmed.to_string()
 }
 
 fn sample_values(values: &[String]) -> Vec<String> {
