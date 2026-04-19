@@ -3621,6 +3621,18 @@ fn test_name_contributed_line_is_detected_as_author() {
 }
 
 #[test]
+fn test_name_contributed_line_ignores_portions_holder_phrase() {
+    let input = "Copyright (c) 2006, Industrial Light & Magic, a division of Lucasfilm\nEntertainment Company Ltd. Portions contributed and copyright held by\nothers as indicated. All rights reserved.";
+    let (_c, _h, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.is_empty(),
+        "expected no authors, got: {:?}",
+        authors
+    );
+}
+
+#[test]
 fn test_date_by_author() {
     let content = "\
 Copyright (c) 1998 Softweyr LLC.  All rights reserved.
