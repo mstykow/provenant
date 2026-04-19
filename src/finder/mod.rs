@@ -83,6 +83,15 @@ mod tests {
     }
 
     #[test]
+    fn test_find_emails_ignores_r_slot_access_false_positives() {
+        let text = "element@arrow.fill <- element@colour\ntt@inherit.blank <- FALSE\n";
+        let config = DetectionConfig::default();
+        let emails = find_emails(text, &config);
+
+        assert!(emails.is_empty(), "emails: {emails:#?}");
+    }
+
+    #[test]
     fn test_find_urls_ignores_email_like_ftp_token() {
         let text = "See ftp.mtuci@gmail.com for details.";
         let config = DetectionConfig::default();
@@ -159,6 +168,46 @@ mod tests {
 
         assert_eq!(urls.len(), 1, "urls: {urls:#?}");
         assert_eq!(urls[0].url, "https://github.com/example/project.git");
+    }
+
+    #[test]
+    fn test_find_urls_strips_rd_url_braces() {
+        let text = r#"\\url{https://dplyr.tidyverse.org}"#;
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        assert_eq!(urls.len(), 1, "urls: {urls:#?}");
+        assert_eq!(urls[0].url, "https://dplyr.tidyverse.org/");
+    }
+
+    #[test]
+    fn test_find_urls_strips_rd_href_trailing_braces() {
+        let text = r#"\\href{https://orcid.org/0000-0003-4757-117X}{ORCID}"#;
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        assert_eq!(urls.len(), 1, "urls: {urls:#?}");
+        assert_eq!(urls[0].url, "https://orcid.org/0000-0003-4757-117X");
+    }
+
+    #[test]
+    fn test_find_urls_strips_rd_url_double_closing_braces() {
+        let text = r#"\\url{https://fred.stlouisfed.org/series/PCE}}"#;
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        assert_eq!(urls.len(), 1, "urls: {urls:#?}");
+        assert_eq!(urls[0].url, "https://fred.stlouisfed.org/series/PCE");
+    }
+
+    #[test]
+    fn test_find_urls_strips_rd_closing_brace_before_punctuation() {
+        let text = r#"\\url{https://fred.stlouisfed.org/}."#;
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        assert_eq!(urls.len(), 1, "urls: {urls:#?}");
+        assert_eq!(urls[0].url, "https://fred.stlouisfed.org/");
     }
 
     #[test]
