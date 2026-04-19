@@ -74,6 +74,50 @@ fn load_scan_from_json_reads_files_and_metadata_sections() {
 }
 
 #[test]
+fn load_scan_from_json_accepts_minimal_real_scancode_file_entries() {
+    let temp_path = std::env::temp_dir().join("provenant-from-json-real-scancode-test.json");
+    let content = json!({
+        "headers": [
+            {
+                "errors": [],
+                "warnings": [],
+                "extra_data": {
+                    "spdx_license_list_version": "3.27"
+                }
+            }
+        ],
+        "files": [
+            {
+                "path": "README",
+                "type": "file",
+                "detected_license_expression": null,
+                "detected_license_expression_spdx": null,
+                "license_detections": [],
+                "license_clues": [],
+                "percentage_of_license_text": 0,
+                "scan_errors": []
+            }
+        ],
+        "license_detections": [],
+        "packages": [],
+        "dependencies": []
+    });
+    fs::write(&temp_path, content.to_string()).expect("write json fixture");
+
+    let parsed = load_scan_from_json(temp_path.to_str().expect("utf-8 path"))
+        .expect("minimal real ScanCode JSON should load");
+
+    assert_eq!(parsed.files.len(), 1);
+    assert_eq!(parsed.files[0].path, "README");
+    assert_eq!(parsed.files[0].name, "README");
+    assert_eq!(parsed.files[0].base_name, "README");
+    assert_eq!(parsed.files[0].extension, "");
+    assert_eq!(parsed.files[0].size, 0);
+
+    let _ = fs::remove_file(temp_path);
+}
+
+#[test]
 fn normalize_loaded_json_scan_applies_strip_root_per_loaded_input() {
     let mut loaded = JsonScanInput {
         headers: vec![JsonHeaderInput {
@@ -190,6 +234,95 @@ fn normalize_loaded_json_scan_trims_full_root_display_without_absolutizing() {
             .as_deref(),
         Some("tmp/archive/root/src/main.rs")
     );
+}
+
+#[test]
+fn normalize_loaded_json_scan_prefixes_multi_resource_relative_replay_with_virtual_root() {
+    let mut loaded = JsonScanInput {
+        headers: vec![],
+        files: vec![
+            output_json_file("README.md", crate::models::FileType::File),
+            output_json_file("src/lib.rs", crate::models::FileType::File),
+        ],
+        packages: vec![],
+        dependencies: vec![],
+        license_detections: vec![],
+        license_references: vec![],
+        license_rule_references: vec![],
+        excluded_count: 0,
+    };
+
+    normalize_loaded_json_scan(&mut loaded, false, false);
+
+    let paths: Vec<_> = loaded.files.iter().map(|file| file.path.as_str()).collect();
+    assert_eq!(
+        paths,
+        vec!["virtual_root/README.md", "virtual_root/src/lib.rs"]
+    );
+}
+
+#[test]
+fn load_and_merge_json_inputs_namespaces_multiple_replay_inputs() {
+    let temp_dir = std::env::temp_dir().join("provenant-from-json-merge-test");
+    let _ = fs::create_dir_all(&temp_dir);
+    let first = temp_dir.join("first.json");
+    let second = temp_dir.join("second.json");
+
+    fs::write(
+        &first,
+        json!({
+            "files": [
+                {"path": "README", "type": "file", "scan_errors": []}
+            ],
+            "packages": [],
+            "dependencies": [],
+            "license_detections": [],
+            "license_references": [],
+            "license_rule_references": []
+        })
+        .to_string(),
+    )
+    .expect("write first json fixture");
+    fs::write(
+        &second,
+        json!({
+            "files": [
+                {"path": "README.adoc", "type": "file", "scan_errors": []},
+                {"path": "bench/data/gsoc-2018.json", "type": "file", "scan_errors": []}
+            ],
+            "packages": [],
+            "dependencies": [],
+            "license_detections": [],
+            "license_references": [],
+            "license_rule_references": []
+        })
+        .to_string(),
+    )
+    .expect("write second json fixture");
+
+    let merged = load_and_merge_json_inputs(
+        &[
+            first.to_str().expect("utf-8 path").to_string(),
+            second.to_str().expect("utf-8 path").to_string(),
+        ],
+        false,
+        false,
+    )
+    .expect("merged replay inputs should load");
+
+    let paths: Vec<_> = merged.files.iter().map(|file| file.path.as_str()).collect();
+    assert_eq!(
+        paths,
+        vec![
+            "virtual_root/codebase-1/README",
+            "virtual_root/codebase-2/README.adoc",
+            "virtual_root/codebase-2/bench/data/gsoc-2018.json",
+        ]
+    );
+
+    let _ = fs::remove_file(first);
+    let _ = fs::remove_file(second);
+    let _ = fs::remove_dir_all(temp_dir);
 }
 
 #[test]

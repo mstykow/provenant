@@ -208,10 +208,12 @@ pub(crate) fn load_and_merge_json_inputs(
     full_root: bool,
 ) -> Result<JsonScanInput> {
     let mut merged: Option<JsonScanInput> = None;
-    for input_path in input_paths {
+    let input_count = input_paths.len();
+    for (index, input_path) in input_paths.iter().enumerate() {
         let mut loaded = load_scan_from_json(input_path)?;
-        if strip_root || full_root {
-            normalize_loaded_json_scan(&mut loaded, strip_root, full_root);
+        normalize_loaded_json_scan(&mut loaded, strip_root, full_root);
+        if input_count > 1 {
+            namespace_loaded_input(&mut loaded, index + 1);
         }
 
         if let Some(acc) = &mut merged {
@@ -234,6 +236,44 @@ pub(crate) fn load_and_merge_json_inputs(
     merged.ok_or_else(|| anyhow!("No input paths provided"))
 }
 
+fn namespace_loaded_input(loaded: &mut JsonScanInput, input_index: usize) {
+    for file in &mut loaded.files {
+        file.path = namespace_loaded_resource_path(&file.path, input_index);
+
+        for package_data in &mut file.package_data {
+            for file_reference in &mut package_data.file_references {
+                file_reference.path =
+                    namespace_loaded_resource_path(&file_reference.path, input_index);
+            }
+        }
+    }
+
+    for package in &mut loaded.packages {
+        for datafile_path in &mut package.datafile_paths {
+            *datafile_path = namespace_loaded_resource_path(datafile_path, input_index);
+        }
+    }
+
+    for dependency in &mut loaded.dependencies {
+        dependency.datafile_path =
+            namespace_loaded_resource_path(&dependency.datafile_path, input_index);
+    }
+}
+
+fn namespace_loaded_resource_path(path: &str, input_index: usize) -> String {
+    let trimmed = path.trim_matches('/');
+    let relative = trimmed
+        .strip_prefix("virtual_root/")
+        .or_else(|| (trimmed == "virtual_root").then_some(""))
+        .unwrap_or(trimmed);
+    let base = format!("virtual_root/codebase-{input_index}");
+    if relative.is_empty() {
+        base
+    } else {
+        format!("{base}/{relative}")
+    }
+}
+
 pub(crate) fn load_scan_from_json(path: &str) -> Result<JsonScanInput> {
     let input_path = Path::new(path);
     if !input_path.is_file() {
@@ -241,10 +281,42 @@ pub(crate) fn load_scan_from_json(path: &str) -> Result<JsonScanInput> {
     }
 
     let content = fs::read_to_string(input_path)?;
-    let parsed: JsonScanInput = serde_json::from_str(&content)
+    let mut parsed: JsonScanInput = serde_json::from_str(&content)
         .map_err(|e| anyhow!("Input JSON scan file is not valid JSON: {path}: {e}"))?;
 
+    backfill_imported_file_identity_fields(&mut parsed);
+
     Ok(parsed)
+}
+
+fn backfill_imported_file_identity_fields(scan: &mut JsonScanInput) {
+    for file in &mut scan.files {
+        let path = Path::new(&file.path);
+
+        if file.name.is_empty() {
+            file.name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default()
+                .to_string();
+        }
+
+        if file.base_name.is_empty() {
+            file.base_name = path
+                .file_stem()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default()
+                .to_string();
+        }
+
+        if file.extension.is_empty() {
+            file.extension = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| format!(".{ext}"))
+                .unwrap_or_default();
+        }
+    }
 }
 
 pub(crate) fn normalize_loaded_json_scan(
@@ -252,6 +324,10 @@ pub(crate) fn normalize_loaded_json_scan(
     strip_root: bool,
     full_root: bool,
 ) {
+    if should_prefix_loaded_paths_with_virtual_root(loaded, strip_root, full_root) {
+        prefix_loaded_resource_paths_with_virtual_root(loaded);
+    }
+
     let original_paths: Vec<String> = loaded.files.iter().map(|file| file.path.clone()).collect();
 
     if let Some(scan_root) = derive_json_scan_root(&loaded.files)
@@ -272,6 +348,61 @@ pub(crate) fn normalize_loaded_json_scan(
     }
 
     normalize_loaded_header_errors(loaded, &original_paths);
+}
+
+fn should_prefix_loaded_paths_with_virtual_root(
+    loaded: &JsonScanInput,
+    strip_root: bool,
+    full_root: bool,
+) -> bool {
+    if strip_root || full_root || loaded.files.len() <= 1 {
+        return false;
+    }
+
+    let mut saw_relative = false;
+    for file in &loaded.files {
+        let path = Path::new(&file.path);
+        if path.is_absolute() {
+            return false;
+        }
+        if file.path == "virtual_root" || file.path.starts_with("virtual_root/") {
+            return false;
+        }
+        saw_relative = true;
+    }
+
+    saw_relative
+}
+
+fn prefix_loaded_resource_paths_with_virtual_root(loaded: &mut JsonScanInput) {
+    for file in &mut loaded.files {
+        file.path = prefix_virtual_root(&file.path);
+
+        for package_data in &mut file.package_data {
+            for file_reference in &mut package_data.file_references {
+                file_reference.path = prefix_virtual_root(&file_reference.path);
+            }
+        }
+    }
+
+    for package in &mut loaded.packages {
+        for datafile_path in &mut package.datafile_paths {
+            *datafile_path = prefix_virtual_root(datafile_path);
+        }
+    }
+
+    for dependency in &mut loaded.dependencies {
+        dependency.datafile_path = prefix_virtual_root(&dependency.datafile_path);
+    }
+}
+
+fn prefix_virtual_root(path: &str) -> String {
+    let trimmed = path.trim_start_matches('/');
+    if trimmed.is_empty() {
+        "virtual_root".to_string()
+    } else {
+        format!("virtual_root/{trimmed}")
+    }
 }
 
 fn derive_json_scan_root(files: &[OutputFileInfo]) -> Option<String> {
