@@ -272,19 +272,19 @@ pub(super) fn extract_name_contributed_authors(
             continue;
         };
         let words: Vec<&str> = who.split_whitespace().collect();
-        if words.len() < 2 {
+        if !(2..=4).contains(&words.len()) {
             continue;
         }
-        if !words.iter().all(|word| {
-            let trimmed_word = word.trim_matches(|ch: char| {
-                !ch.is_alphabetic() && ch != '\'' && ch != '’' && ch != '.' && ch != '-'
-            });
-            trimmed_word
-                .chars()
-                .next()
-                .is_some_and(|ch| ch.is_uppercase())
-                && trimmed_word.chars().any(|ch| ch.is_alphabetic())
-        }) {
+        if !words
+            .iter()
+            .all(|word| looks_like_contributed_person_name_token(word))
+        {
+            continue;
+        }
+        if words
+            .iter()
+            .any(|word| is_contributed_non_person_token(word))
+        {
             continue;
         }
         let Some(author) = refine_author(who) else {
@@ -298,6 +298,40 @@ pub(super) fn extract_name_contributed_authors(
             });
         }
     }
+}
+
+fn looks_like_contributed_person_name_token(word: &str) -> bool {
+    let trimmed_word = word.trim_matches(|ch: char| {
+        !ch.is_alphabetic() && ch != '\'' && ch != '’' && ch != '.' && ch != '-'
+    });
+    trimmed_word
+        .chars()
+        .next()
+        .is_some_and(|ch| ch.is_uppercase())
+        && trimmed_word.chars().any(|ch| ch.is_alphabetic())
+}
+
+fn is_contributed_non_person_token(word: &str) -> bool {
+    matches!(
+        word.trim_matches(|ch: char| !ch.is_alphabetic())
+            .to_ascii_lowercase()
+            .as_str(),
+        "company"
+            | "co"
+            | "corp"
+            | "corporation"
+            | "foundation"
+            | "group"
+            | "inc"
+            | "limited"
+            | "ltd"
+            | "llc"
+            | "llp"
+            | "organization"
+            | "partnership"
+            | "portions"
+            | "team"
+    )
 }
 
 pub(super) fn extract_rst_field_authors(
