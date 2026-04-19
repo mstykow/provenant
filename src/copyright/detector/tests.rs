@@ -5169,3 +5169,52 @@ fn test_extract_toml_authors_array_as_single_combined_detection() {
         "authors: {authors:?}"
     );
 }
+
+#[test]
+fn test_normalize_original_author_current_tail() {
+    let input = "* Original author: Chris Pallotta <chris@allmedia.com>\n* Current maintainer: Jim Van Zandt <jrv@vanzandt.mv.com>\n";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors
+            .iter()
+            .any(|a| a.author == "Chris Pallotta <chris@allmedia.com>"),
+        "authors: {authors:?}"
+    );
+    assert!(
+        authors
+            .iter()
+            .any(|a| a.author == "Jim Van Zandt <jrv@vanzandt.mv.com>"),
+        "authors: {authors:?}"
+    );
+    assert!(
+        !authors.iter().any(|a| a.author.contains("Current")),
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_normalize_original_authors_multiline_to_separate_people() {
+    let input = "* Original Authors: Robert Jennings <rcj@linux.vnet.ibm.com>\n*                   Seth Jennings <sjenning@linux.vnet.ibm.com>\n";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors
+            .iter()
+            .any(|a| a.author == "Robert Jennings <rcj@linux.vnet.ibm.com>"),
+        "authors: {authors:?}"
+    );
+    assert!(
+        authors
+            .iter()
+            .any(|a| a.author == "Seth Jennings <sjenning@linux.vnet.ibm.com>"),
+        "authors: {authors:?}"
+    );
+    assert!(
+        !authors.iter().any(|a| {
+            a.author
+                == "Robert Jennings <rcj@linux.vnet.ibm.com> Seth Jennings <sjenning@linux.vnet.ibm.com>"
+        }),
+        "authors: {authors:?}"
+    );
+}

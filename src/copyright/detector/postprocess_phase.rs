@@ -101,6 +101,7 @@ pub(super) fn run_phase_postprocess(
         prepared_cache,
         authors,
     );
+    super::author_heuristics::drop_shadowed_compound_email_authors(authors);
     super::author_heuristics::drop_shadowed_prefix_authors(authors);
 
     super::postprocess_transforms::merge_implemented_by_lines(

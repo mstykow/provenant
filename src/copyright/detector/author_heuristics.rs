@@ -921,8 +921,11 @@ pub(super) fn extract_author_colon_blocks(
             .unwrap_or("")
             .trim()
             .to_ascii_lowercase();
-        let single_line_original_or_primary = !tail.is_empty()
-            && (label_lower.contains("original") || label_lower.contains("primary"));
+        let original_or_primary_label =
+            label_lower.contains("original") || label_lower.contains("primary");
+        let single_line_original_or_primary = !tail.is_empty() && original_or_primary_label;
+        let collect_following_original_authors =
+            original_or_primary_label && label_lower.contains("authors");
 
         let label_raw = line.split(':').next().unwrap_or("").trim();
         let label_is_all_caps = !label_raw.is_empty()
@@ -943,7 +946,9 @@ pub(super) fn extract_author_colon_blocks(
         }
         let mut j = i + 1;
         let mut added = 0usize;
-        while !single_line_original_or_primary && j < prepared_cache.len() {
+        while (!single_line_original_or_primary || collect_following_original_authors)
+            && j < prepared_cache.len()
+        {
             let Some(next_prepared) = prepared_cache.get_by_index(j) else {
                 break;
             };
@@ -1013,6 +1018,26 @@ pub(super) fn extract_author_colon_blocks(
         if extract_author_colon_bullet_roster(&segments, start_line, authors, &mut seen) {
             i = j;
             continue;
+        }
+        if collect_following_original_authors {
+            let mut extracted_any = false;
+            for segment in &segments {
+                let Some(author) = refine_author_with_optional_handle_suffix(segment) else {
+                    continue;
+                };
+                if seen.insert(author.clone()) {
+                    authors.push(AuthorDetection {
+                        author,
+                        start_line: LineNumber::new(start_line).expect("valid"),
+                        end_line: LineNumber::new(end_line).expect("valid"),
+                    });
+                    extracted_any = true;
+                }
+            }
+            if extracted_any {
+                i = j;
+                continue;
+            }
         }
         if segments.len() == 1
             && extract_author_colon_inline_roster(&segments[0], start_line, authors, &mut seen)
@@ -2444,6 +2469,54 @@ pub(super) fn drop_shadowed_prefix_authors(authors: &mut Vec<AuthorDetection>) {
         }
     }
     *authors = kept;
+}
+
+pub(super) fn drop_shadowed_compound_email_authors(authors: &mut Vec<AuthorDetection>) {
+    if authors.is_empty() {
+        return;
+    }
+
+    static EMAIL_AUTHOR_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"[A-Z][^<\n]{0,120}?<[^>\s]+@[^>\s]+>"#).unwrap());
+    static TRAILING_CURRENT_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"^(?P<author>[A-Z][^<\n]{0,120}?<[^>\s]+@[^>\s]+>)\s+Current(?:\s+.*)?$"#)
+            .unwrap()
+    });
+    static TRAILING_MODULE_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"^(?P<author>[A-Z][^<\n]{0,120}?<[^>\s]+@[^>\s]+>)\s+MODULE_[A-Z_].*$"#)
+            .unwrap()
+    });
+
+    let existing: HashSet<String> = authors
+        .iter()
+        .map(|a| a.author.trim().to_string())
+        .collect();
+
+    authors.retain(|author| {
+        let raw = author.author.trim();
+
+        if let Some(cap) = TRAILING_CURRENT_RE.captures(raw) {
+            let clean = cap
+                .name("author")
+                .map(|m| m.as_str().trim().to_string())
+                .unwrap_or_default();
+            return clean.is_empty() || !existing.contains(&clean);
+        }
+
+        if let Some(cap) = TRAILING_MODULE_RE.captures(raw) {
+            let clean = cap
+                .name("author")
+                .map(|m| m.as_str().trim().to_string())
+                .unwrap_or_default();
+            return clean.is_empty() || !existing.contains(&clean);
+        }
+
+        let matches: Vec<String> = EMAIL_AUTHOR_RE
+            .find_iter(raw)
+            .map(|m| m.as_str().trim().to_string())
+            .collect();
+        !(matches.len() >= 2 && matches.iter().all(|candidate| existing.contains(candidate)))
+    });
 }
 
 pub(super) fn drop_ref_markup_authors(authors: &mut Vec<AuthorDetection>) {
