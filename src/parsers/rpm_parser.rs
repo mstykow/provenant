@@ -22,8 +22,10 @@
 use std::fs::{self, File};
 use std::io::{BufReader, Read};
 use std::path::Path;
+use std::sync::LazyLock;
 
 use crate::parser_warn as warn;
+use regex::Regex;
 use rpm::{IndexTag, Package, PackageMetadata, RPM_MAGIC};
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
@@ -36,6 +38,16 @@ use super::license_normalization::{
 };
 
 const PACKAGE_TYPE: PackageType = PackageType::Rpm;
+
+static RE_RPM_LICENSE_AND: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\s+and\s+").expect("valid RPM license AND regex"));
+static RE_RPM_LICENSE_OR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\s+or\s+").expect("valid RPM license OR regex"));
+static RE_RPM_LICENSE_COMMA: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\s*,\s*").expect("valid RPM license comma regex"));
+static RE_RPM_LICENSE_WITH_EXCEPTIONS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\s+with\s+exceptions\b").expect("valid RPM license exceptions regex")
+});
 
 fn default_package_data() -> PackageData {
     PackageData {
@@ -484,35 +496,72 @@ fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
     }
 }
 
-fn normalize_rpm_declared_license(statement: &str) -> Option<NormalizedDeclaredLicense> {
-    match statement.trim() {
-        "GPLv2" => Some(NormalizedDeclaredLicense::new("gpl-2.0", "GPL-2.0-only")),
-        "GPLv2+" => Some(NormalizedDeclaredLicense::new(
-            "gpl-2.0-plus",
-            "GPL-2.0-or-later",
-        )),
-        "GPLv3" => Some(NormalizedDeclaredLicense::new("gpl-3.0", "GPL-3.0-only")),
-        "GPLv3+" => Some(NormalizedDeclaredLicense::new(
-            "gpl-3.0-plus",
-            "GPL-3.0-or-later",
-        )),
-        "LGPLv2" => Some(NormalizedDeclaredLicense::new("lgpl-2.0", "LGPL-2.0-only")),
-        "LGPLv2+" => Some(NormalizedDeclaredLicense::new(
-            "lgpl-2.0-plus",
-            "LGPL-2.0-or-later",
-        )),
-        "LGPLv2.1" => Some(NormalizedDeclaredLicense::new("lgpl-2.1", "LGPL-2.1-only")),
-        "LGPLv2.1+" => Some(NormalizedDeclaredLicense::new(
-            "lgpl-2.1-plus",
-            "LGPL-2.1-or-later",
-        )),
-        "LGPLv3" => Some(NormalizedDeclaredLicense::new("lgpl-3.0", "LGPL-3.0-only")),
-        "LGPLv3+" => Some(NormalizedDeclaredLicense::new(
-            "lgpl-3.0-plus",
-            "LGPL-3.0-or-later",
-        )),
-        other => normalize_spdx_expression(other).or_else(|| normalize_declared_license_key(other)),
+pub(crate) fn normalize_rpm_declared_license(statement: &str) -> Option<NormalizedDeclaredLicense> {
+    let trimmed = statement.trim();
+    if trimmed.is_empty() {
+        return None;
     }
+
+    let rewritten = canonicalize_rpm_license_statement(trimmed);
+    if let Some(normalized) = normalize_spdx_expression(&rewritten) {
+        return Some(normalized);
+    }
+
+    let is_simple_key = !trimmed.contains(' ')
+        && !trimmed.contains(',')
+        && !trimmed.contains('(')
+        && !trimmed.contains(')');
+    if is_simple_key {
+        return normalize_declared_license_key(trimmed);
+    }
+
+    None
+}
+
+fn canonicalize_rpm_license_statement(statement: &str) -> String {
+    let mut rewritten = statement.trim().to_string();
+
+    for (from, to) in [
+        ("LGPLv2.1+", "LGPL-2.1-or-later"),
+        ("LGPLv2.1", "LGPL-2.1-only"),
+        ("LGPLv2+", "LGPL-2.0-or-later"),
+        ("LGPLv2", "LGPL-2.0-only"),
+        ("LGPLv3+", "LGPL-3.0-or-later"),
+        ("LGPLv3", "LGPL-3.0-only"),
+        ("GPLv2+", "GPL-2.0-or-later"),
+        ("GPLv2", "GPL-2.0-only"),
+        ("GPLv3+", "GPL-3.0-or-later"),
+        ("GPLv3", "GPL-3.0-only"),
+        ("GPLV2+", "GPL-2.0-or-later"),
+        ("MPLv2.0", "MPL-2.0"),
+        ("MPLv1.1", "MPL-1.1"),
+        ("BSD with advertising", "BSD-4-Clause-UC"),
+        ("Public Domain", "LicenseRef-provenant-public-domain"),
+        ("public domain", "LicenseRef-provenant-public-domain"),
+        ("OpenLDAP", "OLDAP-2.8"),
+        ("OpenSSL", "OpenSSL"),
+        ("Sleepycat", "Sleepycat"),
+        ("zlib", "Zlib"),
+        ("Boost", "BSL-1.0"),
+        ("BSD", "BSD-3-Clause"),
+    ] {
+        rewritten = rewritten.replace(from, to);
+    }
+
+    rewritten = RE_RPM_LICENSE_WITH_EXCEPTIONS
+        .replace_all(&rewritten, "")
+        .into_owned();
+    rewritten = RE_RPM_LICENSE_COMMA
+        .replace_all(&rewritten, " AND ")
+        .into_owned();
+    rewritten = RE_RPM_LICENSE_AND
+        .replace_all(&rewritten, " AND ")
+        .into_owned();
+    rewritten = RE_RPM_LICENSE_OR
+        .replace_all(&rewritten, " OR ")
+        .into_owned();
+
+    rewritten.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn extract_rpm_dependencies(pkg: &Package, namespace: Option<&str>) -> Vec<Dependency> {
@@ -988,7 +1037,10 @@ mod tests {
         let pkg = RpmParser::extract_first_package(temp_file.path());
 
         assert_eq!(pkg.extracted_license_statement.as_deref(), Some("LGPLv2"));
-        assert_eq!(pkg.declared_license_expression.as_deref(), Some("lgpl-2.0"));
+        assert_eq!(
+            pkg.declared_license_expression.as_deref(),
+            Some("lgpl-2.0-only")
+        );
         assert_eq!(
             pkg.declared_license_expression_spdx.as_deref(),
             Some("LGPL-2.0-only")
@@ -1001,6 +1053,50 @@ mod tests {
         assert_eq!(
             pkg.license_detections[0].matches[0].matched_text.as_deref(),
             Some("LGPLv2")
+        );
+    }
+
+    #[test]
+    fn test_rpm_archive_normalizes_public_domain_declared_license_expression() {
+        let package = rpm::PackageBuilder::new(
+            "demo-public-domain",
+            "1.0.0",
+            "public domain",
+            "noarch",
+            "RPM public domain normalization fixture",
+        )
+        .release("1")
+        .build()
+        .unwrap();
+
+        let temp_file = NamedTempFile::new().unwrap();
+        package.write_file(temp_file.path()).unwrap();
+
+        let pkg = RpmParser::extract_first_package(temp_file.path());
+
+        assert_eq!(
+            pkg.extracted_license_statement.as_deref(),
+            Some("public domain")
+        );
+        assert_eq!(
+            pkg.declared_license_expression.as_deref(),
+            Some("licenseref-provenant-public-domain")
+        );
+        assert_eq!(
+            pkg.declared_license_expression_spdx.as_deref(),
+            Some("licenseref-provenant-public-domain")
+        );
+        assert_eq!(pkg.license_detections.len(), 1);
+    }
+
+    #[test]
+    fn test_normalize_rpm_declared_license_rewrites_compound_aliases() {
+        let normalized = normalize_rpm_declared_license("BSD and GPLv2+")
+            .expect("compound RPM license should normalize");
+
+        assert_eq!(
+            normalized.declared_license_expression_spdx,
+            "BSD-3-Clause AND GPL-2.0-or-later"
         );
     }
 }

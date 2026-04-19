@@ -28,9 +28,13 @@ use crate::models::{Dependency, FileReference};
 use crate::parsers::utils::{MAX_ITERATION_COUNT, MAX_MANIFEST_SIZE, truncate_field};
 
 use super::PackageParser;
+use super::license_normalization::{
+    DeclaredLicenseMatchMetadata, build_declared_license_data, empty_declared_license_data,
+};
 use super::rpm_db_native::{InstalledRpmDbKind, InstalledRpmPackage, read_installed_rpm_packages};
 use super::rpm_parser::infer_rpm_namespace;
 use super::rpm_parser::infer_rpm_namespace_from_filename;
+use super::rpm_parser::normalize_rpm_declared_license;
 
 const PACKAGE_TYPE: PackageType = PackageType::Rpm;
 const RPM_BDB_PATH_SUFFIXES: &[&str] = &["var/lib/rpm/Packages", "usr/lib/sysimage/rpm/Packages"];
@@ -347,6 +351,26 @@ fn build_package_data(pkg: RpmQueryPackage, datasource_id: DatasourceId) -> Pack
         .filter_map(|require| build_dependency(&require))
         .collect();
     let extracted_license_statement = normalize_optional_string(pkg.license).map(truncate_field);
+    let (declared_license_expression, declared_license_expression_spdx, license_detections) =
+        extracted_license_statement
+            .as_deref()
+            .and_then(normalize_rpm_declared_license)
+            .map(|normalized| {
+                build_declared_license_data(
+                    normalized,
+                    DeclaredLicenseMatchMetadata::single_line(
+                        extracted_license_statement.as_deref().unwrap_or_default(),
+                    ),
+                )
+            })
+            .map(|(expr, spdx, detections)| {
+                (
+                    expr.map(truncate_field),
+                    spdx.map(truncate_field),
+                    detections,
+                )
+            })
+            .unwrap_or_else(empty_declared_license_data);
     let source_packages = source_rpm.clone().into_iter().collect();
     let file_references = {
         let from_dir_components =
@@ -393,9 +417,9 @@ fn build_package_data(pkg: RpmQueryPackage, datasource_id: DatasourceId) -> Pack
         vcs_url: None,
         copyright: None,
         holder: None,
-        declared_license_expression: None,
-        declared_license_expression_spdx: None,
-        license_detections: Vec::new(),
+        declared_license_expression,
+        declared_license_expression_spdx,
+        license_detections,
         other_license_expression: None,
         other_license_expression_spdx: None,
         other_license_detections: Vec::new(),
@@ -701,6 +725,41 @@ mod tests {
         );
 
         assert_eq!(package.namespace.as_deref(), Some("fedora"));
+    }
+
+    #[test]
+    fn test_build_package_data_normalizes_declared_license_expression() {
+        let package = build_package_data(
+            RpmQueryPackage {
+                name: Some("libgcc".to_string()),
+                epoch: None,
+                version: Some("13.1.1".to_string()),
+                release: Some("2.fc38".to_string()),
+                vendor: Some("Fedora Project".to_string()),
+                distribution: None,
+                arch: Some("x86_64".to_string()),
+                platform: None,
+                size: Some(235748),
+                license: Some("LGPLv2".to_string()),
+                source_rpm: Some("gcc-13.1.1-2.fc38.src.rpm".to_string()),
+                requires: Vec::new(),
+                file_names: Vec::new(),
+                dir_indexes: Vec::new(),
+                base_names: Vec::new(),
+                dir_names: Vec::new(),
+            },
+            DatasourceId::RpmInstalledDatabaseSqlite,
+        );
+
+        assert_eq!(
+            package.declared_license_expression.as_deref(),
+            Some("lgpl-2.0-only")
+        );
+        assert_eq!(
+            package.declared_license_expression_spdx.as_deref(),
+            Some("LGPL-2.0-only")
+        );
+        assert_eq!(package.license_detections.len(), 1);
     }
 
     #[test]
