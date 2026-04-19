@@ -3609,6 +3609,18 @@ fn test_contributed_by_with_utf8_diacritics() {
 }
 
 #[test]
+fn test_name_contributed_line_is_detected_as_author() {
+    let input = "\\author{\nRandall Prium contributed most of the implementation of\n\\code{cut_width()}.\n}";
+    let (_c, _h, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.iter().any(|a| a.author == "Randall Prium"),
+        "expected Randall Prium author, got: {:?}",
+        authors
+    );
+}
+
+#[test]
 fn test_date_by_author() {
     let content = "\
 Copyright (c) 1998 Softweyr LLC.  All rights reserved.

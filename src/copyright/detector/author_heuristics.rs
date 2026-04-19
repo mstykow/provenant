@@ -252,6 +252,54 @@ pub(super) fn extract_dash_bullet_attribution_authors(
     }
 }
 
+pub(super) fn extract_name_contributed_authors(
+    prepared_cache: &mut PreparedLineCache<'_>,
+    authors: &mut Vec<AuthorDetection>,
+) {
+    if prepared_cache.is_empty() {
+        return;
+    }
+
+    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+
+    for idx in 0..prepared_cache.len() {
+        let ln = idx + 1;
+        let Some(raw_line) = prepared_cache.raw_by_index(idx) else {
+            continue;
+        };
+        let trimmed = raw_line.trim();
+        let Some((who, _)) = trimmed.split_once(" contributed") else {
+            continue;
+        };
+        let words: Vec<&str> = who.split_whitespace().collect();
+        if words.len() < 2 {
+            continue;
+        }
+        if !words.iter().all(|word| {
+            let trimmed_word = word.trim_matches(|ch: char| {
+                !ch.is_alphabetic() && ch != '\'' && ch != '’' && ch != '.' && ch != '-'
+            });
+            trimmed_word
+                .chars()
+                .next()
+                .is_some_and(|ch| ch.is_uppercase())
+                && trimmed_word.chars().any(|ch| ch.is_alphabetic())
+        }) {
+            continue;
+        }
+        let Some(author) = refine_author(who) else {
+            continue;
+        };
+        if seen.insert(author.clone()) {
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
+            });
+        }
+    }
+}
+
 pub(super) fn extract_rst_field_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
     authors: &mut Vec<AuthorDetection>,

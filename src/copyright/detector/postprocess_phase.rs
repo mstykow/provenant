@@ -70,6 +70,7 @@ pub(super) fn run_phase_postprocess(
         authors,
     );
     super::author_heuristics::extract_multiline_written_by_author_blocks(prepared_cache, authors);
+    super::author_heuristics::extract_name_contributed_authors(prepared_cache, authors);
     super::author_heuristics::extract_dash_bullet_attribution_authors(prepared_cache, authors);
     super::author_heuristics::extract_json_excerpt_developed_by_authors(content, authors);
     super::author_heuristics::extract_modified_portion_developed_by_authors(content, authors);
@@ -130,6 +131,7 @@ pub(super) fn run_phase_postprocess(
         authors,
     );
     super::author_heuristics::drop_json_code_example_authors(raw_lines, authors);
+    super::author_heuristics::extract_name_contributed_authors(prepared_cache, authors);
 
     super::postprocess_transforms::merge_multiline_copyrighted_by_with_trailing_copyright_clause(
         did_expand_href,
