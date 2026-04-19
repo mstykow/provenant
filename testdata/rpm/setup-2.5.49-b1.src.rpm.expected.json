@@ -5,8 +5,8 @@
     "name": "setup",
     "version": "2.5.49-b1",
     "qualifiers": {
-      "source": "true",
-      "arch": "noarch"
+      "arch": "noarch",
+      "source": "true"
     },
     "subpath": null,
     "primary_language": null,
@@ -38,15 +38,15 @@
     "copyright": null,
     "holder": null,
     "declared_license_expression": "licenseref-provenant-public-domain",
-    "declared_license_expression_spdx": "licenseref-provenant-public-domain",
+    "declared_license_expression_spdx": "LicenseRef-provenant-public-domain",
     "license_detections": [
       {
         "license_expression": "licenseref-provenant-public-domain",
-        "license_expression_spdx": "licenseref-provenant-public-domain",
+        "license_expression_spdx": "LicenseRef-provenant-public-domain",
         "matches": [
           {
             "license_expression": "licenseref-provenant-public-domain",
-            "license_expression_spdx": "licenseref-provenant-public-domain",
+            "license_expression_spdx": "LicenseRef-provenant-public-domain",
             "from_file": null,
             "start_line": 1,
             "end_line": 1,
