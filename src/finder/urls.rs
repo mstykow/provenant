@@ -61,6 +61,18 @@ fn end_of_url_cleaner(url: &str) -> String {
         }
     }
 
+    if let Some((before, after)) = cleaned.split_once('}')
+        && ({
+            let trimmed_after =
+                after.trim_matches(|c: char| [',', '.', ':', ';', '!', '?'].contains(&c));
+            trimmed_after.is_empty()
+                || trimmed_after.chars().all(|ch| ch == '}')
+                || trimmed_after.starts_with('{')
+        })
+    {
+        cleaned = before.to_string();
+    }
+
     cleaned
         .trim_end_matches(|c: char| [',', '.', ':', ';', '!', '?'].contains(&c))
         .to_string()
