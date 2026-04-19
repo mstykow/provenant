@@ -38,6 +38,10 @@ name = "compare-outputs"
 path = "src/bin/compare_outputs.rs"
 
 [[bin]]
+name = "generate-benchmark-chart"
+path = "src/bin/generate_benchmark_chart.rs"
+
+[[bin]]
 name = "generate-legalese-artifact"
 path = "src/bin/generate_legalese_artifact/main.rs"
 
