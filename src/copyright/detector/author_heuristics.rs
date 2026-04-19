@@ -1844,7 +1844,7 @@ pub(super) fn extract_package_comment_named_authors(
 
     static COMMENT_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
-            r"(?i)\b(?:was originally written by|it is now maintained by|this package is maintained for debian by)\s+(?P<who>.+?)(?:\.(?:\s|$)|$)",
+            r"(?i)\b(?:was originally written by|was originally implemented by|it is now maintained by|this package is maintained for debian by)\s+(?P<who>.+?)(?:[.,;](?:\s|$)|$)",
         )
         .unwrap()
     });

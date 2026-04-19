@@ -2243,6 +2243,7 @@ pub fn drop_copyright_like_holders(holders: &mut Vec<HolderDetection>) {
         !BAD_HOLDER_RE.is_match(h.holder.trim())
             && !lower.contains("api description")
             && !lower.contains("associated with software")
+            && !lower.contains("protected or trademarked materials")
             && lower != "rest"
     });
 }
@@ -2642,6 +2643,125 @@ pub fn expand_year_only_copyrights_with_by_name_prefix(
                     end_line: c.end_line,
                 });
             }
+        }
+    }
+}
+
+pub fn add_missing_holders_from_preceding_name_lines(
+    prepared_cache: &mut PreparedLineCache<'_>,
+    copyrights: &mut [CopyrightDetection],
+    holders: &mut Vec<HolderDetection>,
+) {
+    if prepared_cache.len() < 2 || copyrights.is_empty() {
+        return;
+    }
+
+    static YEAR_ONLY_COPY_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)^copyright\s*\((?:c|C)\)\s*(?P<years>(?:19\d{2}|20\d{2})(?:\s*[-–]\s*(?:19\d{2}|20\d{2}|\d{2}))?)$",
+        )
+        .unwrap()
+    });
+    static TRAILING_PAREN_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^(?P<name>.+?)\s*\((?P<tail>[^()]+)\)$").unwrap());
+
+    let mut seen_h: HashSet<(usize, usize, String)> = holders
+        .iter()
+        .map(|h| (h.start_line.get(), h.end_line.get(), h.holder.clone()))
+        .collect();
+
+    for copyright in copyrights.iter_mut() {
+        if copyright.start_line.get() != copyright.end_line.get() || copyright.start_line.get() <= 1
+        {
+            continue;
+        }
+
+        let Some(copy_cap) = YEAR_ONLY_COPY_RE.captures(copyright.copyright.trim()) else {
+            continue;
+        };
+        let years = copy_cap
+            .name("years")
+            .map(|m| m.as_str())
+            .unwrap_or("")
+            .trim();
+        if years.is_empty() {
+            continue;
+        }
+
+        let Some(previous_line) = prepared_cache
+            .get(copyright.start_line.get() - 1)
+            .map(|line| line.trim().trim_start_matches('*').trim_start().to_string())
+        else {
+            continue;
+        };
+        if previous_line.is_empty() {
+            continue;
+        }
+
+        let previous_lower = previous_line.to_ascii_lowercase();
+        if previous_lower.starts_with("copyright")
+            || previous_lower.starts_with("written by")
+            || previous_lower.starts_with("developed by")
+            || previous_lower.starts_with("created by")
+        {
+            continue;
+        }
+
+        let candidate_raw = if let Some(paren_cap) = TRAILING_PAREN_RE.captures(&previous_line) {
+            let name = paren_cap
+                .name("name")
+                .map(|m| m.as_str())
+                .unwrap_or("")
+                .trim();
+            let tail = paren_cap
+                .name("tail")
+                .map(|m| m.as_str())
+                .unwrap_or("")
+                .trim();
+            if !name.is_empty()
+                && (tail.contains("http://")
+                    || tail.contains("https://")
+                    || tail.contains('@')
+                    || tail.split_whitespace().count() <= 4)
+            {
+                name.to_string()
+            } else {
+                previous_line.clone()
+            }
+        } else {
+            previous_line.clone()
+        };
+
+        if candidate_raw.split_whitespace().count() < 2 || candidate_raw.len() > 80 {
+            continue;
+        }
+
+        let starts_name_like = candidate_raw
+            .chars()
+            .find(|ch| ch.is_alphabetic())
+            .is_some_and(|ch| ch.is_uppercase());
+        if !starts_name_like {
+            continue;
+        }
+
+        let Some(holder) = refine_holder_in_copyright_context(&candidate_raw) else {
+            continue;
+        };
+        let updated = format!("{holder}, Copyright (c) {years}");
+        copyright.copyright = updated;
+
+        let holder_key = (
+            copyright.start_line.get() - 1,
+            copyright.start_line.get(),
+            holder.clone(),
+        );
+        if seen_h.insert(holder_key) {
+            holders.push(HolderDetection {
+                holder,
+                start_line: LineNumber::new(copyright.start_line.get() - 1)
+                    .expect("valid preceding line number"),
+                end_line: copyright.end_line,
+            });
         }
     }
 }

@@ -5144,6 +5144,59 @@ fn test_extract_original_author_before_maintained_by_clause() {
 }
 
 #[test]
+fn test_extract_originally_implemented_by_author_with_parenthesized_email() {
+    let input = "LALR(1) support was originally implemented by Elias Ioup (ezioup@alumni.uchicago.edu),\nusing the algorithm found in Aho, Sethi, and Ullman.\n";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors
+            .iter()
+            .any(|a| a.author == "Elias Ioup (ezioup@alumni.uchicago.edu)"),
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_add_missing_holder_from_preceding_name_line_for_year_only_copyright() {
+    let input = "Author:  David Beazley (http://www.dabeaz.com)\nCopyright (C) 2007\n";
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        copyrights
+            .iter()
+            .any(|c| c.copyright == "David Beazley, Copyright (c) 2007"),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        holders.iter().any(|h| h.holder == "David Beazley"),
+        "holders: {holders:?}"
+    );
+}
+
+#[test]
+fn test_drop_trademarked_materials_prose_false_positive_copyrights_and_holders() {
+    let input = "SPDX-FileCopyrightText: <years> Univention GmbH\n\nBinary versions of this program provided by Univention to you as well\nas other copyrighted, protected or trademarked materials like Logos,\ngraphics, fonts, specific documentations and configurations,\ncryptographic keys etc. are subject to a license agreement between you\nand Univention and not subject to the AGPL-3.0-only.\n";
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        copyrights
+            .iter()
+            .all(|c| !c.copyright.contains("protected or trademarked materials")),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        holders
+            .iter()
+            .all(|h| !h.holder.contains("protected or trademarked materials")),
+        "holders: {holders:?}"
+    );
+    assert!(
+        holders.iter().any(|h| h.holder == "Univention GmbH"),
+        "holders: {holders:?}"
+    );
+}
+
+#[test]
 fn test_created_by_without_handle_or_email_is_rejected() {
     let (_copyrights, _holders, authors) =
         detect_copyrights_from_text("Created by IntelliJ IDEA\n");
