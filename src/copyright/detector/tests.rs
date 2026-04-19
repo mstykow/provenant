@@ -5174,6 +5174,31 @@ fn test_add_missing_holder_from_preceding_name_line_for_year_only_copyright() {
 }
 
 #[test]
+fn test_descriptive_line_does_not_expand_year_only_copyright_holder() {
+    let input = "Tru64 audio module for SDL (Simple DirectMedia Layer)\nCopyright (C) 2003\n";
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        copyrights
+            .iter()
+            .any(|c| c.copyright == "Copyright (c) 2003"),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        !copyrights
+            .iter()
+            .any(|c| c.copyright == "Tru64 audio module for SDL, Copyright (c) 2003"),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        holders
+            .iter()
+            .all(|h| h.holder != "Tru64 audio module for SDL"),
+        "holders: {holders:?}"
+    );
+}
+
+#[test]
 fn test_drop_trademarked_materials_prose_false_positive_copyrights_and_holders() {
     let input = "SPDX-FileCopyrightText: <years> Univention GmbH\n\nBinary versions of this program provided by Univention to you as well\nas other copyrighted, protected or trademarked materials like Logos,\ngraphics, fonts, specific documentations and configurations,\ncryptographic keys etc. are subject to a license agreement between you\nand Univention and not subject to the AGPL-3.0-only.\n";
     let (copyrights, holders, _authors) = detect_copyrights_from_text(input);

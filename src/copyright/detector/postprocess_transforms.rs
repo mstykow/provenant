@@ -2665,6 +2665,48 @@ pub fn add_missing_holders_from_preceding_name_lines(
     static TRAILING_PAREN_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"^(?P<name>.+?)\s*\((?P<tail>[^()]+)\)$").unwrap());
 
+    fn strip_author_label(line: &str) -> Option<String> {
+        let trimmed = line.trim();
+        for prefix in ["author:", "authors:"] {
+            if trimmed
+                .get(..prefix.len())
+                .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+            {
+                let rest = trimmed[prefix.len()..].trim();
+                if !rest.is_empty() {
+                    return Some(rest.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    fn is_attribution_parenthetical_tail(tail: &str) -> bool {
+        let lower = tail.trim().to_ascii_lowercase();
+        if lower.contains('@') || lower.contains("http://") || lower.contains("https://") {
+            return true;
+        }
+
+        [
+            "llc",
+            "inc",
+            "ltd",
+            "gmbh",
+            "corp",
+            "corporation",
+            "foundation",
+            "project",
+            "team",
+            "company",
+        ]
+        .iter()
+        .any(|needle| {
+            lower
+                .split_whitespace()
+                .any(|word| word.trim_matches('.') == *needle)
+        })
+    }
+
     let mut seen_h: HashSet<(usize, usize, String)> = holders
         .iter()
         .map(|h| (h.start_line.get(), h.end_line.get(), h.holder.clone()))
@@ -2707,7 +2749,11 @@ pub fn add_missing_holders_from_preceding_name_lines(
             continue;
         }
 
-        let candidate_raw = if let Some(paren_cap) = TRAILING_PAREN_RE.captures(&previous_line) {
+        let labeled_candidate = strip_author_label(&previous_line);
+        let mut had_attribution_tail = false;
+        let candidate_raw = if let Some(labeled) = labeled_candidate.clone() {
+            labeled
+        } else if let Some(paren_cap) = TRAILING_PAREN_RE.captures(&previous_line) {
             let name = paren_cap
                 .name("name")
                 .map(|m| m.as_str())
@@ -2718,12 +2764,8 @@ pub fn add_missing_holders_from_preceding_name_lines(
                 .map(|m| m.as_str())
                 .unwrap_or("")
                 .trim();
-            if !name.is_empty()
-                && (tail.contains("http://")
-                    || tail.contains("https://")
-                    || tail.contains('@')
-                    || tail.split_whitespace().count() <= 4)
-            {
+            if !name.is_empty() && is_attribution_parenthetical_tail(tail) {
+                had_attribution_tail = true;
                 name.to_string()
             } else {
                 previous_line.clone()
@@ -2734,6 +2776,22 @@ pub fn add_missing_holders_from_preceding_name_lines(
 
         if candidate_raw.split_whitespace().count() < 2 || candidate_raw.len() > 80 {
             continue;
+        }
+
+        if labeled_candidate.is_none() {
+            if candidate_raw.contains(',')
+                || candidate_raw.to_ascii_lowercase().contains(" and ")
+                || candidate_raw.contains(':')
+            {
+                continue;
+            }
+
+            let has_contact_marker = previous_line.contains('@')
+                || previous_line.contains("http://")
+                || previous_line.contains("https://");
+            if !has_contact_marker && !had_attribution_tail {
+                continue;
+            }
         }
 
         let starts_name_like = candidate_raw
