@@ -46,6 +46,29 @@ fn path_selection_filter_keeps_matching_relative_paths_and_parent_dirs() {
 }
 
 #[test]
+fn path_selection_filter_keeps_matching_directories_without_file_descendants() {
+    let mut files = vec![
+        dir("virtual_root"),
+        dir("virtual_root/.github"),
+        dir("virtual_root/.github/actions"),
+        file("virtual_root/README.md"),
+    ];
+
+    apply_path_selection_filter(&mut files, |file| {
+        file.path == "virtual_root"
+            || file.path == "virtual_root/.github"
+            || file.path == "virtual_root/.github/actions"
+            || file.path.ends_with("README.md")
+    });
+
+    let paths: HashSet<_> = files.into_iter().map(|f| f.path).collect();
+    assert!(paths.contains("virtual_root"));
+    assert!(paths.contains("virtual_root/.github"));
+    assert!(paths.contains("virtual_root/.github/actions"));
+    assert!(paths.contains("virtual_root/README.md"));
+}
+
+#[test]
 fn only_findings_keeps_file_with_findings_and_parent_dirs() {
     let mut files = vec![dir("project"), file("project/a.txt"), file("project/b.txt")];
     files[2].copyrights = vec![Copyright {
