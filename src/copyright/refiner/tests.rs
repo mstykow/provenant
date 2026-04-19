@@ -381,6 +381,11 @@ fn test_is_junk_copyright_rsa() {
 }
 
 #[test]
+fn test_is_junk_copyright_single_letter_holder_noise() {
+    assert!(is_junk_copyright("copyright p"));
+}
+
+#[test]
 fn test_is_junk_copyright_math_c_variable() {
     assert!(is_junk_copyright("(c) Convert Chebyshev"));
     assert!(is_junk_copyright("(c) Multiply a Chebyshev"));
@@ -1375,6 +1380,12 @@ fn test_refine_author_strips_author_prefix() {
 }
 
 #[test]
+fn test_refine_author_strips_maintainers_prefix() {
+    let result = refine_author("Maintainers Hadley <h.wickham@gmail.com>");
+    assert_eq!(result, Some("Hadley <h.wickham@gmail.com>".to_string()));
+}
+
+#[test]
 fn test_refine_author_email_and_name() {
     let result = refine_author("@author stephane@hillion.org Stephane Hillion");
     assert_eq!(
@@ -1412,6 +1423,14 @@ fn test_refine_author_strips_trailing_bare_c_clause() {
 #[test]
 fn test_refine_author_junk_prefix() {
     assert_eq!(refine_author("httpProxy something"), None);
+}
+
+#[test]
+fn test_refine_author_drops_code_assignment_fragments() {
+    assert_eq!(
+        refine_author("Maintainers <- utils::as.person(people)"),
+        None
+    );
 }
 
 // ── strip_all_unbalanced_parens ──────────────────────────────────

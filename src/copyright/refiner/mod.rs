@@ -715,6 +715,7 @@ static COPYRIGHTS_JUNK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"(?i)^copyright permission\b",
         r"(?i)^copyright protection\b",
         r"(?i)^copyright owner\b",
+        r"(?i)^copyright [a-z]$",
         r"(?i)^copyright yyyy\b",
         r"(?i)^copyright exceptions\b",
         r"(?i)^copyright or patent\b",
