@@ -49,7 +49,7 @@ cargo run --manifest-path xtask/Cargo.toml --bin benchmark-target -- --target-pa
 
 CLI arguments:
 
-- Exactly one of `--repo-url` or `--target-path` is required.
+- Exactly one of `--repo-url` or one-or-more `--target-path` values is required.
 - `--repo-url URL`: benchmark the given repository URL via the shared repo cache.
 - `--repo-ref REF`: required with `--repo-url`; commit SHA, tag, or branch to resolve and benchmark.
 - `--target-path PATH`: benchmark an existing local directory in place.
@@ -123,10 +123,10 @@ cargo run --manifest-path xtask/Cargo.toml --bin compare-outputs -- --target-pat
 
 CLI arguments:
 
-- Exactly one of `--repo-url` or `--target-path` is required.
+- Exactly one of `--repo-url` or one-or-more `--target-path` values is required.
 - `--repo-url URL`: compare the given repository URL via the shared repo cache.
 - `--repo-ref REF`: required with `--repo-url`; commit SHA, tag, or branch to resolve and compare.
-- `--target-path PATH`: compare an existing local directory in place.
+- `--target-path PATH`: compare an existing local directory in place, or repeat the flag to stage multiple local files into one compare run.
 - `--scancode-cache-identity ID`: optional with `--target-path`; opt in to shared ScanCode cache reuse for a caller-asserted local snapshot identity.
 - `--profile common`: convenience shorthand for `-clupe --system-package --strip-root --processes 4`.
 - `--profile common-with-compiled`: convenience shorthand for `-clupe --system-package --package-in-compiled --strip-root`.
@@ -178,6 +178,7 @@ Optional diagnostic logs when available:
 - Repo URL runs reuse cached git objects from `.provenant/repo-cache/`, and the temporary detached checkout is removed after the run so compare artifacts do not retain duplicate full repository trees.
 - Repo URL runs also reuse cached raw ScanCode artifacts from `.provenant/scancode-cache/` when the resolved target commit, ScanCode runtime identity, and effective ScanCode scan args are unchanged.
 - Local `--target-path` runs rerun ScanCode by default. Pass `--scancode-cache-identity <id>` to opt into shared ScanCode raw-artifact reuse for a local snapshot you have identified explicitly.
+- Repeated `--target-path` values currently support **files only** and are mainly intended for multi-input `--from-json` replay compares. The harness stages those files under one temporary input directory and passes them explicitly to both scanners in the same order.
 - Cache hits now require a cached `scancode.json` plus cache `manifest.json`; `scancode-stdout.txt` is reused when available but is no longer required for cache completeness.
 - `scancode-stdout.txt` and `provenant-stdout.txt` are best-effort diagnostic logs. The compare pipeline only requires the JSON outputs, so a log-write failure no longer makes the command fail.
 - The command adds Git control-path ignore rules (`.git`, nested `.git`, and their contents) on the ScanCode side plus `target/*` on both scanners so repository metadata and Cargo build output do not dominate the comparison artifacts without hiding package-adjacent files such as `.gitmodules`. Provenant already excludes `.git` directories during path collection by default, so xtask does not need to restate those ignores for Provenant.
