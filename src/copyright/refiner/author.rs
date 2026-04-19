@@ -6,6 +6,7 @@ pub fn refine_author(s: &str) -> Option<String> {
         return None;
     }
     let mut a = remove_some_extra_words_and_punct(s);
+    a = strip_leading_maintainers_label(&a);
     a = strip_trailing_javadoc_tags(&a);
     a = strip_trailing_paren_years(&a);
     a = strip_trailing_bare_c_copyright_clause(&a);
@@ -86,6 +87,10 @@ fn looks_like_prose_fragment_author(s: &str) -> bool {
         return true;
     }
 
+    if trimmed.contains("<-") || trimmed.contains("::") {
+        return true;
+    }
+
     if (trimmed.contains("http://") || trimmed.contains("https://"))
         && !looks_like_name_with_parenthesized_url(trimmed)
     {
@@ -127,6 +132,25 @@ fn looks_like_prose_fragment_author(s: &str) -> bool {
         .count();
 
     starts_lowercase || capitalized_word_count < 2
+}
+
+fn strip_leading_maintainers_label(s: &str) -> String {
+    let trimmed = s.trim_start();
+    let lower = trimmed.to_ascii_lowercase();
+    if !lower.starts_with("maintainers ") {
+        return s.to_string();
+    }
+
+    let rest = trimmed["Maintainers ".len()..].trim_start();
+    if rest
+        .chars()
+        .find(|ch| !ch.is_whitespace())
+        .is_some_and(|ch| ch.is_uppercase())
+    {
+        rest.to_string()
+    } else {
+        s.to_string()
+    }
 }
 
 fn contains_standalone_at_prefixed_token(s: &str) -> bool {
