@@ -4,7 +4,9 @@ mod tests {
     use super::super::cran::CranParser;
     use crate::models::DatasourceId;
     use crate::models::PackageType;
+    use std::fs;
     use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn test_is_match() {
@@ -284,5 +286,50 @@ mod tests {
                 assert!(purl.starts_with("pkg:cran/"));
             }
         }
+    }
+
+    #[test]
+    fn test_dependency_versions_with_hyphenated_constraints() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("cran-hyphenated-constraint-{unique}"));
+        fs::create_dir_all(&dir).expect("create temp dir");
+
+        let desc_path = dir.join("DESCRIPTION");
+        fs::write(
+            &desc_path,
+            "Package: demo\nVersion: 0.1.0\nSuggests:\n    sf (>= 0.7-3), svglite (>= 2.1.2), testthat (== 3.3.0)\n",
+        )
+        .expect("write temp DESCRIPTION");
+
+        let package_data = CranParser::extract_first_package(&desc_path);
+
+        let sf = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:cran/sf"))
+            .expect("sf dependency missing");
+        assert_eq!(sf.extracted_requirement.as_deref(), Some(">= 0.7-3"));
+        assert_eq!(sf.is_pinned, Some(false));
+
+        let svglite = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:cran/svglite"))
+            .expect("svglite dependency missing");
+        assert_eq!(svglite.extracted_requirement.as_deref(), Some(">= 2.1.2"));
+        assert_eq!(svglite.is_pinned, Some(false));
+
+        let testthat = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:cran/testthat@3.3.0"))
+            .expect("testthat dependency missing");
+        assert_eq!(testthat.extracted_requirement.as_deref(), Some("== 3.3.0"));
+        assert_eq!(testthat.is_pinned, Some(true));
+
+        fs::remove_dir_all(&dir).expect("remove temp dir");
     }
 }
