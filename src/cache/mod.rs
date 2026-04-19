@@ -26,6 +26,12 @@ pub fn build_collection_exclude_patterns(scan_root: &Path, cache_root: &Path) ->
         }
     }
 
+    for pattern in [".gitignore", "**/.gitignore"] {
+        if let Ok(pattern) = Pattern::new(pattern) {
+            patterns.push(pattern);
+        }
+    }
+
     if let Ok(relative_cache_root) = cache_root.strip_prefix(scan_root)
         && !relative_cache_root.as_os_str().is_empty()
     {

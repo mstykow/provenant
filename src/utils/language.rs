@@ -37,7 +37,7 @@ fn detect_content_hint_language(content: &[u8]) -> Option<String> {
         Some("Groovy".to_string())
     } else if text_sample.contains("import React") || text_sample.contains("import {") {
         Some("JavaScript/TypeScript".to_string())
-    } else if text_sample.contains("def ") && text_sample.contains(':') {
+    } else if has_python_definition_line(text_sample) {
         Some("Python".to_string())
     } else if text_sample.contains("package ")
         && text_sample.contains("import ")
@@ -47,6 +47,13 @@ fn detect_content_hint_language(content: &[u8]) -> Option<String> {
     } else {
         None
     }
+}
+
+fn has_python_definition_line(text: &str) -> bool {
+    text.lines().any(|line| {
+        let trimmed = line.trim_start();
+        trimmed.starts_with("def ") && trimmed.contains(':')
+    })
 }
 
 fn detect_shebang_language(content: &[u8]) -> Option<String> {
@@ -64,6 +71,14 @@ fn detect_shebang_language(content: &[u8]) -> Option<String> {
         Some("Python".to_string())
     } else if shebang.contains("node") || shebang.contains("deno") || shebang.contains("bun") {
         Some("JavaScript".to_string())
+    } else if shebang.contains("bash") {
+        Some("Bash".to_string())
+    } else if shebang.contains("zsh") {
+        Some("Zsh".to_string())
+    } else if shebang.contains("fish") {
+        Some("Fish".to_string())
+    } else if shebang.contains("ksh") {
+        Some("Ksh".to_string())
     } else if shebang.contains("ruby") {
         Some("Ruby".to_string())
     } else if shebang.contains("perl") {
@@ -74,12 +89,7 @@ fn detect_shebang_language(content: &[u8]) -> Option<String> {
         Some("PowerShell".to_string())
     } else if shebang.contains("awk") {
         Some("Awk".to_string())
-    } else if shebang.contains("bash")
-        || shebang.contains("zsh")
-        || shebang.contains("fish")
-        || shebang.contains("ksh")
-        || shebang.contains("/sh")
-    {
+    } else if shebang.contains("/sh") {
         Some("Shell".to_string())
     } else {
         None
@@ -229,6 +239,8 @@ fn detect_repo_special_file_name_language(path: &Path) -> Option<String> {
         Some("Ruby".to_string())
     } else if matches!(file_name.as_str(), "apkbuild" | "pkgbuild" | "gradlew") {
         Some("Shell".to_string())
+    } else if matches!(file_name.as_str(), "jamfile" | "jamroot") {
+        Some("Jamfile".to_string())
     } else if matches!(file_name.as_str(), "meson.build") {
         Some("Meson".to_string())
     } else if matches!(file_name.as_str(), "containerfile.core") {
@@ -270,7 +282,12 @@ fn detect_manual_extension_language(path: &Path) -> Option<String> {
         "pl" => Some("Perl".to_string()),
         "swift" => Some("Swift".to_string()),
         "sql" => Some("SQL".to_string()),
-        "sh" | "bash" | "zsh" | "fish" | "ksh" => Some("Shell".to_string()),
+        "sh" => Some("Shell".to_string()),
+        "bash" => Some("Bash".to_string()),
+        "zsh" => Some("Zsh".to_string()),
+        "fish" => Some("Fish".to_string()),
+        "ksh" => Some("Ksh".to_string()),
+        "bat" | "cmd" => Some("Batchfile".to_string()),
         "kt" | "kts" => Some("Kotlin".to_string()),
         "dart" => Some("Dart".to_string()),
         "scala" => Some("Scala".to_string()),
@@ -285,6 +302,7 @@ fn detect_manual_extension_language(path: &Path) -> Option<String> {
         "erl" => Some("Erlang".to_string()),
         "tex" => Some("TeX".to_string()),
         "groovy" | "gradle" | "gvy" | "gy" | "gsh" => Some("Groovy".to_string()),
+        "cmake" => Some("CMake".to_string()),
         "nix" => Some("Nix".to_string()),
         "zig" => Some("Zig".to_string()),
         "ps1" | "psm1" | "psd1" => Some("PowerShell".to_string()),
@@ -359,6 +377,13 @@ mod tests {
             Some("Groovy".to_string())
         );
         assert_eq!(
+            detect_language(
+                Path::new("toolchain.cmake"),
+                b"set(CMAKE_CXX_STANDARD 20)\n"
+            ),
+            Some("CMake".to_string())
+        );
+        assert_eq!(
             detect_language(Path::new("main.nix"), b"{ pkgs }: pkgs.hello\n"),
             Some("Nix".to_string())
         );
@@ -369,6 +394,29 @@ mod tests {
         assert_eq!(
             detect_language(Path::new("script.ps1"), b"Write-Host 'hello'\n"),
             Some("PowerShell".to_string())
+        );
+    }
+
+    #[test]
+    fn detect_language_maps_batch_and_ipp_extensions() {
+        assert_eq!(
+            detect_language(Path::new("build.cmd"), b"@echo off\r\n"),
+            Some("Batchfile".to_string())
+        );
+        assert_eq!(
+            detect_language(
+                Path::new("from_chars.ipp"),
+                b"template <class T> void parse();\n"
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn detect_language_handles_jamfile_names() {
+        assert_eq!(
+            detect_language(Path::new("Jamfile"), b"lib boost_json ;\n"),
+            Some("Jamfile".to_string())
         );
     }
 
@@ -410,6 +458,17 @@ mod tests {
                 b"<!DOCTYPE html><html><body></body></html>"
             ),
             Some("HTML".to_string())
+        );
+    }
+
+    #[test]
+    fn detect_language_does_not_infer_python_from_default_labels() {
+        assert_eq!(
+            detect_language(
+                Path::new("from_chars.ipp"),
+                b"switch (value) {\n  default: return parse();\n}\n"
+            ),
+            None
         );
     }
 
