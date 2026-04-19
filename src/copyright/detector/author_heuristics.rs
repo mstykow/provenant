@@ -863,7 +863,10 @@ pub(super) fn extract_author_colon_blocks(
     }
 
     static AUTHOR_COLON_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?i)^author(?:s|\(s\)|s\(s\))?\s*:\s*(?P<tail>.*)$").unwrap()
+        Regex::new(
+            r"(?i)^(?:(?:primary|original)(?:\s+[^:]{0,40})?\s+)?author(?:s|\(s\)|s\(s\))?\s*:\s*(?P<tail>.*)$",
+        )
+        .unwrap()
     });
     static YEAR_ONLY_COPY_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)^copyright\s+\(c\)\s*(?:\d{4}(?:\s*,\s*\d{4})*|\d{4}-\d{4})\s*$").unwrap()
@@ -874,10 +877,7 @@ pub(super) fn extract_author_colon_blocks(
     let mut i = 0;
     while i < prepared_cache.len() {
         let ln = i + 1;
-        let Some(line) = prepared_cache
-            .get_by_index(i)
-            .map(|p| p.trim().trim_start_matches('*').trim_start().to_string())
-        else {
+        let Some(line) = prepared_cache.get_by_index(i).map(trim_author_label_prefix) else {
             i += 1;
             continue;
         };
@@ -939,7 +939,8 @@ pub(super) fn extract_author_colon_blocks(
             let Some(next_prepared) = prepared_cache.get_by_index(j) else {
                 break;
             };
-            let next_line = next_prepared.trim().trim_start_matches('*').trim_start();
+            let next_line_buf = trim_author_label_prefix(next_prepared);
+            let next_line = next_line_buf.as_str();
             if next_line.is_empty() {
                 break;
             }
@@ -1005,8 +1006,14 @@ pub(super) fn extract_author_colon_blocks(
             i = j;
             continue;
         }
+        if segments.len() == 1
+            && extract_author_colon_inline_roster(&segments[0], start_line, authors, &mut seen)
+        {
+            i = j;
+            continue;
+        }
         let combined_raw = segments.join(" ");
-        let Some(combined) = refine_author(&combined_raw) else {
+        let Some(combined) = refine_author_with_optional_handle_suffix(&combined_raw) else {
             i += 1;
             continue;
         };
@@ -1024,6 +1031,48 @@ pub(super) fn extract_author_colon_blocks(
     }
 }
 
+fn extract_author_colon_inline_roster(
+    tail: &str,
+    line_number: usize,
+    authors: &mut Vec<AuthorDetection>,
+    seen: &mut HashSet<String>,
+) -> bool {
+    let mut extracted_any = false;
+
+    for candidate in tail.split(" - ") {
+        let Some(author) = refine_author_with_optional_handle_suffix(candidate) else {
+            continue;
+        };
+        if seen.insert(author.clone()) {
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(line_number).expect("valid"),
+                end_line: LineNumber::new(line_number).expect("valid"),
+            });
+            extracted_any = true;
+        }
+    }
+
+    extracted_any
+}
+
+fn refine_author_with_optional_handle_suffix(candidate: &str) -> Option<String> {
+    static TRAILING_HANDLE_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\s*\(@[A-Za-z0-9_.-]+\)\s*$").unwrap());
+
+    let trimmed = candidate.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let without_handle = TRAILING_HANDLE_RE.replace(trimmed, "").trim().to_string();
+    if without_handle != trimmed {
+        return refine_author(&without_handle);
+    }
+
+    refine_author(trimmed)
+}
+
 fn sanitize_author_colon_tail(tail: &str) -> Option<String> {
     let trimmed = tail.trim();
     if trimmed.is_empty() {
@@ -1038,7 +1087,7 @@ fn sanitize_author_colon_tail(tail: &str) -> Option<String> {
     });
     static METADATA_SPLIT_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
-            r#"(?i),(?:\s*['"]?(?:url|version|wiki|gav|labels|developerid|email|name|previoustimestamp|previousversion|releasetimestamp|requiredcore|scm|title|builddate|dependencies|sha1)\b.*)$"#,
+            r#"(?i),(?:\s*['"]?(?:url|version|wiki|gav|labels|developerid|email|name|previoustimestamp|previousversion|releasetimestamp|requiredcore|scm|title|builddate|dependencies|sha1)\b.*|\s*maintained\s+by\b.*)$"#,
         )
         .unwrap()
     });
@@ -1092,6 +1141,13 @@ fn is_author_metadata_line(line: &str) -> bool {
         || lower.starts_with("requiredcore:")
         || lower.starts_with("scm:")
         || lower.starts_with("disambiguatingdescription")
+}
+
+fn trim_author_label_prefix(line: &str) -> String {
+    line.trim()
+        .trim_start_matches(['*', '#'])
+        .trim_start()
+        .to_string()
 }
 
 pub(super) fn extract_code_written_by_author_blocks(
@@ -1610,14 +1666,7 @@ pub(super) fn extract_created_by_authors(
             continue;
         }
 
-        let who_lower = who.to_ascii_lowercase();
-        let has_email_like =
-            who.contains('@') || (who_lower.contains(" at ") && who_lower.contains(" dot "));
-        if !has_email_like {
-            continue;
-        }
-
-        let Some(author) = refine_author(who) else {
+        let Some(author) = refine_author_with_optional_handle_suffix(who) else {
             continue;
         };
         if seen.insert(author.clone()) {
@@ -1629,6 +1678,56 @@ pub(super) fn extract_created_by_authors(
         }
 
         authors.retain(|a| !(author.starts_with(&a.author) && a.author.len() < author.len()));
+    }
+}
+
+pub(super) fn extract_toml_author_assignment_authors(
+    raw_lines: &[&str],
+    authors: &mut Vec<AuthorDetection>,
+) {
+    if raw_lines.is_empty() {
+        return;
+    }
+
+    static TOML_AUTHOR_ASSIGNMENT_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(?i)^\s*authors?\s*=\s*(?P<rhs>.+?)\s*$"#).unwrap());
+    static QUOTED_VALUE_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"\"(?P<value>(?:\\.|[^\"])*)\""#).unwrap());
+
+    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+
+    for (idx, raw_line) in raw_lines.iter().enumerate() {
+        let ln = idx + 1;
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let Some(cap) = TOML_AUTHOR_ASSIGNMENT_RE.captures(line) else {
+            continue;
+        };
+        let rhs = cap.name("rhs").map(|m| m.as_str()).unwrap_or("").trim();
+        if rhs.is_empty() {
+            continue;
+        }
+
+        for value_cap in QUOTED_VALUE_RE.captures_iter(rhs) {
+            let value = value_cap.name("value").map(|m| m.as_str()).unwrap_or("");
+            if value.is_empty() {
+                continue;
+            }
+
+            let Some(author) = refine_author_with_optional_handle_suffix(value) else {
+                continue;
+            };
+            if seen.insert(author.clone()) {
+                authors.push(AuthorDetection {
+                    author,
+                    start_line: LineNumber::new(ln).expect("invalid line number"),
+                    end_line: LineNumber::new(ln).expect("invalid line number"),
+                });
+            }
+        }
     }
 }
 

@@ -5045,3 +5045,100 @@ fn test_extract_collective_author_with_contributors_before_email() {
         "authors: {authors:?}"
     );
 }
+
+#[test]
+fn test_extract_toml_singular_author_array_with_handle() {
+    let input = "author = [\"Tom Breloff (@tbreloff)\"]\n";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.iter().any(|a| a.author == "Tom Breloff"),
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_extract_created_by_author_with_handle() {
+    let input = "Created by Tom Breloff (@tbreloff)\n";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.iter().any(|a| a.author == "Tom Breloff"),
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_extract_primary_author_with_handle() {
+    let input = "Primary author: Josef Heinen (@jheinen)\n";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.iter().any(|a| a.author == "Josef Heinen"),
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_extract_original_author_with_handle() {
+    let input = "Original author: Thomas Breloff (@tbreloff)\n";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.iter().any(|a| a.author == "Thomas Breloff"),
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_extract_primary_package_author_with_handle() {
+    let input = "Primary PlotlyJS.jl author: Spencer Lyon (@spencerlyon2)\n";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.iter().any(|a| a.author == "Spencer Lyon"),
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_extract_author_colon_inline_roster_with_handles() {
+    let input = "authors: Benoit Pasquier (@briochemc) - David Gustavsson (@gustaphe) - Jan Weidner (@jw3126)\n";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.iter().any(|a| a.author == "Benoit Pasquier"),
+        "authors: {authors:?}"
+    );
+    assert!(
+        authors.iter().any(|a| a.author == "David Gustavsson"),
+        "authors: {authors:?}"
+    );
+    assert!(
+        authors.iter().any(|a| a.author == "Jan Weidner"),
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_extract_markdown_heading_original_author_with_handle() {
+    let input = "### Original author: Thomas Breloff (@tbreloff)\n";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.iter().any(|a| a.author == "Thomas Breloff"),
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_extract_original_author_before_maintained_by_clause() {
+    let input =
+        "### Original author: Thomas Breloff (@tbreloff), maintained by the JuliaPlots members\n";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        authors.iter().any(|a| a.author == "Thomas Breloff"),
+        "authors: {authors:?}"
+    );
+}
