@@ -30,6 +30,10 @@ use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 use crate::parsers::utils::{MAX_ITERATION_COUNT, MAX_MANIFEST_SIZE, truncate_field};
 
 use super::PackageParser;
+use super::license_normalization::{
+    DeclaredLicenseMatchMetadata, NormalizedDeclaredLicense, build_declared_license_data,
+    empty_declared_license_data, normalize_declared_license_key, normalize_spdx_expression,
+};
 
 const PACKAGE_TYPE: PackageType = PackageType::Rpm;
 
@@ -349,6 +353,26 @@ fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
         .get_license()
         .ok()
         .map(|s| truncate_field(s.to_string()));
+    let (declared_license_expression, declared_license_expression_spdx, license_detections) =
+        extracted_license_statement
+            .as_deref()
+            .and_then(normalize_rpm_declared_license)
+            .map(|normalized| {
+                build_declared_license_data(
+                    normalized,
+                    DeclaredLicenseMatchMetadata::single_line(
+                        extracted_license_statement.as_deref().unwrap_or_default(),
+                    ),
+                )
+            })
+            .map(|(expr, spdx, detections)| {
+                (
+                    expr.map(truncate_field),
+                    spdx.map(truncate_field),
+                    detections,
+                )
+            })
+            .unwrap_or_else(empty_declared_license_data);
 
     let dependencies = extract_rpm_dependencies(pkg, namespace.as_deref());
 
@@ -438,6 +462,9 @@ fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
         parties,
         keywords,
         bug_tracking_url,
+        declared_license_expression,
+        declared_license_expression_spdx,
+        license_detections,
         extracted_license_statement,
         dependencies,
         source_packages: source_rpm.into_iter().collect(),
@@ -454,6 +481,37 @@ fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
             .map(truncate_field)
         }),
         ..Default::default()
+    }
+}
+
+fn normalize_rpm_declared_license(statement: &str) -> Option<NormalizedDeclaredLicense> {
+    match statement.trim() {
+        "GPLv2" => Some(NormalizedDeclaredLicense::new("gpl-2.0", "GPL-2.0-only")),
+        "GPLv2+" => Some(NormalizedDeclaredLicense::new(
+            "gpl-2.0-plus",
+            "GPL-2.0-or-later",
+        )),
+        "GPLv3" => Some(NormalizedDeclaredLicense::new("gpl-3.0", "GPL-3.0-only")),
+        "GPLv3+" => Some(NormalizedDeclaredLicense::new(
+            "gpl-3.0-plus",
+            "GPL-3.0-or-later",
+        )),
+        "LGPLv2" => Some(NormalizedDeclaredLicense::new("lgpl-2.0", "LGPL-2.0-only")),
+        "LGPLv2+" => Some(NormalizedDeclaredLicense::new(
+            "lgpl-2.0-plus",
+            "LGPL-2.0-or-later",
+        )),
+        "LGPLv2.1" => Some(NormalizedDeclaredLicense::new("lgpl-2.1", "LGPL-2.1-only")),
+        "LGPLv2.1+" => Some(NormalizedDeclaredLicense::new(
+            "lgpl-2.1-plus",
+            "LGPL-2.1-or-later",
+        )),
+        "LGPLv3" => Some(NormalizedDeclaredLicense::new("lgpl-3.0", "LGPL-3.0-only")),
+        "LGPLv3+" => Some(NormalizedDeclaredLicense::new(
+            "lgpl-3.0-plus",
+            "LGPL-3.0-or-later",
+        )),
+        other => normalize_spdx_expression(other).or_else(|| normalize_declared_license_key(other)),
     }
 }
 
@@ -908,6 +966,41 @@ mod tests {
             obsoletes
                 .iter()
                 .any(|value| value.as_str() == Some("old-demo-rpm < 0.9.0"))
+        );
+    }
+
+    #[test]
+    fn test_rpm_archive_normalizes_declared_license_expression() {
+        let package = rpm::PackageBuilder::new(
+            "demo-license",
+            "1.0.0",
+            "LGPLv2",
+            "noarch",
+            "RPM declared license normalization fixture",
+        )
+        .release("1")
+        .build()
+        .unwrap();
+
+        let temp_file = NamedTempFile::new().unwrap();
+        package.write_file(temp_file.path()).unwrap();
+
+        let pkg = RpmParser::extract_first_package(temp_file.path());
+
+        assert_eq!(pkg.extracted_license_statement.as_deref(), Some("LGPLv2"));
+        assert_eq!(pkg.declared_license_expression.as_deref(), Some("lgpl-2.0"));
+        assert_eq!(
+            pkg.declared_license_expression_spdx.as_deref(),
+            Some("LGPL-2.0-only")
+        );
+        assert_eq!(pkg.license_detections.len(), 1);
+        assert_eq!(
+            pkg.license_detections[0].license_expression_spdx,
+            "LGPL-2.0-only"
+        );
+        assert_eq!(
+            pkg.license_detections[0].matches[0].matched_text.as_deref(),
+            Some("LGPLv2")
         );
     }
 }
