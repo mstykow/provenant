@@ -1,7 +1,9 @@
 use crate::models::{DatasourceId, PackageType};
 use crate::parsers::PackageParser;
 use crate::parsers::julia::{JuliaManifestTomlParser, JuliaProjectTomlParser};
+use std::fs;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn test_data_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("testdata/julia")
@@ -103,4 +105,39 @@ fn test_project_toml_license() {
     let pkg = &packages[0];
     assert_eq!(pkg.extracted_license_statement.as_deref(), Some("MIT"));
     assert!(pkg.declared_license_expression_spdx.is_some());
+}
+
+#[test]
+fn test_project_toml_singular_author_field() {
+    let temp_dir = std::env::temp_dir().join(format!(
+        "provenant-julia-author-test-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos()
+    ));
+    fs::create_dir_all(&temp_dir).expect("create temp test dir");
+
+    let test_file = temp_dir.join("Project.toml");
+    fs::write(
+        &test_file,
+        r#"name = "Plots"
+uuid = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+version = "2.0.0"
+author = ["Tom Breloff (@tbreloff)"]
+"#,
+    )
+    .expect("write temp Project.toml");
+
+    let packages = JuliaProjectTomlParser::extract_packages(&test_file);
+    let pkg = &packages[0];
+
+    assert_eq!(pkg.parties.len(), 1);
+    assert_eq!(pkg.parties[0].role.as_deref(), Some("author"));
+    assert_eq!(
+        pkg.parties[0].name.as_deref(),
+        Some("Tom Breloff (@tbreloff)")
+    );
+
+    fs::remove_dir_all(&temp_dir).expect("remove temp test dir");
 }

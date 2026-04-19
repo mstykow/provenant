@@ -38,6 +38,7 @@ const FIELD_NAME: &str = "name";
 const FIELD_UUID: &str = "uuid";
 const FIELD_VERSION: &str = "version";
 const FIELD_LICENSE: &str = "license";
+const FIELD_AUTHOR: &str = "author";
 const FIELD_AUTHORS: &str = "authors";
 const FIELD_REPOSITORY: &str = "repository";
 const FIELD_DEPS: &str = "deps";
@@ -226,26 +227,55 @@ fn create_package_url(name: &Option<String>, version: &Option<String>) -> Option
 }
 
 fn extract_parties(toml_content: &Value) -> Vec<Party> {
+    use std::collections::HashSet;
+
     let mut parties = Vec::new();
+    let mut seen = HashSet::new();
 
     if let Some(authors) = toml_content.get(FIELD_AUTHORS).and_then(|v| v.as_array()) {
         for author in authors.iter().take(MAX_ITERATION_COUNT) {
-            if let Some(author_str) = author.as_str() {
-                parties.push(Party {
-                    r#type: None,
-                    role: Some("author".to_string()),
-                    name: Some(truncate_field(author_str.trim().to_string())),
-                    email: None,
-                    url: None,
-                    organization: None,
-                    organization_url: None,
-                    timezone: None,
-                });
+            push_author_party(author, &mut parties, &mut seen);
+        }
+    }
+
+    if let Some(author_value) = toml_content.get(FIELD_AUTHOR) {
+        match author_value {
+            Value::Array(authors) => {
+                for author in authors.iter().take(MAX_ITERATION_COUNT) {
+                    push_author_party(author, &mut parties, &mut seen);
+                }
             }
+            other => push_author_party(other, &mut parties, &mut seen),
         }
     }
 
     parties
+}
+
+fn push_author_party(
+    value: &Value,
+    parties: &mut Vec<Party>,
+    seen: &mut std::collections::HashSet<String>,
+) {
+    let Some(author_str) = value.as_str() else {
+        return;
+    };
+
+    let author_name = truncate_field(author_str.trim().to_string());
+    if author_name.is_empty() || !seen.insert(author_name.clone()) {
+        return;
+    }
+
+    parties.push(Party {
+        r#type: None,
+        role: Some("author".to_string()),
+        name: Some(author_name),
+        email: None,
+        url: None,
+        organization: None,
+        organization_url: None,
+        timezone: None,
+    });
 }
 
 fn extract_project_dependencies(toml_content: &Value) -> Vec<Dependency> {
