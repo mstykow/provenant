@@ -880,6 +880,7 @@ pub static UNASSEMBLED_DATASOURCE_IDS: &[DatasourceId] = &[
     DatasourceId::JavaEarApplicationXml,
     DatasourceId::JavaWarWebXml,
     DatasourceId::JbossServiceXml,
+    DatasourceId::BitbakeRecipe,
     DatasourceId::MesonBuild,
     DatasourceId::GemGemspecInstalledSpecifications,
     DatasourceId::NugetDirectoryBuildProps,

@@ -64,6 +64,9 @@ pub enum DatasourceId {
     BazelBuild,
     BazelModule,
 
+    // ── Bitbake ──
+    BitbakeRecipe,
+
     // ── Bower ──
     BowerJson,
 
@@ -390,6 +393,9 @@ impl DatasourceId {
 
             // Bazel
             Self::BazelBuild => "bazel_build",
+
+            // Bitbake
+            Self::BitbakeRecipe => "bitbake_recipe",
 
             // Bower
             Self::BowerJson => "bower_json",

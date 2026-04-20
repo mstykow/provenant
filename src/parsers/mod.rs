@@ -22,6 +22,9 @@ mod bazel;
 mod bazel_module_test;
 #[cfg(test)]
 mod bazel_test;
+mod bitbake;
+#[cfg(test)]
+mod bitbake_test;
 mod bower;
 #[cfg(test)]
 mod bower_scan_test;
@@ -546,6 +549,7 @@ pub use self::android::{
 pub use self::arch::{ArchPkginfoParser, ArchSrcinfoParser};
 pub use self::autotools::AutotoolsConfigureParser;
 pub use self::bazel::{BazelBuildParser, BazelModuleParser};
+pub use self::bitbake::BitbakeRecipeParser;
 pub use self::bower::BowerJsonParser;
 pub use self::buck::{BuckBuildParser, BuckMetadataBzlParser};
 pub use self::bun_lock::BunLockParser;
@@ -805,6 +809,7 @@ register_package_handlers! {
         AutotoolsConfigureParser,
         BazelBuildParser,
         BazelModuleParser,
+        BitbakeRecipeParser,
         BowerJsonParser,
         BunLockParser,
         BunLockbParser,

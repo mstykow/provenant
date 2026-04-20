@@ -12,6 +12,8 @@ mod autotools_golden_test;
 mod bazel_golden_test;
 #[path = "bazel_module_golden_test.rs"]
 mod bazel_module_golden_test;
+#[path = "bitbake_golden_test.rs"]
+mod bitbake_golden_test;
 #[path = "bower_golden_test.rs"]
 mod bower_golden_test;
 #[path = "buck_golden_test.rs"]
