@@ -596,6 +596,7 @@ pub fn run() -> Result<()> {
         ));
     }
     progress.record_final_counts(&output.files);
+    progress.record_final_header_counts(&output.headers);
     progress.finish_output();
 
     let summary_end = Utc::now();
