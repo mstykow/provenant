@@ -272,6 +272,9 @@ ScanCode: 162.58s</title></rect>
     <rect x="649.58" y="389.31" width="8" height="8" fill="#d97706" rx="1.5"><title>debian:bookworm-slim @ sha256:f065376
 Files: 3267
 ScanCode: 156.25s</title></rect>
+    <rect x="653.59" y="309.22" width="8" height="8" fill="#d97706" rx="1.5"><title>protocolbuffers/protobuf @ e3370c2
+Files: 3463
+ScanCode: 851.02s</title></rect>
     <rect x="655.19" y="373.28" width="8" height="8" fill="#d97706" rx="1.5"><title>firebase/flutterfire @ 90d2e1f
 Files: 3544
 ScanCode: 219.35s</title></rect>
@@ -350,6 +353,9 @@ ScanCode: 812.80s</title></rect>
     <rect x="729.11" y="318.85" width="8" height="8" fill="#d97706" rx="1.5"><title>grpc/grpc @ f87c29f
 Files: 10361
 ScanCode: 694.17s</title></rect>
+    <rect x="736.27" y="269.45" width="8" height="8" fill="#d97706" rx="1.5"><title>bazelbuild/bazel @ eb5aeaa
+Files: 11496
+ScanCode: 1974.56s</title></rect>
     <rect x="736.95" y="313.57" width="8" height="8" fill="#d97706" rx="1.5"><title>spring-projects/spring-boot @ 53827d4
 Files: 11610
 ScanCode: 776.24s</title></rect>
@@ -386,6 +392,9 @@ ScanCode: 850.20s</title></rect>
     <rect x="800.22" y="262.42" width="8" height="8" fill="#d97706" rx="1.5"><title>kubernetes/kubernetes @ d3b9c54
 Files: 29080
 ScanCode: 2291.67s</title></rect>
+    <rect x="815.39" y="217.51" width="8" height="8" fill="#d97706" rx="1.5"><title>tensorflow/tensorflow @ 2cd48d2
+Files: 36237
+ScanCode: 5927.08s</title></rect>
     <rect x="822.70" y="228.21" width="8" height="8" fill="#d97706" rx="1.5"><title>elastic/elasticsearch @ a414f3d
 Files: 40293
 ScanCode: 4726.52s</title></rect>
@@ -610,6 +619,9 @@ Provenant: 22.16s</title></circle>
     <circle cx="653.58" cy="488.03" r="4.5" fill="#2563eb"><title>debian:bookworm-slim @ sha256:f065376
 Files: 3267
 Provenant: 21.05s</title></circle>
+    <circle cx="657.59" cy="471.72" r="4.5" fill="#2563eb"><title>protocolbuffers/protobuf @ e3370c2
+Files: 3463
+Provenant: 29.73s</title></circle>
     <circle cx="659.19" cy="479.87" r="4.5" fill="#2563eb"><title>firebase/flutterfire @ 90d2e1f
 Files: 3544
 Provenant: 25.02s</title></circle>
@@ -688,6 +700,9 @@ Provenant: 60.60s</title></circle>
     <circle cx="733.11" cy="448.97" r="4.5" fill="#2563eb"><title>grpc/grpc @ f87c29f
 Files: 10361
 Provenant: 48.11s</title></circle>
+    <circle cx="740.27" cy="381.46" r="4.5" fill="#2563eb"><title>bazelbuild/bazel @ eb5aeaa
+Files: 11496
+Provenant: 200.80s</title></circle>
     <circle cx="740.95" cy="432.92" r="4.5" fill="#2563eb"><title>spring-projects/spring-boot @ 53827d4
 Files: 11610
 Provenant: 67.58s</title></circle>
@@ -724,6 +739,9 @@ Provenant: 41.11s</title></circle>
     <circle cx="804.22" cy="397.97" r="4.5" fill="#2563eb"><title>kubernetes/kubernetes @ d3b9c54
 Files: 29080
 Provenant: 141.58s</title></circle>
+    <circle cx="819.39" cy="364.02" r="4.5" fill="#2563eb"><title>tensorflow/tensorflow @ 2cd48d2
+Files: 36237
+Provenant: 290.44s</title></circle>
     <circle cx="826.70" cy="396.34" r="4.5" fill="#2563eb"><title>elastic/elasticsearch @ a414f3d
 Files: 40293
 Provenant: 146.56s</title></circle>
