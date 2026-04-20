@@ -45,6 +45,7 @@ fn test_cartfile_extract_packages() {
     assert_eq!(pkg.package_type, Some(PackageType::Carthage));
     assert_eq!(pkg.datasource_id, Some(DatasourceId::CarthageCartfile));
     assert_eq!(pkg.primary_language.as_deref(), Some("Objective-C"));
+    assert!(!pkg.is_private);
 
     assert_eq!(pkg.dependencies.len(), 7);
 
@@ -149,6 +150,7 @@ fn test_cartfile_private_extract_packages() {
     assert_eq!(packages.len(), 1);
     let pkg = &packages[0];
     assert_eq!(pkg.dependencies.len(), 2);
+    assert!(pkg.is_private);
 
     let dep0 = &pkg.dependencies[0];
     assert_eq!(dep0.purl.as_deref(), Some("pkg:github/quick/quick"));
