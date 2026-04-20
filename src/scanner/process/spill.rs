@@ -99,3 +99,51 @@ impl FileInfoSpillStore {
         files
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{DiagnosticSeverity, FileType, ScanDiagnostic};
+
+    #[test]
+    fn spilled_files_preserve_scan_diagnostic_severity() {
+        let mut store = FileInfoSpillStore::new();
+        let mut file = FileInfo::new(
+            "custom.txt".to_string(),
+            "custom".to_string(),
+            ".txt".to_string(),
+            "project/custom.txt".to_string(),
+            FileType::File,
+            None,
+            None,
+            10,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Vec::new(),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec!["custom recoverable warning".to_string()],
+        );
+        file.scan_diagnostics = vec![ScanDiagnostic::warning("custom recoverable warning")];
+
+        store.spill(vec![file]);
+        let loaded = store.load_all();
+
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].scan_diagnostics.len(), 1);
+        assert_eq!(
+            loaded[0].scan_diagnostics[0].severity,
+            DiagnosticSeverity::Warning
+        );
+    }
+}

@@ -11,7 +11,9 @@ use indicatif_log_bridge::LogWrapper;
 use log::LevelFilter;
 
 use crate::cli::ProcessMode;
-use crate::models::{FileInfo, FileType};
+use crate::models::{
+    DiagnosticSeverity, FileInfo, FileType, ScanDiagnostic, is_legacy_warning_message,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProgressMode {
@@ -169,21 +171,12 @@ impl ScanProgress {
         }
     }
 
-    pub fn file_completed(&self, path: &Path, bytes: u64, scan_errors: &[String]) {
+    pub fn file_completed(&self, path: &Path, bytes: u64, scan_diagnostics: &[ScanDiagnostic]) {
         self.scan_bar.inc(1);
         let mut stats = self.stats.lock().expect("stats lock poisoned");
         stats.total_bytes_scanned += bytes;
 
-        let errors = scan_errors
-            .iter()
-            .filter(|error| !is_warning_scan_error(error))
-            .cloned()
-            .collect::<Vec<_>>();
-        let warnings = scan_errors
-            .iter()
-            .filter(|error| is_warning_scan_error(error))
-            .cloned()
-            .collect::<Vec<_>>();
+        let (errors, warnings) = partition_scan_diagnostics(scan_diagnostics);
 
         if !errors.is_empty() {
             stats.error_count += 1;
@@ -523,6 +516,22 @@ pub(crate) fn format_default_scan_warning_from_list(
         .map(|warning| format_default_scan_error(path, warning))
 }
 
+pub(crate) fn partition_scan_diagnostics(
+    scan_diagnostics: &[ScanDiagnostic],
+) -> (Vec<String>, Vec<String>) {
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+
+    for diagnostic in scan_diagnostics {
+        match diagnostic.severity {
+            DiagnosticSeverity::Error => errors.push(diagnostic.message.clone()),
+            DiagnosticSeverity::Warning => warnings.push(diagnostic.message.clone()),
+        }
+    }
+
+    (errors, warnings)
+}
+
 fn concise_scan_error_reason(err: &str) -> String {
     let first_line = err
         .lines()
@@ -552,10 +561,7 @@ fn is_timeout_scan_error(err: &str) -> bool {
 }
 
 pub(crate) fn is_warning_scan_error(err: &str) -> bool {
-    let first_line = err.lines().next().unwrap_or(err).trim();
-    first_line.starts_with("Maven property ")
-        || first_line.starts_with("Skipping Maven template coordinates")
-        || first_line.starts_with("Circular include detected")
+    is_legacy_warning_message(err)
 }
 
 fn is_structured_error_prefix(prefix: &str) -> bool {
@@ -739,12 +745,13 @@ pub fn format_size(bytes: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        ScanStats, apply_default_log_filters_from, build_summary_messages,
-        concise_scan_error_reason, format_default_scan_error, format_default_scan_error_from_list,
-        format_size, pdf_oxide_default_log_filter_from, pluralize_files,
-        should_filter_pdf_oxide_default_warnings_from,
+        ProgressMode, ScanProgress, ScanStats, apply_default_log_filters_from,
+        build_summary_messages, concise_scan_error_reason, format_default_scan_error,
+        format_default_scan_error_from_list, format_size, pdf_oxide_default_log_filter_from,
+        pluralize_files, should_filter_pdf_oxide_default_warnings_from,
     };
     use crate::cli::ProcessMode;
+    use crate::models::ScanDiagnostic;
 
     use std::path::Path;
 
@@ -922,5 +929,20 @@ mod tests {
     fn pluralize_files_uses_expected_labels() {
         assert_eq!(pluralize_files(1), "file");
         assert_eq!(pluralize_files(2), "files");
+    }
+
+    #[test]
+    fn file_completed_counts_warning_diagnostics_without_prefix_heuristics() {
+        let progress = ScanProgress::new(ProgressMode::Quiet);
+
+        progress.file_completed(
+            Path::new("project/custom.txt"),
+            42,
+            &[ScanDiagnostic::warning("custom recoverable warning")],
+        );
+
+        let stats = progress.stats.lock().expect("stats lock poisoned");
+        assert_eq!(stats.warning_count, 1);
+        assert_eq!(stats.error_count, 0);
     }
 }

@@ -10,7 +10,7 @@ use crate::license_detection::models::License;
 use crate::license_detection::models::position_span::PositionSpan;
 use crate::license_detection::models::{LicenseMatch, MatchCoordinates, MatcherKind, RuleKind};
 use crate::license_detection::query::Query;
-use crate::models::{FileInfoBuilder, LineNumber, MatchScore};
+use crate::models::{FileInfoBuilder, LineNumber, MatchScore, ScanDiagnostic};
 use crate::scanner::LicenseScanOptions;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
@@ -339,11 +339,11 @@ fn test_compute_percentage_of_license_text_counts_unknown_tokens() {
 #[test]
 fn test_extract_license_information_maps_timeout_to_stage_error() {
     let mut file_info_builder = FileInfoBuilder::default();
-    let mut scan_errors = Vec::new();
+    let mut scan_diagnostics: Vec<ScanDiagnostic> = Vec::new();
 
     let error = extract_license_information(
         &mut file_info_builder,
-        &mut scan_errors,
+        &mut scan_diagnostics,
         LicenseExtractionInput {
             path: std::path::Path::new("timeout.txt"),
             text_content:
@@ -358,6 +358,6 @@ fn test_extract_license_information_maps_timeout_to_stage_error() {
     )
     .expect_err("expired deadline should map to stage-specific timeout");
 
-    assert!(scan_errors.is_empty());
+    assert!(scan_diagnostics.is_empty());
     assert_eq!(error.to_string(), "Timeout during license scan (> 1.00s)");
 }

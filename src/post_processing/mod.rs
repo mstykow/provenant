@@ -245,7 +245,7 @@ fn summarize_header_messages(
     let mut warnings = Vec::new();
 
     for file in files {
-        let (file_errors, file_warnings) = partition_scan_messages(&file.scan_errors);
+        let (file_errors, file_warnings) = partition_scan_messages(file);
 
         if let Some(summary) = summarize_file_header_message(file, &file_errors, verbose, false) {
             errors.push(summary);
@@ -258,8 +258,12 @@ fn summarize_header_messages(
     (errors, warnings)
 }
 
-fn partition_scan_messages(scan_messages: &[String]) -> (Vec<String>, Vec<String>) {
-    scan_messages
+fn partition_scan_messages(file: &FileInfo) -> (Vec<String>, Vec<String>) {
+    if !file.scan_diagnostics.is_empty() {
+        return crate::progress::partition_scan_diagnostics(&file.scan_diagnostics);
+    }
+
+    file.scan_errors
         .iter()
         .cloned()
         .partition(|message| !is_warning_scan_error(message))

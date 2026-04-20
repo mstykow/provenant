@@ -4,7 +4,9 @@ use crate::license_detection::PositionSet;
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::models::LicenseMatch as InternalLicenseMatch;
 use crate::license_detection::query::Query;
-use crate::models::{FileInfoBuilder, LicenseDetection as PublicLicenseDetection, Match};
+use crate::models::{
+    FileInfoBuilder, LicenseDetection as PublicLicenseDetection, Match, ScanDiagnostic,
+};
 use crate::scanner::LicenseScanOptions;
 use anyhow::Error;
 use std::path::Path;
@@ -23,7 +25,7 @@ pub(super) struct LicenseExtractionInput<'a> {
 
 pub(super) fn extract_license_information(
     file_info_builder: &mut FileInfoBuilder,
-    scan_errors: &mut Vec<String>,
+    scan_diagnostics: &mut Vec<ScanDiagnostic>,
     input: LicenseExtractionInput<'_>,
 ) -> Result<(), Error> {
     let LicenseExtractionInput {
@@ -140,7 +142,10 @@ pub(super) fn extract_license_information(
             return Err(timeout_during_license_scan(timeout_seconds));
         }
         Err(e) => {
-            scan_errors.push(format!("License detection failed: {}", e));
+            scan_diagnostics.push(ScanDiagnostic::error(format!(
+                "License detection failed: {}",
+                e
+            )));
         }
     }
 

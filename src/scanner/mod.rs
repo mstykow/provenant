@@ -114,6 +114,7 @@ pub use self::process::{
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::path::PathBuf;
     use std::sync::Arc;
 
     use tempfile::TempDir;
@@ -126,6 +127,23 @@ mod tests {
         LicenseScanOptions, MemoryMode, TextDetectionOptions, collect_paths, process_collected,
         process_collected_with_memory_limit, scan_options_fingerprint,
     };
+
+    fn build_sparse_oversized_rpm(temp_dir: &TempDir, name: &str) -> PathBuf {
+        let file_path = temp_dir.path().join(format!("{name}-1.0-1.x86_64.rpm"));
+        rpm::PackageBuilder::new(name, "1.0", "MIT", "x86_64", "Demo RPM package")
+            .release("1")
+            .build()
+            .expect("build rpm fixture")
+            .write_file(&file_path)
+            .expect("write rpm fixture");
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&file_path)
+            .expect("open rpm fixture for sparse extension")
+            .set_len(100 * 1024 * 1024 + 1_048_576)
+            .expect("extend rpm fixture");
+        file_path
+    }
 
     #[test]
     fn default_options_keep_copyright_detection_enabled() {
@@ -1025,6 +1043,130 @@ mod tests {
             "package_data: {:#?}",
             scanned.package_data
         );
+    }
+
+    #[test]
+    fn scanner_parses_oversized_rpm_in_package_only_mode_without_size_warning() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let file_path = build_sparse_oversized_rpm(&temp_dir, "oversized-demo");
+
+        let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+        let result = process_collected(
+            &collected,
+            progress,
+            None,
+            LicenseScanOptions::default(),
+            &TextDetectionOptions {
+                collect_info: false,
+                detect_packages: true,
+                detect_application_packages: true,
+                detect_system_packages: false,
+                detect_packages_in_compiled: false,
+                detect_copyrights: false,
+                detect_generated: false,
+                detect_emails: false,
+                detect_urls: false,
+                max_emails: 50,
+                max_urls: 50,
+                timeout_seconds: 120.0,
+            },
+        );
+
+        let scanned = result
+            .files
+            .into_iter()
+            .find(|entry| {
+                entry.file_type == FileType::File && entry.path == file_path.to_string_lossy()
+            })
+            .expect("scanned file entry");
+
+        assert!(
+            scanned.scan_errors.is_empty(),
+            "scan_errors: {:#?}",
+            scanned.scan_errors
+        );
+        assert_eq!(
+            scanned.package_data.len(),
+            1,
+            "package_data: {:#?}",
+            scanned.package_data
+        );
+        assert_eq!(
+            scanned.package_data[0].datasource_id,
+            Some(DatasourceId::RpmArchive)
+        );
+        assert_eq!(
+            scanned.package_data[0].name.as_deref(),
+            Some("oversized-demo")
+        );
+        assert_eq!(scanned.package_data[0].version.as_deref(), Some("1.0-1"));
+    }
+
+    #[test]
+    fn scanner_parses_oversized_rpm_with_info_without_timeout_or_size_warning() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let file_path = build_sparse_oversized_rpm(&temp_dir, "oversized-info-demo");
+
+        let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+        let result = process_collected(
+            &collected,
+            progress,
+            None,
+            LicenseScanOptions::default(),
+            &TextDetectionOptions {
+                collect_info: true,
+                detect_packages: true,
+                detect_application_packages: true,
+                detect_system_packages: false,
+                detect_packages_in_compiled: false,
+                detect_copyrights: false,
+                detect_generated: false,
+                detect_emails: false,
+                detect_urls: false,
+                max_emails: 50,
+                max_urls: 50,
+                timeout_seconds: 120.0,
+            },
+        );
+
+        let scanned = result
+            .files
+            .into_iter()
+            .find(|entry| {
+                entry.file_type == FileType::File && entry.path == file_path.to_string_lossy()
+            })
+            .expect("scanned file entry");
+
+        assert!(
+            scanned.scan_errors.is_empty(),
+            "scan_errors: {:#?}",
+            scanned.scan_errors
+        );
+        assert_eq!(
+            scanned.package_data.len(),
+            1,
+            "package_data: {:#?}",
+            scanned.package_data
+        );
+        assert_eq!(
+            scanned.package_data[0].datasource_id,
+            Some(DatasourceId::RpmArchive)
+        );
+        assert_eq!(
+            scanned.package_data[0].name.as_deref(),
+            Some("oversized-info-demo")
+        );
+        assert!(scanned.sha1.is_some());
+        assert!(scanned.md5.is_some());
+        assert!(scanned.sha256.is_some());
+        assert!(scanned.sha1_git.is_some());
+        assert_eq!(scanned.mime_type.as_deref(), Some("application/x-rpm"));
+        assert_eq!(scanned.file_type_label.as_deref(), Some("RPM package"));
+        assert_eq!(scanned.is_binary, Some(true));
+        assert_eq!(scanned.is_text, Some(false));
+        assert_eq!(scanned.is_archive, Some(true));
     }
 
     #[test]

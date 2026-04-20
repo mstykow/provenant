@@ -2781,6 +2781,60 @@ fn create_output_routes_warning_like_scan_errors_into_header_warnings() {
 }
 
 #[test]
+fn create_output_routes_structured_warning_diagnostics_into_header_warnings() {
+    let start = Utc::now();
+    let end = start;
+
+    let mut manifest = file("project/custom.txt");
+    manifest.scan_errors = vec!["custom recoverable warning".to_string()];
+    manifest.scan_diagnostics = vec![crate::models::ScanDiagnostic::warning(
+        "custom recoverable warning",
+    )];
+
+    let output = create_output(
+        start,
+        end,
+        crate::scanner::ProcessResult {
+            files: vec![dir("project"), manifest],
+            excluded_count: 0,
+        },
+        CreateOutputContext {
+            total_dirs: 1,
+            assembly_result: assembly::AssemblyResult {
+                packages: vec![],
+                dependencies: vec![],
+            },
+            license_detections: vec![],
+            license_references: vec![],
+            license_rule_references: vec![],
+            spdx_license_list_version: "3.27".to_string(),
+            license_index_provenance: None,
+            extra_errors: vec![],
+            extra_warnings: vec![],
+            header_options: serde_json::Map::new(),
+            options: CreateOutputOptions {
+                facet_rules: &[],
+                include_classify: false,
+                include_tallies_by_facet: false,
+                include_summary: false,
+                include_license_clarity_score: false,
+                include_tallies: false,
+                include_tallies_with_details: false,
+                include_tallies_of_key_files: false,
+                include_generated: false,
+                verbose: false,
+            },
+        },
+    );
+
+    assert!(output.headers[0].errors.is_empty());
+    assert_eq!(
+        output.headers[0].warnings,
+        vec!["custom recoverable warning: project/custom.txt".to_string()]
+    );
+}
+
+#[test]
 fn create_output_deduplicates_header_summary_errors() {
     let start = Utc::now();
     let end = start;

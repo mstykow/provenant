@@ -398,6 +398,9 @@ impl TryFrom<&OutputFileInfo> for crate::models::FileInfo {
                 .map(|s| crate::models::PackageUid::from_raw(s.clone()))
                 .collect(),
             scan_errors: value.scan_errors.clone(),
+            scan_diagnostics: crate::models::diagnostics_from_legacy_scan_errors(
+                &value.scan_errors,
+            ),
             license_policy,
             is_generated: value.is_generated,
             is_binary: value.is_binary,

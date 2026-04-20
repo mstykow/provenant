@@ -124,7 +124,7 @@ fn normalize_loaded_json_scan_applies_strip_root_per_loaded_input() {
             errors: vec![
                 "Failed to read or parse package.json: archive/root/src/main.rs".to_string(),
             ],
-            warnings: vec![],
+            warnings: vec!["custom recoverable warning: archive/root/src/main.rs".to_string()],
             extra_data: None,
         }],
         files: vec![
@@ -171,6 +171,10 @@ fn normalize_loaded_json_scan_applies_strip_root_per_loaded_input() {
         vec!["Failed to read or parse package.json: src/main.rs"]
     );
     assert_eq!(
+        loaded.headers[0].warnings,
+        vec!["custom recoverable warning: src/main.rs"]
+    );
+    assert_eq!(
         loaded.license_detections[0].reference_matches[0]
             .from_file
             .as_deref(),
@@ -183,7 +187,7 @@ fn normalize_loaded_json_scan_trims_full_root_display_without_absolutizing() {
     let mut loaded = JsonScanInput {
         headers: vec![JsonHeaderInput {
             errors: vec!["Path: /tmp/archive/root/src/main.rs".to_string()],
-            warnings: vec![],
+            warnings: vec!["custom recoverable warning: /tmp/archive/root/src/main.rs".to_string()],
             extra_data: None,
         }],
         files: vec![output_json_file(
@@ -227,6 +231,10 @@ fn normalize_loaded_json_scan_trims_full_root_display_without_absolutizing() {
     assert_eq!(
         loaded.headers[0].errors,
         vec!["Path: tmp/archive/root/src/main.rs"]
+    );
+    assert_eq!(
+        loaded.headers[0].warnings,
+        vec!["custom recoverable warning: tmp/archive/root/src/main.rs"]
     );
     assert_eq!(
         loaded.license_detections[0].reference_matches[0]
@@ -295,6 +303,9 @@ fn load_and_merge_json_inputs_namespaces_multiple_replay_inputs() {
     fs::write(
         &first,
         json!({
+            "headers": [
+                {"warnings": ["custom recoverable warning: README"]}
+            ],
             "files": [
                 {"path": "README", "type": "file", "scan_errors": []}
             ],
@@ -310,6 +321,9 @@ fn load_and_merge_json_inputs_namespaces_multiple_replay_inputs() {
     fs::write(
         &second,
         json!({
+            "headers": [
+                {"warnings": ["custom recoverable warning: README.adoc"]}
+            ],
             "files": [
                 {"path": "README.adoc", "type": "file", "scan_errors": []},
                 {"path": "bench/data/gsoc-2018.json", "type": "file", "scan_errors": []}
@@ -345,6 +359,83 @@ fn load_and_merge_json_inputs_namespaces_multiple_replay_inputs() {
             "virtual_root/codebase-2/bench/data",
             "virtual_root/codebase-2",
         ]
+    );
+    assert_eq!(
+        merged.headers[0].warnings,
+        vec!["custom recoverable warning: virtual_root/codebase-1/README"]
+    );
+    assert_eq!(
+        merged.headers[1].warnings,
+        vec!["custom recoverable warning: virtual_root/codebase-2/README.adoc"]
+    );
+
+    let _ = fs::remove_file(first);
+    let _ = fs::remove_file(second);
+    let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn load_and_merge_json_inputs_restores_warning_severity_after_namespacing() {
+    let temp_dir = std::env::temp_dir().join("provenant-from-json-warning-merge-test");
+    let _ = fs::create_dir_all(&temp_dir);
+    let first = temp_dir.join("first.json");
+    let second = temp_dir.join("second.json");
+
+    fs::write(
+        &first,
+        json!({
+            "headers": [
+                {"warnings": ["custom recoverable warning: README"]}
+            ],
+            "files": [
+                {"path": "README", "type": "file", "scan_errors": ["custom recoverable warning"]}
+            ],
+            "packages": [],
+            "dependencies": [],
+            "license_detections": [],
+            "license_references": [],
+            "license_rule_references": []
+        })
+        .to_string(),
+    )
+    .expect("write first json fixture");
+    fs::write(
+        &second,
+        json!({
+            "files": [
+                {"path": "README.adoc", "type": "file", "scan_errors": []}
+            ],
+            "packages": [],
+            "dependencies": [],
+            "license_detections": [],
+            "license_references": [],
+            "license_rule_references": []
+        })
+        .to_string(),
+    )
+    .expect("write second json fixture");
+
+    let merged = load_and_merge_json_inputs(
+        &[
+            first.to_str().expect("utf-8 path").to_string(),
+            second.to_str().expect("utf-8 path").to_string(),
+        ],
+        false,
+        false,
+    )
+    .expect("merged replay inputs should load");
+
+    let (process_result, ..) = merged.into_parts().expect("into_parts should succeed");
+    let readme = process_result
+        .files
+        .into_iter()
+        .find(|file| file.path == "virtual_root/codebase-1/README")
+        .expect("namespaced replayed file");
+
+    assert_eq!(readme.scan_diagnostics.len(), 1);
+    assert_eq!(
+        readme.scan_diagnostics[0].severity,
+        crate::models::DiagnosticSeverity::Warning
     );
 
     let _ = fs::remove_file(first);
@@ -479,6 +570,43 @@ fn into_parts_drops_imported_warnings_and_file_summary_errors() {
 }
 
 #[test]
+fn into_parts_restores_file_warning_severity_from_header_warnings() {
+    let loaded = JsonScanInput {
+        headers: vec![JsonHeaderInput {
+            errors: vec![],
+            warnings: vec!["custom recoverable warning: src/main.rs".to_string()],
+            extra_data: None,
+        }],
+        files: vec![{
+            let mut file = output_json_file("src/main.rs", crate::models::FileType::File);
+            file.scan_errors = vec!["custom recoverable warning".to_string()];
+            file
+        }],
+        packages: vec![],
+        dependencies: vec![],
+        license_detections: vec![],
+        license_references: vec![],
+        license_rule_references: vec![],
+        excluded_count: 0,
+    };
+
+    let (process_result, _assembly_result, _dets, _refs, _rule_refs, extra_errors, _, _) =
+        loaded.into_parts().expect("into_parts should succeed");
+
+    assert!(extra_errors.is_empty());
+    assert_eq!(process_result.files.len(), 1);
+    assert_eq!(
+        process_result.files[0].scan_errors,
+        vec!["custom recoverable warning"]
+    );
+    assert_eq!(process_result.files[0].scan_diagnostics.len(), 1);
+    assert_eq!(
+        process_result.files[0].scan_diagnostics[0].severity,
+        crate::models::DiagnosticSeverity::Warning
+    );
+}
+
+#[test]
 fn normalize_loaded_json_scan_rewrites_verbose_header_error_path_prefix() {
     let mut loaded = JsonScanInput {
         headers: vec![JsonHeaderInput {
@@ -507,6 +635,34 @@ fn normalize_loaded_json_scan_rewrites_verbose_header_error_path_prefix() {
         vec![
             "Failed to parse package.json: tmp/archive/root/src/main.rs\n  Failed to parse package.json"
         ]
+    );
+}
+
+#[test]
+fn normalize_loaded_json_scan_rewrites_header_warnings_too() {
+    let mut loaded = JsonScanInput {
+        headers: vec![JsonHeaderInput {
+            errors: vec![],
+            warnings: vec!["custom recoverable warning: /tmp/archive/root/src/main.rs".to_string()],
+            extra_data: None,
+        }],
+        files: vec![output_json_file(
+            "/tmp/archive/root/src/main.rs",
+            crate::models::FileType::File,
+        )],
+        packages: vec![],
+        dependencies: vec![],
+        license_detections: vec![],
+        license_references: vec![],
+        license_rule_references: vec![],
+        excluded_count: 0,
+    };
+
+    normalize_loaded_json_scan(&mut loaded, false, true);
+
+    assert_eq!(
+        loaded.headers[0].warnings,
+        vec!["custom recoverable warning: tmp/archive/root/src/main.rs"]
     );
 }
 

@@ -310,18 +310,19 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::license_detection::LicenseDetectionEngine;
-use crate::models::{PackageData, PackageType};
+use crate::models::{DiagnosticSeverity, PackageData, PackageType, ScanDiagnostic};
 use crate::parsers::license_normalization::finalize_package_declared_license_references;
 use crate::parsers::utils::MAX_ITERATION_COUNT;
 
 thread_local! {
-    static PARSER_DIAGNOSTIC_STACK: RefCell<Vec<Vec<String>>> = const { RefCell::new(Vec::new()) };
+    static PARSER_DIAGNOSTIC_STACK: RefCell<Vec<Vec<ScanDiagnostic>>> = const { RefCell::new(Vec::new()) };
     static PARSER_LICENSE_ENGINE_STACK: RefCell<Vec<Option<Arc<LicenseDetectionEngine>>>> = const { RefCell::new(Vec::new()) };
 }
 
 #[derive(Debug, Default)]
 pub struct ParsePackagesResult {
     pub packages: Vec<PackageData>,
+    pub scan_diagnostics: Vec<ScanDiagnostic>,
     pub scan_errors: Vec<String>,
 }
 
@@ -364,24 +365,32 @@ where
     PARSER_LICENSE_ENGINE_STACK.with(|stack| {
         stack.borrow_mut().pop();
     });
-    let mut scan_errors =
+    let mut scan_diagnostics =
         PARSER_DIAGNOSTIC_STACK.with(|stack| stack.borrow_mut().pop().unwrap_or_default());
 
     match extract_result {
         Ok(packages) => ParsePackagesResult {
             packages,
-            scan_errors,
+            scan_errors: scan_diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.message.clone())
+                .collect(),
+            scan_diagnostics,
         },
         Err(payload) => {
-            scan_errors.push(format!(
+            scan_diagnostics.push(ScanDiagnostic::error(format!(
                 "{} panicked while parsing {}: {}",
                 handler_name,
                 path.display(),
                 panic_payload_to_string(payload.as_ref())
-            ));
+            )));
             ParsePackagesResult {
                 packages: Vec::new(),
-                scan_errors,
+                scan_errors: scan_diagnostics
+                    .iter()
+                    .map(|diagnostic| diagnostic.message.clone())
+                    .collect(),
+                scan_diagnostics,
             }
         }
     }
@@ -391,13 +400,13 @@ pub(crate) fn active_parser_license_engine() -> Option<Arc<LicenseDetectionEngin
     PARSER_LICENSE_ENGINE_STACK.with(|stack| stack.borrow().last().cloned().flatten())
 }
 
-pub(crate) fn record_parser_diagnostic(message: String) -> bool {
+pub(crate) fn record_parser_diagnostic(message: String, severity: DiagnosticSeverity) -> bool {
     PARSER_DIAGNOSTIC_STACK.with(|stack| {
         let mut stack = stack.borrow_mut();
         let Some(active) = stack.last_mut() else {
             return false;
         };
-        active.push(message);
+        active.push(ScanDiagnostic { severity, message });
         true
     })
 }
@@ -406,7 +415,10 @@ pub(crate) fn record_parser_diagnostic(message: String) -> bool {
 macro_rules! parser_warn {
     ($($arg:tt)*) => {{
         let message = format!($($arg)*);
-        if !$crate::parsers::record_parser_diagnostic(message.clone()) {
+        if !$crate::parsers::record_parser_diagnostic(
+            message.clone(),
+            $crate::models::DiagnosticSeverity::Warning,
+        ) {
             log::warn!("{message}");
         }
     }};
@@ -488,6 +500,30 @@ pub trait PackageParser {
             .next()
             .unwrap_or_default()
     }
+}
+
+pub fn try_parse_rpm_archive_with_license_engine(
+    path: &Path,
+    license_engine: Option<Arc<LicenseDetectionEngine>>,
+) -> Option<ParsePackagesResult> {
+    if !self::rpm_parser::is_rpm_archive_extension(path) {
+        return None;
+    }
+
+    if <RpmParser as PackageParser>::is_match(path) {
+        return Some(capture_parser_diagnostics(
+            || self::rpm_parser::extract_rpm_packages(path),
+            stringify!(RpmParser),
+            path,
+            license_engine,
+        ));
+    }
+
+    None
+}
+
+pub fn try_parse_rpm_archive(path: &Path) -> Option<ParsePackagesResult> {
+    try_parse_rpm_archive_with_license_engine(path, None)
 }
 
 pub use self::about::AboutFileParser;
@@ -901,6 +937,7 @@ register_package_handlers! {
 #[cfg(test)]
 mod panic_isolation_tests {
     use super::*;
+    use crate::models::DiagnosticSeverity;
 
     #[test]
     fn capture_parser_diagnostics_turns_panics_into_scan_errors() {
@@ -914,6 +951,11 @@ mod panic_isolation_tests {
 
         assert!(result.packages.is_empty());
         assert_eq!(result.scan_errors.len(), 1);
+        assert_eq!(result.scan_diagnostics.len(), 1);
+        assert_eq!(
+            result.scan_diagnostics[0].severity,
+            DiagnosticSeverity::Error
+        );
         assert!(result.scan_errors[0].contains("PanicParser"));
         assert!(result.scan_errors[0].contains("fixtures/panic-package.json"));
         assert!(result.scan_errors[0].contains("panic boom"));
@@ -945,5 +987,10 @@ mod panic_isolation_tests {
 
         assert_eq!(result.packages.len(), 1);
         assert_eq!(result.scan_errors, vec!["recoverable parser warning"]);
+        assert_eq!(result.scan_diagnostics.len(), 1);
+        assert_eq!(
+            result.scan_diagnostics[0].severity,
+            DiagnosticSeverity::Warning
+        );
     }
 }

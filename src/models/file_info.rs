@@ -7,15 +7,18 @@ use std::str::FromStr;
 
 use super::DatasourceId;
 use super::DependencyUid;
+use super::DiagnosticSeverity;
 use super::GitSha1;
 use super::LineNumber;
 use super::MatchScore;
 use super::Md5Digest;
 use super::PackageType;
 use super::PackageUid;
+use super::ScanDiagnostic;
 use super::Sha1Digest;
 use super::Sha256Digest;
 use super::Sha512Digest;
+use super::diagnostics_from_legacy_scan_errors;
 use crate::license_detection::tokenize::tokenize_without_stopwords;
 use crate::models::output::Tallies;
 use crate::utils::spdx::combine_license_expressions;
@@ -91,6 +94,9 @@ pub struct FileInfo {
     #[builder(default)]
     #[serde(default)]
     pub scan_errors: Vec<String>,
+    #[builder(default)]
+    #[serde(default)]
+    pub scan_diagnostics: Vec<ScanDiagnostic>,
     #[builder(default)]
     #[serde(default)]
     pub license_policy: Option<Vec<LicensePolicyEntry>>,
@@ -182,6 +188,16 @@ impl FileInfoBuilder {
             self.for_packages.clone().unwrap_or_default(),
             self.scan_errors.clone().unwrap_or_default(),
         );
+        file_info.scan_diagnostics = if let Some(diagnostics) = &self.scan_diagnostics {
+            diagnostics.clone()
+        } else {
+            diagnostics_from_legacy_scan_errors(&file_info.scan_errors)
+        };
+        file_info.scan_errors = file_info
+            .scan_diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.message.clone())
+            .collect();
         file_info.license_policy = self.license_policy.clone().flatten();
         file_info.sha1_git = self.sha1_git.flatten();
         file_info.is_binary = self.is_binary.flatten();
@@ -279,6 +295,7 @@ impl FileInfo {
             emails,
             urls,
             for_packages,
+            scan_diagnostics: diagnostics_from_legacy_scan_errors(&scan_errors),
             scan_errors,
             license_policy: None,
             is_generated: None,
@@ -301,6 +318,7 @@ impl FileInfo {
             facets: vec![],
             tallies: None,
         };
+
         file_info.backfill_license_provenance();
         file_info
     }
@@ -313,6 +331,20 @@ impl FileInfo {
         for package in &mut self.package_data {
             enrich_package_data_license_provenance(package, &self.path);
         }
+    }
+}
+
+impl FileInfo {
+    pub fn warning_diagnostics(&self) -> impl Iterator<Item = &ScanDiagnostic> {
+        self.scan_diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity == DiagnosticSeverity::Warning)
+    }
+
+    pub fn error_diagnostics(&self) -> impl Iterator<Item = &ScanDiagnostic> {
+        self.scan_diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity == DiagnosticSeverity::Error)
     }
 }
 

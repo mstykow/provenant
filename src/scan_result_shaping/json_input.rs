@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 
 use crate::assembly;
 use crate::models::{
-    FileInfo, FileType, LicenseIndexProvenance, LicenseReference, LicenseRuleReference, Package,
-    TopLevelDependency, TopLevelLicenseDetection,
+    DiagnosticSeverity, FileInfo, FileType, LicenseIndexProvenance, LicenseReference,
+    LicenseRuleReference, Package, TopLevelDependency, TopLevelLicenseDetection,
 };
 use crate::output_schema::{
     OutputFileInfo, OutputLicenseReference, OutputLicenseRuleReference, OutputMatch, OutputPackage,
@@ -93,17 +93,32 @@ impl JsonScanInput {
     }
 
     pub(crate) fn into_parts(self) -> Result<JsonInputParts> {
+        let imported_header_warnings: Vec<String> = self
+            .headers
+            .iter()
+            .flat_map(|header| header.warnings.iter().cloned())
+            .collect();
+        let imported_header_errors: Vec<String> = self
+            .headers
+            .iter()
+            .flat_map(|header| header.errors.iter().cloned())
+            .collect();
         let _discarded_warning_count: usize = self
             .headers
             .iter()
             .map(|header| header.warnings.len())
             .sum();
-        let files = self
+        let mut files = self
             .files
             .iter()
             .map(FileInfo::try_from)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| anyhow!("Failed to convert file from JSON: {}", e))?;
+        restore_imported_warning_severities(
+            &mut files,
+            &imported_header_warnings,
+            &imported_header_errors,
+        );
         let packages = self
             .packages
             .iter()
@@ -203,6 +218,31 @@ fn header_error_matches_file_summary(error: &str, path: &str) -> bool {
     first_line == format!("Path: {path}") || first_line.ends_with(&format!(": {path}"))
 }
 
+fn restore_imported_warning_severities(
+    files: &mut [FileInfo],
+    imported_header_warnings: &[String],
+    imported_header_errors: &[String],
+) {
+    for file in files {
+        if file.scan_errors.is_empty() {
+            continue;
+        }
+
+        let warning_summary = imported_header_warnings
+            .iter()
+            .any(|warning| header_error_matches_file_summary(warning, &file.path));
+        let error_summary = imported_header_errors
+            .iter()
+            .any(|error| header_error_matches_file_summary(error, &file.path));
+
+        if warning_summary && !error_summary {
+            for diagnostic in &mut file.scan_diagnostics {
+                diagnostic.severity = DiagnosticSeverity::Warning;
+            }
+        }
+    }
+}
+
 pub(crate) fn load_and_merge_json_inputs(
     input_paths: &[String],
     strip_root: bool,
@@ -238,6 +278,8 @@ pub(crate) fn load_and_merge_json_inputs(
 }
 
 fn namespace_loaded_input(loaded: &mut JsonScanInput, input_index: usize) {
+    let original_paths: Vec<String> = loaded.files.iter().map(|file| file.path.clone()).collect();
+
     for file in &mut loaded.files {
         file.path = namespace_loaded_resource_path(&file.path, input_index);
 
@@ -259,6 +301,8 @@ fn namespace_loaded_input(loaded: &mut JsonScanInput, input_index: usize) {
         dependency.datafile_path =
             namespace_loaded_resource_path(&dependency.datafile_path, input_index);
     }
+
+    normalize_loaded_header_paths(loaded, &original_paths);
 }
 
 fn namespace_loaded_resource_path(path: &str, input_index: usize) -> String {
@@ -435,8 +479,11 @@ pub(crate) fn normalize_loaded_json_scan(
     strip_root: bool,
     full_root: bool,
 ) {
+    let initial_paths: Vec<String> = loaded.files.iter().map(|file| file.path.clone()).collect();
+
     if should_prefix_loaded_paths_with_virtual_root(loaded, strip_root, full_root) {
         prefix_loaded_resource_paths_with_virtual_root(loaded);
+        normalize_loaded_header_paths(loaded, &initial_paths);
     }
 
     let original_paths: Vec<String> = loaded.files.iter().map(|file| file.path.clone()).collect();
@@ -460,7 +507,7 @@ pub(crate) fn normalize_loaded_json_scan(
 
     synthesize_missing_directory_entries(loaded);
 
-    normalize_loaded_header_errors(loaded, &original_paths);
+    normalize_loaded_header_paths(loaded, &original_paths);
 }
 
 fn should_prefix_loaded_paths_with_virtual_root(
@@ -615,7 +662,7 @@ fn normalize_loaded_top_level_detection_paths(
     }
 }
 
-fn normalize_loaded_header_errors(loaded: &mut JsonScanInput, original_paths: &[String]) {
+fn normalize_loaded_header_paths(loaded: &mut JsonScanInput, original_paths: &[String]) {
     let mut replacements: Vec<_> = original_paths
         .iter()
         .zip(loaded.files.iter().map(|file| file.path.as_str()))
@@ -626,26 +673,33 @@ fn normalize_loaded_header_errors(loaded: &mut JsonScanInput, original_paths: &[
 
     for header in &mut loaded.headers {
         for error in &mut header.errors {
-            for (before, after) in &replacements {
-                if let Some(remainder) = error.strip_prefix(&format!("Path: {before}")) {
-                    *error = format!("Path: {after}{remainder}");
-                    break;
-                }
-                if let Some((first_line, remainder)) = error.split_once('\n')
-                    && first_line.ends_with(&format!(": {before}"))
-                {
-                    *error = format!(
-                        "{}: {after}\n{remainder}",
-                        &first_line[..first_line.len() - before.len() - 2]
-                    );
-                    break;
-                }
-                if error.ends_with(before) {
-                    let prefix_len = error.len() - before.len();
-                    error.replace_range(prefix_len.., after);
-                    break;
-                }
-            }
+            normalize_loaded_header_message(error, &replacements);
+        }
+        for warning in &mut header.warnings {
+            normalize_loaded_header_message(warning, &replacements);
+        }
+    }
+}
+
+fn normalize_loaded_header_message(message: &mut String, replacements: &[(&str, &str)]) {
+    for (before, after) in replacements {
+        if let Some(remainder) = message.strip_prefix(&format!("Path: {before}")) {
+            *message = format!("Path: {after}{remainder}");
+            break;
+        }
+        if let Some((first_line, remainder)) = message.split_once('\n')
+            && first_line.ends_with(&format!(": {before}"))
+        {
+            *message = format!(
+                "{}: {after}\n{remainder}",
+                &first_line[..first_line.len() - before.len() - 2]
+            );
+            break;
+        }
+        if message.ends_with(before) {
+            let prefix_len = message.len() - before.len();
+            message.replace_range(prefix_len.., after);
+            break;
         }
     }
 }

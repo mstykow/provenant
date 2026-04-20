@@ -11,7 +11,7 @@ use super::locking::with_exclusive_cache_lock;
 use crate::models::{FileInfo, Sha256Digest};
 use crate::utils::hash::calculate_sha256;
 
-const INCREMENTAL_MANIFEST_VERSION: u32 = 1;
+const INCREMENTAL_MANIFEST_VERSION: u32 = 2;
 const MANIFEST_FILE_NAME: &str = "manifest.json";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -126,7 +126,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::models::{FileInfo, FileType};
+    use crate::models::{DiagnosticSeverity, FileInfo, FileType, ScanDiagnostic};
 
     fn sample_manifest(options_fingerprint: &str) -> IncrementalManifest {
         let mut entries = BTreeMap::new();
@@ -190,6 +190,22 @@ mod tests {
     }
 
     #[test]
+    fn test_load_incremental_manifest_returns_none_for_older_manifest_version() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let manifest_path = incremental_manifest_path(temp_dir.path(), "abc123");
+        let mut manifest = sample_manifest("options-v1");
+        manifest.version = 1;
+
+        write_incremental_manifest(temp_dir.path(), &manifest_path, &manifest)
+            .expect("write manifest");
+
+        let loaded =
+            load_incremental_manifest(&manifest_path, "options-v1").expect("load manifest");
+
+        assert!(loaded.is_none());
+    }
+
+    #[test]
     fn test_write_and_load_incremental_manifest_round_trip() {
         let temp_dir = TempDir::new().expect("create temp dir");
         let manifest_path = incremental_manifest_path(temp_dir.path(), "abc123");
@@ -204,6 +220,34 @@ mod tests {
 
         assert_eq!(loaded.entries.len(), 1);
         assert!(loaded.entry("src/main.rs").is_some());
+    }
+
+    #[test]
+    fn test_incremental_manifest_preserves_scan_diagnostic_severity() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let manifest_path = incremental_manifest_path(temp_dir.path(), "diag");
+        let mut manifest = sample_manifest("options-v1");
+        let entry = manifest
+            .entries
+            .get_mut("src/main.rs")
+            .expect("manifest entry");
+        entry.file_info.scan_errors = vec!["custom recoverable warning".to_string()];
+        entry.file_info.scan_diagnostics =
+            vec![ScanDiagnostic::warning("custom recoverable warning")];
+
+        write_incremental_manifest(temp_dir.path(), &manifest_path, &manifest)
+            .expect("write manifest");
+
+        let loaded = load_incremental_manifest(&manifest_path, "options-v1")
+            .expect("load manifest")
+            .expect("expected manifest");
+
+        let loaded_entry = loaded.entry("src/main.rs").expect("loaded entry");
+        assert_eq!(loaded_entry.file_info.scan_diagnostics.len(), 1);
+        assert_eq!(
+            loaded_entry.file_info.scan_diagnostics[0].severity,
+            DiagnosticSeverity::Warning
+        );
     }
 
     #[test]

@@ -28,7 +28,7 @@ pub fn process_collected(
                 license_options,
                 text_options,
             );
-            progress.file_completed(path, metadata.len(), &file_entry.scan_errors);
+            progress.file_completed(path, metadata.len(), &file_entry.scan_diagnostics);
             file_entry
         })
         .collect();
@@ -67,7 +67,7 @@ pub fn process_collected_sequential(
             license_options,
             text_options,
         );
-        progress.file_completed(path, metadata.len(), &file_entry.scan_errors);
+        progress.file_completed(path, metadata.len(), &file_entry.scan_diagnostics);
         all_files.push(file_entry);
     }
 
@@ -119,7 +119,7 @@ pub fn process_collected_with_memory_limit(
                     license_options,
                     text_options,
                 );
-                progress.file_completed(path, metadata.len(), &file_entry.scan_errors);
+                progress.file_completed(path, metadata.len(), &file_entry.scan_diagnostics);
                 file_entry
             })
             .collect();
@@ -189,7 +189,7 @@ pub fn process_collected_with_memory_limit_sequential(
                 license_options,
                 text_options,
             );
-            progress.file_completed(path, metadata.len(), &file_entry.scan_errors);
+            progress.file_completed(path, metadata.len(), &file_entry.scan_diagnostics);
             processed_chunk.push(file_entry);
         }
 
