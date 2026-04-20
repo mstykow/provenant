@@ -41,7 +41,7 @@ Python surfaces `dependencyManagement` entries as dependency records with synthe
 
 Rust now does the same. Managed entries are no longer hidden only in `extra_data.dependency_management`; they are also emitted as first-class dependencies, while the raw management metadata is still preserved in `extra_data`.
 
-This improves dependency visibility for BOMs and managed dependency sets without losing the original Maven structure.
+For import-scoped BOMs, Rust keeps both normalized views in the dependency list: an `import` entry that records BOM provenance and a `dependencymanagement` entry that keeps the same coordinate visible as a managed-constraint source. This lets downstream JSON/template/SBOM-adjacent consumers preserve both facts even when they do not inspect Maven-specific `extra_data`.
 
 ## Improvement 3: Maven Qualifiers, Source Packages, and Packaging-aware Downloads
 
