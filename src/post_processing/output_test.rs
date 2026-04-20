@@ -521,6 +521,106 @@ fn apply_local_file_reference_following_resolves_root_license_file() {
 }
 
 #[test]
+fn apply_local_file_reference_following_resolves_multi_match_root_license_reference() {
+    let mut license = file("LICENSE");
+    license.license_expression = Some("mit".to_string());
+    license.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "mit".to_string(),
+        license_expression_spdx: "MIT".to_string(),
+        matches: vec![Match {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            from_file: Some("LICENSE".to_string()),
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::new(20).unwrap(),
+            matcher: Some("1-hash".to_string()),
+            score: MatchScore::MAX,
+            matched_length: Some(161),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("mit.LICENSE".to_string()),
+            rule_url: None,
+            matched_text: None,
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: Some("mit-license".to_string()),
+    }];
+
+    let mut faqs = file("docs/faqs.md");
+    faqs.license_expression = Some("unknown-license-reference".to_string());
+    faqs.license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "unknown-license-reference".to_string(),
+        license_expression_spdx: "LicenseRef-scancode-unknown-license-reference".to_string(),
+        matches: vec![
+            Match {
+                license_expression: "unknown-license-reference".to_string(),
+                license_expression_spdx: "LicenseRef-scancode-unknown-license-reference"
+                    .to_string(),
+                from_file: Some("docs/faqs.md".to_string()),
+                start_line: LineNumber::new(208).unwrap(),
+                end_line: LineNumber::new(208).unwrap(),
+                matcher: Some("2-aho".to_string()),
+                score: MatchScore::MAX,
+                matched_length: Some(2),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: Some("unknown-license-reference_see-license_1.RULE".to_string()),
+                rule_url: None,
+                matched_text: None,
+                referenced_filenames: Some(vec!["LICENSE".to_string()]),
+                matched_text_diagnostics: None,
+            },
+            Match {
+                license_expression: "unknown-license-reference".to_string(),
+                license_expression_spdx: "LicenseRef-scancode-unknown-license-reference"
+                    .to_string(),
+                from_file: Some("docs/faqs.md".to_string()),
+                start_line: LineNumber::new(212).unwrap(),
+                end_line: LineNumber::new(212).unwrap(),
+                matcher: Some("2-aho".to_string()),
+                score: MatchScore::MAX,
+                matched_length: Some(2),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: Some("unknown-license-reference_see-license_1.RULE".to_string()),
+                rule_url: None,
+                matched_text: None,
+                referenced_filenames: Some(vec!["LICENSE".to_string()]),
+                matched_text_diagnostics: None,
+            },
+        ],
+        detection_log: vec![],
+        identifier: Some("unknown-ref-faqs".to_string()),
+    }];
+
+    let mut files = vec![dir("docs"), license, faqs];
+    let mut packages = Vec::new();
+    apply_package_reference_following(&mut files, &mut packages);
+
+    let faqs = files
+        .iter()
+        .find(|file| file.path == "docs/faqs.md")
+        .expect("faqs file should exist");
+    assert_eq!(faqs.license_expression.as_deref(), Some("mit"));
+    assert_eq!(
+        faqs.license_detections[0].detection_log,
+        vec!["unknown-reference-to-local-file"]
+    );
+    assert_eq!(faqs.license_detections[0].license_expression_spdx, "MIT");
+    assert!(
+        faqs.license_detections[0]
+            .matches
+            .iter()
+            .any(|detection_match| {
+                detection_match.from_file.as_deref() == Some("LICENSE")
+                    && detection_match.license_expression_spdx == "MIT"
+            })
+    );
+}
+
+#[test]
 fn apply_local_file_reference_following_prefers_root_license_for_imperfect_subdir_reference() {
     let mut root_license = file("LICENSE");
     root_license.license_expression = Some("npsl-exception-0.95".to_string());
