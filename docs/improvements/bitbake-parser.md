@@ -1,26 +1,47 @@
-# BitBake Parser — Net-New
+# BitBake Parser Improvements
 
-The `BitbakeRecipeParser` is a net-new parser with no Python ScanCode reference implementation.
+## Summary
 
-## What it does
+Rust now ships static BitBake support for both `.bb` recipe files and `.bbappend` append files even
+though the Python ScanCode reference does not currently provide a production BitBake parser.
 
-Parses Yocto / OpenEmbedded BitBake recipe files (`.bb`) to extract:
+## Rust Improvements
 
-- **Package identity**: name and version derived from filename convention (`name_version.bb`)
-  or explicit `PN` / `PV` variable assignments
-- **Metadata**: `SUMMARY`, `DESCRIPTION`, `HOMEPAGE`, `BUGTRACKER`, `SECTION`
-- **License**: `LICENSE` variable with BitBake-specific operator normalization (`&` → `AND`,
-  `|` → `OR`) and SPDX expression mapping
-- **Dependencies**: `DEPENDS` (build-time) and `RDEPENDS` variants (runtime), supporting both
-  modern colon-based (`RDEPENDS:${PN}`) and legacy underscore-based (`RDEPENDS_${PN}`) override
-  syntax
-- **Source URIs**: non-local `SRC_URI` entries (filters out `file://` patches)
-- **Inherited classes**: `inherit` directives
+### Recipe and append-file coverage
 
-## Variable handling
+- Rust recognizes both `.bb` and `.bbappend` files.
+- `.bbappend` files participate in sibling assembly with their matching recipe instead of remaining
+  standalone parser-only output.
+- Filename-derived identity supports the common `name_version.bb` shape and bounded `%`
+  wildcards in append filenames.
 
-The parser handles all BitBake assignment operators (`=`, `?=`, `??=`, `:=`, `+=`, `=+`, `.=`,
-`=.`) with correct precedence semantics and multi-line continuation via `\`.
+### Bounded BitBake variable semantics
 
-Variable references like `${EXTRA_DEPENDS}` in dependency lists are filtered out since they
-cannot be resolved statically.
+- Rust extracts `PN`, `PV`, `SUMMARY`, `DESCRIPTION`, `HOMEPAGE`, `BUGTRACKER`, `SECTION`, and
+  inherited classes.
+- Rust supports ordinary assignment operators (`=`, `?=`, `??=`, `:=`, `+=`, `=+`, `.=` , `=.`)
+  plus bounded override-style handling for `:append`, `:prepend`, `:remove`, and their legacy
+  `_append`, `_prepend`, `_remove` forms.
+- Variable references such as `${EXTRA_DEPENDS}` are preserved in raw metadata surfaces where
+  appropriate, but unresolved dependency placeholders are not promoted into dependency purls.
+
+### License and dependency fidelity
+
+- Rust preserves the raw `LICENSE` value as `extracted_license_statement`.
+- BitBake-specific `&` / `|` operators are normalized for declared-license expression generation.
+- `DEPENDS` and `RDEPENDS` variants are extracted as build/runtime dependencies, and versioned
+  requirements such as `foo (>= 1.2)` are preserved in `extracted_requirement`.
+
+### Local file references and scanner ownership
+
+- Local `LIC_FILES_CHKSUM` and `SRC_URI` `file://...` entries are emitted as `file_references`
+  instead of being dropped.
+- Scanner assembly resolves those references relative to the manifest directory, so sibling files
+  like patches and license texts can attach back to the assembled BitBake package.
+
+## Guardrails
+
+- Rust does **not** execute BitBake, evaluate full override context, or resolve fetcher search
+  paths such as `FILESPATH` dynamically.
+- The current implementation is intentionally bounded static parsing aimed at trustworthy manifest
+  metadata recovery rather than full BitBake execution semantics.
