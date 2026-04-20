@@ -66,6 +66,7 @@ pub enum DatasourceId {
 
     // ── Bitbake ──
     BitbakeRecipe,
+    BitbakeRecipeAppend,
 
     // ── Bower ──
     BowerJson,
@@ -396,6 +397,7 @@ impl DatasourceId {
 
             // Bitbake
             Self::BitbakeRecipe => "bitbake_recipe",
+            Self::BitbakeRecipeAppend => "bitbake_recipe_append",
 
             // Bower
             Self::BowerJson => "bower_json",

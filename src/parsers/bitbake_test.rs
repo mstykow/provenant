@@ -10,7 +10,7 @@ fn test_is_match() {
         "/some/path/busybox_1.36.1.bb"
     )));
     assert!(BitbakeRecipeParser::is_match(Path::new("simple.bb")));
-    assert!(!BitbakeRecipeParser::is_match(Path::new("recipe.bbappend")));
+    assert!(BitbakeRecipeParser::is_match(Path::new("recipe.bbappend")));
     assert!(!BitbakeRecipeParser::is_match(Path::new("base.bbclass")));
     assert!(!BitbakeRecipeParser::is_match(Path::new("local.conf")));
     assert!(!BitbakeRecipeParser::is_match(Path::new("package.json")));
@@ -40,7 +40,6 @@ fn test_extract_packages_basic() {
         Some("https://example.com/bugs")
     );
     assert_eq!(pkg.purl.as_deref(), Some("pkg:bitbake/example@1.2.3"));
-
     assert_eq!(pkg.extracted_license_statement.as_deref(), Some("MIT"));
 
     let extra = pkg.extra_data.as_ref().unwrap();
@@ -57,6 +56,17 @@ fn test_extract_packages_basic() {
     assert_eq!(inherits.len(), 2);
     assert_eq!(inherits[0].as_str(), Some("autotools"));
     assert_eq!(inherits[1].as_str(), Some("pkgconfig"));
+}
+
+#[test]
+fn test_extract_packages_basic_file_references_and_dependencies() {
+    let path = Path::new("testdata/bitbake/example_1.2.3.bb");
+    let pkg = &BitbakeRecipeParser::extract_packages(path)[0];
+
+    assert_eq!(pkg.file_references.len(), 2);
+    assert_eq!(pkg.file_references[0].path, "LICENSE");
+    assert!(pkg.file_references[0].md5.is_none());
+    assert_eq!(pkg.file_references[1].path, "fix-build.patch");
 
     let build_deps: Vec<_> = pkg
         .dependencies
@@ -132,7 +142,7 @@ fn test_extract_packages_weak_defaults() {
 }
 
 #[test]
-fn test_extract_packages_append_operators() {
+fn test_extract_packages_legacy_append_operators() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("test_1.0.bb");
     std::fs::write(
@@ -153,7 +163,48 @@ fn test_extract_packages_append_operators() {
 }
 
 #[test]
-fn test_extract_packages_legacy_rdepends_syntax() {
+fn test_extract_packages_supports_override_style_operators() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("example_1.0.bbappend");
+    std::fs::write(
+        &path,
+        "DEPENDS:append = \" openssl\"\n\
+         DEPENDS:prepend = \"libxml2 \"\n\
+         DEPENDS:remove = \"zlib\"\n\
+         DEPENDS = \"zlib\"\n\
+         RDEPENDS:${PN}:append = \" libfoo\"\n",
+    )
+    .unwrap();
+
+    let packages = BitbakeRecipeParser::extract_packages(&path);
+    let pkg = &packages[0];
+    assert_eq!(pkg.datasource_id, Some(DatasourceId::BitbakeRecipeAppend));
+
+    let build_deps: Vec<_> = pkg
+        .dependencies
+        .iter()
+        .filter(|d| d.scope.as_deref() == Some("build"))
+        .collect();
+    let build_purls: Vec<_> = build_deps
+        .iter()
+        .filter_map(|dep| dep.purl.as_deref())
+        .collect();
+    assert_eq!(
+        build_purls,
+        vec!["pkg:bitbake/libxml2", "pkg:bitbake/openssl"]
+    );
+
+    let runtime_deps: Vec<_> = pkg
+        .dependencies
+        .iter()
+        .filter(|d| d.scope.as_deref() == Some("runtime"))
+        .collect();
+    assert_eq!(runtime_deps.len(), 1);
+    assert_eq!(runtime_deps[0].purl.as_deref(), Some("pkg:bitbake/libfoo"));
+}
+
+#[test]
+fn test_extract_packages_supports_legacy_rdepends_syntax() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("test_1.0.bb");
     std::fs::write(&path, "RDEPENDS_${PN} = \"libfoo libbar\"\n").unwrap();
@@ -167,6 +218,19 @@ fn test_extract_packages_legacy_rdepends_syntax() {
         .collect();
     assert_eq!(runtime_deps.len(), 2);
     assert_eq!(runtime_deps[0].purl.as_deref(), Some("pkg:bitbake/libfoo"));
+}
+
+#[test]
+fn test_extract_packages_bbappend_wildcard_filename_keeps_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("busybox_%.bbappend");
+    std::fs::write(&path, "SUMMARY = \"BusyBox append\"\n").unwrap();
+
+    let packages = BitbakeRecipeParser::extract_packages(&path);
+    let pkg = &packages[0];
+    assert_eq!(pkg.datasource_id, Some(DatasourceId::BitbakeRecipeAppend));
+    assert_eq!(pkg.name.as_deref(), Some("busybox"));
+    assert_eq!(pkg.version, None);
 }
 
 #[test]
@@ -195,7 +259,7 @@ fn test_variable_references_in_deps_are_skipped() {
 }
 
 #[test]
-fn test_license_with_operators() {
+fn test_license_with_operators_preserves_raw_statement() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("test_1.0.bb");
     std::fs::write(&path, "LICENSE = \"GPL-2.0-only & MIT\"\n").unwrap();
@@ -204,6 +268,38 @@ fn test_license_with_operators() {
     let pkg = &packages[0];
     assert_eq!(
         pkg.extracted_license_statement.as_deref(),
+        Some("GPL-2.0-only & MIT")
+    );
+    assert_eq!(
+        pkg.declared_license_expression_spdx.as_deref(),
         Some("GPL-2.0-only AND MIT")
     );
+}
+
+#[test]
+fn test_dependency_requirements_are_preserved() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("test_1.0.bb");
+    std::fs::write(
+        &path,
+        "DEPENDS = \"zlib (>= 1.2)\"\n\
+         RDEPENDS:${PN} = \"libfoo (= 2.0)\"\n",
+    )
+    .unwrap();
+
+    let packages = BitbakeRecipeParser::extract_packages(&path);
+    let pkg = &packages[0];
+    let build_dep = pkg
+        .dependencies
+        .iter()
+        .find(|dependency| dependency.scope.as_deref() == Some("build"))
+        .unwrap();
+    let runtime_dep = pkg
+        .dependencies
+        .iter()
+        .find(|dependency| dependency.scope.as_deref() == Some("runtime"))
+        .unwrap();
+
+    assert_eq!(build_dep.extracted_requirement.as_deref(), Some(">= 1.2"));
+    assert_eq!(runtime_dep.extracted_requirement.as_deref(), Some("= 2.0"));
 }

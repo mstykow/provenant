@@ -58,7 +58,30 @@
     "extracted_license_statement": "GPL-2.0-only",
     "notice_text": null,
     "source_packages": [],
-    "file_references": [],
+    "file_references": [
+      {
+        "path": "LICENSE",
+        "size": null,
+        "sha1": null,
+        "md5": "de10de48642ab74318e893a61105afbb",
+        "sha256": null,
+        "sha512": null,
+        "extra_data": {
+          "source_variable": "LIC_FILES_CHKSUM"
+        }
+      },
+      {
+        "path": "defconfig",
+        "size": null,
+        "sha1": null,
+        "md5": null,
+        "sha256": null,
+        "sha512": null,
+        "extra_data": {
+          "source_variable": "SRC_URI"
+        }
+      }
+    ],
     "is_private": false,
     "is_virtual": false,
     "extra_data": {
