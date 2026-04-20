@@ -2487,17 +2487,14 @@ fn local_target_revision(paths: &[PathBuf]) -> String {
 }
 
 fn scancode_ignore_args() -> Vec<String> {
-    [".git", ".git/**", "**/.git", "**/.git/**", "target/*"]
+    [".git", ".git/**", "**/.git", "**/.git/**"]
         .into_iter()
         .flat_map(|pattern| ["--ignore".to_string(), pattern.to_string()])
         .collect()
 }
 
 fn provenant_ignore_args() -> Vec<String> {
-    ["target/*"]
-        .into_iter()
-        .flat_map(|pattern| ["--ignore".to_string(), pattern.to_string()])
-        .collect()
+    Vec::new()
 }
 
 fn effective_scancode_cache_identity(context: &ContextState) -> Option<&str> {
@@ -3352,10 +3349,10 @@ mod tests {
     }
 
     #[test]
-    fn provenant_ignore_args_only_keep_target_build_output_excluded() {
+    fn provenant_ignore_args_do_not_hide_legitimate_source_trees() {
         let args = provenant_ignore_args();
 
-        assert!(args.windows(2).any(|pair| pair == ["--ignore", "target/*"]));
+        assert!(!args.windows(2).any(|pair| pair == ["--ignore", "target/*"]));
         assert!(!args.iter().any(|arg| arg == ".git"));
         assert!(!args.iter().any(|arg| arg == ".git/**"));
         assert!(!args.iter().any(|arg| arg == "**/.git"));
