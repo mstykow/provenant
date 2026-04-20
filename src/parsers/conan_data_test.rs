@@ -109,6 +109,62 @@ sources:
     }
 
     #[test]
+    fn test_parse_multiple_source_entries_per_version() {
+        let content = r#"
+sources:
+  "3.6":
+    - url: "https://example.com/libselinux-3.6.tar.gz"
+      sha256: "abc1230000000000000000000000000000000000000000000000000000000000"
+    - url: "https://example.com/libsepol-3.6.tar.gz"
+      sha256: "def4560000000000000000000000000000000000000000000000000000000000"
+patches:
+  "3.6":
+    - patch_file: "patches/fix.patch"
+      patch_description: "Fix packaging"
+      patch_type: "portability"
+"#;
+
+        let packages = parse_conandata_yml(content);
+        assert_eq!(packages.len(), 1);
+
+        let pkg = &packages[0];
+        assert_eq!(pkg.version.as_deref(), Some("3.6"));
+        assert_eq!(
+            pkg.download_url.as_deref(),
+            Some("https://example.com/libselinux-3.6.tar.gz")
+        );
+        assert_eq!(
+            pkg.sha256,
+            Some(
+                Sha256Digest::from_hex(
+                    "abc1230000000000000000000000000000000000000000000000000000000000"
+                )
+                .unwrap()
+            )
+        );
+
+        let extra = pkg.extra_data.as_ref().expect("extra_data should exist");
+        let additional_sources = extra
+            .get("additional_sources")
+            .and_then(|value| value.as_array())
+            .expect("additional_sources should be preserved");
+        assert_eq!(additional_sources.len(), 1);
+        assert_eq!(
+            additional_sources[0]
+                .get("url")
+                .and_then(|value| value.as_str()),
+            Some("https://example.com/libsepol-3.6.tar.gz")
+        );
+        assert_eq!(
+            additional_sources[0]
+                .get("sha256")
+                .and_then(|value| value.as_str()),
+            Some("def4560000000000000000000000000000000000000000000000000000000000")
+        );
+        assert!(extra.contains_key("patches"));
+    }
+
+    #[test]
     fn test_parse_missing_fields() {
         let content = r#"
 sources:
