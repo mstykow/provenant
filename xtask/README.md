@@ -325,7 +325,18 @@ cargo run --manifest-path xtask/Cargo.toml --bin generate-supported-formats -- -
 
 ## `generate-benchmark-chart`
 
-`generate-benchmark-chart` regenerates `docs/benchmarks/scan-duration-vs-files.svg` from the benchmark timing rows in `docs/BENCHMARKS.md`.
+`generate-benchmark-chart` regenerates `docs/benchmarks/scan-duration-vs-files.svg` and refreshes the headline benchmark summary stats in `docs/BENCHMARKS.md` from the benchmark timing rows in that document.
+
+The command computes and prints:
+
+- number of recorded runs
+- number of runs where Provenant is faster
+- median speedup
+- geometric-mean speedup
+- median speedup on sub-100-file targets
+- median speedup on 10k+-file targets
+
+`--check` verifies both the checked-in SVG and the BENCHMARKS headline summary line.
 
 Examples:
 
