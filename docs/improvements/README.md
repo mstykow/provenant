@@ -153,6 +153,8 @@ Related broader architecture/security docs:
 
 ## Contributing Improvements
 
+For the general contributor workflow, local setup, testing guidance, and pull request conventions, start with [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
+
 When implementing a parser or detection subsystem, if you discover:
 
 1. **A bug in Python**: Fix it in Rust, document here

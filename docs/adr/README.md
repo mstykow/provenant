@@ -58,6 +58,8 @@ Avoid new ADRs for:
 3. Update this README with the new entry
 4. Submit for review via pull request
 
+For the general contributor workflow, local setup, testing guidance, and pull request conventions, start with [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
+
 ## ADR Lifecycle
 
 - **Proposed**: Under discussion, not yet implemented

@@ -18,6 +18,7 @@ This index helps you find the right documentation for your needs.
 
 ### Getting Started
 
+- **[CONTRIBUTING.md](../CONTRIBUTING.md)** - Contributor workflow, local setup, testing guidance, and pull request conventions
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design and components
 - **[LICENSE_DETECTION_ARCHITECTURE.md](LICENSE_DETECTION_ARCHITECTURE.md)** - Detailed license-detection engine architecture and rule-loading flow
 - **[HOW_TO_ADD_A_PARSER.md](HOW_TO_ADD_A_PARSER.md)** - Step-by-step parser implementation guide
