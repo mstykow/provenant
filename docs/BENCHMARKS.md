@@ -239,7 +239,7 @@ The tables below provide the per-target detail behind the chart. Each row is one
 
 ## How to extend this document
 
-After adding or editing benchmark rows in this document, rerun `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart` so the checked-in SVG reflects the latest timing data.
+After adding or editing benchmark rows in this document, rerun `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart` so the checked-in headline stats and SVG both reflect the latest timing data.
 
 For each new benchmark example, record:
 
