@@ -3,10 +3,10 @@
 This guide covers the parts of parser work that are specific to Provenant: parser invariants,
 registration, datasource wiring, test expectations, and assembly/file-reference integration.
 
-It intentionally does **not** repeat generic setup, Rust style, or broad testing workflow docs.
+It intentionally does **not** repeat generic setup, Rust style, pull request workflow, or broad testing workflow docs.
 Use these as the source of truth for project-wide guidance:
 
-- [`README.md`](../README.md) for local setup and hook installation
+- [`CONTRIBUTING.md`](../CONTRIBUTING.md) for local setup, hooks, and pull request conventions
 - [`TESTING_STRATEGY.md`](TESTING_STRATEGY.md) for test-layer definitions and command guidance
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) for parser/assembly subsystem rationale
 - [`AGENTS.md`](../AGENTS.md) for contributor guardrails and repo conventions
