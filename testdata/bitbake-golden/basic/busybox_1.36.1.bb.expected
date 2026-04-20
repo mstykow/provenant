@@ -1,0 +1,105 @@
+[
+  {
+    "type": "bitbake",
+    "namespace": null,
+    "name": "busybox",
+    "version": "1.36.1",
+    "qualifiers": null,
+    "subpath": null,
+    "primary_language": null,
+    "description": "Tiny versions of many common UNIX utilities in a single small executable",
+    "release_date": null,
+    "parties": [],
+    "keywords": [],
+    "homepage_url": "https://www.busybox.net",
+    "download_url": null,
+    "size": null,
+    "sha1": null,
+    "md5": null,
+    "sha256": null,
+    "sha512": null,
+    "bug_tracking_url": "https://bugs.busybox.net/",
+    "code_view_url": null,
+    "vcs_url": null,
+    "copyright": null,
+    "holder": null,
+    "declared_license_expression": "gpl-2.0-only",
+    "declared_license_expression_spdx": "GPL-2.0-only",
+    "license_detections": [
+      {
+        "license_expression": "gpl-2.0-only",
+        "license_expression_spdx": "GPL-2.0-only",
+        "matches": [
+          {
+            "license_expression": "gpl-2.0-only",
+            "license_expression_spdx": "GPL-2.0-only",
+            "from_file": null,
+            "start_line": 1,
+            "end_line": 1,
+            "matcher": "parser-declared-license",
+            "score": 100.0,
+            "matched_length": 1,
+            "match_coverage": 100.0,
+            "rule_relevance": 100,
+            "rule_identifier": "spdx_license_id_gpl-2.0-only_for_gpl-2.0.RULE",
+            "rule_url": "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/spdx_license_id_gpl-2.0-only_for_gpl-2.0.RULE",
+            "matched_text": "GPL-2.0-only",
+            "matched_text_diagnostics": null,
+            "referenced_filenames": null
+          }
+        ],
+        "detection_log": [],
+        "identifier": null
+      }
+    ],
+    "other_license_expression": null,
+    "other_license_expression_spdx": null,
+    "other_license_detections": [],
+    "extracted_license_statement": "GPL-2.0-only",
+    "notice_text": null,
+    "source_packages": [],
+    "file_references": [],
+    "is_private": false,
+    "is_virtual": false,
+    "extra_data": {
+      "inherit": [
+        "autotools",
+        "update-rc.d"
+      ],
+      "src_uri": [
+        "https://www.busybox.net/downloads/busybox-${PV}.tar.bz2",
+        "https://www.busybox.net/downloads/fixes-${PV}/busybox-fix1.patch"
+      ],
+      "section": "base"
+    },
+    "dependencies": [
+      {
+        "purl": "pkg:bitbake/virtual%2Flibc",
+        "extracted_requirement": null,
+        "scope": "build",
+        "is_runtime": false,
+        "is_optional": null,
+        "is_pinned": null,
+        "is_direct": true,
+        "resolved_package": null,
+        "extra_data": null
+      },
+      {
+        "purl": "pkg:bitbake/update-alternatives",
+        "extracted_requirement": null,
+        "scope": "runtime",
+        "is_runtime": true,
+        "is_optional": null,
+        "is_pinned": null,
+        "is_direct": true,
+        "resolved_package": null,
+        "extra_data": null
+      }
+    ],
+    "repository_homepage_url": null,
+    "repository_download_url": null,
+    "api_data_url": null,
+    "datasource_id": "bitbake_recipe",
+    "purl": "pkg:bitbake/busybox@1.36.1"
+  }
+]
