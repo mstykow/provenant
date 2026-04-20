@@ -826,6 +826,14 @@ pub static ASSEMBLERS: &[AssemblerConfig] = &[
         sibling_file_patterns: &["*.ABOUT"],
         mode: AssemblyMode::OnePerPackageData,
     },
+    AssemblerConfig {
+        datasource_ids: &[
+            DatasourceId::BitbakeRecipe,
+            DatasourceId::BitbakeRecipeAppend,
+        ],
+        sibling_file_patterns: &["*.bb", "*.bbappend"],
+        mode: AssemblyMode::SiblingMerge,
+    },
 ];
 
 // Datasource IDs intentionally excluded from package assembly.
@@ -880,7 +888,6 @@ pub static UNASSEMBLED_DATASOURCE_IDS: &[DatasourceId] = &[
     DatasourceId::JavaEarApplicationXml,
     DatasourceId::JavaWarWebXml,
     DatasourceId::JbossServiceXml,
-    DatasourceId::BitbakeRecipe,
     DatasourceId::MesonBuild,
     DatasourceId::GemGemspecInstalledSpecifications,
     DatasourceId::NugetDirectoryBuildProps,
