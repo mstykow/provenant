@@ -31,36 +31,66 @@ struct BenchmarkPoint {
     scancode_seconds: f64,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct BenchmarkStats {
+    total_runs: usize,
+    faster_runs: usize,
+    median_speedup: f64,
+    geometric_mean_speedup: f64,
+    sub_100_median_gap: f64,
+    ten_k_plus_median_gap: f64,
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
     let benchmarks_path = Path::new(BENCHMARKS_PATH);
     let output_path = Path::new(SVG_PATH);
-    let points = read_points(benchmarks_path)?;
+    let benchmarks_markdown = fs::read_to_string(benchmarks_path)
+        .with_context(|| format!("failed to read {}", benchmarks_path.display()))?;
+    let points = parse_points(&benchmarks_markdown).with_context(|| {
+        format!(
+            "failed to parse benchmark rows from {}",
+            benchmarks_path.display()
+        )
+    })?;
+    let stats = calculate_stats(&points)?;
+    let updated_benchmarks_markdown = replace_summary_line(&benchmarks_markdown, &stats)?;
     let svg = generate_svg(&points)?;
 
     if args.check {
+        let benchmarks_up_to_date = benchmarks_markdown == updated_benchmarks_markdown;
         let existing = fs::read_to_string(output_path)
             .with_context(|| format!("failed to read {}", output_path.display()))?;
-        if existing == svg {
+        let svg_up_to_date = existing == svg;
+
+        if benchmarks_up_to_date && svg_up_to_date {
+            println!("✓ {} is up to date", benchmarks_path.display());
             println!("✓ {} is up to date", output_path.display());
+            print_stats(&stats);
             return Ok(());
         }
-        eprintln!("✗ {} is out of date", output_path.display());
+
+        if !benchmarks_up_to_date {
+            eprintln!("✗ {} summary is out of date", benchmarks_path.display());
+        }
+        if !svg_up_to_date {
+            eprintln!("✗ {} is out of date", output_path.display());
+        }
         eprintln!("Run: cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart");
         std::process::exit(1);
+    }
+
+    if benchmarks_markdown != updated_benchmarks_markdown {
+        fs::write(benchmarks_path, updated_benchmarks_markdown)
+            .with_context(|| format!("failed to write {}", benchmarks_path.display()))?;
+        println!("✓ Updated {}", benchmarks_path.display());
     }
 
     fs::write(output_path, svg)
         .with_context(|| format!("failed to write {}", output_path.display()))?;
     println!("✓ Generated {}", output_path.display());
+    print_stats(&stats);
     Ok(())
-}
-
-fn read_points(path: &Path) -> Result<Vec<BenchmarkPoint>> {
-    let content =
-        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
-    parse_points(&content)
-        .with_context(|| format!("failed to parse benchmark rows from {}", path.display()))
 }
 
 fn parse_points(markdown: &str) -> Result<Vec<BenchmarkPoint>> {
@@ -130,6 +160,97 @@ fn parse_points(markdown: &str) -> Result<Vec<BenchmarkPoint>> {
     }
 
     Ok(points)
+}
+
+fn calculate_stats(points: &[BenchmarkPoint]) -> Result<BenchmarkStats> {
+    if points.is_empty() {
+        bail!("cannot calculate benchmark stats from an empty point list");
+    }
+
+    let speedups: Vec<f64> = points
+        .iter()
+        .map(|point| point.scancode_seconds / point.provenant_seconds)
+        .collect();
+    let sub_100_speedups: Vec<f64> = points
+        .iter()
+        .filter(|point| point.files < 100)
+        .map(|point| point.scancode_seconds / point.provenant_seconds)
+        .collect();
+    let ten_k_plus_speedups: Vec<f64> = points
+        .iter()
+        .filter(|point| point.files >= 10_000)
+        .map(|point| point.scancode_seconds / point.provenant_seconds)
+        .collect();
+
+    if sub_100_speedups.is_empty() {
+        bail!("benchmark stats need at least one sub-100-file target");
+    }
+    if ten_k_plus_speedups.is_empty() {
+        bail!("benchmark stats need at least one 10k+-file target");
+    }
+
+    let faster_runs = points
+        .iter()
+        .filter(|point| point.provenant_seconds < point.scancode_seconds)
+        .count();
+    let geometric_mean_speedup =
+        (speedups.iter().map(|speedup| speedup.ln()).sum::<f64>() / speedups.len() as f64).exp();
+
+    Ok(BenchmarkStats {
+        total_runs: points.len(),
+        faster_runs,
+        median_speedup: median(&speedups),
+        geometric_mean_speedup,
+        sub_100_median_gap: median(&sub_100_speedups),
+        ten_k_plus_median_gap: median(&ten_k_plus_speedups),
+    })
+}
+
+fn replace_summary_line(markdown: &str, stats: &BenchmarkStats) -> Result<String> {
+    let summary_pattern = Regex::new(r"(?m)^> Provenant is faster on .*$")
+        .expect("benchmark summary regex should compile");
+    if !summary_pattern.is_match(markdown) {
+        bail!("failed to find benchmark summary line in {BENCHMARKS_PATH}");
+    }
+
+    Ok(summary_pattern
+        .replace(markdown, render_summary_line(stats))
+        .into_owned())
+}
+
+fn render_summary_line(stats: &BenchmarkStats) -> String {
+    format!(
+        "> Provenant is faster on {} of {} recorded runs, with a **{:.1}× median speedup** and **{:.1}× geometric-mean speedup** overall; the median gap grows from **{:.1}×** on sub-100-file targets to **{:.1}×** on 10k+ file targets.",
+        stats.faster_runs,
+        stats.total_runs,
+        stats.median_speedup,
+        stats.geometric_mean_speedup,
+        stats.sub_100_median_gap,
+        stats.ten_k_plus_median_gap
+    )
+}
+
+fn print_stats(stats: &BenchmarkStats) {
+    println!(
+        "stats: total_runs={} faster_runs={} median_speedup={:.1}x geometric_mean_speedup={:.1}x median_gap_sub_100={:.1}x median_gap_10k_plus={:.1}x",
+        stats.total_runs,
+        stats.faster_runs,
+        stats.median_speedup,
+        stats.geometric_mean_speedup,
+        stats.sub_100_median_gap,
+        stats.ten_k_plus_median_gap
+    );
+}
+
+fn median(values: &[f64]) -> f64 {
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|a, b| a.total_cmp(b));
+    let mid = sorted.len() / 2;
+    if sorted.len().is_multiple_of(2) {
+        (sorted[mid - 1] + sorted[mid]) / 2.0
+    } else {
+        sorted[mid]
+    }
 }
 
 fn generate_svg(points: &[BenchmarkPoint]) -> Result<String> {
@@ -393,6 +514,7 @@ mod tests {
 | Target snapshot | Run context | Timing snapshot | Advantages over ScanCode |
 | --- | --- | --- | --- |
 | [demo/repo @ abc1234](https://github.com/demo/repo/tree/abc1234)<br>1,234 files | 2026-04-19 · demo-123 · macOS | Provenant: 12.34s<br>ScanCode: 56.78s<br>**4.60× faster (-78.3%)** | Demo advantage |
+| [demo/artifact @ ghi9012](https://example.com/demo/artifact)<br>1 file | 2026-04-19 · artifact-789 · macOS | Provenant: 9.31s<br>ScanCode: 69.31s<br>**7.44× faster (-86.6%)** | Artifact advantage |
 | [demo/slow @ def5678](https://github.com/demo/slow/tree/def5678)<br>300 files | 2026-04-19 · slow-456 · macOS | Provenant: 18.81s<br>ScanCode: 17.13s<br>**1.10× slower (+9.8%)** | Slow example |
 "#;
 
@@ -400,6 +522,12 @@ mod tests {
         assert_eq!(
             points,
             vec![
+                BenchmarkPoint {
+                    label: "demo/artifact @ ghi9012".to_string(),
+                    files: 1,
+                    provenant_seconds: 9.31,
+                    scancode_seconds: 69.31,
+                },
                 BenchmarkPoint {
                     label: "demo/slow @ def5678".to_string(),
                     files: 300,
@@ -439,6 +567,68 @@ mod tests {
         assert!(svg.contains("ScanCode"));
         assert!(svg.contains("small fixture"));
         assert!(svg.contains("large repo"));
+    }
+
+    #[test]
+    fn calculate_stats_includes_singular_file_rows() {
+        let points = vec![
+            BenchmarkPoint {
+                label: "tiny artifact".to_string(),
+                files: 1,
+                provenant_seconds: 9.31,
+                scancode_seconds: 69.31,
+            },
+            BenchmarkPoint {
+                label: "small fixture".to_string(),
+                files: 42,
+                provenant_seconds: 4.0,
+                scancode_seconds: 20.0,
+            },
+            BenchmarkPoint {
+                label: "medium repo".to_string(),
+                files: 300,
+                provenant_seconds: 18.81,
+                scancode_seconds: 17.13,
+            },
+            BenchmarkPoint {
+                label: "large repo".to_string(),
+                files: 10_000,
+                provenant_seconds: 45.0,
+                scancode_seconds: 320.0,
+            },
+        ];
+
+        let stats = calculate_stats(&points).expect("stats should calculate");
+        assert_eq!(stats.total_runs, 4);
+        assert_eq!(stats.faster_runs, 3);
+        assert!((stats.median_speedup - 6.055_555_555_6).abs() < 0.000_001);
+        assert!((stats.sub_100_median_gap - 6.222_341_568_2).abs() < 0.000_001);
+        assert!((stats.ten_k_plus_median_gap - 7.111_111_111_1).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn replace_summary_line_updates_benchmark_headline() {
+        let markdown = r#"
+## Scan duration vs. file count
+
+> Provenant is faster on 1 of 2 recorded runs, with a **2.0× median speedup** and **2.0× geometric-mean speedup** overall; the median gap grows from **2.0×** on sub-100-file targets to **2.0×** on 10k+ file targets.
+> Generated from the benchmark timing rows in this document via `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart`.
+"#;
+        let stats = BenchmarkStats {
+            total_runs: 115,
+            faster_runs: 113,
+            median_speedup: 10.8,
+            geometric_mean_speedup: 9.5,
+            sub_100_median_gap: 3.7,
+            ten_k_plus_median_gap: 16.2,
+        };
+
+        let updated = replace_summary_line(markdown, &stats).expect("summary should update");
+        assert!(updated.contains("Provenant is faster on 113 of 115 recorded runs"));
+        assert!(updated.contains("**10.8× median speedup**"));
+        assert!(updated.contains("**9.5× geometric-mean speedup**"));
+        assert!(updated.contains("**3.7×** on sub-100-file targets"));
+        assert!(updated.contains("**16.2×** on 10k+ file targets"));
     }
 
     #[test]
