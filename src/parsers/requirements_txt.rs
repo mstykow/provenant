@@ -84,7 +84,14 @@ fn is_requirements_txt_filename(name: &str) -> bool {
 }
 
 fn is_reqs_alias_stem(stem: &str) -> bool {
-    stem == "reqs" || stem.ends_with("-reqs") || stem.ends_with("_reqs") || stem.ends_with(".reqs")
+    matches_requirement_alias_stem(stem, "reqs") || matches_requirement_alias_stem(stem, "minreqs")
+}
+
+fn matches_requirement_alias_stem(stem: &str, alias: &str) -> bool {
+    stem == alias
+        || stem
+            .strip_suffix(alias)
+            .is_some_and(|prefix| matches!(prefix.chars().last(), Some('-' | '_' | '.')))
 }
 
 fn is_requirements_like_extension(name: &str) -> bool {
@@ -770,9 +777,13 @@ crate::register_parser!(
         "**/requirements*.txt",
         "**/*requirements.txt",
         "**/reqs.txt",
+        "**/minreqs.txt",
         "**/*-reqs.txt",
         "**/*_reqs.txt",
         "**/*.reqs.txt",
+        "**/*-minreqs.txt",
+        "**/*_minreqs.txt",
+        "**/*.minreqs.txt",
         "**/requirements*.in",
         "**/*requirements.in",
         "**/requires.txt",

@@ -418,6 +418,32 @@ version = "1.0.0"
     }
 
     #[test]
+    fn test_python_standalone_minreqs_filename_scan_hoists_dependencies() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        fs::write(
+            temp_dir.path().join("minreqs.txt"),
+            "pytest==6.0.2\nqemu.qmp==0.0.5\n",
+        )
+        .expect("write minreqs.txt");
+
+        let (_files, result) = scan_and_assemble(temp_dir.path());
+
+        assert!(result.packages.is_empty());
+        assert_dependency_present(&result.dependencies, "pkg:pypi/pytest@6.0.2", "minreqs.txt");
+        assert_dependency_present(
+            &result.dependencies,
+            "pkg:pypi/qemu-qmp@0.0.5",
+            "minreqs.txt",
+        );
+        assert!(
+            result
+                .dependencies
+                .iter()
+                .all(|dependency| dependency.for_package_uid.is_none())
+        );
+    }
+
+    #[test]
     fn test_python_pyproject_scan_preserves_dependency_requirement_shapes() {
         let temp_dir = tempfile::TempDir::new().expect("create temp dir");
         fs::write(
