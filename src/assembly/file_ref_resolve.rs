@@ -123,6 +123,13 @@ const FILE_REFERENCE_RESOLVER_CONFIGS: &[FileReferenceResolverConfig] = &[
         datasource_ids: &[DatasourceId::GradleModule],
         kind: FileReferenceResolverKind::RelativeToDatafileParent,
     },
+    FileReferenceResolverConfig {
+        datasource_ids: &[
+            DatasourceId::BitbakeRecipe,
+            DatasourceId::BitbakeRecipeAppend,
+        ],
+        kind: FileReferenceResolverKind::RelativeToDatafileParent,
+    },
 ];
 
 struct PythonMetadataResolution {
@@ -210,37 +217,36 @@ fn resolve_relative_to_datafile_parent(
     package: &mut Package,
     datasource_ids: &[DatasourceId],
 ) {
-    let Some(datafile_path) = package.datafile_paths.first() else {
-        return;
-    };
-    let root = Path::new(datafile_path)
-        .parent()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_default();
-
-    let file_references = collect_file_references(
-        files,
-        path_index,
-        datafile_path,
-        &package.datasource_ids,
-        datasource_ids,
-        package.purl.as_deref(),
-    );
-
     let mut missing_refs = Vec::new();
-    for file_ref in &file_references {
-        let resolved_path = if root.is_empty() {
-            file_ref.path.clone()
-        } else {
-            format!("{}/{}", root, file_ref.path.trim_start_matches('/'))
-        };
-        if let Some(&file_idx) = path_index.get(&resolved_path) {
-            let package_uid = package.package_uid.clone();
-            if !files[file_idx].for_packages.contains(&package_uid) {
-                files[file_idx].for_packages.push(package_uid);
+    for datafile_path in &package.datafile_paths {
+        let root = Path::new(datafile_path)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        let file_references = collect_file_references(
+            files,
+            path_index,
+            datafile_path,
+            &package.datasource_ids,
+            datasource_ids,
+            package.purl.as_deref(),
+        );
+
+        for file_ref in &file_references {
+            let resolved_path = if root.is_empty() {
+                file_ref.path.clone()
+            } else {
+                format!("{}/{}", root, file_ref.path.trim_start_matches('/'))
+            };
+            if let Some(&file_idx) = path_index.get(&resolved_path) {
+                let package_uid = package.package_uid.clone();
+                if !files[file_idx].for_packages.contains(&package_uid) {
+                    files[file_idx].for_packages.push(package_uid);
+                }
+            } else {
+                missing_refs.push(file_ref.path.clone());
             }
-        } else {
-            missing_refs.push(file_ref.path.clone());
         }
     }
 
