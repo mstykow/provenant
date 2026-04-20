@@ -475,6 +475,45 @@ fn is_valid_short_match(matched_text: &str, rule_text: &str, max_diff: usize) ->
     false
 }
 
+fn contains_filename_like_rule_token(matched_text: &str, rule_text: &str) -> bool {
+    let rule = rule_text.trim().trim_end_matches('+').to_lowercase();
+    if rule.is_empty() {
+        return false;
+    }
+
+    let matched = matched_text.to_lowercase();
+    for (idx, _) in matched.match_indices(&rule) {
+        let prefix_ok = idx == 0
+            || matched[..idx]
+                .chars()
+                .last()
+                .is_some_and(|c| !c.is_ascii_alphanumeric());
+        if !prefix_ok {
+            continue;
+        }
+
+        let suffix = &matched[idx + rule.len()..];
+        let Some(rest) = suffix.strip_prefix('.') else {
+            continue;
+        };
+
+        let ext_len = rest
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+            .count();
+        if ext_len == 0 {
+            continue;
+        }
+
+        let trailing = rest[ext_len..].chars().next();
+        if trailing.is_none_or(|c| !c.is_ascii_alphanumeric() && c != '_' && c != '-') {
+            return true;
+        }
+    }
+
+    false
+}
+
 /// Filter invalid matches to single-word gibberish in binary files.
 ///
 /// Filters gibberish matches considered as invalid under these conditions:
@@ -511,6 +550,32 @@ pub(crate) fn filter_invalid_matches_to_single_word_gibberish(
                 if !is_valid_short_match(&matched_text, &rule.text, max_diff) {
                     return false;
                 }
+            }
+            true
+        })
+        .cloned()
+        .collect()
+}
+
+pub(crate) fn filter_filename_like_single_word_reference_matches(
+    index: &LicenseIndex,
+    matches: &[LicenseMatch],
+    query: &Query,
+) -> Vec<LicenseMatch> {
+    matches
+        .iter()
+        .filter(|m| {
+            let rid = m.rid;
+            if let Some(rule) = index.rules_by_rid.get(rid)
+                && rule.length_unique == 1
+                && rule.is_license_reference()
+                && rule.relevance < 100
+            {
+                let matched_text = match &m.matched_text {
+                    Some(text) => text.clone(),
+                    None => query.matched_text(m.start_line.get(), m.end_line.get()),
+                };
+                return !contains_filename_like_rule_token(&matched_text, &rule.text);
             }
             true
         })
@@ -1201,5 +1266,78 @@ mod tests {
     fn test_is_valid_short_match_rejects_mixed_case() {
         assert!(!is_valid_short_match("gPl", "GPL", 0));
         assert!(is_valid_short_match("Gpl", "GPL", 0));
+    }
+
+    #[test]
+    fn test_contains_filename_like_rule_token_detects_filename_reference() {
+        assert!(contains_filename_like_rule_token(
+            "copy(self, \"lgpl.txt\", src=self.source_folder)",
+            "LGPL"
+        ));
+    }
+
+    #[test]
+    fn test_contains_filename_like_rule_token_ignores_standalone_license_text() {
+        assert!(!contains_filename_like_rule_token(
+            "Licensed under LGPL v2.1 only",
+            "LGPL"
+        ));
+    }
+
+    #[test]
+    fn test_filter_filename_like_single_word_reference_matches_drops_filename_token() {
+        let mut index = LicenseIndex::with_legalese_count(10);
+        index.rules_by_rid.push(Rule {
+            identifier: "lgpl_bare_single_word.RULE".to_string(),
+            license_expression: "lgpl-2.0-plus".to_string(),
+            text: "LGPL".to_string(),
+            tokens: vec![],
+            rule_kind: crate::license_detection::models::RuleKind::Reference,
+            is_false_positive: false,
+            is_required_phrase: false,
+            is_from_license: false,
+            relevance: 60,
+            minimum_coverage: None,
+            has_stored_minimum_coverage: false,
+            is_continuous: true,
+            referenced_filenames: None,
+            ignorable_urls: None,
+            ignorable_emails: None,
+            ignorable_copyrights: None,
+            ignorable_holders: None,
+            ignorable_authors: None,
+            language: None,
+            notes: None,
+            length_unique: 1,
+            high_length_unique: 0,
+            high_length: 0,
+            min_matched_length: 1,
+            min_high_matched_length: 0,
+            min_matched_length_unique: 0,
+            min_high_matched_length_unique: 0,
+            is_small: true,
+            is_tiny: false,
+            starts_with_license: false,
+            ends_with_license: false,
+            is_deprecated: false,
+            spdx_license_key: None,
+            other_spdx_license_keys: vec![],
+            required_phrase_spans: vec![],
+            stopwords_by_pos: std::collections::HashMap::new(),
+        });
+
+        let mut m = create_test_match("#0", 1, 1, MatchScore::MAX, 100.0, 60);
+        m.license_expression = "lgpl-2.0-plus".to_string();
+        m.license_expression_spdx = Some("LGPL-2.0-or-later".to_string());
+        m.rule_identifier = "lgpl_bare_single_word.RULE".to_string();
+
+        let query = Query::from_extracted_text(
+            "copy(self, \"lgpl.txt\", src=self.source_folder)",
+            &index,
+            false,
+        )
+        .unwrap();
+        let filtered = filter_filename_like_single_word_reference_matches(&index, &[m], &query);
+        assert!(filtered.is_empty());
     }
 }
