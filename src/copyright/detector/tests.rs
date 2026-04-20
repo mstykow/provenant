@@ -1918,10 +1918,7 @@ fn test_index_html_first_group_span_extraction_keeps_copyright_word() {
     let tokens = get_tokens(&groups[0]);
     let tree = parse(tokens);
 
-    let mut c = Vec::new();
-    let mut h = Vec::new();
-    let mut a = Vec::new();
-    extract_from_spans(&tree, &mut c, &mut h, &mut a, false);
+    let (c, _h, _a) = extract_from_spans(&tree, false);
 
     assert!(
         c.iter()
@@ -1946,10 +1943,7 @@ fn test_index_html_first_group_tree_node_extraction_matches_span_extraction() {
     let tokens = get_tokens(&groups[0]);
     let tree = parse(tokens);
 
-    let mut c = Vec::new();
-    let mut h = Vec::new();
-    let mut a = Vec::new();
-    extract_from_tree_nodes(&tree, &mut c, &mut h, &mut a, false);
+    let (c, _h, _a) = extract_from_tree_nodes(&tree, false);
 
     assert!(
         c.iter()

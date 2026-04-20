@@ -225,13 +225,11 @@ fn extract_dash_bullet_attribution_author(line: &str) -> Option<String> {
 
 pub(super) fn extract_dash_bullet_attribution_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -245,25 +243,23 @@ pub(super) fn extract_dash_bullet_attribution_authors(
         let Some(author) = extract_dash_bullet_attribution_author(trimmed) else {
             continue;
         };
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
-            });
-        }
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(ln).expect("invalid line number"),
+            end_line: LineNumber::new(ln).expect("invalid line number"),
+        });
     }
+
+    authors
 }
 
 pub(super) fn extract_name_contributed_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -293,14 +289,14 @@ pub(super) fn extract_name_contributed_authors(
         let Some(author) = refine_author(who) else {
             continue;
         };
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
-            });
-        }
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(ln).expect("invalid line number"),
+            end_line: LineNumber::new(ln).expect("invalid line number"),
+        });
     }
+
+    authors
 }
 
 fn looks_like_contributed_person_name_token(word: &str) -> bool {
@@ -339,10 +335,10 @@ fn is_contributed_non_person_token(word: &str) -> bool {
 
 pub(super) fn extract_rst_field_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
 
     static RST_FIELD_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -353,8 +349,6 @@ pub(super) fn extract_rst_field_authors(
         Regex::new(r"(?i)^(?:written|updated|authored|created|developed|maintained)\s+by\s+")
             .unwrap()
     });
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -378,34 +372,33 @@ pub(super) fn extract_rst_field_authors(
         let Some(author) = refine_author(&trimmed) else {
             continue;
         };
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
-            });
-        }
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(ln).expect("invalid line number"),
+            end_line: LineNumber::new(ln).expect("invalid line number"),
+        });
     }
+
+    authors
 }
 
 fn extract_author_colon_bullet_roster(
     segments: &[String],
     start_line: usize,
-    authors: &mut Vec<AuthorDetection>,
-    seen: &mut HashSet<String>,
-) -> bool {
+) -> Vec<AuthorDetection> {
     static BARE_EMAIL_AUTHOR_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"^(?P<who>.+?<[^>\s]*@[^>\s]*>)\s*,?$").unwrap());
+
+    let mut authors = Vec::new();
 
     if segments.is_empty()
         || !segments
             .iter()
             .any(|segment| segment.trim_start().starts_with('-'))
     {
-        return false;
+        return authors;
     }
 
-    let mut extracted_any = false;
     for (offset, segment) in segments.iter().enumerate() {
         let trimmed = segment.trim();
         let line_no = start_line + offset;
@@ -415,18 +408,15 @@ fn extract_author_colon_bullet_roster(
             if lower.starts_with("with the help of ") {
                 continue;
             }
-            return false;
+            return authors;
         }
 
         if let Some(author) = extract_dash_bullet_attribution_author(trimmed) {
-            if seen.insert(author.clone()) {
-                authors.push(AuthorDetection {
-                    author,
-                    start_line: LineNumber::new(line_no).expect("valid"),
-                    end_line: LineNumber::new(line_no).expect("valid"),
-                });
-            }
-            extracted_any = true;
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(line_no).expect("valid"),
+                end_line: LineNumber::new(line_no).expect("valid"),
+            });
             continue;
         }
 
@@ -441,17 +431,14 @@ fn extract_author_colon_bullet_roster(
         let Some(author) = refine_author(who) else {
             continue;
         };
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(line_no).expect("valid"),
-                end_line: LineNumber::new(line_no).expect("valid"),
-            });
-        }
-        extracted_any = true;
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(line_no).expect("valid"),
+            end_line: LineNumber::new(line_no).expect("valid"),
+        });
     }
 
-    extracted_any
+    authors
 }
 
 pub(super) fn extract_multiline_written_by_author_blocks(
@@ -478,8 +465,6 @@ pub(super) fn extract_multiline_written_by_author_blocks(
         )
         .unwrap()
     });
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -515,9 +500,7 @@ pub(super) fn extract_multiline_written_by_author_blocks(
                 who
             };
 
-            if let Some(author) = refine_author(who)
-                && seen.insert(author.clone())
-            {
+            if let Some(author) = refine_author(who) {
                 authors.push(AuthorDetection {
                     author,
                     start_line: LineNumber::new(ln).expect("invalid line number"),
@@ -618,9 +601,7 @@ pub(super) fn extract_multiline_written_by_author_blocks(
                 .unwrap_or(combined_raw.as_str())
                 .trim_end_matches('.')
                 .trim();
-            if let Some(combined) = refine_author(combined_candidate)
-                && seen.insert(combined.clone())
-            {
+            if let Some(combined) = refine_author(combined_candidate) {
                 authors.retain(|a| a.start_line.get() < start_line || a.end_line.get() > end_line);
                 authors.push(AuthorDetection {
                     author: combined,
@@ -643,9 +624,7 @@ pub(super) fn extract_multiline_written_by_author_blocks(
                 if !who.is_empty() {
                     let who = who.trim_end_matches('.').trim();
                     if !who.to_ascii_lowercase().starts_with("the ") {
-                        if let Some(author) = refine_author(who)
-                            && seen.insert(author.clone())
-                        {
+                        if let Some(author) = refine_author(who) {
                             authors.push(AuthorDetection {
                                 author,
                                 start_line: LineNumber::new(start_line).expect("valid"),
@@ -672,9 +651,7 @@ pub(super) fn extract_multiline_written_by_author_blocks(
                 .unwrap_or(combined_raw.as_str())
                 .trim_end_matches('.')
                 .trim();
-            if let Some(combined) = refine_author(combined_candidate)
-                && seen.insert(combined.clone())
-            {
+            if let Some(combined) = refine_author(combined_candidate) {
                 authors.retain(|a| a.start_line.get() < start_line || a.end_line.get() > end_line);
                 authors.push(AuthorDetection {
                     author: combined,
@@ -707,12 +684,10 @@ pub(super) fn drop_merged_dash_bullet_attribution_authors(authors: &mut Vec<Auth
     });
 }
 
-pub(super) fn extract_json_excerpt_developed_by_authors(
-    content: &str,
-    authors: &mut Vec<AuthorDetection>,
-) {
+pub(super) fn extract_json_excerpt_developed_by_authors(content: &str) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if content.is_empty() {
-        return;
+        return authors;
     }
 
     static JSON_DEVELOPED_BY_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -722,7 +697,6 @@ pub(super) fn extract_json_excerpt_developed_by_authors(
         .unwrap()
     });
 
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
     for cap in JSON_DEVELOPED_BY_RE.captures_iter(content) {
         let who = cap
             .name("who")
@@ -736,22 +710,20 @@ pub(super) fn extract_json_excerpt_developed_by_authors(
         let Some(author) = refine_author(who) else {
             continue;
         };
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::ONE,
-                end_line: LineNumber::ONE,
-            });
-        }
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
+        });
     }
+
+    authors
 }
 
-pub(super) fn extract_modified_portion_developed_by_authors(
-    content: &str,
-    authors: &mut Vec<AuthorDetection>,
-) {
+pub(super) fn extract_modified_portion_developed_by_authors(content: &str) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if content.is_empty() {
-        return;
+        return authors;
     }
 
     static MODIFIED_PORTION_DEVELOPED_BY_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -760,8 +732,6 @@ pub(super) fn extract_modified_portion_developed_by_authors(
         )
         .unwrap()
     });
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for cap in MODIFIED_PORTION_DEVELOPED_BY_RE.captures_iter(content) {
         let Some(full) = cap.get(0) else {
@@ -781,36 +751,40 @@ pub(super) fn extract_modified_portion_developed_by_authors(
             author.push(')');
         }
 
-        if seen.insert(author.clone()) {
-            let start_line = line_number_for_offset(content, full.start());
-            let end_line = line_number_for_offset(content, full.end());
-            authors.push(AuthorDetection {
-                author,
-                start_line,
-                end_line,
-            });
-        }
+        let start_line = line_number_for_offset(content, full.start());
+        let end_line = line_number_for_offset(content, full.end());
+        authors.push(AuthorDetection {
+            author,
+            start_line,
+            end_line,
+        });
     }
+
+    authors
 }
 
 pub(super) fn extract_module_author_macros(
     content: &str,
     copyrights: &[CopyrightDetection],
     holders: &[HolderDetection],
-    authors: &mut Vec<AuthorDetection>,
+) -> (
+    Vec<CopyrightDetection>,
+    Vec<HolderDetection>,
+    Vec<AuthorDetection>,
 ) {
+    let authors = Vec::new();
     if content.is_empty() {
-        return;
+        return (Vec::new(), Vec::new(), authors);
     }
-    if !copyrights.is_empty() || !holders.is_empty() || !authors.is_empty() {
-        return;
+    if !copyrights.is_empty() || !holders.is_empty() {
+        return (Vec::new(), Vec::new(), authors);
     }
 
     static MODULE_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r#"(?i)MODULE_AUTHOR\s*\(\s*\"(?P<who>[^\"]+)\"\s*\)"#).unwrap()
     });
 
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+    let mut authors = Vec::new();
     for (idx, raw) in content.lines().enumerate() {
         let ln = idx + 1;
         let line = raw.trim();
@@ -827,31 +801,29 @@ pub(super) fn extract_module_author_macros(
             let Some(author) = refine_author(&who) else {
                 continue;
             };
-            if seen.insert(author.clone()) {
-                authors.push(AuthorDetection {
-                    author,
-                    start_line: LineNumber::new(ln).expect("invalid line number"),
-                    end_line: LineNumber::new(ln).expect("invalid line number"),
-                });
-            }
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
+            });
         }
     }
+
+    (Vec::new(), Vec::new(), authors)
 }
 
 pub(super) fn extract_was_developed_by_author_blocks(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
 
     static WAS_DEVELOPED_BY_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\bwas\s+developed\s+by\s+(?P<who>.+)$").unwrap());
     static WITH_PARTICIPATION_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\bwith\s+participation\b").unwrap());
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     let mut i = 0;
     while i < prepared_cache.len() {
@@ -927,16 +899,16 @@ pub(super) fn extract_was_developed_by_author_blocks(
             continue;
         }
 
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(end_ln).expect("invalid line number"),
-            });
-        }
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(ln).expect("invalid line number"),
+            end_line: LineNumber::new(end_ln).expect("invalid line number"),
+        });
 
         i += 1;
     }
+
+    authors
 }
 
 pub(super) fn extract_author_colon_blocks(
@@ -956,8 +928,6 @@ pub(super) fn extract_author_colon_blocks(
     static YEAR_ONLY_COPY_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)^copyright\s+\(c\)\s*(?:\d{4}(?:\s*,\s*\d{4})*|\d{4}-\d{4})\s*$").unwrap()
     });
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     let mut i = 0;
     while i < prepared_cache.len() {
@@ -1100,7 +1070,9 @@ pub(super) fn extract_author_colon_blocks(
 
         let start_line = ln;
         let end_line = if j == i + 1 { start_line } else { j };
-        if extract_author_colon_bullet_roster(&segments, start_line, authors, &mut seen) {
+        let bullet_results = extract_author_colon_bullet_roster(&segments, start_line);
+        if !bullet_results.is_empty() {
+            authors.extend(bullet_results);
             i = j;
             continue;
         }
@@ -1110,25 +1082,25 @@ pub(super) fn extract_author_colon_blocks(
                 let Some(author) = refine_author_with_optional_handle_suffix(segment) else {
                     continue;
                 };
-                if seen.insert(author.clone()) {
-                    authors.push(AuthorDetection {
-                        author,
-                        start_line: LineNumber::new(start_line).expect("valid"),
-                        end_line: LineNumber::new(end_line).expect("valid"),
-                    });
-                    extracted_any = true;
-                }
+                authors.push(AuthorDetection {
+                    author,
+                    start_line: LineNumber::new(start_line).expect("valid"),
+                    end_line: LineNumber::new(end_line).expect("valid"),
+                });
+                extracted_any = true;
             }
             if extracted_any {
                 i = j;
                 continue;
             }
         }
-        if segments.len() == 1
-            && extract_author_colon_inline_roster(&segments[0], start_line, authors, &mut seen)
-        {
-            i = j;
-            continue;
+        if segments.len() == 1 {
+            let inline_results = extract_author_colon_inline_roster(&segments[0], start_line);
+            if !inline_results.is_empty() {
+                authors.extend(inline_results);
+                i = j;
+                continue;
+            }
         }
         let combined_raw = segments.join(" ");
         let Some(combined) = refine_author_with_optional_handle_suffix(&combined_raw) else {
@@ -1136,42 +1108,32 @@ pub(super) fn extract_author_colon_blocks(
             continue;
         };
 
-        if seen.insert(combined.clone()) {
-            authors.retain(|a| a.start_line.get() < start_line || a.end_line.get() > end_line);
-            authors.push(AuthorDetection {
-                author: combined,
-                start_line: LineNumber::new(start_line).expect("valid"),
-                end_line: LineNumber::new(end_line).expect("valid"),
-            });
-        }
+        authors.retain(|a| a.start_line.get() < start_line || a.end_line.get() > end_line);
+        authors.push(AuthorDetection {
+            author: combined,
+            start_line: LineNumber::new(start_line).expect("valid"),
+            end_line: LineNumber::new(end_line).expect("valid"),
+        });
 
         i = j;
     }
 }
 
-fn extract_author_colon_inline_roster(
-    tail: &str,
-    line_number: usize,
-    authors: &mut Vec<AuthorDetection>,
-    seen: &mut HashSet<String>,
-) -> bool {
-    let mut extracted_any = false;
+fn extract_author_colon_inline_roster(tail: &str, line_number: usize) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
 
     for candidate in tail.split(" - ") {
         let Some(author) = refine_author_with_optional_handle_suffix(candidate) else {
             continue;
         };
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(line_number).expect("valid"),
-                end_line: LineNumber::new(line_number).expect("valid"),
-            });
-            extracted_any = true;
-        }
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(line_number).expect("valid"),
+            end_line: LineNumber::new(line_number).expect("valid"),
+        });
     }
 
-    extracted_any
+    authors
 }
 
 fn refine_author_with_optional_handle_suffix(candidate: &str) -> Option<String> {
@@ -1270,10 +1232,10 @@ fn trim_author_label_prefix(line: &str) -> String {
 
 pub(super) fn extract_code_written_by_author_blocks(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
 
     static HEADER_RE: LazyLock<Regex> =
@@ -1283,8 +1245,6 @@ pub(super) fn extract_code_written_by_author_blocks(
     static STOP_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?is)(?P<prefix>.+?\bDonald\s+wrote\s+the\s+SMC\s+91c92\s+code)\b").unwrap()
     });
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     let mut i = 0;
     while i < prepared_cache.len() {
@@ -1346,16 +1306,16 @@ pub(super) fn extract_code_written_by_author_blocks(
             i = j;
             continue;
         };
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(j).expect("invalid line number"),
-            });
-        }
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(ln).expect("invalid line number"),
+            end_line: LineNumber::new(j).expect("invalid line number"),
+        });
 
         i = j;
     }
+
+    authors
 }
 
 pub(super) fn extract_developed_and_created_by_authors(
@@ -1372,8 +1332,6 @@ pub(super) fn extract_developed_and_created_by_authors(
     if prepared_cache.is_empty() {
         return;
     }
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for start_idx in 0..prepared_cache.len() {
         let Some(prepared0) = prepared_cache.get_by_index(start_idx) else {
@@ -1426,13 +1384,11 @@ pub(super) fn extract_developed_and_created_by_authors(
         let Some(author) = refine_author(&combined) else {
             continue;
         };
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author: author.clone(),
-                start_line: LineNumber::from_0_indexed(start_idx),
-                end_line: LineNumber::from_0_indexed(end_idx),
-            });
-        }
+        authors.push(AuthorDetection {
+            author: author.clone(),
+            start_line: LineNumber::from_0_indexed(start_idx),
+            end_line: LineNumber::from_0_indexed(end_idx),
+        });
 
         authors.retain(|a| !(author.starts_with(&a.author) && a.author.len() < author.len()));
     }
@@ -1440,13 +1396,11 @@ pub(super) fn extract_developed_and_created_by_authors(
 
 pub(super) fn extract_with_additional_hacking_by_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     static RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)^\s*with\s+additional\s+hacking\s+by\s+(?P<who>.+?)\s*$").unwrap()
     });
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -1464,9 +1418,7 @@ pub(super) fn extract_with_additional_hacking_by_authors(
         if who.is_empty() {
             continue;
         }
-        if let Some(author) = refine_author(who)
-            && seen.insert(author.clone())
-        {
+        if let Some(author) = refine_author(who) {
             authors.push(AuthorDetection {
                 author,
                 start_line: LineNumber::new(ln).expect("invalid line number"),
@@ -1474,20 +1426,18 @@ pub(super) fn extract_with_additional_hacking_by_authors(
             });
         }
     }
+
+    authors
 }
 
-pub(super) fn extract_parenthesized_inline_by_authors(
-    raw_lines: &[&str],
-    authors: &mut Vec<AuthorDetection>,
-) {
+pub(super) fn extract_parenthesized_inline_by_authors(raw_lines: &[&str]) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     static RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?i)^\s*copyright\b.*\((?:written|authored|created|developed)\s+by\s+(?P<who>[^)]+)\)",
         )
         .unwrap()
     });
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for (idx, raw) in raw_lines.iter().enumerate() {
         let ln = idx + 1;
@@ -1502,9 +1452,7 @@ pub(super) fn extract_parenthesized_inline_by_authors(
         if who.is_empty() {
             continue;
         }
-        if let Some(author) = refine_author(who)
-            && seen.insert(author.clone())
-        {
+        if let Some(author) = refine_author(who) {
             authors.push(AuthorDetection {
                 author,
                 start_line: LineNumber::new(ln).expect("invalid line number"),
@@ -1512,6 +1460,8 @@ pub(super) fn extract_parenthesized_inline_by_authors(
             });
         }
     }
+
+    authors
 }
 
 pub(super) fn merge_metadata_author_and_email_lines(
@@ -1527,8 +1477,6 @@ pub(super) fn merge_metadata_author_and_email_lines(
     if !has_metadata {
         return;
     }
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let author_ln = idx + 1;
@@ -1579,13 +1527,11 @@ pub(super) fn merge_metadata_author_and_email_lines(
             let combined_raw = format!("{name} Author-email {email}");
             let combined = normalize_whitespace(&combined_raw);
 
-            if seen.insert(combined.clone()) {
-                authors.push(AuthorDetection {
-                    author: combined,
-                    start_line: LineNumber::new(author_ln).expect("invalid line number"),
-                    end_line: LineNumber::new(email_ln).expect("invalid line number"),
-                });
-            }
+            authors.push(AuthorDetection {
+                author: combined,
+                start_line: LineNumber::new(author_ln).expect("invalid line number"),
+                end_line: LineNumber::new(email_ln).expect("invalid line number"),
+            });
 
             authors.retain(|a| {
                 if a.start_line.get() == author_ln
@@ -1610,10 +1556,10 @@ pub(super) fn merge_metadata_author_and_email_lines(
 
 pub(super) fn extract_debian_maintainer_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
 
     static DEBIANIZED_BY_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -1628,8 +1574,6 @@ pub(super) fn extract_debian_maintainer_authors(
     static MAINTAINED_BY_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)^maintained\s+by\s+(?P<who>.+?)(?:\s+on\b|\s+since\b|\s*$)").unwrap()
     });
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -1660,30 +1604,28 @@ pub(super) fn extract_debian_maintainer_authors(
             continue;
         };
 
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
-            });
-        }
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(ln).expect("invalid line number"),
+            end_line: LineNumber::new(ln).expect("invalid line number"),
+        });
     }
+
+    authors
 }
 
 pub(super) fn extract_maintainers_label_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
 
     static MAINTAINERS_LABEL_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)^maintainers?\s*:?[ \t]+(?P<who>.+)$").unwrap());
     static GITREPO_SUFFIX_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\s+GitRepo\s+https?://\S+.*$").unwrap());
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -1711,28 +1653,26 @@ pub(super) fn extract_maintainers_label_authors(
             continue;
         }
 
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
-            });
-        }
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(ln).expect("invalid line number"),
+            end_line: LineNumber::new(ln).expect("invalid line number"),
+        });
     }
+
+    authors
 }
 
 pub(super) fn extract_created_by_project_author(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
 
     static CREATED_BY_PROJECT_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\bcreated\s+by\s+the\s+project\b").unwrap());
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -1741,16 +1681,16 @@ pub(super) fn extract_created_by_project_author(
         };
         if CREATED_BY_PROJECT_RE.is_match(prepared.trim()) {
             let author = "the Project".to_string();
-            if seen.insert(author.clone()) {
-                authors.push(AuthorDetection {
-                    author,
-                    start_line: LineNumber::new(ln).expect("invalid line number"),
-                    end_line: LineNumber::new(ln).expect("invalid line number"),
-                });
-            }
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
+            });
             break;
         }
     }
+
+    authors
 }
 
 pub(super) fn extract_created_by_authors(
@@ -1763,8 +1703,6 @@ pub(super) fn extract_created_by_authors(
 
     static CREATED_BY_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)^\s*created\s+by\s+(?P<who>.+?)\s*$").unwrap());
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -1794,32 +1732,26 @@ pub(super) fn extract_created_by_authors(
         let Some(author) = refine_author_with_optional_handle_suffix(who) else {
             continue;
         };
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author: author.clone(),
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
-            });
-        }
+        authors.push(AuthorDetection {
+            author: author.clone(),
+            start_line: LineNumber::new(ln).expect("invalid line number"),
+            end_line: LineNumber::new(ln).expect("invalid line number"),
+        });
 
         authors.retain(|a| !(author.starts_with(&a.author) && a.author.len() < author.len()));
     }
 }
 
-pub(super) fn extract_toml_author_assignment_authors(
-    raw_lines: &[&str],
-    authors: &mut Vec<AuthorDetection>,
-) {
+pub(super) fn extract_toml_author_assignment_authors(raw_lines: &[&str]) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if raw_lines.is_empty() {
-        return;
+        return authors;
     }
 
     static TOML_AUTHOR_ASSIGNMENT_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r#"(?i)^\s*authors?\s*=\s*(?P<rhs>.+?)\s*$"#).unwrap());
     static QUOTED_VALUE_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r#"\"(?P<value>(?:\\.|[^\"])*)\""#).unwrap());
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for (idx, raw_line) in raw_lines.iter().enumerate() {
         let ln = idx + 1;
@@ -1863,15 +1795,15 @@ pub(super) fn extract_toml_author_assignment_authors(
             let Some(author) = refine_author_with_optional_handle_suffix(&candidate) else {
                 continue;
             };
-            if seen.insert(author.clone()) {
-                authors.push(AuthorDetection {
-                    author,
-                    start_line: LineNumber::new(ln).expect("invalid line number"),
-                    end_line: LineNumber::new(ln).expect("invalid line number"),
-                });
-            }
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
+            });
         }
     }
+
+    authors
 }
 
 pub(super) fn extract_written_by_comma_and_copyright_authors(
@@ -1885,8 +1817,6 @@ pub(super) fn extract_written_by_comma_and_copyright_authors(
     static WRITTEN_BY_AND_COPYRIGHT_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)\bwritten\s+by\s+(?P<who>.+?),\s+and\s+copyright\b").unwrap()
     });
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -1908,23 +1838,21 @@ pub(super) fn extract_written_by_comma_and_copyright_authors(
         let Some(author) = refine_author(who) else {
             continue;
         };
-        if seen.insert(author.clone()) {
-            authors.retain(|a| !(a.start_line.get() == ln && a.end_line.get() == ln));
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
-            });
-        }
+        authors.retain(|a| !(a.start_line.get() == ln && a.end_line.get() == ln));
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(ln).expect("invalid line number"),
+            end_line: LineNumber::new(ln).expect("invalid line number"),
+        });
     }
 }
 
 pub(super) fn extract_package_comment_named_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
 
     static COMMENT_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -1936,8 +1864,6 @@ pub(super) fn extract_package_comment_named_authors(
     static RAW_ANGLE_EMAIL_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"^(?P<name>[A-Z][^<>@]+?)\s*<(?P<email>[^>\s]+@[^>\s]+)>$").unwrap()
     });
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -1963,9 +1889,7 @@ pub(super) fn extract_package_comment_named_authors(
                 refine_author(who)
             };
 
-            if let Some(author) = author
-                && seen.insert(author.clone())
-            {
+            if let Some(author) = author {
                 authors.push(AuthorDetection {
                     author,
                     start_line: LineNumber::new(ln).expect("invalid line number"),
@@ -1974,20 +1898,20 @@ pub(super) fn extract_package_comment_named_authors(
             }
         }
     }
+
+    authors
 }
 
 pub(super) fn extract_developed_by_sentence_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
 
     static DEVELOPED_BY_PREFIX_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)^\s*developed\s+by\s+(?P<rest>.+)$").unwrap());
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -2027,29 +1951,27 @@ pub(super) fn extract_developed_by_sentence_authors(
             continue;
         }
 
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
-            });
-        }
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(ln).expect("invalid line number"),
+            end_line: LineNumber::new(ln).expect("invalid line number"),
+        });
     }
+
+    authors
 }
 
 pub(super) fn extract_developed_by_phrase_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
 
     static DEVELOPED_BY_PHRASE_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)\bdeveloped\s+by\s+(?P<who>.+?)\s+and\s+to\s+credit\b").unwrap()
     });
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -2076,23 +1998,23 @@ pub(super) fn extract_developed_by_phrase_authors(
                 continue;
             }
 
-            if seen.insert(author.clone()) {
-                authors.push(AuthorDetection {
-                    author,
-                    start_line: LineNumber::new(ln).expect("invalid line number"),
-                    end_line: LineNumber::new(ln).expect("invalid line number"),
-                });
-            }
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
+            });
         }
     }
+
+    authors
 }
 
 pub(super) fn extract_developed_by_contributors_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
 
     static DEVELOPED_BY_CONTRIBUTORS_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -2101,8 +2023,6 @@ pub(super) fn extract_developed_by_contributors_authors(
         )
         .unwrap()
     });
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -2141,25 +2061,21 @@ pub(super) fn extract_developed_by_contributors_authors(
             continue;
         };
 
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(end_line).expect("invalid line number"),
-            });
-        }
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(ln).expect("invalid line number"),
+            end_line: LineNumber::new(end_line).expect("invalid line number"),
+        });
     }
+
+    authors
 }
 
-pub(super) fn extract_json_author_object_authors(
-    raw_lines: &[&str],
-    authors: &mut Vec<AuthorDetection>,
-) {
+pub(super) fn extract_json_author_object_authors(raw_lines: &[&str]) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if raw_lines.is_empty() {
-        return;
+        return authors;
     }
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for (idx, line) in raw_lines.iter().enumerate() {
         if !line.contains("\"author\"") {
@@ -2179,29 +2095,27 @@ pub(super) fn extract_json_author_object_authors(
             continue;
         };
 
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(idx + 1).expect("invalid line number"),
-                end_line: LineNumber::new(end).expect("invalid line number"),
-            });
-        }
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(idx + 1).expect("invalid line number"),
+            end_line: LineNumber::new(end).expect("invalid line number"),
+        });
     }
+
+    authors
 }
 
 pub(super) fn extract_maintained_by_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
 
     static MAINTAINED_BY_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)\bmaintained\s+by\s+(?P<who>.+?)(?:\s+(?:on|since|for)\b|$)").unwrap()
     });
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -2223,23 +2137,23 @@ pub(super) fn extract_maintained_by_authors(
             let Some(author) = refine_author(who) else {
                 continue;
             };
-            if seen.insert(author.clone()) {
-                authors.push(AuthorDetection {
-                    author,
-                    start_line: LineNumber::new(ln).expect("invalid line number"),
-                    end_line: LineNumber::new(ln).expect("invalid line number"),
-                });
-            }
+            authors.push(AuthorDetection {
+                author,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
+            });
         }
     }
+
+    authors
 }
 
 pub(super) fn extract_converted_to_by_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
 
     static CONVERTED_BY_RE: LazyLock<Regex> =
@@ -2249,8 +2163,6 @@ pub(super) fn extract_converted_to_by_authors(
     });
     static CONVERTED_TO_VERSION_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\bconverted\s+to\s+\d+\.\d+\b").unwrap());
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -2287,39 +2199,35 @@ pub(super) fn extract_converted_to_by_authors(
         let Some(author) = refine_author(who) else {
             continue;
         };
-        if seen.insert(author.clone()) {
+        authors.push(AuthorDetection {
+            author: author.clone(),
+            start_line: LineNumber::new(ln).expect("invalid line number"),
+            end_line: LineNumber::new(ln).expect("invalid line number"),
+        });
+        if add_converted_variant {
+            let converted = format!("{author} Converted");
             authors.push(AuthorDetection {
-                author: author.clone(),
+                author: converted,
                 start_line: LineNumber::new(ln).expect("invalid line number"),
                 end_line: LineNumber::new(ln).expect("invalid line number"),
             });
         }
-        if add_converted_variant {
-            let converted = format!("{author} Converted");
-            if seen.insert(converted.clone()) {
-                authors.push(AuthorDetection {
-                    author: converted,
-                    start_line: LineNumber::new(ln).expect("invalid line number"),
-                    end_line: LineNumber::new(ln).expect("invalid line number"),
-                });
-            }
-        }
     }
+
+    authors
 }
 
 pub(super) fn extract_various_bugfixes_and_enhancements_by_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
 
     static VARIOUS_BUGFIXES_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)^\s*various\s+bugfixes\s+and\s+enhancements\s+by\s+(?P<who>.+)$").unwrap()
     });
-
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -2343,14 +2251,14 @@ pub(super) fn extract_various_bugfixes_and_enhancements_by_authors(
         let Some(author) = refine_author(who) else {
             continue;
         };
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
-            });
-        }
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(ln).expect("invalid line number"),
+            end_line: LineNumber::new(ln).expect("invalid line number"),
+        });
     }
+
+    authors
 }
 
 pub(super) fn drop_authors_embedded_in_copyrights(
@@ -2945,10 +2853,10 @@ pub(super) fn drop_written_by_authors_preceded_by_copyright(
 
 pub(super) fn extract_dense_name_email_author_lists(
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return;
+        return authors;
     }
 
     static NAME_EMAIL_LINE_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -2967,7 +2875,7 @@ pub(super) fn extract_dense_name_email_author_lists(
         non_empty_lines.push((idx + 1, line.to_string()));
     }
     if non_empty_lines.len() < 2 {
-        return;
+        return authors;
     }
 
     let mut matched: Vec<(usize, String)> = Vec::new();
@@ -2992,23 +2900,22 @@ pub(super) fn extract_dense_name_email_author_lists(
     }
 
     if matched.len() < 2 {
-        return;
+        return authors;
     }
     if matched.len() * 2 < non_empty_lines.len() {
-        return;
+        return authors;
     }
 
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
     for (ln, candidate) in matched {
         let Some(author) = refine_author(&candidate) else {
             continue;
         };
-        if seen.insert(author.clone()) {
-            authors.push(AuthorDetection {
-                author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
-            });
-        }
+        authors.push(AuthorDetection {
+            author,
+            start_line: LineNumber::new(ln).expect("invalid line number"),
+            end_line: LineNumber::new(ln).expect("invalid line number"),
+        });
     }
+
+    authors
 }

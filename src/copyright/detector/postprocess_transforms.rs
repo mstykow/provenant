@@ -3644,25 +3644,17 @@ pub fn merge_year_only_copyrights_with_following_author_colon_lines(
 
 pub fn extract_question_mark_year_copyrights(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if prepared_cache.is_empty() {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     static QMARK_COPY_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)^\s*copyright\s+(?P<year>\d{3}\?)\s+(?P<tail>.+)$").unwrap()
     });
 
-    let mut seen_c: HashSet<(usize, String)> = copyrights
-        .iter()
-        .map(|c| (c.start_line.get(), c.copyright.clone()))
-        .collect();
-    let mut seen_h: HashSet<(usize, String)> = holders
-        .iter()
-        .map(|h| (h.start_line.get(), h.holder.clone()))
-        .collect();
+    let mut new_copyrights = Vec::new();
+    let mut new_holders = Vec::new();
 
     for ln in 1..=prepared_cache.len() {
         let Some(prepared) = prepared_cache.get(ln) else {
@@ -3682,25 +3674,23 @@ pub fn extract_question_mark_year_copyrights(
         let Some(cr) = refine_copyright(&raw) else {
             continue;
         };
-        if seen_c.insert((ln, cr.clone())) {
-            copyrights.push(CopyrightDetection {
-                copyright: cr,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
-            });
-        }
+        new_copyrights.push(CopyrightDetection {
+            copyright: cr,
+            start_line: LineNumber::new(ln).unwrap(),
+            end_line: LineNumber::new(ln).unwrap(),
+        });
 
         let raw_holder = format!("{year} {tail}");
-        if let Some(h) = refine_holder_in_copyright_context(&raw_holder)
-            && seen_h.insert((ln, h.clone()))
-        {
-            holders.push(HolderDetection {
+        if let Some(h) = refine_holder_in_copyright_context(&raw_holder) {
+            new_holders.push(HolderDetection {
                 holder: h,
                 start_line: LineNumber::new(ln).unwrap(),
                 end_line: LineNumber::new(ln).unwrap(),
             });
         }
     }
+
+    (new_copyrights, new_holders)
 }
 
 pub fn strip_inc_suffix_from_holders_for_today_year_copyrights(
@@ -3960,9 +3950,7 @@ pub fn apply_openoffice_org_report_builder_bin_normalizations(
 
 pub fn extract_midline_c_year_holder_with_leading_acronym(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static MIDLINE_C_YEAR_HOLDER_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?ix)^
@@ -3976,6 +3964,9 @@ pub fn extract_midline_c_year_holder_with_leading_acronym(
         )
         .unwrap()
     });
+
+    let mut new_copyrights = Vec::new();
+    let mut new_holders = Vec::new();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -4008,7 +3999,7 @@ pub fn extract_midline_c_year_holder_with_leading_acronym(
             continue;
         };
 
-        copyrights.push(CopyrightDetection {
+        new_copyrights.push(CopyrightDetection {
             copyright: cr,
             start_line: LineNumber::new(ln).unwrap(),
             end_line: LineNumber::new(ln).unwrap(),
@@ -4016,13 +4007,15 @@ pub fn extract_midline_c_year_holder_with_leading_acronym(
 
         let holder_raw = format!("{holder} {prefix}");
         if let Some(h) = refine_holder_in_copyright_context(&holder_raw) {
-            holders.push(HolderDetection {
+            new_holders.push(HolderDetection {
                 holder: h,
                 start_line: LineNumber::new(ln).unwrap(),
                 end_line: LineNumber::new(ln).unwrap(),
             });
         }
     }
+
+    (new_copyrights, new_holders)
 }
 
 pub fn dedupe_exact_span_copyrights(copyrights: &mut Vec<CopyrightDetection>) {
@@ -4872,9 +4865,6 @@ pub fn merge_freebird_c_inc_urls(
         return;
     }
 
-    let mut seen_c: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_h: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
-
     for i in 0..prepared_cache.len() {
         let ln = i + 1;
         let Some(prepared) = prepared_cache.get_by_index(i) else {
@@ -4917,9 +4907,7 @@ pub fn merge_freebird_c_inc_urls(
         };
 
         let cr_raw = format!("(c), Inc. {url}");
-        if let Some(cr) = refine_copyright(&cr_raw)
-            && seen_c.insert(cr.clone())
-        {
+        if let Some(cr) = refine_copyright(&cr_raw) {
             copyrights.push(CopyrightDetection {
                 copyright: cr,
                 start_line: LineNumber::new(ln).unwrap(),
@@ -4927,9 +4915,7 @@ pub fn merge_freebird_c_inc_urls(
             });
         }
         let holder_raw = "Inc.";
-        if let Some(h) = refine_holder(holder_raw)
-            && seen_h.insert(h.clone())
-        {
+        if let Some(h) = refine_holder(holder_raw) {
             holders.push(HolderDetection {
                 holder: h,
                 start_line: LineNumber::new(ln).unwrap(),
@@ -5125,9 +5111,6 @@ pub fn merge_kirkwood_converted_to(
         Regex::new(r"(?i)\(c\)\s+(?P<year>19\d{2}|20\d{2})\s+(?P<who>M\.?\s*Kirkwood)\b").unwrap()
     });
 
-    let mut seen_c: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_h: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
-
     for i in 0..prepared_cache.len().saturating_sub(1) {
         let ln = i + 1;
         let Some(p1) = prepared_cache.get_by_index(i).map(|p| p.trim().to_string()) else {
@@ -5152,9 +5135,7 @@ pub fn merge_kirkwood_converted_to(
         }
 
         let cr_raw = format!("(c) {year} {who} Converted to");
-        if let Some(cr) = refine_copyright(&cr_raw)
-            && seen_c.insert(cr.clone())
-        {
+        if let Some(cr) = refine_copyright(&cr_raw) {
             copyrights.push(CopyrightDetection {
                 copyright: cr,
                 start_line: LineNumber::new(ln).unwrap(),
@@ -5162,9 +5143,7 @@ pub fn merge_kirkwood_converted_to(
             });
         }
         let holder_raw = format!("{who} Converted");
-        if let Some(h) = refine_holder_in_copyright_context(&holder_raw)
-            && seen_h.insert(h.clone())
-        {
+        if let Some(h) = refine_holder_in_copyright_context(&holder_raw) {
             holders.push(HolderDetection {
                 holder: h,
                 start_line: LineNumber::new(ln).unwrap(),
@@ -5187,8 +5166,6 @@ pub fn split_reworked_by_suffixes(
         Regex::new(r"(?i)^(?P<prefix>.+?)\s+Re-worked\s+by\s+(?P<who>.+)$").unwrap()
     });
 
-    let mut seen_authors: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
-
     for det in copyrights.iter_mut() {
         let current = det.copyright.clone();
         let Some(cap) = REWORKED_RE.captures(current.as_str()) else {
@@ -5210,9 +5187,7 @@ pub fn split_reworked_by_suffixes(
         } else {
             det.copyright = prefix.to_string();
         }
-        if let Some(author) = refine_author(&who)
-            && seen_authors.insert(author.clone())
-        {
+        if let Some(author) = refine_author(&who) {
             authors.push(AuthorDetection {
                 author,
                 start_line: det.start_line,
@@ -5270,10 +5245,10 @@ pub fn drop_combined_period_holders(holders: &mut Vec<HolderDetection>) {
 
 pub fn extract_line_ending_copyright_then_by_holder(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
-    let mut existing: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
+    let mut new_copyrights = Vec::new();
+    let mut new_holders = Vec::new();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -5313,10 +5288,8 @@ pub fn extract_line_ending_copyright_then_by_holder(
             if next_lower.starts_with("by ") {
                 let holder_raw = next_prepared[3..].trim();
                 let copyright_raw = format!("copyright {}", next_prepared.trim());
-                if let Some(copyright_text) = refine_copyright(&copyright_raw)
-                    && existing.insert(copyright_text.clone())
-                {
-                    copyrights.push(CopyrightDetection {
+                if let Some(copyright_text) = refine_copyright(&copyright_raw) {
+                    new_copyrights.push(CopyrightDetection {
                         copyright: copyright_text,
                         start_line: LineNumber::new(ln).unwrap(),
                         end_line: LineNumber::new(next_ln).expect("valid"),
@@ -5324,9 +5297,9 @@ pub fn extract_line_ending_copyright_then_by_holder(
                 }
 
                 if let Some(holder) = refine_holder_in_copyright_context(holder_raw)
-                    && !holders.iter().any(|h| h.holder == holder)
+                    && !existing_holders.iter().any(|h| h.holder == holder)
                 {
-                    holders.push(HolderDetection {
+                    new_holders.push(HolderDetection {
                         holder,
                         start_line: LineNumber::new(next_ln).expect("valid"),
                         end_line: LineNumber::new(next_ln).expect("valid"),
@@ -5336,6 +5309,8 @@ pub fn extract_line_ending_copyright_then_by_holder(
             break;
         }
     }
+
+    (new_copyrights, new_holders)
 }
 
 pub fn drop_trailing_software_line_from_holders(
@@ -5426,10 +5401,6 @@ pub fn recover_template_literal_year_range_copyrights(
         .expect("valid template literal copyright regex")
     });
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
-
     for (idx, raw_line) in content.lines().enumerate() {
         if !(raw_line.contains("Copyright") || raw_line.contains("copyright")) {
             continue;
@@ -5459,13 +5430,11 @@ pub fn recover_template_literal_year_range_copyrights(
         };
 
         let copyright_text = format!("Copyright {start}-{templ} {holder}");
-        if seen_copyrights.insert(copyright_text.clone()) {
-            copyrights.push(CopyrightDetection {
-                copyright: copyright_text,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
-            });
-        }
+        copyrights.push(CopyrightDetection {
+            copyright: copyright_text,
+            start_line: LineNumber::new(ln).unwrap(),
+            end_line: LineNumber::new(ln).unwrap(),
+        });
 
         let truncated = format!("Copyright {start}-$");
         copyrights.retain(|c| {
@@ -5474,13 +5443,11 @@ pub fn recover_template_literal_year_range_copyrights(
                 && c.copyright.eq_ignore_ascii_case(&truncated))
         });
 
-        if seen_holders.insert(holder.clone()) {
-            holders.push(HolderDetection {
-                holder,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
-            });
-        }
+        holders.push(HolderDetection {
+            holder,
+            start_line: LineNumber::new(ln).unwrap(),
+            end_line: LineNumber::new(ln).unwrap(),
+        });
     }
 }
 
@@ -5652,17 +5619,17 @@ pub fn drop_url_embedded_suffix_variants_same_span(
 pub fn extract_following_authors_holders(
     raw_lines: &[&str],
     prepared_cache: &mut PreparedLineCache<'_>,
-    authors: &mut Vec<AuthorDetection>,
-) {
+) -> Vec<AuthorDetection> {
     if raw_lines.is_empty() {
-        return;
+        return Vec::new();
     }
 
     static HEADER_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)^\s*copyright\b.*\bby\s+the\s+following\s+authors\b.*$")
             .expect("valid following authors header regex")
     });
-    let mut seen: HashSet<String> = authors.iter().map(|a| a.author.clone()).collect();
+
+    let mut new_authors = Vec::new();
 
     let mut i = 0;
     while i < raw_lines.len() {
@@ -5694,9 +5661,8 @@ pub fn extract_following_authors_holders(
             item = super::token_utils::normalize_whitespace(&item);
             if !item.is_empty()
                 && let Some(author) = refine_author(&item)
-                && seen.insert(author.clone())
             {
-                authors.push(AuthorDetection {
+                new_authors.push(AuthorDetection {
                     author,
                     start_line: LineNumber::new(next_ln).unwrap(),
                     end_line: LineNumber::new(next_ln).unwrap(),
@@ -5708,6 +5674,8 @@ pub fn extract_following_authors_holders(
 
         i = if extracted_any { j } else { i + 1 };
     }
+
+    new_authors
 }
 
 pub fn drop_created_by_camelcase_identifier_authors(
@@ -5967,9 +5935,6 @@ pub fn fix_shm_inline_copyrights(
             .unwrap()
     });
 
-    let mut seen_c: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_h: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
-
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
         let Some(prepared) = prepared_cache.get_by_index(idx) else {
@@ -5993,17 +5958,13 @@ pub fn fix_shm_inline_copyrights(
         let Some(cr) = refine_copyright(&cr_raw) else {
             continue;
         };
-        if seen_c.insert(cr.clone()) {
-            copyrights.push(CopyrightDetection {
-                copyright: cr,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
-            });
-        }
+        copyrights.push(CopyrightDetection {
+            copyright: cr,
+            start_line: LineNumber::new(ln).unwrap(),
+            end_line: LineNumber::new(ln).unwrap(),
+        });
 
-        if let Some(holder) = refine_holder(name)
-            && seen_h.insert(holder.clone())
-        {
+        if let Some(holder) = refine_holder(name) {
             holders.push(HolderDetection {
                 holder,
                 start_line: LineNumber::new(ln).unwrap(),
@@ -6029,9 +5990,6 @@ pub fn fix_n_tty_linus_torvalds_written_by_clause(
         return;
     }
 
-    let mut seen_c: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_h: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
-
     let lines: Vec<&str> = content.lines().collect();
     for i in 0..lines.len().saturating_sub(1) {
         if !lines[i].contains("Linus Torvalds") {
@@ -6042,21 +6000,17 @@ pub fn fix_n_tty_linus_torvalds_written_by_clause(
         }
         let ln = i + 1;
         let cr = "Linus Torvalds, Copyright 1991, 1992, 1993".to_string();
-        if seen_c.insert(cr.clone()) {
-            copyrights.push(CopyrightDetection {
-                copyright: cr,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln + 1).expect("invalid line number"),
-            });
-        }
+        copyrights.push(CopyrightDetection {
+            copyright: cr,
+            start_line: LineNumber::new(ln).unwrap(),
+            end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+        });
         let holder = "Linus Torvalds".to_string();
-        if seen_h.insert(holder.clone()) {
-            holders.push(HolderDetection {
-                holder,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln + 1).expect("invalid line number"),
-            });
-        }
+        holders.push(HolderDetection {
+            holder,
+            start_line: LineNumber::new(ln).unwrap(),
+            end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+        });
         break;
     }
 }
@@ -6153,18 +6107,15 @@ pub fn add_missing_holders_for_debian_modifications(
         return;
     }
 
-    let mut seen: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
     for cr in copyrights {
         let Some(holder) = derive_holder_from_simple_copyright_string(&cr.copyright) else {
             continue;
         };
-        if seen.insert(holder.clone()) {
-            holders.push(HolderDetection {
-                holder,
-                start_line: cr.start_line,
-                end_line: cr.end_line,
-            });
-        }
+        holders.push(HolderDetection {
+            holder,
+            start_line: cr.start_line,
+            end_line: cr.end_line,
+        });
     }
 }
 
@@ -6348,18 +6299,15 @@ pub fn add_missing_holders_derived_from_split_copyrights(
     copyrights: &[CopyrightDetection],
     holders: &mut Vec<HolderDetection>,
 ) {
-    let mut seen: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
     for cr in copyrights {
         let Some(holder) = derive_holder_from_simple_copyright_string(&cr.copyright) else {
             continue;
         };
-        if seen.insert(holder.clone()) {
-            holders.push(HolderDetection {
-                holder,
-                start_line: cr.start_line,
-                end_line: cr.end_line,
-            });
-        }
+        holders.push(HolderDetection {
+            holder,
+            start_line: cr.start_line,
+            end_line: cr.end_line,
+        });
     }
 }
 

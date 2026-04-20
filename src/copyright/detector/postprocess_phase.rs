@@ -4,6 +4,9 @@
 use crate::copyright::line_tracking::PreparedLineCache;
 use crate::copyright::types::{AuthorDetection, CopyrightDetection, HolderDetection};
 
+use super::seen_text::SeenTextSets;
+
+#[allow(clippy::too_many_arguments)]
 pub(super) fn run_phase_postprocess(
     content: &str,
     raw_lines: &[&str],
@@ -12,12 +15,14 @@ pub(super) fn run_phase_postprocess(
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
     authors: &mut Vec<AuthorDetection>,
+    seen: &mut SeenTextSets,
 ) {
-    super::postprocess_transforms::extract_question_mark_year_copyrights(
-        prepared_cache,
-        copyrights,
-        holders,
-    );
+    let (mut new_c, mut new_h) =
+        super::postprocess_transforms::extract_question_mark_year_copyrights(prepared_cache);
+    seen.dedup_new_copyrights(&mut new_c, 0);
+    seen.dedup_new_holders(&mut new_h, 0);
+    copyrights.extend(new_c);
+    holders.extend(new_h);
 
     if super::pattern_extract::is_lppl_license_document(content) {
         holders.retain(|h| h.holder != "M. Y.");
@@ -25,6 +30,8 @@ pub(super) fn run_phase_postprocess(
 
     super::pattern_extract::drop_arch_floppy_h_bare_1995(content, copyrights);
     super::pattern_extract::drop_batman_adv_contributors_copyright(content, copyrights, holders);
+    seen.rebuild_copyrights_from(copyrights);
+    seen.rebuild_holders_from(holders);
 
     super::postprocess_transforms::split_embedded_copyright_detections(copyrights, holders);
     super::postprocess_transforms::add_missing_holders_from_email_bearing_copyrights(
@@ -54,45 +61,158 @@ pub(super) fn run_phase_postprocess(
     super::postprocess_transforms::drop_url_embedded_c_symbol_false_positive_holders(
         content, holders,
     );
+
+    let c_before = copyrights.len();
+    let h_before = holders.len();
     super::postprocess_transforms::recover_template_literal_year_range_copyrights(
         content, copyrights, holders,
     );
+    seen.dedup_new_copyrights(copyrights, c_before);
+    seen.dedup_new_holders(holders, h_before);
 
+    let a_before_markup = authors.len();
     super::author_heuristics::extract_markup_authors(content, authors);
-    super::author_heuristics::extract_rst_field_authors(prepared_cache, authors);
-    super::author_heuristics::extract_toml_author_assignment_authors(raw_lines, authors);
+    for a in &authors[a_before_markup..] {
+        seen.authors.insert(a.author.clone());
+    }
+
+    let mut new_a = super::author_heuristics::extract_rst_field_authors(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a = super::author_heuristics::extract_toml_author_assignment_authors(raw_lines);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let a_before = authors.len();
     super::author_heuristics::merge_metadata_author_and_email_lines(prepared_cache, authors);
-    super::author_heuristics::extract_debian_maintainer_authors(prepared_cache, authors);
-    super::author_heuristics::extract_maintainers_label_authors(prepared_cache, authors);
-    super::author_heuristics::extract_maintained_by_authors(prepared_cache, authors);
-    super::author_heuristics::extract_package_comment_named_authors(prepared_cache, authors);
-    super::author_heuristics::extract_created_by_project_author(prepared_cache, authors);
+    seen.dedup_new_authors(authors, a_before);
+
+    let mut new_a = super::author_heuristics::extract_debian_maintainer_authors(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a = super::author_heuristics::extract_maintainers_label_authors(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a = super::author_heuristics::extract_maintained_by_authors(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a = super::author_heuristics::extract_package_comment_named_authors(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a = super::author_heuristics::extract_created_by_project_author(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let a_before = authors.len();
     super::author_heuristics::extract_created_by_authors(prepared_cache, authors);
+    seen.dedup_new_authors(authors, a_before);
+    seen.rebuild_authors_from(authors);
+
+    let a_before = authors.len();
     super::author_heuristics::extract_written_by_comma_and_copyright_authors(
         prepared_cache,
         authors,
     );
+    seen.dedup_new_authors(authors, a_before);
+    seen.rebuild_authors_from(authors);
+
+    let a_before = authors.len();
     super::author_heuristics::extract_multiline_written_by_author_blocks(prepared_cache, authors);
-    super::author_heuristics::extract_name_contributed_authors(prepared_cache, authors);
-    super::author_heuristics::extract_dash_bullet_attribution_authors(prepared_cache, authors);
-    super::author_heuristics::extract_json_excerpt_developed_by_authors(content, authors);
-    super::author_heuristics::extract_modified_portion_developed_by_authors(content, authors);
-    super::author_heuristics::extract_was_developed_by_author_blocks(prepared_cache, authors);
-    super::author_heuristics::extract_developed_by_sentence_authors(prepared_cache, authors);
-    super::author_heuristics::extract_developed_by_phrase_authors(prepared_cache, authors);
-    super::author_heuristics::extract_developed_by_contributors_authors(prepared_cache, authors);
-    super::author_heuristics::extract_with_additional_hacking_by_authors(prepared_cache, authors);
-    super::author_heuristics::extract_parenthesized_inline_by_authors(raw_lines, authors);
+    seen.dedup_new_authors(authors, a_before);
+    seen.rebuild_authors_from(authors);
+
+    let mut new_a = super::author_heuristics::extract_name_contributed_authors(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a =
+        super::author_heuristics::extract_dash_bullet_attribution_authors(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a = super::author_heuristics::extract_json_excerpt_developed_by_authors(content);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a =
+        super::author_heuristics::extract_modified_portion_developed_by_authors(content);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a =
+        super::author_heuristics::extract_was_developed_by_author_blocks(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a = super::author_heuristics::extract_developed_by_sentence_authors(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a = super::author_heuristics::extract_developed_by_phrase_authors(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a =
+        super::author_heuristics::extract_developed_by_contributors_authors(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a =
+        super::author_heuristics::extract_with_additional_hacking_by_authors(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a = super::author_heuristics::extract_parenthesized_inline_by_authors(raw_lines);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let a_before = authors.len();
     super::author_heuristics::extract_developed_and_created_by_authors(prepared_cache, authors);
+    seen.dedup_new_authors(authors, a_before);
+    seen.rebuild_authors_from(authors);
+
+    let a_before = authors.len();
     super::author_heuristics::extract_author_colon_blocks(prepared_cache, authors);
-    super::author_heuristics::extract_module_author_macros(content, copyrights, holders, authors);
-    super::author_heuristics::extract_code_written_by_author_blocks(prepared_cache, authors);
-    super::author_heuristics::extract_converted_to_by_authors(prepared_cache, authors);
-    super::author_heuristics::extract_various_bugfixes_and_enhancements_by_authors(
-        prepared_cache,
-        authors,
+    seen.dedup_new_authors(authors, a_before);
+    seen.rebuild_authors_from(authors);
+
+    let (mut new_c, mut new_h, mut new_a) = super::author_heuristics::extract_module_author_macros(
+        content,
+        &copyrights[..],
+        &holders[..],
     );
-    super::author_heuristics::extract_dense_name_email_author_lists(prepared_cache, authors);
+    seen.dedup_new_copyrights(&mut new_c, 0);
+    seen.dedup_new_holders(&mut new_h, 0);
+    seen.dedup_new_authors(&mut new_a, 0);
+    copyrights.extend(new_c);
+    holders.extend(new_h);
+    authors.extend(new_a);
+
+    let mut new_a = super::author_heuristics::extract_code_written_by_author_blocks(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    let mut new_a = super::author_heuristics::extract_converted_to_by_authors(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+    seen.rebuild_authors_from(authors);
+
+    let mut new_a = super::author_heuristics::extract_various_bugfixes_and_enhancements_by_authors(
+        prepared_cache,
+    );
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+    seen.rebuild_authors_from(authors);
+
+    let mut new_a = super::author_heuristics::extract_dense_name_email_author_lists(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
     super::author_heuristics::drop_author_colon_lines_absorbed_into_year_only_copyrights(
         prepared_cache,
         copyrights,
@@ -101,12 +221,14 @@ pub(super) fn run_phase_postprocess(
     super::author_heuristics::drop_authors_embedded_in_copyrights(copyrights, authors);
     super::author_heuristics::drop_authors_from_copyright_by_lines(prepared_cache, authors);
     super::author_heuristics::drop_merged_dash_bullet_attribution_authors(authors);
+    seen.rebuild_authors_from(authors);
     super::postprocess_transforms::drop_created_by_camelcase_identifier_authors(
         prepared_cache,
         authors,
     );
     super::author_heuristics::drop_shadowed_compound_email_authors(authors);
     super::author_heuristics::drop_shadowed_prefix_authors(authors);
+    seen.rebuild_authors_from(authors);
 
     super::postprocess_transforms::merge_implemented_by_lines(
         prepared_cache,
@@ -125,16 +247,26 @@ pub(super) fn run_phase_postprocess(
         authors,
     );
     super::author_heuristics::drop_ref_markup_authors(authors);
-    super::author_heuristics::extract_json_author_object_authors(raw_lines, authors);
-    super::author_heuristics::normalize_json_blob_authors(raw_lines, authors);
+    seen.rebuild_authors_from(authors);
 
-    super::postprocess_transforms::extract_following_authors_holders(
-        raw_lines,
-        prepared_cache,
-        authors,
-    );
+    let mut new_a = super::author_heuristics::extract_json_author_object_authors(raw_lines);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
+    super::author_heuristics::normalize_json_blob_authors(raw_lines, authors);
+    seen.authors = authors.iter().map(|a| a.author.clone()).collect();
+
+    let mut new_a =
+        super::postprocess_transforms::extract_following_authors_holders(raw_lines, prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
+
     super::author_heuristics::drop_json_code_example_authors(raw_lines, authors);
-    super::author_heuristics::extract_name_contributed_authors(prepared_cache, authors);
+    seen.rebuild_authors_from(authors);
+
+    let mut new_a = super::author_heuristics::extract_name_contributed_authors(prepared_cache);
+    seen.dedup_new_authors(&mut new_a, 0);
+    authors.extend(new_a);
 
     super::postprocess_transforms::merge_multiline_copyrighted_by_with_trailing_copyright_clause(
         did_expand_href,
@@ -152,13 +284,29 @@ pub(super) fn run_phase_postprocess(
     super::postprocess_transforms::drop_symbol_year_only_copyrights(content, copyrights);
 
     super::postprocess_transforms::drop_from_source_attribution_copyrights(copyrights, holders);
+    seen.rebuild_copyrights_from(copyrights);
+    seen.rebuild_holders_from(holders);
 
+    let c_before = copyrights.len();
+    let h_before = holders.len();
     super::postprocess_transforms::fix_shm_inline_copyrights(prepared_cache, copyrights, holders);
+    seen.dedup_new_copyrights(copyrights, c_before);
+    seen.dedup_new_holders(holders, h_before);
+
+    let c_before = copyrights.len();
+    let h_before = holders.len();
     super::postprocess_transforms::fix_n_tty_linus_torvalds_written_by_clause(
         content, copyrights, holders,
     );
+    seen.dedup_new_copyrights(copyrights, c_before);
+    seen.dedup_new_holders(holders, h_before);
 
+    let c_before = copyrights.len();
+    let h_before = holders.len();
     super::postprocess_transforms::merge_freebird_c_inc_urls(prepared_cache, copyrights, holders);
+    seen.dedup_new_copyrights(copyrights, c_before);
+    seen.dedup_new_holders(holders, h_before);
+
     super::postprocess_transforms::merge_debugging390_best_viewed_suffix(
         prepared_cache,
         copyrights,
@@ -166,35 +314,67 @@ pub(super) fn run_phase_postprocess(
     );
     super::postprocess_transforms::merge_fsf_gdb_notice_lines(prepared_cache, copyrights, holders);
     super::postprocess_transforms::merge_axis_ethereal_suffix(prepared_cache, copyrights, holders);
+
+    let c_before = copyrights.len();
+    let h_before = holders.len();
     super::postprocess_transforms::merge_kirkwood_converted_to(prepared_cache, copyrights, holders);
+    seen.dedup_new_copyrights(copyrights, c_before);
+    seen.dedup_new_holders(holders, h_before);
+
+    let c_before = copyrights.len();
+    let h_before = holders.len();
+    let a_before = authors.len();
     super::postprocess_transforms::split_reworked_by_suffixes(
         content, copyrights, holders, authors,
     );
+    seen.dedup_new_copyrights(copyrights, c_before);
+    seen.dedup_new_holders(holders, h_before);
+    seen.dedup_new_authors(authors, a_before);
+
     super::postprocess_transforms::drop_static_char_string_copyrights(content, copyrights, holders);
     super::postprocess_transforms::drop_combined_period_holders(holders);
     super::pattern_extract::drop_shadowed_prefix_holders(holders);
     super::pattern_extract::strip_trailing_c_year_suffix_from_comma_and_others(copyrights);
     super::pattern_extract::drop_bare_c_shadowed_by_non_copyright_prefixes(copyrights);
-    super::pattern_extract::extract_name_before_rewrited_by_copyrights(
-        prepared_cache,
-        copyrights,
-        holders,
-    );
-    super::pattern_extract::extract_developed_at_software_copyrights(
-        prepared_cache,
-        copyrights,
-        holders,
-    );
+    seen.rebuild_copyrights_from(copyrights);
+    seen.rebuild_holders_from(holders);
+
+    let (mut new_c, mut new_h) =
+        super::pattern_extract::extract_name_before_rewrited_by_copyrights(prepared_cache);
+    seen.dedup_new_copyrights(&mut new_c, 0);
+    seen.dedup_new_holders(&mut new_h, 0);
+    copyrights.extend(new_c);
+    holders.extend(new_h);
+
+    let (mut new_c, mut new_h) =
+        super::pattern_extract::extract_developed_at_software_copyrights(prepared_cache);
+    seen.dedup_new_copyrights(&mut new_c, 0);
+    seen.dedup_new_holders(&mut new_h, 0);
+    copyrights.extend(new_c);
+    holders.extend(new_h);
+
+    let c_before = copyrights.len();
+    let h_before = holders.len();
     super::pattern_extract::extract_confidential_proprietary_copyrights(
         prepared_cache,
         copyrights,
         holders,
     );
+    seen.dedup_new_copyrights(copyrights, c_before);
+    seen.dedup_new_holders(holders, h_before);
+
     super::pattern_extract::drop_shadowed_bare_c_holders_with_year_prefixed_copyrights(
         copyrights, holders,
     );
     super::pattern_extract::drop_shadowed_dashless_holders(holders);
-    super::pattern_extract::extract_initials_holders_from_copyrights(copyrights, holders);
+    seen.rebuild_copyrights_from(copyrights);
+    seen.rebuild_holders_from(holders);
+
+    let mut new_h =
+        super::pattern_extract::extract_initials_holders_from_copyrights(&copyrights[..]);
+    seen.dedup_new_holders(&mut new_h, 0);
+    holders.extend(new_h);
+
     super::pattern_extract::strip_trailing_the_source_suffixes(copyrights);
     super::pattern_extract::truncate_stichting_mathematisch_centrum_amsterdam_netherlands(
         copyrights, holders,
