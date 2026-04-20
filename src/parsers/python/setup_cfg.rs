@@ -1,6 +1,6 @@
 use super::PythonParser;
 use super::utils::{
-    ProjectUrls, apply_project_url_mappings, default_package_data,
+    ProjectUrls, apply_project_url_mappings, build_python_dependency_purl, default_package_data,
     extract_setup_cfg_dependency_name, has_private_classifier, parse_setup_cfg_keywords,
     parse_setup_cfg_project_urls,
 };
@@ -235,10 +235,10 @@ fn build_setup_cfg_dependency(req: &str, scope: &str, is_optional: bool) -> Opti
     }
 
     let name = extract_setup_cfg_dependency_name(trimmed)?;
-    let purl = PackageUrl::new(PythonParser::PACKAGE_TYPE.as_str(), &name).ok()?;
+    let purl = build_python_dependency_purl(&name, None)?;
 
     Some(Dependency {
-        purl: Some(purl.to_string()),
+        purl: Some(purl),
         extracted_requirement: Some(normalize_setup_cfg_requirement(trimmed)),
         scope: Some(scope.to_string()),
         is_runtime: Some(true),
