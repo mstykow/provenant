@@ -26,7 +26,7 @@ use std::sync::LazyLock;
 
 use crate::parser_warn as warn;
 use regex::Regex;
-use rpm::{IndexTag, Package, PackageMetadata, RPM_MAGIC};
+use rpm::{IndexTag, PackageMetadata, RPM_MAGIC};
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 use crate::parsers::utils::{MAX_ITERATION_COUNT, MAX_MANIFEST_SIZE, truncate_field};
@@ -38,6 +38,7 @@ use super::license_normalization::{
 };
 
 const PACKAGE_TYPE: PackageType = PackageType::Rpm;
+const RPM_HEADER_PARSE_LIMIT_BYTES: u64 = MAX_MANIFEST_SIZE.saturating_add(1);
 
 static RE_RPM_LICENSE_AND: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)\s+and\s+").expect("valid RPM license AND regex"));
@@ -167,6 +168,39 @@ fn build_rpm_qualifiers(
     (!qualifiers.is_empty()).then_some(qualifiers)
 }
 
+pub(crate) fn is_rpm_archive_extension(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|ext| matches!(ext, "rpm" | "srpm"))
+}
+
+fn parse_rpm_metadata_only(path: &Path) -> Result<PackageMetadata, String> {
+    let file =
+        File::open(path).map_err(|e| format!("Failed to open RPM file {:?}: {}", path, e))?;
+    let limited_file = file.take(RPM_HEADER_PARSE_LIMIT_BYTES);
+    let mut reader = BufReader::new(limited_file);
+
+    PackageMetadata::parse(&mut reader)
+        .map_err(|e| format!("Failed to parse RPM file {:?}: {}", path, e))
+}
+
+pub(crate) fn extract_rpm_packages(path: &Path) -> Vec<PackageData> {
+    if let Err(e) = fs::metadata(path) {
+        warn!("Cannot stat RPM file {:?}: {}", path, e);
+        return vec![default_package_data()];
+    }
+
+    let metadata = match parse_rpm_metadata_only(path) {
+        Ok(metadata) => metadata,
+        Err(message) => {
+            warn!("{}", message);
+            return vec![default_package_data()];
+        }
+    };
+
+    vec![parse_rpm_package(&metadata, path)]
+}
+
 /// Parser for RPM package archives
 pub struct RpmParser;
 
@@ -174,33 +208,12 @@ impl PackageParser for RpmParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn is_match(path: &Path) -> bool {
-        if let Some(ext) = path.extension().and_then(|e| e.to_str())
-            && matches!(ext, "rpm" | "srpm")
-        {
-            if let Ok(metadata) = fs::metadata(path)
-                && metadata.len() > MAX_MANIFEST_SIZE
-            {
-                warn!(
-                    "RPM file {:?} is too large ({} bytes), skipping",
-                    path,
-                    metadata.len()
-                );
-                return false;
-            }
+        if is_rpm_archive_extension(path) {
             return true;
         }
 
-        match fs::metadata(path) {
-            Ok(metadata) if metadata.len() > MAX_MANIFEST_SIZE => {
-                warn!(
-                    "RPM file {:?} is too large ({} bytes), skipping",
-                    path,
-                    metadata.len()
-                );
-                return false;
-            }
-            Err(_) => return false,
-            _ => {}
+        if fs::metadata(path).is_err() {
+            return false;
         }
 
         let mut file = match File::open(path) {
@@ -212,40 +225,7 @@ impl PackageParser for RpmParser {
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
-        match fs::metadata(path) {
-            Ok(metadata) if metadata.len() > MAX_MANIFEST_SIZE => {
-                warn!(
-                    "RPM file {:?} is too large ({} bytes), skipping",
-                    path,
-                    metadata.len()
-                );
-                return vec![default_package_data()];
-            }
-            Err(e) => {
-                warn!("Cannot stat RPM file {:?}: {}", path, e);
-                return vec![default_package_data()];
-            }
-            _ => {}
-        }
-
-        let file = match File::open(path) {
-            Ok(f) => f,
-            Err(e) => {
-                warn!("Failed to open RPM file {:?}: {}", path, e);
-                return vec![default_package_data()];
-            }
-        };
-
-        let mut reader = BufReader::new(file);
-        let pkg = match Package::parse(&mut reader) {
-            Ok(p) => p,
-            Err(e) => {
-                warn!("Failed to parse RPM file {:?}: {}", path, e);
-                return vec![default_package_data()];
-            }
-        };
-
-        vec![parse_rpm_package(&pkg, path)]
+        extract_rpm_packages(path)
     }
 }
 
@@ -271,9 +251,7 @@ pub(crate) fn infer_rpm_namespace_from_filename(path: &Path) -> Option<String> {
     None
 }
 
-fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
-    let metadata = &pkg.metadata;
-
+fn parse_rpm_package(metadata: &PackageMetadata, path: &Path) -> PackageData {
     let name = metadata
         .get_name()
         .ok()
@@ -386,7 +364,7 @@ fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
             })
             .unwrap_or_else(empty_declared_license_data);
 
-    let dependencies = extract_rpm_dependencies(pkg, namespace.as_deref());
+    let dependencies = extract_rpm_dependencies(metadata, namespace.as_deref());
 
     let qualifiers = build_rpm_qualifiers(architecture.as_deref(), is_source);
 
@@ -433,7 +411,7 @@ fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
             ),
         );
     }
-    if let Some(provides) = extract_rpm_relationships(pkg, RpmRelationshipKind::Provides)
+    if let Some(provides) = extract_rpm_relationships(metadata, RpmRelationshipKind::Provides)
         && !provides.is_empty()
     {
         extra_data.insert(
@@ -446,7 +424,7 @@ fn parse_rpm_package(pkg: &Package, path: &Path) -> PackageData {
             ),
         );
     }
-    if let Some(obsoletes) = extract_rpm_relationships(pkg, RpmRelationshipKind::Obsoletes)
+    if let Some(obsoletes) = extract_rpm_relationships(metadata, RpmRelationshipKind::Obsoletes)
         && !obsoletes.is_empty()
     {
         extra_data.insert(
@@ -564,10 +542,13 @@ fn canonicalize_rpm_license_statement(statement: &str) -> String {
     rewritten.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn extract_rpm_dependencies(pkg: &Package, namespace: Option<&str>) -> Vec<Dependency> {
+fn extract_rpm_dependencies(
+    metadata: &PackageMetadata,
+    namespace: Option<&str>,
+) -> Vec<Dependency> {
     let mut dependencies = Vec::new();
 
-    if let Ok(requires) = pkg.metadata.get_requires() {
+    if let Ok(requires) = metadata.get_requires() {
         for rpm_dep in requires {
             if dependencies.len() >= MAX_ITERATION_COUNT {
                 warn!(
@@ -617,10 +598,13 @@ enum RpmRelationshipKind {
     Obsoletes,
 }
 
-fn extract_rpm_relationships(pkg: &Package, kind: RpmRelationshipKind) -> Option<Vec<String>> {
+fn extract_rpm_relationships(
+    metadata: &PackageMetadata,
+    kind: RpmRelationshipKind,
+) -> Option<Vec<String>> {
     let relationships = match kind {
-        RpmRelationshipKind::Provides => pkg.metadata.get_provides().ok()?,
-        RpmRelationshipKind::Obsoletes => pkg.metadata.get_obsoletes().ok()?,
+        RpmRelationshipKind::Provides => metadata.get_provides().ok()?,
+        RpmRelationshipKind::Obsoletes => metadata.get_obsoletes().ok()?,
     };
 
     let mut count = 0usize;
@@ -736,6 +720,25 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
 
+    fn build_sparse_oversized_rpm(name: &str) -> PathBuf {
+        let package = rpm::PackageBuilder::new(name, "1.0", "MIT", "x86_64", "Demo RPM package")
+            .release("1")
+            .build()
+            .unwrap();
+
+        let temp_file = NamedTempFile::new().unwrap();
+        package.write_file(temp_file.path()).unwrap();
+        let oversized_len = MAX_MANIFEST_SIZE + 1_048_576;
+        fs::OpenOptions::new()
+            .write(true)
+            .open(temp_file.path())
+            .unwrap()
+            .set_len(oversized_len)
+            .unwrap();
+
+        temp_file.into_temp_path().keep().unwrap()
+    }
+
     #[test]
     fn test_rpm_parser_is_match() {
         assert!(RpmParser::is_match(&PathBuf::from("package.rpm")));
@@ -815,6 +818,22 @@ mod tests {
             assert_eq!(pkg.name, Some("Eterm".to_string()));
             assert!(pkg.version.is_some());
         }
+    }
+
+    #[test]
+    fn test_parse_oversized_rpm_from_headers_only() {
+        let test_file = build_sparse_oversized_rpm("oversized-demo");
+
+        assert!(RpmParser::is_match(&test_file));
+
+        let pkg = RpmParser::extract_first_package(&test_file);
+
+        assert_eq!(pkg.datasource_id, Some(DatasourceId::RpmArchive));
+        assert_eq!(pkg.package_type, Some(PackageType::Rpm));
+        assert_eq!(pkg.name.as_deref(), Some("oversized-demo"));
+        assert_eq!(pkg.version.as_deref(), Some("1.0-1"));
+
+        fs::remove_file(test_file).unwrap();
     }
 
     #[test]

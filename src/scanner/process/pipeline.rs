@@ -3,12 +3,17 @@ use super::copyright::extract_copyright_information;
 use super::license::{LicenseExtractionInput, extract_license_information};
 use super::special_cases::{is_go_non_production_source, should_skip_text_detection};
 use crate::license_detection::LicenseDetectionEngine;
-use crate::models::{DatasourceId, FileInfo, FileInfoBuilder, FileType, Sha256Digest};
+use crate::models::{
+    DatasourceId, FileInfo, FileInfoBuilder, FileType, PackageData, ScanDiagnostic, Sha256Digest,
+};
 use crate::parsers::compiled_binary::{
     is_supported_compiled_binary_format, try_parse_compiled_bytes,
 };
 use crate::parsers::windows_executable::try_parse_windows_executable_bytes;
-use crate::parsers::{try_parse_file, try_parse_file_with_license_engine};
+use crate::parsers::{
+    ParsePackagesResult, try_parse_file, try_parse_file_with_license_engine, try_parse_rpm_archive,
+    try_parse_rpm_archive_with_license_engine,
+};
 use crate::progress::ScanProgress;
 use crate::scanner::{LicenseScanOptions, TextDetectionOptions};
 use crate::utils::file::{
@@ -16,7 +21,9 @@ use crate::utils::file::{
     extract_text_for_detection_with_diagnostics, get_creation_date,
 };
 use crate::utils::generated::generated_code_hints_from_bytes;
-use crate::utils::hash::{calculate_md5, calculate_sha1, calculate_sha1_git, calculate_sha256};
+use crate::utils::hash::{
+    calculate_file_hashes, calculate_md5, calculate_sha1, calculate_sha1_git, calculate_sha256,
+};
 use crate::utils::text::{
     remove_verbatim_escape_sequences, should_remove_verbatim_escape_sequences,
 };
@@ -37,7 +44,7 @@ pub(super) fn process_file(
     license_options: LicenseScanOptions,
     text_options: &TextDetectionOptions,
 ) -> FileInfo {
-    let mut scan_errors: Vec<String> = vec![];
+    let mut scan_diagnostics: Vec<ScanDiagnostic> = vec![];
     let mut file_info_builder = FileInfoBuilder::default();
     let license_enabled = license_engine.is_some();
 
@@ -47,7 +54,7 @@ pub(super) fn process_file(
     let mut is_source_file = false;
     match extract_information_from_content(
         &mut file_info_builder,
-        &mut scan_errors,
+        &mut scan_diagnostics,
         path,
         progress,
         license_engine,
@@ -59,10 +66,10 @@ pub(super) fn process_file(
             is_source_file = is_source;
             let _ = sha256;
         }
-        Err(e) => scan_errors.push(e.to_string()),
+        Err(e) => scan_diagnostics.push(ScanDiagnostic::error(e.to_string())),
     };
 
-    maybe_record_processing_timeout(&mut scan_errors, started, text_options.timeout_seconds);
+    maybe_record_processing_timeout(&mut scan_diagnostics, started, text_options.timeout_seconds);
 
     let mut file_info = file_info_builder
         .name(path.file_name().unwrap().to_string_lossy().to_string())
@@ -85,7 +92,13 @@ pub(super) fn process_file(
                 .then(|| get_creation_date(metadata))
                 .flatten(),
         )
-        .scan_errors(scan_errors)
+        .scan_diagnostics(scan_diagnostics.clone())
+        .scan_errors(
+            scan_diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.message.clone())
+                .collect(),
+        )
         .build()
         .expect("FileInformationBuild not completely initialized");
 
@@ -112,7 +125,7 @@ pub(super) fn process_file(
 
 fn extract_information_from_content(
     file_info_builder: &mut FileInfoBuilder,
-    scan_errors: &mut Vec<String>,
+    scan_diagnostics: &mut Vec<ScanDiagnostic>,
     path: &Path,
     progress: &ScanProgress,
     license_engine: Option<Arc<LicenseDetectionEngine>>,
@@ -121,8 +134,42 @@ fn extract_information_from_content(
 ) -> Result<(Option<bool>, Sha256Digest, bool), Error> {
     let started = Instant::now();
     let filesystem_path = absolute_filesystem_path(path);
-    let buffer = fs::read(&filesystem_path)?;
     let license_enabled = license_engine.is_some();
+    let mut rpm_fast_path_parse_result = None;
+    let mut rpm_fast_path_timing_seconds = 0.0;
+    let oversized_rpm_fast_path = is_oversized_rpm_archive_candidate(&filesystem_path)?;
+
+    if should_try_rpm_package_fast_path(&filesystem_path, text_options) {
+        let package_started = Instant::now();
+        rpm_fast_path_parse_result = if let Some(engine) = license_engine.clone() {
+            try_parse_rpm_archive_with_license_engine(&filesystem_path, Some(engine))
+        } else {
+            try_parse_rpm_archive(&filesystem_path)
+        };
+        rpm_fast_path_timing_seconds = package_started.elapsed().as_secs_f64();
+
+        if can_skip_content_read_after_package_fast_path(
+            text_options,
+            license_enabled,
+            oversized_rpm_fast_path,
+        ) {
+            if let Some(parse_result) = rpm_fast_path_parse_result.take() {
+                apply_parse_result(
+                    file_info_builder,
+                    scan_diagnostics,
+                    parse_result,
+                    text_options,
+                );
+            }
+            if oversized_rpm_fast_path {
+                populate_oversized_rpm_info(file_info_builder, &filesystem_path, text_options)?;
+            }
+            progress.record_detail_timing("scan:packages", rpm_fast_path_timing_seconds);
+            return Ok((None, Sha256Digest::EMPTY, false));
+        }
+    }
+
+    let buffer = fs::read(&filesystem_path)?;
 
     if is_timeout_exceeded(started, text_options.timeout_seconds) {
         return Err(Error::msg(format!(
@@ -163,54 +210,42 @@ fn extract_information_from_content(
 
     if text_options.detect_packages {
         let started = Instant::now();
-        let parse_result = if let Some(engine) = license_engine.clone() {
-            try_parse_file_with_license_engine(&filesystem_path, Some(engine))
-        } else {
-            try_parse_file(&filesystem_path)
-        }
-        .or_else(|| {
-            text_options
-                .detect_application_packages
-                .then(|| try_parse_windows_executable_bytes(&filesystem_path, &buffer))
-                .flatten()
-        })
-        .or_else(|| {
-            text_options
-                .detect_packages_in_compiled
-                .then(|| {
-                    (classification.is_binary && is_supported_compiled_binary_format(&buffer))
-                        .then(|| try_parse_compiled_bytes(&buffer))
-                        .flatten()
-                })
-                .flatten()
+        let parse_result = rpm_fast_path_parse_result.take().or_else(|| {
+            if let Some(engine) = license_engine.clone() {
+                try_parse_file_with_license_engine(&filesystem_path, Some(engine))
+            } else {
+                try_parse_file(&filesystem_path)
+            }
+            .or_else(|| {
+                text_options
+                    .detect_application_packages
+                    .then(|| try_parse_windows_executable_bytes(&filesystem_path, &buffer))
+                    .flatten()
+            })
+            .or_else(|| {
+                text_options
+                    .detect_packages_in_compiled
+                    .then(|| {
+                        (classification.is_binary && is_supported_compiled_binary_format(&buffer))
+                            .then(|| try_parse_compiled_bytes(&buffer))
+                            .flatten()
+                    })
+                    .flatten()
+            })
         });
 
         if let Some(parse_result) = parse_result {
-            let packages = parse_result
-                .packages
-                .into_iter()
-                .filter(|package| {
-                    let is_compiled_package = package
-                        .datasource_id
-                        .as_ref()
-                        .is_some_and(is_compiled_datasource);
-                    let is_system_package = package
-                        .datasource_id
-                        .as_ref()
-                        .is_some_and(is_system_datasource);
-                    if is_compiled_package {
-                        text_options.detect_packages_in_compiled
-                    } else if is_system_package {
-                        text_options.detect_system_packages
-                    } else {
-                        text_options.detect_application_packages
-                    }
-                })
-                .collect();
-            file_info_builder.package_data(packages);
-            scan_errors.extend(parse_result.scan_errors);
+            apply_parse_result(
+                file_info_builder,
+                scan_diagnostics,
+                parse_result,
+                text_options,
+            );
         }
-        progress.record_detail_timing("scan:packages", started.elapsed().as_secs_f64());
+        progress.record_detail_timing(
+            "scan:packages",
+            rpm_fast_path_timing_seconds + started.elapsed().as_secs_f64(),
+        );
     }
 
     if is_timeout_exceeded(started, text_options.timeout_seconds) {
@@ -223,7 +258,7 @@ fn extract_information_from_content(
     let (text_content, text_kind, text_scan_error) =
         extract_text_for_detection_with_diagnostics(&filesystem_path, &buffer);
     if let Some(text_scan_error) = text_scan_error {
-        scan_errors.push(text_scan_error);
+        scan_diagnostics.push(ScanDiagnostic::error(text_scan_error));
     }
     let from_binary_strings = matches!(text_kind, ExtractedTextKind::BinaryStrings);
 
@@ -278,7 +313,7 @@ fn extract_information_from_content(
         let started = Instant::now();
         extract_license_information(
             file_info_builder,
-            scan_errors,
+            scan_diagnostics,
             LicenseExtractionInput {
                 path: &filesystem_path,
                 text_content: text_content_for_license_detection.clone(),
@@ -293,7 +328,7 @@ fn extract_information_from_content(
     } else {
         extract_license_information(
             file_info_builder,
-            scan_errors,
+            scan_diagnostics,
             LicenseExtractionInput {
                 path: &filesystem_path,
                 text_content: text_content_for_license_detection,
@@ -348,6 +383,108 @@ fn absolute_filesystem_path(path: &Path) -> PathBuf {
         .unwrap_or_else(|_| path.to_path_buf())
 }
 
+fn should_try_rpm_package_fast_path(path: &Path, text_options: &TextDetectionOptions) -> bool {
+    text_options.detect_packages
+        && text_options.detect_application_packages
+        && path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| matches!(ext, "rpm" | "srpm"))
+}
+
+fn can_skip_content_read_after_package_fast_path(
+    text_options: &TextDetectionOptions,
+    license_enabled: bool,
+    oversized_rpm_fast_path: bool,
+) -> bool {
+    oversized_rpm_fast_path
+        || (!text_options.collect_info
+            && !text_options.detect_copyrights
+            && !text_options.detect_generated
+            && !text_options.detect_emails
+            && !text_options.detect_urls
+            && !license_enabled)
+}
+
+fn is_oversized_rpm_archive_candidate(path: &Path) -> Result<bool, Error> {
+    if !matches!(
+        path.extension().and_then(|ext| ext.to_str()),
+        Some("rpm" | "srpm")
+    ) {
+        return Ok(false);
+    }
+
+    Ok(fs::metadata(path)?.len() > 100 * 1024 * 1024)
+}
+
+fn populate_oversized_rpm_info(
+    file_info_builder: &mut FileInfoBuilder,
+    filesystem_path: &Path,
+    text_options: &TextDetectionOptions,
+) -> Result<(), Error> {
+    if !text_options.collect_info {
+        return Ok(());
+    }
+
+    let size = fs::metadata(filesystem_path)?.len();
+    let (sha1, md5, sha256, sha1_git) = calculate_file_hashes(filesystem_path, size)?;
+    file_info_builder
+        .sha1(Some(sha1))
+        .md5(Some(md5))
+        .sha256(Some(sha256))
+        .sha1_git(Some(sha1_git))
+        .programming_language(None)
+        .mime_type(Some("application/x-rpm".to_string()))
+        .file_type_label(Some("RPM package".to_string()))
+        .is_binary(Some(true))
+        .is_text(Some(false))
+        .is_archive(Some(true))
+        .is_media(Some(false))
+        .is_source(Some(false))
+        .is_script(Some(false))
+        .files_count(Some(0))
+        .dirs_count(Some(0))
+        .size_count(Some(0));
+
+    Ok(())
+}
+
+fn apply_parse_result(
+    file_info_builder: &mut FileInfoBuilder,
+    scan_diagnostics: &mut Vec<ScanDiagnostic>,
+    parse_result: ParsePackagesResult,
+    text_options: &TextDetectionOptions,
+) {
+    file_info_builder.package_data(filter_packages(parse_result.packages, text_options));
+    scan_diagnostics.extend(parse_result.scan_diagnostics);
+}
+
+fn filter_packages(
+    packages: Vec<PackageData>,
+    text_options: &TextDetectionOptions,
+) -> Vec<PackageData> {
+    packages
+        .into_iter()
+        .filter(|package| {
+            let is_compiled_package = package
+                .datasource_id
+                .as_ref()
+                .is_some_and(is_compiled_datasource);
+            let is_system_package = package
+                .datasource_id
+                .as_ref()
+                .is_some_and(is_system_datasource);
+            if is_compiled_package {
+                text_options.detect_packages_in_compiled
+            } else if is_system_package {
+                text_options.detect_system_packages
+            } else {
+                text_options.detect_application_packages
+            }
+        })
+        .collect()
+}
+
 fn is_timeout_exceeded(started: Instant, timeout_seconds: f64) -> bool {
     timeout_seconds.is_finite()
         && timeout_seconds > 0.0
@@ -364,17 +501,19 @@ fn deadline_from_start(started: Instant, timeout_seconds: f64) -> Option<Instant
 }
 
 fn maybe_record_processing_timeout(
-    scan_errors: &mut Vec<String>,
+    scan_diagnostics: &mut Vec<ScanDiagnostic>,
     started: Instant,
     timeout_seconds: f64,
 ) {
     if is_timeout_exceeded(started, timeout_seconds)
-        && !scan_errors.iter().any(|error| is_timeout_scan_error(error))
+        && !scan_diagnostics
+            .iter()
+            .any(|diagnostic| is_timeout_scan_error(&diagnostic.message))
     {
-        scan_errors.push(format!(
+        scan_diagnostics.push(ScanDiagnostic::error(format!(
             "Processing interrupted due to timeout after {:.2} seconds",
             timeout_seconds
-        ));
+        )));
     }
 }
 

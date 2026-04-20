@@ -94,6 +94,7 @@ pub(super) fn process_directory(
         urls: Vec::new(),
         for_packages: Vec::new(),
         scan_errors: Vec::new(),
+        scan_diagnostics: Vec::new(),
         license_policy: None,
         is_binary: collect_info.then_some(false),
         is_text: collect_info.then_some(false),

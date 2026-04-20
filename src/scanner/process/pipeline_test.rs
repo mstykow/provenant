@@ -2,6 +2,7 @@ use super::{
     LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES, cap_non_source_json_license_text,
     maybe_record_processing_timeout, process_file,
 };
+use crate::models::{DiagnosticSeverity, ScanDiagnostic};
 use crate::progress::{ProgressMode, ScanProgress};
 use crate::scanner::{LicenseScanOptions, TextDetectionOptions};
 use crate::utils::file::FileInfoClassification;
@@ -34,23 +35,31 @@ fn test_process_file_suppresses_non_actionable_pdf_extraction_failure() {
 #[test]
 fn test_processing_timeout_is_not_duplicated_after_stage_specific_timeout() {
     let started = Instant::now() - Duration::from_secs(2);
-    let mut scan_errors = vec!["Timeout before license scan (> 1.00s)".to_string()];
+    let mut scan_diagnostics = vec![ScanDiagnostic::error(
+        "Timeout before license scan (> 1.00s)",
+    )];
 
-    maybe_record_processing_timeout(&mut scan_errors, started, 1.0);
+    maybe_record_processing_timeout(&mut scan_diagnostics, started, 1.0);
 
-    assert_eq!(scan_errors, vec!["Timeout before license scan (> 1.00s)"]);
+    assert_eq!(scan_diagnostics.len(), 1);
+    assert_eq!(
+        scan_diagnostics[0].message,
+        "Timeout before license scan (> 1.00s)"
+    );
 }
 
 #[test]
 fn test_processing_timeout_is_recorded_when_no_timeout_error_exists() {
     let started = Instant::now() - Duration::from_secs(2);
-    let mut scan_errors = Vec::new();
+    let mut scan_diagnostics = Vec::new();
 
-    maybe_record_processing_timeout(&mut scan_errors, started, 1.0);
+    maybe_record_processing_timeout(&mut scan_diagnostics, started, 1.0);
 
+    assert_eq!(scan_diagnostics.len(), 1);
+    assert_eq!(scan_diagnostics[0].severity, DiagnosticSeverity::Error);
     assert_eq!(
-        scan_errors,
-        vec!["Processing interrupted due to timeout after 1.00 seconds"]
+        scan_diagnostics[0].message,
+        "Processing interrupted due to timeout after 1.00 seconds"
     );
 }
 

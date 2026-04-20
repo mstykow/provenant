@@ -72,6 +72,7 @@ pub(crate) fn try_parse_windows_executable_bytes(
 
     (!packages.is_empty()).then_some(ParsePackagesResult {
         packages,
+        scan_diagnostics: Vec::new(),
         scan_errors: Vec::new(),
     })
 }
