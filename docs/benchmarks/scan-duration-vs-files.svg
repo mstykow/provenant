@@ -107,6 +107,9 @@ ScanCode: 65.66s</title></rect>
     <rect x="365.59" y="422.87" width="8" height="8" fill="#d97706" rx="1.5"><title>docker-library/python @ ced4ac7
 Files: 53
 ScanCode: 76.81s</title></rect>
+    <rect x="393.09" y="400.80" width="8" height="8" fill="#d97706" rx="1.5"><title>Mantle/Mantle @ 2a8e212
+Files: 79
+ScanCode: 122.53s</title></rect>
     <rect x="397.32" y="478.15" width="8" height="8" fill="#d97706" rx="1.5"><title>Alpine 3.23.3 minirootfs @ sha256:42d0e6d
 Files: 84
 ScanCode: 23.84s</title></rect>
@@ -125,9 +128,15 @@ ScanCode: 78.89s</title></rect>
     <rect x="428.98" y="388.90" width="8" height="8" fill="#d97706" rx="1.5"><title>fmtlib/fmt @ 2cb3983
 Files: 133
 ScanCode: 157.63s</title></rect>
+    <rect x="450.98" y="397.47" width="8" height="8" fill="#d97706" rx="1.5"><title>Carthage/Carthage @ e33e133
+Files: 183
+ScanCode: 131.47s</title></rect>
     <rect x="460.79" y="416.30" width="8" height="8" fill="#d97706" rx="1.5"><title>AFNetworking/AFNetworking @ d9f589c
 Files: 211
 ScanCode: 88.26s</title></rect>
+    <rect x="462.40" y="401.49" width="8" height="8" fill="#d97706" rx="1.5"><title>ReactiveCocoa/ReactiveCocoa @ f2d9bd5
+Files: 216
+ScanCode: 120.75s</title></rect>
     <rect x="468.50" y="426.47" width="8" height="8" fill="#d97706" rx="1.5"><title>boostorg/boost @ 4f1cbeb
 Files: 236
 ScanCode: 71.17s</title></rect>
@@ -472,6 +481,9 @@ Provenant: 8.66s</title></circle>
     <circle cx="369.59" cy="514.74" r="4.5" fill="#2563eb"><title>docker-library/python @ ced4ac7
 Files: 53
 Provenant: 11.96s</title></circle>
+    <circle cx="397.09" cy="518.23" r="4.5" fill="#2563eb"><title>Mantle/Mantle @ 2a8e212
+Files: 79
+Provenant: 11.11s</title></circle>
     <circle cx="401.32" cy="491.72" r="4.5" fill="#2563eb"><title>Alpine 3.23.3 minirootfs @ sha256:42d0e6d
 Files: 84
 Provenant: 19.47s</title></circle>
@@ -490,9 +502,15 @@ Provenant: 12.14s</title></circle>
     <circle cx="432.98" cy="514.62" r="4.5" fill="#2563eb"><title>fmtlib/fmt @ 2cb3983
 Files: 133
 Provenant: 11.99s</title></circle>
+    <circle cx="454.98" cy="519.74" r="4.5" fill="#2563eb"><title>Carthage/Carthage @ e33e133
+Files: 183
+Provenant: 10.76s</title></circle>
     <circle cx="464.79" cy="518.95" r="4.5" fill="#2563eb"><title>AFNetworking/AFNetworking @ d9f589c
 Files: 211
 Provenant: 10.94s</title></circle>
+    <circle cx="466.40" cy="520.98" r="4.5" fill="#2563eb"><title>ReactiveCocoa/ReactiveCocoa @ f2d9bd5
+Files: 216
+Provenant: 10.48s</title></circle>
     <circle cx="472.50" cy="506.33" r="4.5" fill="#2563eb"><title>boostorg/boost @ 4f1cbeb
 Files: 236
 Provenant: 14.29s</title></circle>
