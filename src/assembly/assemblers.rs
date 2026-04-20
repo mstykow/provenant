@@ -343,6 +343,15 @@ pub static ASSEMBLERS: &[AssemblerConfig] = &[
         sibling_file_patterns: &["Project.toml", "Manifest.toml"],
         mode: AssemblyMode::SiblingMerge,
     },
+    // Carthage ecosystem
+    AssemblerConfig {
+        datasource_ids: &[
+            DatasourceId::CarthageCartfile,
+            DatasourceId::CarthageCartfileResolved,
+        ],
+        sibling_file_patterns: &["Cartfile", "Cartfile.private", "Cartfile.resolved"],
+        mode: AssemblyMode::SiblingMerge,
+    },
     // CocoaPods ecosystem
     AssemblerConfig {
         datasource_ids: &[

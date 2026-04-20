@@ -41,6 +41,9 @@ mod cargo_lock_test;
 mod cargo_scan_test;
 #[cfg(test)]
 mod cargo_test;
+mod carthage;
+#[cfg(test)]
+mod carthage_test;
 mod chef;
 #[cfg(test)]
 mod chef_scan_test;
@@ -502,6 +505,7 @@ pub use self::bun_lockb::BunLockbParser;
 pub use self::cargo::CargoParser;
 #[cfg_attr(not(test), allow(unused_imports))]
 pub use self::cargo_lock::CargoLockParser;
+pub use self::carthage::{CarthageCartfileParser, CarthageCartfileResolvedParser};
 pub use self::chef::{ChefMetadataJsonParser, ChefMetadataRbParser};
 pub use self::citation::CitationCffParser;
 pub use self::clojure::{ClojureDepsEdnParser, ClojureProjectCljParser};
@@ -756,6 +760,8 @@ register_package_handlers! {
         BuckMetadataBzlParser,
         CargoLockParser,
         CargoParser,
+        CarthageCartfileParser,
+        CarthageCartfileResolvedParser,
         ChefMetadataJsonParser,
         ChefMetadataRbParser,
         CitationCffParser,
