@@ -16,6 +16,7 @@ The supported surface covers dependency declaration parsing across all three Car
 ### `Cartfile` and `Cartfile.private` dependency extraction
 
 - Rust now recognizes `Cartfile` and `Cartfile.private` and extracts direct dependency declarations.
+- `Cartfile.private` is marked `is_private: true` so the project-local manifest stays distinguishable from the ordinary `Cartfile` surface.
 - All three Carthage origin types are supported: `github` entries produce `pkg:github/` purls, while `git` and `binary` entries preserve source identity in dependency metadata.
 - Version requirement operators (`>=`, `~>`, `==`) and branch/tag references are preserved as `extracted_requirement`.
 - Inline comments are stripped from version specifications.
@@ -24,7 +25,7 @@ The supported surface covers dependency declaration parsing across all three Car
 
 - Rust now parses `Cartfile.resolved` for locked dependency versions.
 - Resolved versions are included in `pkg:github/` purls and dependencies are marked `is_pinned: true`.
-- Sibling assembly keeps both the declared dependency view from `Cartfile` and the pinned dependency view from `Cartfile.resolved`.
+- Scanner assembly hoists the PURL-bearing declared dependency view from `Cartfile` and the pinned dependency view from `Cartfile.resolved` without inventing a root Carthage package identity.
 
 ## Guardrails
 
