@@ -28,9 +28,18 @@ though the Python ScanCode reference does not currently provide a production Bit
 ### License and dependency fidelity
 
 - Rust preserves the raw `LICENSE` value as `extracted_license_statement`.
+- Rust prefers package-specific `LICENSE:${PN}` / `LICENSE_${PN}` declarations when present and
+  falls back to recipe-level `LICENSE` otherwise.
 - BitBake-specific `&` / `|` operators are normalized for declared-license expression generation.
 - `DEPENDS` and `RDEPENDS` variants are extracted as build/runtime dependencies, and versioned
   requirements such as `foo (>= 1.2)` are preserved in `extracted_requirement`.
+
+### Source metadata fidelity
+
+- When a recipe declares exactly one non-local source URI, Rust promotes that entry to top-level
+  `download_url` metadata.
+- Rust extracts source checksum metadata from both inline `SRC_URI` parameters and documented
+  varflag forms such as `SRC_URI[sha256sum]` and `SRC_URI[name.sha256sum]`.
 
 ### Local file references and scanner ownership
 

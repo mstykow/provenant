@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::models::{DatasourceId, Dependency, FileReference, Md5Digest, PackageData, PackageType};
+use crate::models::{
+    DatasourceId, Dependency, FileReference, Md5Digest, PackageData, PackageType, Sha1Digest,
+    Sha256Digest, Sha512Digest,
+};
 use crate::parser_warn as warn;
 use packageurl::PackageUrl;
 use serde_json::Value;
@@ -77,10 +80,10 @@ fn parse_recipe(content: &str, path: &Path, datasource_id: DatasourceId) -> Pack
         package.bug_tracking_url = Some(truncate_field(bugtracker.clone()));
     }
 
-    if let Some(license) = vars.get("LICENSE") {
+    if let Some(license) = select_license_value(&vars, name.as_deref()) {
         package.extracted_license_statement = Some(truncate_field(license.clone()));
 
-        let normalized = normalize_bitbake_license(license);
+        let normalized = normalize_bitbake_license(&license);
         let (declared, spdx, detections) =
             normalize_spdx_declared_license(Some(normalized.as_str()));
         package.declared_license_expression = declared;
@@ -101,7 +104,11 @@ fn parse_recipe(content: &str, path: &Path, datasource_id: DatasourceId) -> Pack
     }
 
     if let Some(src_uri) = vars.get("SRC_URI") {
-        let (uris, local_references) = extract_src_uri_data(src_uri);
+        let (remote_entries, local_references) = extract_src_uri_data(src_uri);
+        let uris: Vec<String> = remote_entries
+            .iter()
+            .map(|entry| entry.uri.clone())
+            .collect();
         if !uris.is_empty() {
             extra_data.insert(
                 "src_uri".to_string(),
@@ -109,6 +116,7 @@ fn parse_recipe(content: &str, path: &Path, datasource_id: DatasourceId) -> Pack
             );
         }
         merge_file_references(&mut file_references, local_references);
+        apply_src_uri_package_metadata(&mut package, &vars, &remote_entries);
     }
 
     let inherits = extract_inherits(content);
@@ -188,6 +196,91 @@ fn parse_recipe_filename(path: &Path) -> (Option<String>, Option<String>) {
         }
         _ => (Some(stem.to_string()), None),
     }
+}
+
+fn select_license_value(
+    vars: &HashMap<String, String>,
+    package_name: Option<&str>,
+) -> Option<String> {
+    let mut candidate_keys = Vec::new();
+
+    if let Some(package_name) = package_name {
+        candidate_keys.push(format!("LICENSE:{package_name}"));
+        candidate_keys.push(format!("LICENSE_{package_name}"));
+    }
+
+    candidate_keys.extend([
+        "LICENSE:${PN}".to_string(),
+        "LICENSE_${PN}".to_string(),
+        "LICENSE".to_string(),
+    ]);
+
+    candidate_keys
+        .into_iter()
+        .find_map(|candidate| vars.get(&candidate).cloned())
+}
+
+fn apply_src_uri_package_metadata(
+    package: &mut PackageData,
+    vars: &HashMap<String, String>,
+    remote_entries: &[SrcUriEntry],
+) {
+    if remote_entries.len() != 1 {
+        return;
+    }
+
+    let entry = &remote_entries[0];
+    package.download_url = Some(entry.uri.clone());
+    package.sha1 = parse_sha1_digest(
+        entry
+            .sha1sum
+            .as_deref()
+            .or_else(|| src_uri_varflag_value(vars, entry.name.as_deref(), "sha1sum")),
+    );
+    package.md5 = parse_md5_digest(
+        entry
+            .md5sum
+            .as_deref()
+            .or_else(|| src_uri_varflag_value(vars, entry.name.as_deref(), "md5sum")),
+    );
+    package.sha256 = parse_sha256_digest(
+        entry
+            .sha256sum
+            .as_deref()
+            .or_else(|| src_uri_varflag_value(vars, entry.name.as_deref(), "sha256sum")),
+    );
+    package.sha512 = parse_sha512_digest(
+        entry
+            .sha512sum
+            .as_deref()
+            .or_else(|| src_uri_varflag_value(vars, entry.name.as_deref(), "sha512sum")),
+    );
+}
+
+fn src_uri_varflag_value<'a>(
+    vars: &'a HashMap<String, String>,
+    name: Option<&str>,
+    algorithm: &str,
+) -> Option<&'a str> {
+    name.and_then(|name| vars.get(&format!("SRC_URI[{name}.{algorithm}]")))
+        .or_else(|| vars.get(&format!("SRC_URI[{algorithm}]")))
+        .map(String::as_str)
+}
+
+fn parse_sha1_digest(value: Option<&str>) -> Option<Sha1Digest> {
+    value.and_then(|value| Sha1Digest::from_hex(value).ok())
+}
+
+fn parse_md5_digest(value: Option<&str>) -> Option<Md5Digest> {
+    value.and_then(|value| Md5Digest::from_hex(value).ok())
+}
+
+fn parse_sha256_digest(value: Option<&str>) -> Option<Sha256Digest> {
+    value.and_then(|value| Sha256Digest::from_hex(value).ok())
+}
+
+fn parse_sha512_digest(value: Option<&str>) -> Option<Sha512Digest> {
+    value.and_then(|value| Sha512Digest::from_hex(value).ok())
 }
 
 #[derive(Default)]
@@ -458,6 +551,16 @@ struct ParsedDependency {
     requirement: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SrcUriEntry {
+    uri: String,
+    name: Option<String>,
+    sha1sum: Option<String>,
+    md5sum: Option<String>,
+    sha256sum: Option<String>,
+    sha512sum: Option<String>,
+}
+
 fn parse_dependency_list(value: &str) -> Vec<ParsedDependency> {
     let tokens: Vec<&str> = value.split_whitespace().collect();
     let mut dependencies = Vec::new();
@@ -508,8 +611,8 @@ fn parse_dependency_list(value: &str) -> Vec<ParsedDependency> {
     dependencies
 }
 
-fn extract_src_uri_data(src_uri: &str) -> (Vec<String>, Vec<FileReference>) {
-    let mut remote_uris = Vec::new();
+fn extract_src_uri_data(src_uri: &str) -> (Vec<SrcUriEntry>, Vec<FileReference>) {
+    let mut remote_entries = Vec::new();
     let mut local_references = Vec::new();
 
     for entry in src_uri.split_whitespace() {
@@ -517,7 +620,33 @@ fn extract_src_uri_data(src_uri: &str) -> (Vec<String>, Vec<FileReference>) {
             continue;
         }
 
-        let base = entry.split(';').next().unwrap_or(entry);
+        let mut parts = entry.split(';');
+        let base = parts.next().unwrap_or(entry);
+
+        let mut remote_entry = SrcUriEntry {
+            uri: truncate_field(base.to_string()),
+            name: None,
+            sha1sum: None,
+            md5sum: None,
+            sha256sum: None,
+            sha512sum: None,
+        };
+
+        for parameter in parts {
+            let Some((key, value)) = parameter.split_once('=') else {
+                continue;
+            };
+
+            match key {
+                "name" => remote_entry.name = Some(value.to_string()),
+                "sha1sum" => remote_entry.sha1sum = Some(value.to_string()),
+                "md5sum" => remote_entry.md5sum = Some(value.to_string()),
+                "sha256sum" => remote_entry.sha256sum = Some(value.to_string()),
+                "sha512sum" => remote_entry.sha512sum = Some(value.to_string()),
+                _ => {}
+            }
+        }
+
         if let Some(path) = base.strip_prefix("file://") {
             if !path.is_empty() {
                 local_references.push(file_reference_from_path(path, "SRC_URI"));
@@ -525,10 +654,10 @@ fn extract_src_uri_data(src_uri: &str) -> (Vec<String>, Vec<FileReference>) {
             continue;
         }
 
-        remote_uris.push(truncate_field(base.to_string()));
+        remote_entries.push(remote_entry);
     }
 
-    (remote_uris, local_references)
+    (remote_entries, local_references)
 }
 
 fn extract_lic_files_chksum_references(value: &str) -> Vec<FileReference> {
