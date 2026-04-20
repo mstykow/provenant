@@ -217,37 +217,9 @@ Output architecture and compatibility approach are documented in:
 
 Contributions are welcome. Please feel free to submit a pull request.
 
-For contributor guidance, start with the [Documentation Index](docs/DOCUMENTATION_INDEX.md), [How to Add a Parser](docs/HOW_TO_ADD_A_PARSER.md), and [Testing Strategy](docs/TESTING_STRATEGY.md).
+For contributor workflow, start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Before running the local setup flow, install these prerequisites:
-
-- Git
-- A Rust toolchain with `cargo` available on your `PATH` (see `rust-toolchain.toml`)
-- Node.js with `npm` available on your `PATH` (see `package.json` `engines`)
-
-A typical local setup on Linux, macOS, or WSL is:
-
-```sh
-git clone https://github.com/mstykow/provenant.git
-cd provenant
-npm run setup
-```
-
-That command runs `npm install`, installs the Rust CLI helper tools used by local hooks/checks (including `cargo-deny` for dependency policy enforcement), and then runs `./setup.sh` to initialize submodules and hooks.
-
-The embedded license index is checked into the repository directly. If you only need to re-run submodule and hook setup after the initial bootstrap, `./setup.sh` is sufficient:
-
-```sh
-./setup.sh
-```
-
-Use the generator only when intentionally refreshing embedded license data:
-
-```sh
-cargo run --manifest-path xtask/Cargo.toml --bin generate-index-artifact
-```
-
-For normal local development, `npm run setup` is the one-command bootstrap path. `npm run hooks:install` is available if you need to re-install hooks manually. These setup and helper commands are currently shell-oriented, so Windows contributors should prefer running them inside WSL2.
+For deeper contributor documentation, see the [Documentation Index](docs/DOCUMENTATION_INDEX.md), [How to Add a Parser](docs/HOW_TO_ADD_A_PARSER.md), and [Testing Strategy](docs/TESTING_STRATEGY.md).
 
 ## Support and Acknowledgements
 
