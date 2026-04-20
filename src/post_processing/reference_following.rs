@@ -766,14 +766,16 @@ fn apply_resolved_reference_targets(
         return false;
     }
 
-    let is_placeholder_reference = matches!(
-        detection.license_expression.as_str(),
-        "unknown-license-reference" | "free-unknown"
-    );
+    let strip_source_matches_for_expression = detection_log
+        == DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE
+        || matches!(
+            detection.license_expression.as_str(),
+            "unknown-license-reference" | "free-unknown"
+        );
     let mut internal_detection = public_detection_to_internal(detection, current_path);
-    let mut placeholder_matches = Vec::new();
-    if is_placeholder_reference {
-        placeholder_matches = internal_detection.matches.clone();
+    let mut source_matches = Vec::new();
+    if strip_source_matches_for_expression {
+        source_matches = internal_detection.matches.clone();
         internal_detection.matches.clear();
     }
     for target in &referenced_targets {
@@ -801,8 +803,8 @@ fn apply_resolved_reference_targets(
     internal_detection.license_expression_spdx =
         determine_spdx_expression(&matches_for_expression, None).ok();
     internal_detection.detection_log = vec![detection_log.to_string()];
-    if !placeholder_matches.is_empty() {
-        let mut combined_matches = placeholder_matches;
+    if !source_matches.is_empty() {
+        let mut combined_matches = source_matches;
         combined_matches.extend(internal_detection.matches);
         internal_detection.matches = combined_matches;
     }
@@ -893,8 +895,22 @@ fn has_resolved_referenced_file(detection: &LicenseDetection, current_path: &str
         detection_match
             .from_file
             .as_deref()
-            .is_some_and(|path| path != current_path)
+            .is_some_and(|path| !paths_refer_to_same_file(path, current_path))
     })
+}
+
+fn paths_refer_to_same_file(left: &str, right: &str) -> bool {
+    let normalize = |path: &str| {
+        path.replace('\\', "/")
+            .trim_start_matches("./")
+            .trim_matches('/')
+            .to_string()
+    };
+
+    let left = normalize(left);
+    let right = normalize(right);
+
+    left == right || left.ends_with(&format!("/{right}")) || right.ends_with(&format!("/{left}"))
 }
 
 fn normalize_referenced_filename(name: &str) -> String {
