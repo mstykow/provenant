@@ -174,6 +174,23 @@ pub(crate) fn is_rpm_archive_extension(path: &Path) -> bool {
         .is_some_and(|ext| matches!(ext, "rpm" | "srpm"))
 }
 
+pub(crate) fn path_looks_like_rpm_archive(path: &Path) -> bool {
+    if is_rpm_archive_extension(path) {
+        return true;
+    }
+
+    if fs::metadata(path).is_err() {
+        return false;
+    }
+
+    let mut file = match File::open(path) {
+        Ok(file) => file,
+        Err(_) => return false,
+    };
+    let mut magic = [0_u8; 4];
+    file.read_exact(&mut magic).is_ok() && magic == RPM_MAGIC
+}
+
 fn parse_rpm_metadata_only(path: &Path) -> Result<PackageMetadata, String> {
     let file =
         File::open(path).map_err(|e| format!("Failed to open RPM file {:?}: {}", path, e))?;
@@ -208,20 +225,7 @@ impl PackageParser for RpmParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn is_match(path: &Path) -> bool {
-        if is_rpm_archive_extension(path) {
-            return true;
-        }
-
-        if fs::metadata(path).is_err() {
-            return false;
-        }
-
-        let mut file = match File::open(path) {
-            Ok(file) => file,
-            Err(_) => return false,
-        };
-        let mut magic = [0_u8; 4];
-        file.read_exact(&mut magic).is_ok() && magic == RPM_MAGIC
+        path_looks_like_rpm_archive(path)
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
@@ -761,6 +765,21 @@ mod tests {
         fs::copy(&source_fixture, temp_file.path()).unwrap();
 
         assert!(RpmParser::is_match(temp_file.path()));
+    }
+
+    #[test]
+    fn test_rpm_parser_matches_pack_named_rpm_by_magic() {
+        let source_fixture = PathBuf::from("testdata/rpm/setup-2.5.49-b1.src.rpm");
+        if !source_fixture.exists() {
+            return;
+        }
+
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let pack_path = temp_dir.path().join("setup-2.5.49-b1.src.pack");
+        fs::copy(&source_fixture, &pack_path).unwrap();
+
+        assert!(RpmParser::is_match(&pack_path));
+        assert!(path_looks_like_rpm_archive(&pack_path));
     }
 
     #[test]

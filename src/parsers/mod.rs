@@ -511,7 +511,7 @@ pub fn try_parse_rpm_archive_with_license_engine(
     path: &Path,
     license_engine: Option<Arc<LicenseDetectionEngine>>,
 ) -> Option<ParsePackagesResult> {
-    if !self::rpm_parser::is_rpm_archive_extension(path) {
+    if !self::rpm_parser::path_looks_like_rpm_archive(path) {
         return None;
     }
 
@@ -529,6 +529,10 @@ pub fn try_parse_rpm_archive_with_license_engine(
 
 pub fn try_parse_rpm_archive(path: &Path) -> Option<ParsePackagesResult> {
     try_parse_rpm_archive_with_license_engine(path, None)
+}
+
+pub(crate) fn path_looks_like_rpm_archive(path: &Path) -> bool {
+    self::rpm_parser::path_looks_like_rpm_archive(path)
 }
 
 pub use self::about::AboutFileParser;

@@ -11,7 +11,8 @@ use crate::parsers::compiled_binary::{
 };
 use crate::parsers::windows_executable::try_parse_windows_executable_bytes;
 use crate::parsers::{
-    ParsePackagesResult, try_parse_file, try_parse_file_with_license_engine, try_parse_rpm_archive,
+    ParsePackagesResult, path_looks_like_rpm_archive, try_parse_file,
+    try_parse_file_with_license_engine, try_parse_rpm_archive,
     try_parse_rpm_archive_with_license_engine,
 };
 use crate::progress::ScanProgress;
@@ -386,10 +387,7 @@ fn absolute_filesystem_path(path: &Path) -> PathBuf {
 fn should_try_rpm_package_fast_path(path: &Path, text_options: &TextDetectionOptions) -> bool {
     text_options.detect_packages
         && text_options.detect_application_packages
-        && path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .is_some_and(|ext| matches!(ext, "rpm" | "srpm"))
+        && path_looks_like_rpm_archive(path)
 }
 
 fn can_skip_content_read_after_package_fast_path(
@@ -407,10 +405,7 @@ fn can_skip_content_read_after_package_fast_path(
 }
 
 fn is_oversized_rpm_archive_candidate(path: &Path) -> Result<bool, Error> {
-    if !matches!(
-        path.extension().and_then(|ext| ext.to_str()),
-        Some("rpm" | "srpm")
-    ) {
+    if !path_looks_like_rpm_archive(path) {
         return Ok(false);
     }
 
