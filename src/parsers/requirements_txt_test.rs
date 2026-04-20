@@ -196,6 +196,9 @@ mod tests {
             "/tmp/reqs.txt"
         )));
         assert!(RequirementsTxtParser::is_match(&PathBuf::from(
+            "/tmp/minreqs.txt"
+        )));
+        assert!(RequirementsTxtParser::is_match(&PathBuf::from(
             "/tmp/requirements.in"
         )));
         assert!(RequirementsTxtParser::is_match(&PathBuf::from(
@@ -247,6 +250,9 @@ mod tests {
         let mkdocs_requirements = unique_temp_path("mkdocs-reqs.txt");
         fs::write(&mkdocs_requirements, "mkdocs>=1\n").expect("Failed to write reqs file");
 
+        let min_requirements = unique_temp_path("minreqs.txt");
+        fs::write(&min_requirements, "pytest>=8\n").expect("Failed to write minreqs file");
+
         let egg_info_dir = unique_temp_path("demo.egg-info");
         fs::create_dir_all(&egg_info_dir).expect("Failed to create egg-info dir");
         let requires_txt = egg_info_dir.join("requires.txt");
@@ -254,6 +260,8 @@ mod tests {
 
         let poetry_package = RequirementsTxtParser::extract_first_package(&poetry_requirements);
         let mkdocs_package = RequirementsTxtParser::extract_first_package(&mkdocs_requirements);
+        let min_requirements_package =
+            RequirementsTxtParser::extract_first_package(&min_requirements);
         let egg_info_package = RequirementsTxtParser::extract_first_package(&requires_txt);
 
         assert!(
@@ -269,6 +277,12 @@ mod tests {
                 .any(|dependency| dependency.purl.as_deref() == Some("pkg:pypi/mkdocs"))
         );
         assert!(
+            min_requirements_package
+                .dependencies
+                .iter()
+                .any(|dependency| dependency.purl.as_deref() == Some("pkg:pypi/pytest"))
+        );
+        assert!(
             egg_info_package
                 .dependencies
                 .iter()
@@ -277,6 +291,7 @@ mod tests {
 
         fs::remove_file(&poetry_requirements).expect("Failed to remove poetry file");
         fs::remove_file(&mkdocs_requirements).expect("Failed to remove reqs file");
+        fs::remove_file(&min_requirements).expect("Failed to remove minreqs file");
         fs::remove_file(&requires_txt).expect("Failed to remove requires.txt");
         fs::remove_dir_all(
             poetry_requirements
