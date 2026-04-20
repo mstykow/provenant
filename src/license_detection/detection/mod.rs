@@ -298,14 +298,18 @@ pub(crate) fn select_matches_for_expression(
         matches.to_vec()
     };
 
-    if post_scan && is_unknown_reference_follow_log(log_category) {
-        let has_concrete_match = filtered
-            .iter()
-            .any(|match_item| !is_unknown_reference_like_match(match_item));
-        if has_concrete_match {
-            filtered.retain(|match_item| !is_unknown_reference_like_match(match_item));
-        }
+    let has_unknown_local_file_placeholder = filtered.iter().any(|match_item| {
+        match_item.license_expression == "unknown-license-reference"
+            && is_local_file_reference_match(match_item)
+    });
+    let has_concrete_match = filtered
+        .iter()
+        .any(|match_item| !is_unknown_reference_like_match(match_item));
+    if has_unknown_local_file_placeholder && has_concrete_match {
+        filtered.retain(|match_item| !is_unknown_reference_like_match(match_item));
+    }
 
+    if is_unknown_reference_follow_log(log_category) {
         let local_reference_sources = filtered
             .iter()
             .filter(|match_item| is_local_file_reference_match(match_item))
@@ -320,7 +324,7 @@ pub(crate) fn select_matches_for_expression(
                         .as_deref()
                         .is_some_and(|path| !local_reference_sources.contains(path))
             });
-        if has_resolved_concrete_match {
+        if post_scan && has_resolved_concrete_match {
             let without_imperfect_reference_fragments: Vec<_> = filtered
                 .iter()
                 .filter(|match_item| !is_imperfect_local_file_reference_match(match_item))
@@ -700,6 +704,38 @@ mod tests {
         );
 
         assert_eq!(selected, vec![referenced]);
+    }
+
+    #[test]
+    fn select_matches_for_expression_drops_unknown_local_file_reference_placeholders_in_main_detection()
+     {
+        let mut license_intro = create_test_match(1, 1, "2-aho", "license-intro_2.RULE");
+        license_intro.license_expression = "unknown-license-reference".to_string();
+        license_intro.license_expression_spdx =
+            Some("LicenseRef-scancode-unknown-license-reference".to_string());
+
+        let mut unknown_reference = create_test_match(
+            1,
+            1,
+            "2-aho",
+            "unknown-license-reference_see-license_1.RULE",
+        );
+        unknown_reference.license_expression = "unknown-license-reference".to_string();
+        unknown_reference.license_expression_spdx =
+            Some("LicenseRef-scancode-unknown-license-reference".to_string());
+        unknown_reference.referenced_filenames = Some(vec!["LICENSE".to_string()]);
+
+        let mut mit = create_test_match(1, 1, "2-aho", "mit_14.RULE");
+        mit.license_expression = "mit".to_string();
+        mit.license_expression_spdx = Some("MIT".to_string());
+
+        let selected = select_matches_for_expression(
+            &[license_intro, unknown_reference, mit.clone()],
+            "",
+            false,
+        );
+
+        assert_eq!(selected, vec![mit]);
     }
 
     #[test]
