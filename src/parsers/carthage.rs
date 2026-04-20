@@ -13,11 +13,12 @@ impl PackageParser for CarthageCartfileParser {
     const PACKAGE_TYPE: PackageType = PackageType::Carthage;
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
+        let is_private = is_private_cartfile_path(path);
         let content = match read_file_to_string(path, None) {
             Ok(c) => c,
             Err(e) => {
                 warn!("Failed to read Cartfile at {:?}: {}", path, e);
-                return vec![default_cartfile_package_data()];
+                return vec![default_cartfile_package_data(is_private)];
             }
         };
 
@@ -26,6 +27,7 @@ impl PackageParser for CarthageCartfileParser {
         vec![PackageData {
             package_type: Some(Self::PACKAGE_TYPE),
             primary_language: Some("Objective-C".to_string()),
+            is_private,
             dependencies,
             datasource_id: Some(DatasourceId::CarthageCartfile),
             ..Default::default()
@@ -250,10 +252,16 @@ fn make_binary_dep_info(source: &str) -> (Option<String>, Option<String>) {
     (None, name)
 }
 
-fn default_cartfile_package_data() -> PackageData {
+fn is_private_cartfile_path(path: &Path) -> bool {
+    path.file_name()
+        .is_some_and(|name| name == "Cartfile.private")
+}
+
+fn default_cartfile_package_data(is_private: bool) -> PackageData {
     PackageData {
         package_type: Some(PackageType::Carthage),
         primary_language: Some("Objective-C".to_string()),
+        is_private,
         datasource_id: Some(DatasourceId::CarthageCartfile),
         ..Default::default()
     }
