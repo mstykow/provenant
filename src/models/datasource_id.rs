@@ -76,6 +76,10 @@ pub enum DatasourceId {
     BunLock,
     BunLockb,
 
+    // ── Carthage ──
+    CarthageCartfile,
+    CarthageCartfileResolved,
+
     // ── Cargo/Rust ──
     CargoLock,
     CargoToml,
@@ -387,6 +391,10 @@ impl DatasourceId {
             // Buck
             Self::BuckFile => "buck_file",
             Self::BuckMetadata => "buck_metadata",
+
+            // Carthage
+            Self::CarthageCartfile => "carthage_cartfile",
+            Self::CarthageCartfileResolved => "carthage_cartfile_resolved",
 
             // Cargo/Rust
             Self::CargoLock => "cargo_lock",

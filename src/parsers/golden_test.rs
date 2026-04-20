@@ -20,6 +20,8 @@ mod bun_lock_golden_test;
 mod bun_lockb_golden_test;
 #[path = "cargo_golden_test.rs"]
 mod cargo_golden_test;
+#[path = "carthage_golden_test.rs"]
+mod carthage_golden_test;
 #[path = "chef_golden_test.rs"]
 mod chef_golden_test;
 #[path = "citation_golden_test.rs"]
