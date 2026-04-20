@@ -1354,10 +1354,27 @@ mod tests {
         );
         assert_eq!(import_dep.is_runtime, Some(false));
 
+        let managed_import_dep = package_data
+            .dependencies
+            .iter()
+            .find(|dep| {
+                dep.scope.as_deref() == Some("dependencymanagement")
+                    && dep.purl.as_deref()
+                        == Some("pkg:maven/org.springframework.boot/spring-boot-dependencies@3.2.0")
+            })
+            .expect("dependencyManagement copy of import dependency should exist");
+        assert_eq!(managed_import_dep.is_runtime, Some(false));
+
         let managed_dep = package_data
             .dependencies
             .iter()
-            .find(|dep| dep.scope.as_deref() == Some("dependencymanagement"))
+            .find(|dep| {
+                dep.scope.as_deref() == Some("dependencymanagement")
+                    && dep.purl.as_deref()
+                        == Some(
+                            "pkg:maven/com.example.libs/managed-war@4.5.6?classifier=tests&type=war",
+                        )
+            })
             .expect("dependencyManagement dependency should exist");
         assert_eq!(
             managed_dep.purl,

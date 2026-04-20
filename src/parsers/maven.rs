@@ -1722,15 +1722,25 @@ impl PackageParser for MavenParser {
         }
 
         for dependency in &dependency_management_entries {
-            let fallback_scope = if dependency.scope.as_deref() == Some("import") {
-                Some("import")
-            } else {
-                Some("dependencymanagement")
-            };
-
-            if let Some(converted) =
-                maven_dependency_to_dependency(dependency, fallback_scope, true)
+            if dependency.scope.as_deref() == Some("import")
+                && let Some(import_dependency) =
+                    maven_dependency_to_dependency(dependency, Some("import"), true)
             {
+                package_data.dependencies.push(import_dependency);
+            }
+
+            // ScanCode surfaces import-scoped BOM entries twice: once as an
+            // import edge and again as a dependencyManagement record. Preserve
+            // that shape so compare-output parity does not depend on target-
+            // specific workarounds.
+            let mut dependency_management_copy = dependency.clone();
+            dependency_management_copy.scope = Some("dependencymanagement".to_string());
+
+            if let Some(converted) = maven_dependency_to_dependency(
+                &dependency_management_copy,
+                Some("dependencymanagement"),
+                true,
+            ) {
                 package_data.dependencies.push(converted);
             }
         }
