@@ -24,6 +24,8 @@ mod bazel_module_test;
 mod bazel_test;
 mod bitbake;
 #[cfg(test)]
+mod bitbake_scan_test;
+#[cfg(test)]
 mod bitbake_test;
 mod bower;
 #[cfg(test)]
