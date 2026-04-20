@@ -1,6 +1,6 @@
 use super::PackageParser;
 use super::bitbake::BitbakeRecipeParser;
-use crate::models::{DatasourceId, PackageType};
+use crate::models::{DatasourceId, PackageType, Sha256Digest};
 use std::path::Path;
 
 #[test]
@@ -38,6 +38,10 @@ fn test_extract_packages_basic() {
     assert_eq!(
         pkg.bug_tracking_url.as_deref(),
         Some("https://example.com/bugs")
+    );
+    assert_eq!(
+        pkg.download_url.as_deref(),
+        Some("https://example.com/releases/example-${PV}.tar.gz")
     );
     assert_eq!(pkg.purl.as_deref(), Some("pkg:bitbake/example@1.2.3"));
     assert_eq!(pkg.extracted_license_statement.as_deref(), Some("MIT"));
@@ -274,6 +278,102 @@ fn test_license_with_operators_preserves_raw_statement() {
         pkg.declared_license_expression_spdx.as_deref(),
         Some("GPL-2.0-only AND MIT")
     );
+}
+
+#[test]
+fn test_package_specific_license_overrides_plain_license() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("example_1.0.bb");
+    std::fs::write(
+        &path,
+        "PN = \"example\"\n\
+         LICENSE = \"MIT\"\n\
+         LICENSE:${PN} = \"GPL-2.0-only\"\n",
+    )
+    .unwrap();
+
+    let packages = BitbakeRecipeParser::extract_packages(&path);
+    let pkg = &packages[0];
+    assert_eq!(
+        pkg.extracted_license_statement.as_deref(),
+        Some("GPL-2.0-only")
+    );
+    assert_eq!(
+        pkg.declared_license_expression_spdx.as_deref(),
+        Some("GPL-2.0-only")
+    );
+}
+
+#[test]
+fn test_single_remote_src_uri_sets_download_url_and_checksums() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("example_1.0.bb");
+    std::fs::write(
+        &path,
+        "SRC_URI = \"https://example.com/example-1.0.tar.gz;sha256sum=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n",
+    )
+    .unwrap();
+
+    let packages = BitbakeRecipeParser::extract_packages(&path);
+    let pkg = &packages[0];
+    assert_eq!(
+        pkg.download_url.as_deref(),
+        Some("https://example.com/example-1.0.tar.gz")
+    );
+    assert_eq!(
+        pkg.sha256,
+        Some(
+            Sha256Digest::from_hex(
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            )
+            .unwrap()
+        )
+    );
+}
+
+#[test]
+fn test_named_src_uri_varflag_sets_checksum_for_single_remote_uri() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("example_1.0.bb");
+    std::fs::write(
+        &path,
+        "SRC_URI = \"https://example.com/example-1.0.tar.gz;name=tarball\"\n\
+         SRC_URI[tarball.sha256sum] = \"abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd\"\n",
+    )
+    .unwrap();
+
+    let packages = BitbakeRecipeParser::extract_packages(&path);
+    let pkg = &packages[0];
+    assert_eq!(
+        pkg.download_url.as_deref(),
+        Some("https://example.com/example-1.0.tar.gz")
+    );
+    assert_eq!(
+        pkg.sha256,
+        Some(
+            Sha256Digest::from_hex(
+                "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+            )
+            .unwrap()
+        )
+    );
+}
+
+#[test]
+fn test_multiple_remote_src_uri_entries_do_not_guess_single_download_url() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("example_1.0.bb");
+    std::fs::write(
+        &path,
+        "SRC_URI = \"https://example.com/source.tar.gz https://example.com/fix.patch\"\n\
+         SRC_URI[sha256sum] = \"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n",
+    )
+    .unwrap();
+
+    let packages = BitbakeRecipeParser::extract_packages(&path);
+    let pkg = &packages[0];
+    assert_eq!(pkg.download_url, None);
+    assert_eq!(pkg.sha256, None);
 }
 
 #[test]
