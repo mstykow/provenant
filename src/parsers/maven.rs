@@ -1729,10 +1729,13 @@ impl PackageParser for MavenParser {
                 package_data.dependencies.push(import_dependency);
             }
 
-            // ScanCode surfaces import-scoped BOM entries twice: once as an
-            // import edge and again as a dependencyManagement record. Preserve
-            // that shape so compare-output parity does not depend on target-
-            // specific workarounds.
+            // Import-scoped BOMs carry two distinct facts in the declared POM:
+            // this project explicitly imports that BOM, and the imported BOM
+            // contributes managed constraints. Keep both normalized rows in the
+            // ordinary dependency stream so generic dependency consumers can see
+            // BOM provenance (`scope=import`) without inspecting Maven-specific
+            // extra_data, while still getting the managed-constraint view
+            // (`scope=dependencymanagement`).
             let mut dependency_management_copy = dependency.clone();
             dependency_management_copy.scope = Some("dependencymanagement".to_string());
 
