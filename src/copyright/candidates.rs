@@ -222,6 +222,16 @@ fn is_code_line_with_false_c(line: &str) -> bool {
     code_pattern_count >= 2
 }
 
+fn is_swift_convention_c_signature_line(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed.contains("@convention(c)")
+        && !has_copyright_indicators(trimmed)
+        && (trimmed.starts_with("let ")
+            || trimmed.starts_with("var ")
+            || trimmed.starts_with("typealias ")
+            || trimmed.contains(" -> "))
+}
+
 /// Regex to remove all non-alphanumeric characters (for chars-only comparison).
 static NON_CHARS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[^a-zA-Z0-9]").unwrap());
 
@@ -482,6 +492,10 @@ where
             || co.contains("http")
             || is_raw_versioned_project_banner_line(line)
         {
+            if is_swift_convention_c_signature_line(line) {
+                continue;
+            }
+
             if is_code_line_with_false_c(line) {
                 continue;
             }
@@ -1125,6 +1139,23 @@ mod tests {
         assert!(!has_copyright_indicators(
             "just some random @ text with right margin"
         ));
+    }
+
+    #[test]
+    fn test_collect_skips_swift_convention_c_signature_lines() {
+        let lines = vec![
+            (
+                1,
+                "let invokeSuperSetter: @convention(c) (NSObject, AnyClass, Selector, AnyObject?) -> Void = { object, superclass, selector, delegate in".to_string(),
+            ),
+            (
+                2,
+                "typealias Setter = @convention(c) (NSObject, Selector, AnyObject?) -> Void"
+                    .to_string(),
+            ),
+        ];
+
+        assert!(collect_candidate_lines(lines).is_empty());
     }
 
     // ── has_c_sign_before_year ──────────────────────────────────────

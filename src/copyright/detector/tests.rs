@@ -167,6 +167,20 @@ fn test_trailing_copy_year_suffix_is_kept() {
 }
 
 #[test]
+fn test_swift_convention_c_signatures_do_not_produce_copyrights_or_holders() {
+    let input = concat!(
+        "let invokeSuperSetter: @convention(c) (NSObject, AnyClass, Selector, AnyObject?) -> Void = { object, superclass, selector, delegate in\n",
+        "typealias Setter = @convention(c) (NSObject, Selector, AnyObject?) -> Void\n",
+    );
+
+    let (copyrights, holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(copyrights.is_empty(), "copyrights: {copyrights:?}");
+    assert!(holders.is_empty(), "holders: {holders:?}");
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
 fn test_author_prefix_dedup_keeps_short_email_list() {
     let input = "Author(s): gthomas, sorin@netappi.com\nContributors: gthomas, sorin@netappi.com, andrew.lunn@ascom.ch\n";
     let (_c, _h, authors) = detect_copyrights_from_text(input);
