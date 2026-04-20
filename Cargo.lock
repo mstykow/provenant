@@ -2028,16 +2028,6 @@ dependencies = [
 
 [[package]]
 name = "md-5"
-version = "0.10.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
-dependencies = [
- "cfg-if",
- "digest 0.10.7",
-]
-
-[[package]]
-name = "md-5"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69b6441f590336821bb897fb28fc622898ccceb1d6cea3fde5ea86b090c4de98"
@@ -2509,7 +2499,7 @@ dependencies = [
  "lazy_static",
  "log",
  "lzw",
- "md-5 0.11.0",
+ "md-5",
  "memchr",
  "nom",
  "phf 0.13.1",
@@ -2907,7 +2897,7 @@ dependencies = [
  "kamadak-exif",
  "liblzma",
  "log",
- "md-5 0.11.0",
+ "md-5",
  "mime_guess",
  "object",
  "os_info",
@@ -3231,9 +3221,9 @@ dependencies = [
 
 [[package]]
 name = "rpm"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42b9353ebc70385f83520d2490e23139ae78f897a5d7e3b7c34cb8a9f91c69a6"
+checksum = "581e408e460fb1f08055d368ccea30352d8c77ae46d9158641c07366d583f27c"
 dependencies = [
  "base64",
  "bitflags 2.11.1",
@@ -3246,7 +3236,6 @@ dependencies = [
  "itertools 0.14.0",
  "liblzma",
  "log",
- "md-5 0.10.6",
  "memchr",
  "nom",
  "num",
