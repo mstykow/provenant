@@ -14,7 +14,6 @@
 //!   collect spans heuristically.
 
 use std::borrow::Cow;
-use std::collections::HashSet;
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
@@ -126,6 +125,8 @@ pub fn detect_copyrights_from_text_with_deadline(
     let groups =
         collect_candidate_lines(raw_lines.iter().enumerate().map(|(i, line)| (i + 1, *line)));
 
+    let mut seen = seen_text::SeenTextSets::from_existing(&copyrights, &holders, &authors);
+
     for group in &groups {
         if deadline_exceeded(deadline) {
             break;
@@ -154,19 +155,18 @@ pub fn detect_copyrights_from_text_with_deadline(
         });
 
         if has_top_level_nodes {
+            let (new_c, new_h, new_a) =
+                extract_from_tree_nodes(&tree, allow_not_copyrighted_prefix);
+            seen.register_copyrights(&new_c);
+            seen.register_holders(&new_h);
+            seen.register_authors(&new_a);
             let copyrights_before = copyrights.len();
-            extract_from_tree_nodes(
-                &tree,
-                &mut copyrights,
-                &mut holders,
-                &mut authors,
-                allow_not_copyrighted_prefix,
-            );
+            copyrights.extend(new_c);
+            holders.extend(new_h);
+            authors.extend(new_a);
 
             if let Some(det) = extract_original_author_additional_contributors(&tree)
-                && !authors
-                    .iter()
-                    .any(|a| a.author == det.author && a.start_line.get() == det.start_line.get())
+                && seen.authors.insert(det.author.clone())
             {
                 authors.push(det);
             }
@@ -204,13 +204,17 @@ pub fn detect_copyrights_from_text_with_deadline(
                 && has_authorish_boundary_token
                 && is_single_line_group
             {
-                extract_bare_copyrights(&tree, &mut copyrights, &mut holders);
-                extract_copyrights_from_spans(
-                    &tree,
-                    &mut copyrights,
-                    &mut holders,
-                    allow_not_copyrighted_prefix,
-                );
+                let (new_c, new_h) = extract_bare_copyrights(&tree);
+                seen.register_copyrights(&new_c);
+                seen.register_holders(&new_h);
+                copyrights.extend(new_c);
+                holders.extend(new_h);
+                let (new_c, new_h) =
+                    extract_copyrights_from_spans(&tree, allow_not_copyrighted_prefix);
+                seen.register_copyrights(&new_c);
+                seen.register_holders(&new_h);
+                copyrights.extend(new_c);
+                holders.extend(new_h);
             }
 
             let has_year_token = tree
@@ -218,28 +222,32 @@ pub fn detect_copyrights_from_text_with_deadline(
                 .flat_map(collect_all_leaves)
                 .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
             if copyrights.len() == copyrights_before && has_copy_like_token && has_year_token {
-                extract_copyrights_from_spans(
-                    &tree,
-                    &mut copyrights,
-                    &mut holders,
-                    allow_not_copyrighted_prefix,
-                );
+                let (new_c, new_h) =
+                    extract_copyrights_from_spans(&tree, allow_not_copyrighted_prefix);
+                seen.register_copyrights(&new_c);
+                seen.register_holders(&new_h);
+                copyrights.extend(new_c);
+                holders.extend(new_h);
             }
         } else {
-            extract_bare_copyrights(&tree, &mut copyrights, &mut holders);
-            extract_from_spans(
-                &tree,
-                &mut copyrights,
-                &mut holders,
-                &mut authors,
-                allow_not_copyrighted_prefix,
-            );
-            extract_orphaned_by_authors(&tree, &mut authors);
+            let (new_c, new_h) = extract_bare_copyrights(&tree);
+            seen.register_copyrights(&new_c);
+            seen.register_holders(&new_h);
+            copyrights.extend(new_c);
+            holders.extend(new_h);
+            let (new_c, new_h, new_a) = extract_from_spans(&tree, allow_not_copyrighted_prefix);
+            seen.register_copyrights(&new_c);
+            seen.register_holders(&new_h);
+            seen.register_authors(&new_a);
+            copyrights.extend(new_c);
+            holders.extend(new_h);
+            authors.extend(new_a);
+            let mut new_a = extract_orphaned_by_authors(&tree);
+            seen.dedup_new_authors(&mut new_a, 0);
+            authors.extend(new_a);
 
             if let Some(det) = extract_original_author_additional_contributors(&tree)
-                && !authors
-                    .iter()
-                    .any(|a| a.author == det.author && a.start_line.get() == det.start_line.get())
+                && seen.authors.insert(det.author.clone())
             {
                 authors.push(det);
             }
@@ -248,7 +256,12 @@ pub fn detect_copyrights_from_text_with_deadline(
         // Run after each group is processed so it can fix authors detected
         // through any extraction path.
         fix_truncated_contributors_authors(&tree, &mut authors);
-        extract_holder_is_name(&tree, &mut copyrights, &mut holders);
+        seen.rebuild_authors_from(&authors);
+        let (mut new_c, mut new_h) = extract_holder_is_name(&tree);
+        seen.dedup_new_copyrights(&mut new_c, 0);
+        seen.dedup_new_holders(&mut new_h, 0);
+        copyrights.extend(new_c);
+        holders.extend(new_h);
         apply_written_by_for_markers(group, &mut copyrights, &mut holders);
         extend_multiline_copyright_c_year_holder_continuations(
             group,
@@ -264,23 +277,16 @@ pub fn detect_copyrights_from_text_with_deadline(
         extend_software_in_the_public_interest_holder(group, &mut copyrights, &mut holders);
     }
 
-    if copyrights.is_empty() {
-        copyrights.extend(fallback_year_only_copyrights(&groups));
-    } else {
-        let fallback = fallback_year_only_copyrights(&groups);
-        let existing_set: HashSet<&str> = copyrights.iter().map(|c| c.copyright.as_str()).collect();
-        let to_add: Vec<CopyrightDetection> = fallback
-            .into_iter()
-            .filter(|det| {
-                !existing_set.contains(det.copyright.as_str())
-                    && !existing_set.iter().any(|e| {
-                        e.to_ascii_lowercase()
-                            .contains(&det.copyright.to_ascii_lowercase())
-                    })
-            })
-            .collect();
-        copyrights.extend(to_add);
-    }
+    let mut fallback = fallback_year_only_copyrights(&groups);
+    seen.dedup_new_copyrights(&mut fallback, 0);
+    fallback.retain(|det| {
+        !copyrights.iter().any(|c| {
+            c.copyright
+                .to_ascii_lowercase()
+                .contains(&det.copyright.to_ascii_lowercase())
+        })
+    });
+    copyrights.extend(fallback);
 
     if deadline_exceeded(deadline) {
         refine_final_copyrights(&mut copyrights);
@@ -297,6 +303,7 @@ pub fn detect_copyrights_from_text_with_deadline(
         &mut prepared_cache,
         &mut copyrights,
         &mut holders,
+        &mut seen,
     );
 
     postprocess_phase::run_phase_postprocess(
@@ -307,6 +314,7 @@ pub fn detect_copyrights_from_text_with_deadline(
         &mut copyrights,
         &mut holders,
         &mut authors,
+        &mut seen,
     );
 
     refine_final_copyrights(&mut copyrights);
@@ -334,6 +342,7 @@ mod pattern_extract;
 mod postprocess_phase;
 mod postprocess_transforms;
 mod primary_phase;
+mod seen_text;
 mod token_utils;
 mod tree_walk;
 

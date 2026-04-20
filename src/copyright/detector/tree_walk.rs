@@ -115,11 +115,16 @@ fn single_portions_prefix_token<'a>(
 
 pub fn extract_from_tree_nodes(
     tree: &[ParseNode],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-    authors: &mut Vec<AuthorDetection>,
     allow_not_copyrighted_prefix: bool,
+) -> (
+    Vec<CopyrightDetection>,
+    Vec<HolderDetection>,
+    Vec<AuthorDetection>,
 ) {
+    let mut copyrights: Vec<CopyrightDetection> = Vec::new();
+    let mut holders: Vec<HolderDetection> = Vec::new();
+    let mut authors: Vec<AuthorDetection> = Vec::new();
+
     let group_has_copyright = tree.iter().any(|n| {
         matches!(
             n.label(),
@@ -891,6 +896,8 @@ pub fn extract_from_tree_nodes(
         }
         i += 1;
     }
+
+    (copyrights, holders, authors)
 }
 
 fn merge_copyright_with_following_author<'a>(
@@ -2485,7 +2492,9 @@ fn extract_author_from_copyright_node(node: &ParseNode) -> Option<AuthorDetectio
     super::token_utils::build_author_from_tokens(&author_tokens)
 }
 
-pub fn extract_orphaned_by_authors(tree: &[ParseNode], authors: &mut Vec<AuthorDetection>) {
+pub fn extract_orphaned_by_authors(tree: &[ParseNode]) -> Vec<AuthorDetection> {
+    let mut authors: Vec<AuthorDetection> = Vec::new();
+
     let mut i = 0;
     while i < tree.len() {
         if let Some((det, skip)) = try_extract_orphaned_by_author(tree, i) {
@@ -2497,6 +2506,8 @@ pub fn extract_orphaned_by_authors(tree: &[ParseNode], authors: &mut Vec<AuthorD
         }
         i += 1;
     }
+
+    authors
 }
 
 pub fn fix_truncated_contributors_authors(tree: &[ParseNode], authors: &mut Vec<AuthorDetection>) {
@@ -2627,9 +2638,10 @@ fn restore_trailing_contributors_suffix(author: &str, suffix: &str) -> String {
 
 pub fn extract_holder_is_name(
     tree: &[ParseNode],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
+    let mut copyrights: Vec<CopyrightDetection> = Vec::new();
+    let mut holders: Vec<HolderDetection> = Vec::new();
+
     let mut i = 0;
     while i < tree.len() {
         if let ParseNode::Leaf(token) = &tree[i]
@@ -2672,6 +2684,8 @@ pub fn extract_holder_is_name(
         }
         i += 1;
     }
+
+    (copyrights, holders)
 }
 
 /// Handle "bare copyright" pattern: a Copy leaf followed by a NameYear/Name/Company
@@ -2679,9 +2693,7 @@ pub fn extract_holder_is_name(
 /// Also handles "Portions/Parts (c) ..." by including a preceding Portions token.
 pub fn extract_bare_copyrights(
     tree: &[ParseNode],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     fn has_line_start_copyright_prefix(tree: &[ParseNode], idx: usize, line: LineNumber) -> bool {
         let mut found_copyright = false;
         for j in (0..idx).rev() {
@@ -2704,6 +2716,9 @@ pub fn extract_bare_copyrights(
         }
         found_copyright
     }
+
+    let mut copyrights: Vec<CopyrightDetection> = Vec::new();
+    let mut holders: Vec<HolderDetection> = Vec::new();
 
     let mut i = 0;
     while i < tree.len() {
@@ -2805,19 +2820,26 @@ pub fn extract_bare_copyrights(
         }
         i += 1;
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_from_spans(
     tree: &[ParseNode],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-    authors: &mut Vec<AuthorDetection>,
     allow_not_copyrighted_prefix: bool,
+) -> (
+    Vec<CopyrightDetection>,
+    Vec<HolderDetection>,
+    Vec<AuthorDetection>,
 ) {
+    let mut copyrights: Vec<CopyrightDetection> = Vec::new();
+    let mut holders: Vec<HolderDetection> = Vec::new();
+    let mut authors: Vec<AuthorDetection> = Vec::new();
+
     let all_leaves: Vec<&Token> = tree.iter().flat_map(super::collect_all_leaves).collect();
 
     if all_leaves.is_empty() {
-        return;
+        return (copyrights, holders, authors);
     }
 
     let mut i = 0;
@@ -3072,17 +3094,20 @@ pub fn extract_from_spans(
             i += 1;
         }
     }
+
+    (copyrights, holders, authors)
 }
 
 pub fn extract_copyrights_from_spans(
     tree: &[ParseNode],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
     allow_not_copyrighted_prefix: bool,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
+    let mut copyrights: Vec<CopyrightDetection> = Vec::new();
+    let mut holders: Vec<HolderDetection> = Vec::new();
+
     let all_leaves: Vec<&Token> = tree.iter().flat_map(super::collect_all_leaves).collect();
     if all_leaves.is_empty() {
-        return;
+        return (copyrights, holders);
     }
 
     let mut i = 0;
@@ -3261,4 +3286,6 @@ pub fn extract_copyrights_from_spans(
             i += 1;
         }
     }
+
+    (copyrights, holders)
 }

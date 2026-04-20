@@ -16,22 +16,18 @@ use crate::models::LineNumber;
 
 use super::token_utils::normalize_whitespace;
 
-pub fn extract_glide_3dfx_copyright_notice(
-    content: &str,
-    copyrights: &mut Vec<CopyrightDetection>,
-) {
+pub fn extract_glide_3dfx_copyright_notice(content: &str) -> Vec<CopyrightDetection> {
     static GLIDE_3DFX_COPYRIGHT_NOTICE_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)\bcopyright\s+notice\s*\(3dfx\s+interactive,\s+inc\.\s+1999\)").unwrap()
     });
 
-    let mut seen: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
+    let mut copyrights = Vec::new();
+
     for (idx, line) in content.lines().enumerate() {
         let ln = idx + 1;
         if let Some(m) = GLIDE_3DFX_COPYRIGHT_NOTICE_RE.find(line) {
             let raw = m.as_str();
-            if let Some(refined) = refine_copyright(raw)
-                && seen.insert(refined.clone())
-            {
+            if let Some(refined) = refine_copyright(raw) {
                 copyrights.push(CopyrightDetection {
                     copyright: refined,
                     start_line: LineNumber::new(ln).unwrap(),
@@ -40,19 +36,22 @@ pub fn extract_glide_3dfx_copyright_notice(
             }
         }
     }
+
+    copyrights
 }
 
 pub fn extract_spdx_filecopyrighttext_c_without_year(
     content: &str,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static SPDX_COPYRIGHT_C_NO_YEAR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)\bSPDX-FileCopyrightText:\s*Copyright\s*\(c\)\s+(.+?)\s*$").unwrap()
     });
 
-    let mut seen_cr: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_h: HashSet<(String, usize)> = holders
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
+
+    let mut seen_h: HashSet<(String, usize)> = existing_holders
         .iter()
         .map(|h| (h.holder.clone(), h.start_line.get()))
         .collect();
@@ -69,9 +68,7 @@ pub fn extract_spdx_filecopyrighttext_c_without_year(
         }
 
         let raw = format!("Copyright (c) {tail}");
-        if let Some(refined) = refine_copyright(&raw)
-            && seen_cr.insert(refined.clone())
-        {
+        if let Some(refined) = refine_copyright(&raw) {
             copyrights.push(CopyrightDetection {
                 copyright: refined,
                 start_line: LineNumber::new(ln).unwrap(),
@@ -89,13 +86,14 @@ pub fn extract_spdx_filecopyrighttext_c_without_year(
             });
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_html_meta_name_copyright_content(
     content: &str,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static META_COPYRIGHT_CONTENT_DQ_NAME_CONTENT_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r#"(?i)<meta\s+[^>]*\bname\s*=\s*"copyright"[^>]*\bcontent\s*=\s*"([^"]+)""#)
             .unwrap()
@@ -113,8 +111,10 @@ pub fn extract_html_meta_name_copyright_content(
             .unwrap()
     });
 
-    let mut seen_cr: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_h: HashSet<(String, usize)> = holders
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
+
+    let mut seen_h: HashSet<(String, usize)> = existing_holders
         .iter()
         .map(|h| (h.holder.clone(), h.start_line.get()))
         .collect();
@@ -138,9 +138,7 @@ pub fn extract_html_meta_name_copyright_content(
             continue;
         }
 
-        if let Some(refined) = refine_copyright(raw)
-            && seen_cr.insert(refined.clone())
-        {
+        if let Some(refined) = refine_copyright(raw) {
             copyrights.push(CopyrightDetection {
                 copyright: refined.clone(),
                 start_line: LineNumber::new(ln).unwrap(),
@@ -159,13 +157,14 @@ pub fn extract_html_meta_name_copyright_content(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_added_the_copyright_year_for_lines(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static ADDED_COPYRIGHT_YEAR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?i)^\s*added\s+the\s+copyright\s+year\s*\(\s*(?P<year>\d{4})\s*\)\s+for\s+(?P<holder>.+?)\s*$",
@@ -173,8 +172,10 @@ pub fn extract_added_the_copyright_year_for_lines(
         .unwrap()
     });
 
-    let mut seen_cr: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_h: HashSet<(String, usize)> = holders
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
+
+    let mut seen_h: HashSet<(String, usize)> = existing_holders
         .iter()
         .map(|h| (h.holder.clone(), h.start_line.get()))
         .collect();
@@ -195,13 +196,11 @@ pub fn extract_added_the_copyright_year_for_lines(
         let holder = refine_holder(holder_raw).unwrap_or_else(|| holder_raw.trim().to_string());
 
         let cr = format!("Copyright year ({year}) for {holder}");
-        if seen_cr.insert(cr.clone()) {
-            copyrights.push(CopyrightDetection {
-                copyright: cr,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
-            });
-        }
+        copyrights.push(CopyrightDetection {
+            copyright: cr,
+            start_line: LineNumber::new(ln).unwrap(),
+            end_line: LineNumber::new(ln).unwrap(),
+        });
 
         if seen_h.insert((holder.clone(), ln)) {
             holders.push(HolderDetection {
@@ -211,18 +210,21 @@ pub fn extract_added_the_copyright_year_for_lines(
             });
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_changelog_timestamp_copyrights_from_content(
     content: &str,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static CHANGELOG_TS_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+(.+?)\s*$").unwrap());
 
-    let mut seen_cr: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_h: HashSet<(String, usize)> = holders
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
+
+    let mut seen_h: HashSet<(String, usize)> = existing_holders
         .iter()
         .map(|h| (h.holder.clone(), h.start_line.get()))
         .collect();
@@ -247,14 +249,12 @@ pub fn extract_changelog_timestamp_copyrights_from_content(
     }
 
     if matches.len() < 2 {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     let (ln, dt, tail) = &matches[0];
     let raw = format!("copyright {dt} {tail}");
-    if let Some(refined) = refine_copyright(&raw)
-        && seen_cr.insert(refined.clone())
-    {
+    if let Some(refined) = refine_copyright(&raw) {
         copyrights.push(CopyrightDetection {
             copyright: refined,
             start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -271,6 +271,8 @@ pub fn extract_changelog_timestamp_copyrights_from_content(
             end_line: LineNumber::new(*ln).expect("invalid line number"),
         });
     }
+
+    (copyrights, holders)
 }
 
 pub fn drop_arch_floppy_h_bare_1995(content: &str, copyrights: &mut Vec<CopyrightDetection>) {
@@ -316,10 +318,7 @@ pub fn is_lppl_license_document(content: &str) -> bool {
     content.to_ascii_lowercase().contains("lppl version")
 }
 
-pub fn extract_common_year_only_lines(
-    groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-) {
+pub fn extract_common_year_only_lines(groups: &[Vec<(usize, String)>]) -> Vec<CopyrightDetection> {
     const MIN_YEAR_ONLY_LINES: usize = 3;
     const MAX_YEAR: u32 = 2020;
 
@@ -336,6 +335,7 @@ pub fn extract_common_year_only_lines(
         .unwrap()
     });
 
+    let mut copyrights = Vec::new();
     let mut matches: Vec<(usize, String)> = Vec::new();
     for group in groups {
         for (idx, (ln, line)) in group.iter().enumerate() {
@@ -372,25 +372,24 @@ pub fn extract_common_year_only_lines(
     }
 
     if matches.len() < MIN_YEAR_ONLY_LINES {
-        return;
+        return Vec::new();
     }
 
-    let mut seen: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
     for (ln, refined) in matches {
-        if seen.insert(refined.clone()) {
-            copyrights.push(CopyrightDetection {
-                copyright: refined,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
-            });
-        }
+        copyrights.push(CopyrightDetection {
+            copyright: refined,
+            start_line: LineNumber::new(ln).unwrap(),
+            end_line: LineNumber::new(ln).unwrap(),
+        });
     }
+
+    copyrights
 }
 
 pub fn extract_embedded_bare_c_year_suffixes(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-) {
+    existing_copyrights: &[CopyrightDetection],
+) -> Vec<CopyrightDetection> {
     const MAX_YEAR: u32 = 2099;
 
     static EMBEDDED_BARE_C_YEAR_SUFFIX_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -400,7 +399,8 @@ pub fn extract_embedded_bare_c_year_suffixes(
         .unwrap()
     });
 
-    let mut seen: HashSet<String> = copyrights
+    let mut copyrights = Vec::new();
+    let mut seen: HashSet<String> = existing_copyrights
         .iter()
         .map(|c| c.copyright.to_ascii_lowercase())
         .collect();
@@ -474,18 +474,19 @@ pub fn extract_embedded_bare_c_year_suffixes(
             }
         }
     }
+
+    copyrights
 }
 
 pub fn extract_trailing_bare_c_year_range_suffixes(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-) {
+) -> Vec<CopyrightDetection> {
     static TRAILING_BARE_C_RANGE_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)\(c\)\s*(?:19\d{2}|20\d{2})\s*[-–]\s*(?:19\d{2}|20\d{2})\s*\.?\s*$")
             .unwrap()
     });
 
-    let mut seen: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
+    let mut copyrights = Vec::new();
 
     for group in groups {
         for (idx, (ln, line)) in group.iter().enumerate() {
@@ -514,9 +515,7 @@ pub fn extract_trailing_bare_c_year_range_suffixes(
             }
 
             let suffix = trimmed[m.start()..m.end()].trim();
-            if let Some(cr) = refine_copyright(suffix)
-                && seen.insert(cr.clone())
-            {
+            if let Some(cr) = refine_copyright(suffix) {
                 copyrights.push(CopyrightDetection {
                     copyright: cr,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -525,12 +524,13 @@ pub fn extract_trailing_bare_c_year_range_suffixes(
             }
         }
     }
+
+    copyrights
 }
 
 pub fn extract_repeated_embedded_bare_c_year_suffixes(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-) {
+) -> Vec<CopyrightDetection> {
     const MIN_REPEATS: usize = 2;
     const MAX_YEAR: u32 = 2020;
 
@@ -541,6 +541,7 @@ pub fn extract_repeated_embedded_bare_c_year_suffixes(
         .unwrap()
     });
 
+    let mut copyrights = Vec::new();
     let mut license_counts: std::collections::HashMap<String, (usize, usize)> =
         std::collections::HashMap::new();
     let mut copyright_line_sets: std::collections::HashMap<String, (HashSet<String>, usize)> =
@@ -582,15 +583,11 @@ pub fn extract_repeated_embedded_bare_c_year_suffixes(
         }
     }
 
-    let mut seen: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
-
     for (bare, (count, first_ln)) in license_counts {
         if count < MIN_REPEATS {
             continue;
         }
-        if let Some(refined) = refine_copyright(&bare)
-            && seen.insert(refined.clone())
-        {
+        if let Some(refined) = refine_copyright(&bare) {
             copyrights.push(CopyrightDetection {
                 copyright: refined,
                 start_line: LineNumber::new(first_ln).expect("valid"),
@@ -603,9 +600,7 @@ pub fn extract_repeated_embedded_bare_c_year_suffixes(
         if lines.len() < MIN_REPEATS {
             continue;
         }
-        if let Some(refined) = refine_copyright(&bare)
-            && seen.insert(refined.clone())
-        {
+        if let Some(refined) = refine_copyright(&bare) {
             copyrights.push(CopyrightDetection {
                 copyright: refined,
                 start_line: LineNumber::new(first_ln).expect("valid"),
@@ -613,13 +608,13 @@ pub fn extract_repeated_embedded_bare_c_year_suffixes(
             });
         }
     }
+
+    copyrights
 }
 
 pub fn extract_lowercase_username_angle_email_copyrights(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static USER_EMAIL_COPYRIGHT_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"^[Cc]opyright\s*(?:\([Cc]\)\s*)?(19\d{2}|20\d{2})\s+([a-z0-9][a-z0-9_\-]{2,63})\s*<\s*([^>\s]+@[^>\s]+)\s*>\s*[\.,;:]*\s*$",
@@ -627,9 +622,8 @@ pub fn extract_lowercase_username_angle_email_copyrights(
         .unwrap()
     });
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -646,9 +640,7 @@ pub fn extract_lowercase_username_angle_email_copyrights(
             }
 
             let cr_raw = format!("Copyright (c) {year} {user} <{email}>");
-            if let Some(cr) = refine_copyright(&cr_raw)
-                && seen_copyrights.insert(cr.clone())
-            {
+            if let Some(cr) = refine_copyright(&cr_raw) {
                 copyrights.push(CopyrightDetection {
                     copyright: cr,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -656,22 +648,20 @@ pub fn extract_lowercase_username_angle_email_copyrights(
                 });
             }
 
-            if seen_holders.insert(user.to_string()) {
-                holders.push(HolderDetection {
-                    holder: user.to_string(),
-                    start_line: LineNumber::new(*ln).expect("invalid line number"),
-                    end_line: LineNumber::new(*ln).expect("invalid line number"),
-                });
-            }
+            holders.push(HolderDetection {
+                holder: user.to_string(),
+                start_line: LineNumber::new(*ln).expect("invalid line number"),
+                end_line: LineNumber::new(*ln).expect("invalid line number"),
+            });
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_lowercase_username_paren_email_copyrights(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static USER_EMAIL_PARENS_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"\b[Cc]opyright\s*(?:\([Cc]\)\s*)?(19\d{2}|20\d{2})\s+([a-z0-9][a-z0-9_\-]{2,63})\s*\(\s*([^\)\s]+@[^\)\s]+)\s*\)",
@@ -679,9 +669,8 @@ pub fn extract_lowercase_username_paren_email_copyrights(
         .unwrap()
     });
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -694,9 +683,7 @@ pub fn extract_lowercase_username_paren_email_copyrights(
                 }
 
                 let cr_raw = format!("copyright {year} {user} ({email})");
-                if let Some(cr) = refine_copyright(&cr_raw)
-                    && seen_copyrights.insert(cr.clone())
-                {
+                if let Some(cr) = refine_copyright(&cr_raw) {
                     copyrights.push(CopyrightDetection {
                         copyright: cr,
                         start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -704,23 +691,21 @@ pub fn extract_lowercase_username_paren_email_copyrights(
                     });
                 }
 
-                if seen_holders.insert(user.to_string()) {
-                    holders.push(HolderDetection {
-                        holder: user.to_string(),
-                        start_line: LineNumber::new(*ln).expect("invalid line number"),
-                        end_line: LineNumber::new(*ln).expect("invalid line number"),
-                    });
-                }
+                holders.push(HolderDetection {
+                    holder: user.to_string(),
+                    start_line: LineNumber::new(*ln).expect("invalid line number"),
+                    end_line: LineNumber::new(*ln).expect("invalid line number"),
+                });
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_c_year_range_by_name_comma_email_lines(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static C_BY_NAME_EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?i)^\(c\)\s+(?P<years>\d{4}(?:\s*[-–]\s*(?:\d{4}|\d{2}))?)\s+by\s+(?P<name>[^,]+),\s*(?P<email>[^\s,]+@[^\s,]+)\s*$",
@@ -728,9 +713,8 @@ pub fn extract_c_year_range_by_name_comma_email_lines(
         .unwrap()
     });
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -747,9 +731,7 @@ pub fn extract_c_year_range_by_name_comma_email_lines(
             }
 
             let cr_raw = format!("(c) {years} by {name}, {email}");
-            if let Some(cr) = refine_copyright(&cr_raw)
-                && seen_copyrights.insert(cr.clone())
-            {
+            if let Some(cr) = refine_copyright(&cr_raw) {
                 copyrights.push(CopyrightDetection {
                     copyright: cr,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -757,9 +739,7 @@ pub fn extract_c_year_range_by_name_comma_email_lines(
                 });
             }
 
-            if let Some(h) = refine_holder(name)
-                && seen_holders.insert(h.clone())
-            {
+            if let Some(h) = refine_holder(name) {
                 holders.push(HolderDetection {
                     holder: h,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -768,6 +748,8 @@ pub fn extract_c_year_range_by_name_comma_email_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_copyright_years_by_name_paren_email_lines(
@@ -786,7 +768,6 @@ pub fn extract_copyright_years_by_name_paren_email_lines(
         .iter()
         .map(|c| c.copyright.to_ascii_lowercase())
         .collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
 
     for group in groups {
         for (ln, line) in group {
@@ -810,13 +791,15 @@ pub fn extract_copyright_years_by_name_paren_email_lines(
                     continue;
                 };
 
-                if seen_copyrights.insert(full.to_ascii_lowercase()) {
-                    copyrights.push(CopyrightDetection {
-                        copyright: full.clone(),
-                        start_line: LineNumber::new(*ln).expect("invalid line number"),
-                        end_line: LineNumber::new(*ln).expect("invalid line number"),
-                    });
+                if !seen_copyrights.insert(full.to_ascii_lowercase()) {
+                    continue;
                 }
+
+                copyrights.push(CopyrightDetection {
+                    copyright: full.clone(),
+                    start_line: LineNumber::new(*ln).expect("invalid line number"),
+                    end_line: LineNumber::new(*ln).expect("invalid line number"),
+                });
 
                 let year_only_raw = format!("copyright {years}");
                 if let Some(year_only) = refine_copyright(&year_only_raw) {
@@ -828,9 +811,7 @@ pub fn extract_copyright_years_by_name_paren_email_lines(
                     });
                 }
 
-                if let Some(holder) = refine_holder_in_copyright_context(name)
-                    && seen_holders.insert(holder.clone())
-                {
+                if let Some(holder) = refine_holder_in_copyright_context(name) {
                     holders.push(HolderDetection {
                         holder,
                         start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -860,7 +841,6 @@ pub fn extract_copyright_years_by_name_then_paren_email_next_line(
         .iter()
         .map(|c| c.copyright.to_ascii_lowercase())
         .collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -941,9 +921,7 @@ pub fn extract_copyright_years_by_name_then_paren_email_next_line(
                 });
             }
 
-            if let Some(holder) = refine_holder_in_copyright_context(&name)
-                && seen_holders.insert(holder.clone())
-            {
+            if let Some(holder) = refine_holder_in_copyright_context(&name) {
                 holders.push(HolderDetection {
                     holder,
                     start_line: LineNumber::new(ln).unwrap(),
@@ -958,9 +936,7 @@ pub fn extract_copyright_years_by_name_then_paren_email_next_line(
 
 pub fn extract_copyright_year_name_with_of_lines(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static COPY_YEAR_OF_NAME_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?i)^Copyright\s*\(c\)\s+(?P<year>19\d{2}|20\d{2})\s+(?P<holder>[A-Z][A-Za-z0-9.'\-]*(?:\s+of\s+[A-Z][A-Za-z0-9.'\-]*)+)\s*$",
@@ -968,9 +944,8 @@ pub fn extract_copyright_year_name_with_of_lines(
         .unwrap()
     });
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -986,9 +961,7 @@ pub fn extract_copyright_year_name_with_of_lines(
             }
 
             let cr_raw = format!("Copyright (c) {year} {holder_raw}");
-            if let Some(cr) = refine_copyright(&cr_raw)
-                && seen_copyrights.insert(cr.clone())
-            {
+            if let Some(cr) = refine_copyright(&cr_raw) {
                 copyrights.push(CopyrightDetection {
                     copyright: cr,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -996,9 +969,7 @@ pub fn extract_copyright_year_name_with_of_lines(
                 });
             }
 
-            if let Some(h) = refine_holder(holder_raw)
-                && seen_holders.insert(h.clone())
-            {
+            if let Some(h) = refine_holder(holder_raw) {
                 holders.push(HolderDetection {
                     holder: h,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -1007,6 +978,8 @@ pub fn extract_copyright_year_name_with_of_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn drop_url_extended_prefix_duplicates(copyrights: &mut Vec<CopyrightDetection>) {
@@ -1060,9 +1033,8 @@ pub fn drop_url_extended_prefix_duplicates(copyrights: &mut Vec<CopyrightDetecti
 
 pub fn extract_standalone_c_holder_year_lines(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    existing_copyrights: &[CopyrightDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static STANDALONE_C_HOLDER_YEAR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"^\(c\)\s+(?P<holder>[A-Z0-9][A-Za-z0-9 ,&'\-\.]*?)\s+(?P<years>(?:19\d{2}|20\d{2})(?:\s*[-–]\s*(?:19\d{2}|20\d{2}|\d{2}))?(?:\s*,\s*(?:19\d{2}|20\d{2}))*)\s*\.?\s*(?:[Aa]ll\s+[Rr]ights\s+[Rr]eserved)?\s*$",
@@ -1078,9 +1050,8 @@ pub fn extract_standalone_c_holder_year_lines(
     static EMAIL_ONLY_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"^[^\s@]+@[^\s@]+$").unwrap());
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for idx in 0..group.len() {
@@ -1114,7 +1085,7 @@ pub fn extract_standalone_c_holder_year_lines(
                 continue;
             }
 
-            let already_covered = copyrights.iter().any(|c| {
+            let already_covered = existing_copyrights.iter().any(|c| {
                 c.start_line.get() <= *ln
                     && c.end_line.get() >= *ln
                     && c.copyright.contains(&yearish)
@@ -1153,9 +1124,7 @@ pub fn extract_standalone_c_holder_year_lines(
             } else {
                 format!("(c) {holder_raw} {yearish}")
             };
-            if let Some(cr) = refine_copyright(&cr_raw)
-                && seen_copyrights.insert(cr.clone())
-            {
+            if let Some(cr) = refine_copyright(&cr_raw) {
                 copyrights.push(CopyrightDetection {
                     copyright: cr,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -1172,9 +1141,7 @@ pub fn extract_standalone_c_holder_year_lines(
                 });
             }
 
-            if let Some(h) = refine_holder(holder_raw)
-                && seen_holders.insert(h.clone())
-            {
+            if let Some(h) = refine_holder(holder_raw) {
                 holders.push(HolderDetection {
                     holder: h,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -1183,14 +1150,14 @@ pub fn extract_standalone_c_holder_year_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_c_holder_without_year_lines(
     content: &str,
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static STRING_NAME_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)<\s*string\b[^>]*\bname\s*=").unwrap());
     static C_YEAR_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)\(c\)\s*\d{4}").unwrap());
@@ -1204,12 +1171,11 @@ pub fn extract_c_holder_without_year_lines(
     });
 
     if !STRING_NAME_RE.is_match(content) || !C_YEAR_RE.is_match(content) {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -1236,9 +1202,7 @@ pub fn extract_c_holder_without_year_lines(
             }
 
             let cr_raw = format!("(c) {holder_raw}");
-            if let Some(cr) = refine_copyright(&cr_raw)
-                && seen_copyrights.insert(cr.clone())
-            {
+            if let Some(cr) = refine_copyright(&cr_raw) {
                 copyrights.push(CopyrightDetection {
                     copyright: cr,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -1246,9 +1210,7 @@ pub fn extract_c_holder_without_year_lines(
                 });
             }
 
-            if let Some(holder) = refine_holder_in_copyright_context(holder_raw)
-                && seen_holders.insert(holder.clone())
-            {
+            if let Some(holder) = refine_holder_in_copyright_context(holder_raw) {
                 holders.push(HolderDetection {
                     holder,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -1257,21 +1219,26 @@ pub fn extract_c_holder_without_year_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_versioned_project_c_holder_banner_lines(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
-    let mut seen_c: HashSet<(usize, String)> = copyrights
+    existing_copyrights: &[CopyrightDetection],
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
+    let mut seen_c: HashSet<(usize, String)> = existing_copyrights
         .iter()
         .map(|c| (c.start_line.get(), c.copyright.clone()))
         .collect();
-    let mut seen_h: HashSet<(usize, String)> = holders
+    let mut seen_h: HashSet<(usize, String)> = existing_holders
         .iter()
         .map(|h| (h.start_line.get(), h.holder.clone()))
         .collect();
+
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -1320,21 +1287,26 @@ pub fn extract_versioned_project_c_holder_banner_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_c_years_then_holder_lines(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
-    let mut seen_cr: HashSet<(usize, String)> = copyrights
+    existing_copyrights: &[CopyrightDetection],
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
+    let mut seen_cr: HashSet<(usize, String)> = existing_copyrights
         .iter()
         .map(|c| (c.start_line.get(), c.copyright.clone()))
         .collect();
-    let mut seen_h: HashSet<(usize, String)> = holders
+    let mut seen_h: HashSet<(usize, String)> = existing_holders
         .iter()
         .map(|h| (h.start_line.get(), h.holder.clone()))
         .collect();
+
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -1396,13 +1368,15 @@ pub fn extract_c_years_then_holder_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_copyright_c_years_holder_lines(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    existing_copyrights: &[CopyrightDetection],
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static COPY_C_YEARS_HOLDER_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?i)^copyright\s*\(c\)\s*(?P<years>(?:19\d{2}|20\d{2})(?:\s*[-–]\s*(?:19\d{2}|20\d{2}|\d{2}))?(?:\s*,\s*(?:19\d{2}|20\d{2}))*?)\s+(?P<holder>.+?)\s*$",
@@ -1410,14 +1384,17 @@ pub fn extract_copyright_c_years_holder_lines(
         .unwrap()
     });
 
-    let mut seen_c: HashSet<(usize, String)> = copyrights
+    let mut seen_c: HashSet<(usize, String)> = existing_copyrights
         .iter()
         .map(|c| (c.start_line.get(), c.copyright.clone()))
         .collect();
-    let mut seen_h: HashSet<(usize, String)> = holders
+    let mut seen_h: HashSet<(usize, String)> = existing_holders
         .iter()
         .map(|h| (h.start_line.get(), h.holder.clone()))
         .collect();
+
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -1459,29 +1436,34 @@ pub fn extract_copyright_c_years_holder_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_three_digit_copyright_year_lines(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    existing_copyrights: &[CopyrightDetection],
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if prepared_cache.is_empty() {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     static COPYRIGHT_C_3DIGIT_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)^\s*copyright\s*\(c\)\s*(?P<year>\d{3})\s+(?P<tail>.+)$").unwrap()
     });
 
-    let mut seen_cr: HashSet<(usize, String)> = copyrights
+    let mut seen_cr: HashSet<(usize, String)> = existing_copyrights
         .iter()
         .map(|c| (c.start_line.get(), c.copyright.clone()))
         .collect();
-    let mut seen_h: HashSet<(usize, String)> = holders
+    let mut seen_h: HashSet<(usize, String)> = existing_holders
         .iter()
         .map(|h| (h.start_line.get(), h.holder.clone()))
         .collect();
+
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -1526,29 +1508,34 @@ pub fn extract_three_digit_copyright_year_lines(
             });
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_copyrighted_by_lines(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    existing_copyrights: &[CopyrightDetection],
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if prepared_cache.is_empty() {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     static COPYRIGHTED_BY_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)\bcopyrighted\s+by\s+(?P<who>(?-i:[\p{Lu}][^\.\,\;\)]+))").unwrap()
     });
 
-    let mut seen_cr: HashSet<(usize, String)> = copyrights
+    let mut seen_cr: HashSet<(usize, String)> = existing_copyrights
         .iter()
         .map(|c| (c.start_line.get(), c.copyright.clone()))
         .collect();
-    let mut seen_h: HashSet<(usize, String)> = holders
+    let mut seen_h: HashSet<(usize, String)> = existing_holders
         .iter()
         .map(|h| (h.start_line.get(), h.holder.clone()))
         .collect();
+
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -1597,29 +1584,34 @@ pub fn extract_copyrighted_by_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_c_word_year_lines(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    existing_copyrights: &[CopyrightDetection],
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if prepared_cache.is_empty() {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     static C_WORD_YEAR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)\(c\)\s+(?P<who>[\p{L}]{2,20})\s+(?P<year>(?:19\d{2}|20\d{2}))\b").unwrap()
     });
 
-    let mut seen_cr: HashSet<(usize, String)> = copyrights
+    let mut seen_cr: HashSet<(usize, String)> = existing_copyrights
         .iter()
         .map(|c| (c.start_line.get(), c.copyright.clone()))
         .collect();
-    let mut seen_h: HashSet<(usize, String)> = holders
+    let mut seen_h: HashSet<(usize, String)> = existing_holders
         .iter()
         .map(|h| (h.start_line.get(), h.holder.clone()))
         .collect();
+
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -1674,15 +1666,17 @@ pub fn extract_c_word_year_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_are_c_year_holder_lines(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    existing_copyrights: &[CopyrightDetection],
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if prepared_cache.is_empty() {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     static ARE_C_YEAR_HOLDER_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -1692,14 +1686,17 @@ pub fn extract_are_c_year_holder_lines(
     static TRAILING_UNDER_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\s+under\b.*$").unwrap());
 
-    let mut seen_cr: HashSet<(usize, String)> = copyrights
+    let mut seen_cr: HashSet<(usize, String)> = existing_copyrights
         .iter()
         .map(|c| (c.start_line.get(), c.copyright.clone()))
         .collect();
-    let mut seen_h: HashSet<(usize, String)> = holders
+    let mut seen_h: HashSet<(usize, String)> = existing_holders
         .iter()
         .map(|h| (h.start_line.get(), h.holder.clone()))
         .collect();
+
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for ln in 1..=prepared_cache.len() {
         let Some(prepared) = prepared_cache.get(ln) else {
@@ -1750,28 +1747,33 @@ pub fn extract_are_c_year_holder_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_bare_c_by_holder_lines(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    existing_copyrights: &[CopyrightDetection],
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if prepared_cache.is_empty() {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     static C_BY_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\(c\)\s*by\s+(?P<holder>[A-Z][^\n]+)$").unwrap());
 
-    let mut seen_cr: HashSet<(usize, String)> = copyrights
+    let mut seen_cr: HashSet<(usize, String)> = existing_copyrights
         .iter()
         .map(|c| (c.start_line.get(), c.copyright.clone()))
         .collect();
-    let mut seen_h: HashSet<(usize, String)> = holders
+    let mut seen_h: HashSet<(usize, String)> = existing_holders
         .iter()
         .map(|h| (h.start_line.get(), h.holder.clone()))
         .collect();
+
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for ln in 1..=prepared_cache.len() {
         let Some(prepared) = prepared_cache.get(ln) else {
@@ -1809,15 +1811,17 @@ pub fn extract_bare_c_by_holder_lines(
             });
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_all_rights_reserved_by_holder_lines(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    existing_copyrights: &[CopyrightDetection],
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if prepared_cache.is_empty() {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     static RESERVED_BY_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -1825,14 +1829,17 @@ pub fn extract_all_rights_reserved_by_holder_lines(
             .unwrap()
     });
 
-    let mut seen_cr: HashSet<(usize, String)> = copyrights
+    let mut seen_cr: HashSet<(usize, String)> = existing_copyrights
         .iter()
         .map(|c| (c.start_line.get(), c.copyright.clone()))
         .collect();
-    let mut seen_h: HashSet<(usize, String)> = holders
+    let mut seen_h: HashSet<(usize, String)> = existing_holders
         .iter()
         .map(|h| (h.start_line.get(), h.holder.clone()))
         .collect();
+
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for ln in 1..=prepared_cache.len() {
         let Some(prepared) = prepared_cache.get(ln) else {
@@ -1872,15 +1879,17 @@ pub fn extract_all_rights_reserved_by_holder_lines(
             });
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_holder_is_name_paren_email_lines(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    existing_copyrights: &[CopyrightDetection],
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if prepared_cache.is_empty() {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     static HOLDER_IS_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -1890,14 +1899,17 @@ pub fn extract_holder_is_name_paren_email_lines(
         .unwrap()
     });
 
-    let mut seen_c: HashSet<(usize, String)> = copyrights
+    let mut seen_c: HashSet<(usize, String)> = existing_copyrights
         .iter()
         .map(|c| (c.start_line.get(), c.copyright.clone()))
         .collect();
-    let mut seen_h: HashSet<(usize, String)> = holders
+    let mut seen_h: HashSet<(usize, String)> = existing_holders
         .iter()
         .map(|h| (h.start_line.get(), h.holder.clone()))
         .collect();
+
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for ln in 1..=prepared_cache.len() {
         let Some(prepared) = prepared_cache.get(ln) else {
@@ -1936,6 +1948,8 @@ pub fn extract_holder_is_name_paren_email_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_copr_lines(
@@ -1952,10 +1966,6 @@ pub fn extract_copr_lines(
     static TRAILING_YEAR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"\s+(?:19\d{2}|20\d{2})(?:\s*[-–]\s*(?:19\d{2}|20\d{2}|\d{2}))?\s*$").unwrap()
     });
-
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
 
     for group in groups {
         for (ln, line) in group {
@@ -2039,13 +2049,11 @@ pub fn extract_copr_lines(
                 !(cr.starts_with(&c.copyright) && cr.len() > c.copyright.len())
             });
 
-            if seen_copyrights.insert(cr.clone()) {
-                copyrights.push(CopyrightDetection {
-                    copyright: cr.clone(),
-                    start_line: LineNumber::new(*ln).expect("invalid line number"),
-                    end_line: LineNumber::new(*ln).expect("invalid line number"),
-                });
-            }
+            copyrights.push(CopyrightDetection {
+                copyright: cr.clone(),
+                start_line: LineNumber::new(*ln).expect("invalid line number"),
+                end_line: LineNumber::new(*ln).expect("invalid line number"),
+            });
 
             let mut holder_raw = holder_candidate;
             holder_raw = LEADING_YEAR_RE.replace(&holder_raw, "").to_string();
@@ -2069,13 +2077,11 @@ pub fn extract_copr_lines(
                 });
             }
 
-            if seen_holders.insert(h.clone()) {
-                holders.push(HolderDetection {
-                    holder: h,
-                    start_line: LineNumber::new(*ln).expect("invalid line number"),
-                    end_line: LineNumber::new(*ln).expect("invalid line number"),
-                });
-            }
+            holders.push(HolderDetection {
+                holder: h,
+                start_line: LineNumber::new(*ln).expect("invalid line number"),
+                end_line: LineNumber::new(*ln).expect("invalid line number"),
+            });
         }
     }
 }
@@ -2204,8 +2210,6 @@ pub fn extract_html_entity_year_range_copyrights(
         Regex::new(r"(?i)\bare\s+copyright\s*\(c\)\s*(\d{4}\s*[-–]\s*\d{4})\s*\.").unwrap()
     });
 
-    let mut seen: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
-
     let is_terminator = |s: &str| {
         let tail = s.trim_start();
         if tail.is_empty() {
@@ -2230,9 +2234,7 @@ pub fn extract_html_entity_year_range_copyrights(
             continue;
         }
         let raw = format!("Copyright (c) {range}");
-        if let Some(refined) = refine_copyright(&raw)
-            && seen.insert(refined.clone())
-        {
+        if let Some(refined) = refine_copyright(&raw) {
             copyrights.push(CopyrightDetection {
                 copyright: refined,
                 start_line: ln,
@@ -2257,9 +2259,7 @@ pub fn extract_html_entity_year_range_copyrights(
             continue;
         }
         let raw = format!("(c) {range}");
-        if let Some(refined) = refine_copyright(&raw)
-            && seen.insert(refined.clone())
-        {
+        if let Some(refined) = refine_copyright(&raw) {
             copyrights.push(CopyrightDetection {
                 copyright: refined,
                 start_line: ln,
@@ -2281,9 +2281,7 @@ pub fn extract_html_entity_year_range_copyrights(
             continue;
         }
         let raw = format!("Copyright (c) {range}");
-        if let Some(refined) = refine_copyright(&raw)
-            && seen.insert(refined.clone())
-        {
+        if let Some(refined) = refine_copyright(&raw) {
             copyrights.push(CopyrightDetection {
                 copyright: refined,
                 start_line: ln,
@@ -2516,16 +2514,15 @@ pub fn fallback_year_only_copyrights(groups: &[Vec<(usize, String)>]) -> Vec<Cop
 
 pub fn extract_copyright_c_year_comma_name_angle_email_lines(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    existing_copyrights: &[CopyrightDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     let has_copyright_label_lines = groups.iter().flatten().any(|(_, l)| {
         l.trim_start()
             .to_ascii_lowercase()
             .starts_with("copyright:")
     });
     if !has_copyright_label_lines {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     static COPY_C_YEAR_NAME_EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -2535,11 +2532,12 @@ pub fn extract_copyright_c_year_comma_name_angle_email_lines(
         .unwrap()
     });
 
-    let mut seen_copyrights: HashSet<String> = copyrights
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
+    let mut seen_copyrights: HashSet<String> = existing_copyrights
         .iter()
         .map(|c| c.copyright.to_ascii_lowercase())
         .collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
 
     for group in groups {
         for (ln, line) in group {
@@ -2559,17 +2557,17 @@ pub fn extract_copyright_c_year_comma_name_angle_email_lines(
                 continue;
             };
 
-            if seen_copyrights.insert(cr.to_ascii_lowercase()) {
-                copyrights.push(CopyrightDetection {
-                    copyright: cr,
-                    start_line: LineNumber::new(*ln).expect("invalid line number"),
-                    end_line: LineNumber::new(*ln).expect("invalid line number"),
-                });
+            if !seen_copyrights.insert(cr.to_ascii_lowercase()) {
+                continue;
             }
 
-            if let Some(holder) = refine_holder_in_copyright_context(name)
-                && seen_holders.insert(holder.clone())
-            {
+            copyrights.push(CopyrightDetection {
+                copyright: cr,
+                start_line: LineNumber::new(*ln).expect("invalid line number"),
+                end_line: LineNumber::new(*ln).expect("invalid line number"),
+            });
+
+            if let Some(holder) = refine_holder_in_copyright_context(name) {
                 holders.push(HolderDetection {
                     holder,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -2578,6 +2576,8 @@ pub fn extract_copyright_c_year_comma_name_angle_email_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extend_software_in_the_public_interest_holder(
@@ -2663,9 +2663,7 @@ pub fn strip_trailing_c_year_suffix_from_comma_and_others(copyrights: &mut [Copy
 
 pub fn extract_name_before_rewrited_by_copyrights(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static NAME_EMAIL_YEARS_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"^(?P<name>[^<>]+?)\s*<\s*(?P<email>[^>\s]+@[^>\s]+)\s*>\s+(?P<years>(?:19\d{2}|20\d{2})(?:\s*[-–]\s*(?:19\d{2}|20\d{2}|\d{2}))?)\s*$",
@@ -2680,12 +2678,11 @@ pub fn extract_name_before_rewrited_by_copyrights(
     });
 
     if prepared_cache.len() < 2 {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for idx in 0..prepared_cache.len().saturating_sub(1) {
         let ln1 = idx + 1;
@@ -2735,9 +2732,7 @@ pub fn extract_name_before_rewrited_by_copyrights(
 
         let combined_raw =
             format!("{name1} <{email1}> {years1} {prefix2} {name2} <{email2}> (c) {year2}");
-        if let Some(refined) = refine_copyright(&combined_raw)
-            && seen_copyrights.insert(refined.clone())
-        {
+        if let Some(refined) = refine_copyright(&combined_raw) {
             copyrights.push(CopyrightDetection {
                 copyright: refined,
                 start_line: LineNumber::new(ln1).expect("valid"),
@@ -2746,9 +2741,7 @@ pub fn extract_name_before_rewrited_by_copyrights(
         }
 
         let holder_raw = format!("{name1} {prefix2} {name2}");
-        if let Some(holder) = refine_holder(&holder_raw)
-            && seen_holders.insert(holder.clone())
-        {
+        if let Some(holder) = refine_holder(&holder_raw) {
             holders.push(HolderDetection {
                 holder,
                 start_line: LineNumber::new(ln1).expect("valid"),
@@ -2756,13 +2749,13 @@ pub fn extract_name_before_rewrited_by_copyrights(
             });
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_developed_at_software_copyrights(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static DEVELOPED_AT_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?i)\bat\s+(?P<holder>[^\n,]+,\s*inc\.,\s*software)\s+copyright\s*\(c\)\s+(?P<year>(?:19\d{2}|20\d{2}))\b",
@@ -2771,12 +2764,11 @@ pub fn extract_developed_at_software_copyrights(
     });
 
     if prepared_cache.is_empty() {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
@@ -2798,24 +2790,22 @@ pub fn extract_developed_at_software_copyrights(
                     continue;
                 }
                 let cr = format!("at {holder} copyright (c) {year}");
-                if seen_copyrights.insert(cr.clone()) {
-                    copyrights.push(CopyrightDetection {
-                        copyright: cr,
-                        start_line: LineNumber::new(ln).unwrap(),
-                        end_line: LineNumber::new(ln).unwrap(),
-                    });
-                }
+                copyrights.push(CopyrightDetection {
+                    copyright: cr,
+                    start_line: LineNumber::new(ln).unwrap(),
+                    end_line: LineNumber::new(ln).unwrap(),
+                });
                 let h = holder.to_string();
-                if seen_holders.insert(h.clone()) {
-                    holders.push(HolderDetection {
-                        holder: h,
-                        start_line: LineNumber::new(ln).unwrap(),
-                        end_line: LineNumber::new(ln).unwrap(),
-                    });
-                }
+                holders.push(HolderDetection {
+                    holder: h,
+                    start_line: LineNumber::new(ln).unwrap(),
+                    end_line: LineNumber::new(ln).unwrap(),
+                });
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_confidential_proprietary_copyrights(
@@ -2852,10 +2842,6 @@ pub fn extract_confidential_proprietary_copyrights(
         return;
     }
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
-
     for idx in 0..prepared_cache.len() {
         let ln = idx + 1;
         let Some(line) = prepared_cache
@@ -2873,18 +2859,14 @@ pub fn extract_confidential_proprietary_copyrights(
             let year = cap.name("year").map(|m| m.as_str()).unwrap_or("").trim();
             if !holder.is_empty() && !year.is_empty() {
                 let cr = format!("{holder} (c) Copyright {year}");
-                if let Some(refined) = refine_copyright(&cr)
-                    && seen_copyrights.insert(refined.clone())
-                {
+                if let Some(refined) = refine_copyright(&cr) {
                     copyrights.push(CopyrightDetection {
                         copyright: refined,
                         start_line: LineNumber::new(ln).unwrap(),
                         end_line: LineNumber::new(ln).unwrap(),
                     });
                 }
-                if let Some(h) = refine_holder_in_copyright_context(holder)
-                    && seen_holders.insert(h.clone())
-                {
+                if let Some(h) = refine_holder_in_copyright_context(holder) {
                     holders.push(HolderDetection {
                         holder: h,
                         start_line: LineNumber::new(ln).unwrap(),
@@ -2914,9 +2896,7 @@ pub fn extract_confidential_proprietary_copyrights(
             };
             if !next_clean.is_empty() && CONFIDENTIAL_RE.is_match(&next_clean) {
                 let cr_raw = format!("COPYRIGHT {year} {tag} {next_clean}");
-                if let Some(cr) = refine_copyright(&cr_raw)
-                    && seen_copyrights.insert(cr.clone())
-                {
+                if let Some(cr) = refine_copyright(&cr_raw) {
                     copyrights.push(CopyrightDetection {
                         copyright: cr,
                         start_line: LineNumber::new(ln).unwrap(),
@@ -2924,9 +2904,7 @@ pub fn extract_confidential_proprietary_copyrights(
                     });
                 }
                 let holder_raw = format!("{tag} {next_clean}");
-                if let Some(h) = refine_holder_in_copyright_context(&holder_raw)
-                    && seen_holders.insert(h.clone())
-                {
+                if let Some(h) = refine_holder_in_copyright_context(&holder_raw) {
                     holders.push(HolderDetection {
                         holder: h,
                         start_line: LineNumber::new(ln).unwrap(),
@@ -2951,9 +2929,7 @@ pub fn extract_confidential_proprietary_copyrights(
             };
             if !next_clean.is_empty() && CONFIDENTIAL_RE.is_match(&next_clean) {
                 let cr_raw = format!("Copyright {year} (c), {base_holder} - {next_clean}");
-                if let Some(cr) = refine_copyright(&cr_raw)
-                    && seen_copyrights.insert(cr.clone())
-                {
+                if let Some(cr) = refine_copyright(&cr_raw) {
                     copyrights.push(CopyrightDetection {
                         copyright: cr,
                         start_line: LineNumber::new(ln).unwrap(),
@@ -2967,9 +2943,7 @@ pub fn extract_confidential_proprietary_copyrights(
                 }
 
                 let holder_raw = format!("{base_holder} - {next_clean}");
-                if let Some(h) = refine_holder_in_copyright_context(&holder_raw)
-                    && seen_holders.insert(h.clone())
-                {
+                if let Some(h) = refine_holder_in_copyright_context(&holder_raw) {
                     holders.push(HolderDetection {
                         holder: h,
                         start_line: LineNumber::new(ln).unwrap(),
@@ -3026,9 +3000,7 @@ pub fn truncate_stichting_mathematisch_centrum_amsterdam_netherlands(
 
 pub fn extract_copyright_year_c_holder_mid_sentence_lines(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static COPY_YEAR_C_HOLDER_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?i)^\s*copyright\s+(?P<year>19\d{2}|20\d{2})\s+\(c\)\s+(?P<holder>.+?)\s+is\s+licensed\b",
@@ -3036,9 +3008,8 @@ pub fn extract_copyright_year_c_holder_mid_sentence_lines(
         .unwrap()
     });
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -3066,9 +3037,7 @@ pub fn extract_copyright_year_c_holder_mid_sentence_lines(
             }
 
             let raw = format!("Copyright {year} (c) {holder}");
-            if let Some(cr) = refine_copyright(&raw)
-                && seen_copyrights.insert(cr.clone())
-            {
+            if let Some(cr) = refine_copyright(&raw) {
                 copyrights.push(CopyrightDetection {
                     copyright: cr,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -3076,9 +3045,7 @@ pub fn extract_copyright_year_c_holder_mid_sentence_lines(
                 });
             }
 
-            if let Some(h) = refine_holder_in_copyright_context(holder)
-                && seen_holders.insert(h.clone())
-            {
+            if let Some(h) = refine_holder_in_copyright_context(holder) {
                 holders.push(HolderDetection {
                     holder: h,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -3087,13 +3054,13 @@ pub fn extract_copyright_year_c_holder_mid_sentence_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_javadoc_author_copyright_lines(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static JAVADOC_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?i)^\s*@author\s+(?P<name>.+?)\s*,?\s*\(\s*c\s*\)\s*(?P<year>(?:19|20)\d{2})\b",
@@ -3101,8 +3068,8 @@ pub fn extract_javadoc_author_copyright_lines(
         .unwrap()
     });
 
-    let mut seen_c: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_h: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -3127,9 +3094,7 @@ pub fn extract_javadoc_author_copyright_lines(
             }
 
             let cr_raw = format!("{name}, (c) {year}");
-            if let Some(cr) = refine_copyright(&cr_raw)
-                && seen_c.insert(cr.clone())
-            {
+            if let Some(cr) = refine_copyright(&cr_raw) {
                 copyrights.push(CopyrightDetection {
                     copyright: cr,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -3137,9 +3102,7 @@ pub fn extract_javadoc_author_copyright_lines(
                 });
             }
 
-            if let Some(h) = refine_holder_in_copyright_context(&name)
-                && seen_h.insert(h.clone())
-            {
+            if let Some(h) = refine_holder_in_copyright_context(&name) {
                 holders.push(HolderDetection {
                     holder: h,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -3148,6 +3111,8 @@ pub fn extract_javadoc_author_copyright_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_xml_copyright_tag_c_lines(
@@ -3167,10 +3132,6 @@ pub fn extract_xml_copyright_tag_c_lines(
         LazyLock::new(|| Regex::new(r"(?i)\(c\)\s*(?P<body>.+)").unwrap());
     static ALL_RIGHTS_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i),?\s*all\s+rights\s+reserved\.?\s*$").unwrap());
-
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
 
     for cap in BLOCK_RE.captures_iter(content) {
         let ln = cap
@@ -3221,9 +3182,7 @@ pub fn extract_xml_copyright_tag_c_lines(
             .map(|b| format!("(c) {b}"))
             .collect::<Vec<_>>()
             .join(" ");
-        if let Some(cr) = refine_copyright(&combined)
-            && seen_copyrights.insert(cr.clone())
-        {
+        if let Some(cr) = refine_copyright(&combined) {
             copyrights.push(CopyrightDetection {
                 copyright: cr,
                 start_line: ln,
@@ -3232,9 +3191,7 @@ pub fn extract_xml_copyright_tag_c_lines(
         }
 
         let combined_holder = bodies.join(" ");
-        if let Some(h) = refine_holder_in_copyright_context(&combined_holder)
-            && seen_holders.insert(h.clone())
-        {
+        if let Some(h) = refine_holder_in_copyright_context(&combined_holder) {
             holders.push(HolderDetection {
                 holder: h,
                 start_line: ln,
@@ -3253,15 +3210,12 @@ pub fn extract_xml_copyright_tag_c_lines(
 
 pub fn extract_copyright_its_authors_lines(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static ITS_AUTHORS_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\bcopyright\s+its\s+authors\b(?P<tail>.*)$").unwrap());
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -3281,40 +3235,35 @@ pub fn extract_copyright_its_authors_lines(
             }
 
             let cr = "copyright its authors".to_string();
-            if seen_copyrights.insert(cr.clone()) {
-                copyrights.push(CopyrightDetection {
-                    copyright: cr,
-                    start_line: LineNumber::new(*ln).expect("invalid line number"),
-                    end_line: LineNumber::new(*ln).expect("invalid line number"),
-                });
-            }
+            copyrights.push(CopyrightDetection {
+                copyright: cr,
+                start_line: LineNumber::new(*ln).expect("invalid line number"),
+                end_line: LineNumber::new(*ln).expect("invalid line number"),
+            });
 
             let holder = "its authors".to_string();
-            if seen_holders.insert(holder.clone()) {
-                holders.push(HolderDetection {
-                    holder,
-                    start_line: LineNumber::new(*ln).expect("invalid line number"),
-                    end_line: LineNumber::new(*ln).expect("invalid line number"),
-                });
-            }
+            holders.push(HolderDetection {
+                holder,
+                start_line: LineNumber::new(*ln).expect("invalid line number"),
+                end_line: LineNumber::new(*ln).expect("invalid line number"),
+            });
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_us_government_year_placeholder_copyrights(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static LINE_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)^\s*copyright\b.*\bYEAR\b.*\bUnited\s+States\s+Government\b").unwrap()
     });
     static HAS_DIGIT_YEAR_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"\b(?:19\d{2}|20\d{2})\b").unwrap());
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -3330,9 +3279,7 @@ pub fn extract_us_government_year_placeholder_copyrights(
             }
 
             let raw = "Copyright YEAR United States Government";
-            if let Some(cr) = refine_copyright(raw)
-                && seen_copyrights.insert(cr.clone())
-            {
+            if let Some(cr) = refine_copyright(raw) {
                 copyrights.push(CopyrightDetection {
                     copyright: cr,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -3341,9 +3288,7 @@ pub fn extract_us_government_year_placeholder_copyrights(
             }
 
             let holder_raw = "United States Government";
-            if let Some(holder) = refine_holder_in_copyright_context(holder_raw)
-                && seen_holders.insert(holder.clone())
-            {
+            if let Some(holder) = refine_holder_in_copyright_context(holder_raw) {
                 holders.push(HolderDetection {
                     holder,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -3352,13 +3297,13 @@ pub fn extract_us_government_year_placeholder_copyrights(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_copyright_notice_paren_year_lines(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?i)\bcopyright\s+notice\s*\(\s*(?P<year>\d{4})\s*\)\s+(?P<holder>[^\n]+?)\s*$",
@@ -3366,9 +3311,8 @@ pub fn extract_copyright_notice_paren_year_lines(
         .unwrap()
     });
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -3386,9 +3330,7 @@ pub fn extract_copyright_notice_paren_year_lines(
             }
 
             let raw = format!("Copyright Notice ({year}) {holder_raw}");
-            if let Some(cr) = refine_copyright(&raw)
-                && seen_copyrights.insert(cr.clone())
-            {
+            if let Some(cr) = refine_copyright(&raw) {
                 copyrights.push(CopyrightDetection {
                     copyright: cr,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -3396,9 +3338,7 @@ pub fn extract_copyright_notice_paren_year_lines(
                 });
             }
 
-            if let Some(holder) = refine_holder_in_copyright_context(holder_raw)
-                && seen_holders.insert(holder.clone())
-            {
+            if let Some(holder) = refine_holder_in_copyright_context(holder_raw) {
                 holders.push(HolderDetection {
                     holder,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -3407,6 +3347,8 @@ pub fn extract_copyright_notice_paren_year_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn drop_shadowed_bare_c_holders_with_year_prefixed_copyrights(
@@ -3442,8 +3384,7 @@ pub fn drop_shadowed_bare_c_holders_with_year_prefixed_copyrights(
 
 pub fn extract_initials_holders_from_copyrights(
     copyrights: &[CopyrightDetection],
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> Vec<HolderDetection> {
     static INITIALS_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?i)^copyright\s+\(c\)\s+(?:19\d{2}|20\d{2})\s*,?\s+(?P<holder>[A-Z](?:\s+[A-Z]){1,2})$",
@@ -3451,7 +3392,7 @@ pub fn extract_initials_holders_from_copyrights(
         .unwrap()
     });
 
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut holders = Vec::new();
 
     for det in copyrights {
         let Some(cap) = INITIALS_RE.captures(&det.copyright) else {
@@ -3461,9 +3402,7 @@ pub fn extract_initials_holders_from_copyrights(
         if holder_raw.is_empty() {
             continue;
         }
-        if let Some(holder) = refine_holder_in_copyright_context(holder_raw)
-            && seen_holders.insert(holder.clone())
-        {
+        if let Some(holder) = refine_holder_in_copyright_context(holder_raw) {
             holders.push(HolderDetection {
                 holder,
                 start_line: det.start_line,
@@ -3471,16 +3410,16 @@ pub fn extract_initials_holders_from_copyrights(
             });
         }
     }
+
+    holders
 }
 
 pub fn extract_html_anchor_copyright_url(
     content: &str,
     line_number_index: &LineNumberIndex,
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if !content.to_ascii_lowercase().contains("href=") {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     static A_HREF_COPYRIGHT_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -3496,9 +3435,8 @@ pub fn extract_html_anchor_copyright_url(
         .unwrap()
     });
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for cap in A_HREF_COPYRIGHT_RE.captures_iter(content) {
         let start_line = cap
@@ -3519,22 +3457,18 @@ pub fn extract_html_anchor_copyright_url(
         }
 
         let cr = format!("copyright {url}");
-        if seen_copyrights.insert(cr.clone()) {
-            copyrights.push(CopyrightDetection {
-                copyright: cr,
-                start_line,
-                end_line,
-            });
-        }
+        copyrights.push(CopyrightDetection {
+            copyright: cr,
+            start_line,
+            end_line,
+        });
 
         let holder = url.to_string();
-        if seen_holders.insert(holder.clone()) {
-            holders.push(HolderDetection {
-                holder,
-                start_line,
-                end_line,
-            });
-        }
+        holders.push(HolderDetection {
+            holder,
+            start_line,
+            end_line,
+        });
     }
 
     for cap in COPY_SYMBOL_A_HREF_RE.captures_iter(content) {
@@ -3557,30 +3491,28 @@ pub fn extract_html_anchor_copyright_url(
         }
 
         let cr = format!("(c) {url} {holder}");
-        if seen_copyrights.insert(cr.clone()) {
-            copyrights.push(CopyrightDetection {
-                copyright: cr,
-                start_line,
-                end_line,
-            });
-        }
+        copyrights.push(CopyrightDetection {
+            copyright: cr,
+            start_line,
+            end_line,
+        });
 
         let holder = holder.to_string();
-        if seen_holders.insert(holder.clone()) {
-            holders.push(HolderDetection {
-                holder,
-                start_line,
-                end_line,
-            });
-        }
+        holders.push(HolderDetection {
+            holder,
+            start_line,
+            end_line,
+        });
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_angle_bracket_year_name_copyrights(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    copyrights: &mut [CopyrightDetection],
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static COPY_C_ANGLE_YEAR_ANGLE_NAME_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?i)^copyright\s*\(c\)\s*<\s*(?P<years>[^>]+?)\s*>\s*<\s*(?P<name>[A-Z][A-Za-z'\.-]+(?:\s+[A-Z][A-Za-z'\.-]+){1,2})\s*>\s*$",
@@ -3592,10 +3524,13 @@ pub fn extract_angle_bracket_year_name_copyrights(
         .iter()
         .map(|c| c.copyright.to_ascii_lowercase())
         .collect();
-    let mut seen_holders: HashSet<String> = holders
+    let mut seen_holders: HashSet<String> = existing_holders
         .iter()
         .map(|h| h.holder.to_ascii_lowercase())
         .collect();
+
+    let mut new_copyrights = Vec::new();
+    let mut new_holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -3618,7 +3553,7 @@ pub fn extract_angle_bracket_year_name_copyrights(
                 }) {
                     existing.copyright = full.clone();
                 } else {
-                    copyrights.push(CopyrightDetection {
+                    new_copyrights.push(CopyrightDetection {
                         copyright: full.clone(),
                         start_line: LineNumber::new(*ln).expect("invalid line number"),
                         end_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -3631,7 +3566,7 @@ pub fn extract_angle_bracket_year_name_copyrights(
                 refine_holder_in_copyright_context(name).unwrap_or_else(|| name.to_string());
             let holder_lower = holder.to_ascii_lowercase();
             if seen_holders.insert(holder_lower) {
-                holders.push(HolderDetection {
+                new_holders.push(HolderDetection {
                     holder,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
                     end_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -3639,6 +3574,8 @@ pub fn extract_angle_bracket_year_name_copyrights(
             }
         }
     }
+
+    (new_copyrights, new_holders)
 }
 
 pub fn extract_html_icon_class_copyrights(
@@ -3671,10 +3608,6 @@ pub fn extract_html_icon_class_copyrights(
         .unwrap()
     });
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
-
     for cap in FA_AUTHORS_RE.captures_iter(content) {
         let ln = cap
             .get(0)
@@ -3685,21 +3618,17 @@ pub fn extract_html_icon_class_copyrights(
             continue;
         }
         let cr = format!("Copyright fa-copyright {year} by the authors");
-        if seen_copyrights.insert(cr.clone()) {
-            copyrights.push(CopyrightDetection {
-                copyright: cr,
-                start_line: ln,
-                end_line: ln,
-            });
-        }
+        copyrights.push(CopyrightDetection {
+            copyright: cr,
+            start_line: ln,
+            end_line: ln,
+        });
         let holder = "fa-copyright by the authors".to_string();
-        if seen_holders.insert(holder.clone()) {
-            holders.push(HolderDetection {
-                holder,
-                start_line: ln,
-                end_line: ln,
-            });
-        }
+        holders.push(HolderDetection {
+            holder,
+            start_line: ln,
+            end_line: ln,
+        });
 
         let simple = format!("Copyright {year} by the authors");
         copyrights.retain(|c| c.copyright != simple);
@@ -3721,21 +3650,17 @@ pub fn extract_html_icon_class_copyrights(
         }
 
         let cr = format!("Copyright glyphicon-copyright-mark {url}");
-        if seen_copyrights.insert(cr.clone()) {
-            copyrights.push(CopyrightDetection {
-                copyright: cr,
-                start_line: ln,
-                end_line: ln,
-            });
-        }
+        copyrights.push(CopyrightDetection {
+            copyright: cr,
+            start_line: ln,
+            end_line: ln,
+        });
         let holder = "glyphicon-copyright-mark".to_string();
-        if seen_holders.insert(holder.clone()) {
-            holders.push(HolderDetection {
-                holder,
-                start_line: ln,
-                end_line: ln,
-            });
-        }
+        holders.push(HolderDetection {
+            holder,
+            start_line: ln,
+            end_line: ln,
+        });
 
         copyrights.retain(|c| c.copyright != "Copyright Dalegroup");
         holders.retain(|h| h.holder != "Dalegroup");
@@ -3751,22 +3676,18 @@ pub fn extract_html_icon_class_copyrights(
             continue;
         }
         let cr = format!("Copyright glyphicon-copyright-mark {years} Rubix");
-        if seen_copyrights.insert(cr.clone()) {
-            copyrights.push(CopyrightDetection {
-                copyright: cr,
-                start_line: ln,
-                end_line: ln,
-            });
-        }
+        copyrights.push(CopyrightDetection {
+            copyright: cr,
+            start_line: ln,
+            end_line: ln,
+        });
 
         let holder = "glyphicon-copyright-mark Rubix".to_string();
-        if seen_holders.insert(holder.clone()) {
-            holders.push(HolderDetection {
-                holder,
-                start_line: ln,
-                end_line: ln,
-            });
-        }
+        holders.push(HolderDetection {
+            holder,
+            start_line: ln,
+            end_line: ln,
+        });
 
         let simple = format!("Copyright {years} Rubix");
         copyrights.retain(|c| c.copyright != simple);
@@ -3776,9 +3697,7 @@ pub fn extract_html_icon_class_copyrights(
 
 pub fn extract_copyright_year_c_name_angle_email_lines(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static COPY_YEAR_C_NAME_EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?i)^copyright\s+(?P<year>19\d{2}|20\d{2})\s+\(c\)\s+(?P<name>.+?)\s*<\s*(?P<email>[^>\s]+@[^>\s]+)\s*>\s*$",
@@ -3786,9 +3705,8 @@ pub fn extract_copyright_year_c_name_angle_email_lines(
         .unwrap()
     });
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         for (ln, line) in group {
@@ -3807,9 +3725,7 @@ pub fn extract_copyright_year_c_name_angle_email_lines(
             }
 
             let raw = format!("Copyright {year} (c) {name} <{email}>");
-            if let Some(cr) = refine_copyright(&raw)
-                && seen_copyrights.insert(cr.clone())
-            {
+            if let Some(cr) = refine_copyright(&raw) {
                 copyrights.push(CopyrightDetection {
                     copyright: cr,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -3817,9 +3733,7 @@ pub fn extract_copyright_year_c_name_angle_email_lines(
                 });
             }
 
-            if let Some(h) = refine_holder_in_copyright_context(name)
-                && seen_holders.insert(h.clone())
-            {
+            if let Some(h) = refine_holder_in_copyright_context(name) {
                 holders.push(HolderDetection {
                     holder: h,
                     start_line: LineNumber::new(*ln).expect("invalid line number"),
@@ -3828,21 +3742,20 @@ pub fn extract_copyright_year_c_name_angle_email_lines(
             }
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn extract_copyright_by_without_year_lines(
     groups: &[Vec<(usize, String)>],
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static COPYRIGHT_BY_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)\bcopyright\s+by\s+(?P<who>.+?)(?:\s+all\s+rights\s+reserved\b|\.|$)")
             .unwrap()
     });
 
-    let mut seen_copyrights: HashSet<String> =
-        copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let mut seen_holders: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
 
     for group in groups {
         if group.is_empty() {
@@ -3873,19 +3786,15 @@ pub fn extract_copyright_by_without_year_lines(
             continue;
         }
         let cr = format!("copyright by {who}");
-        if seen_copyrights.insert(cr.clone()) {
-            let start_line = group.first().map(|(n, _)| *n).unwrap_or(1);
-            let end_line = group.last().map(|(n, _)| *n).unwrap_or(start_line);
-            copyrights.push(CopyrightDetection {
-                copyright: cr,
-                start_line: LineNumber::new(start_line).expect("valid"),
-                end_line: LineNumber::new(end_line).expect("valid"),
-            });
-        }
+        let start_line = group.first().map(|(n, _)| *n).unwrap_or(1);
+        let end_line = group.last().map(|(n, _)| *n).unwrap_or(start_line);
+        copyrights.push(CopyrightDetection {
+            copyright: cr,
+            start_line: LineNumber::new(start_line).expect("valid"),
+            end_line: LineNumber::new(end_line).expect("valid"),
+        });
 
-        if let Some(holder) = refine_holder_in_copyright_context(who)
-            && seen_holders.insert(holder.clone())
-        {
+        if let Some(holder) = refine_holder_in_copyright_context(who) {
             let start_line = group.first().map(|(n, _)| *n).unwrap_or(1);
             let end_line = group.last().map(|(n, _)| *n).unwrap_or(start_line);
             holders.push(HolderDetection {
@@ -3895,6 +3804,8 @@ pub fn extract_copyright_by_without_year_lines(
             });
         }
     }
+
+    (copyrights, holders)
 }
 
 pub fn drop_shadowed_and_or_holders(holders: &mut Vec<HolderDetection>) {
