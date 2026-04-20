@@ -47,8 +47,15 @@ pub struct ConanDataParser;
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ConanDataYml {
-    sources: Option<HashMap<String, SourceInfo>>,
+    sources: Option<HashMap<String, SourcesValue>>,
     patches: Option<HashMap<String, PatchesValue>>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+enum SourcesValue {
+    Single(SourceInfo),
+    Multiple(Vec<SourceInfo>),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -76,6 +83,47 @@ struct PatchInfo {
 struct SourceInfo {
     url: Option<UrlValue>,
     sha256: Option<String>,
+}
+
+impl SourceInfo {
+    fn primary_download_url(&self) -> Option<String> {
+        match &self.url {
+            Some(UrlValue::Single(url)) => Some(truncate_field(url.clone())),
+            Some(UrlValue::Multiple(urls)) if !urls.is_empty() => {
+                Some(truncate_field(urls[0].clone()))
+            }
+            _ => None,
+        }
+    }
+
+    fn additional_data_json(&self) -> serde_json::Value {
+        let mut entry = serde_json::Map::new();
+
+        if let Some(url) = &self.url {
+            match url {
+                UrlValue::Single(value) => {
+                    entry.insert("url".to_string(), json!(truncate_field(value.clone())));
+                }
+                UrlValue::Multiple(values) => {
+                    let urls: Vec<_> = values.iter().cloned().map(truncate_field).collect();
+                    entry.insert("url".to_string(), json!(urls));
+                }
+            }
+        }
+
+        if let Some(sha256) = &self.sha256 {
+            entry.insert("sha256".to_string(), json!(sha256));
+        }
+
+        serde_json::Value::Object(entry)
+    }
+}
+
+fn sources_to_infos(sources_value: SourcesValue) -> Vec<SourceInfo> {
+    match sources_value {
+        SourcesValue::Single(source) => vec![source],
+        SourcesValue::Multiple(sources) => sources,
+    }
 }
 
 impl PackageParser for ConanDataParser {
@@ -113,21 +161,44 @@ pub(crate) fn parse_conandata_yml(content: &str) -> Vec<PackageData> {
 
     let mut packages = Vec::new();
 
-    for (version, source_info) in sources.into_iter().take(MAX_ITERATION_COUNT) {
+    for (version, sources_value) in sources.into_iter().take(MAX_ITERATION_COUNT) {
+        let source_infos = sources_to_infos(sources_value);
         let mut extra_data = HashMap::new();
 
-        let download_url = match &source_info.url {
-            Some(UrlValue::Single(url)) => Some(truncate_field(url.clone())),
-            Some(UrlValue::Multiple(urls)) if !urls.is_empty() => {
-                Some(truncate_field(urls[0].clone()))
-            }
-            _ => None,
-        };
+        let primary_index = source_infos
+            .iter()
+            .position(|source_info| {
+                source_info.url.is_some()
+                    || source_info
+                        .sha256
+                        .as_ref()
+                        .is_some_and(|value| !value.is_empty())
+            })
+            .unwrap_or(0);
 
-        if let Some(UrlValue::Multiple(urls)) = &source_info.url
+        let primary_source = source_infos.get(primary_index);
+
+        let download_url = primary_source.and_then(SourceInfo::primary_download_url);
+
+        if let Some(UrlValue::Multiple(urls)) =
+            primary_source.and_then(|source| source.url.as_ref())
             && urls.len() > 1
         {
-            extra_data.insert("mirror_urls".to_string(), json!(urls));
+            let mirror_urls: Vec<_> = urls.iter().cloned().map(truncate_field).collect();
+            extra_data.insert("mirror_urls".to_string(), json!(mirror_urls));
+        }
+
+        if source_infos.len() > 1 {
+            let additional_sources: Vec<_> = source_infos
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| *index != primary_index)
+                .map(|(_, source_info)| source_info.additional_data_json())
+                .collect();
+
+            if !additional_sources.is_empty() {
+                extra_data.insert("additional_sources".to_string(), json!(additional_sources));
+            }
         }
 
         if let Some(ref patches_map) = data.patches
@@ -157,9 +228,9 @@ pub(crate) fn parse_conandata_yml(content: &str) -> Vec<PackageData> {
             primary_language: Some("C++".to_string()),
             version: Some(truncate_field(version)),
             download_url,
-            sha256: source_info
-                .sha256
-                .and_then(|h| Sha256Digest::from_hex(&h).ok()),
+            sha256: primary_source
+                .and_then(|source_info| source_info.sha256.as_deref())
+                .and_then(|hash| Sha256Digest::from_hex(hash).ok()),
             extra_data: if extra_data.is_empty() {
                 None
             } else {
