@@ -2817,6 +2817,30 @@ test = coverage>=6.0
     }
 
     #[test]
+    fn test_setup_cfg_dependency_purl_normalizes_dotted_names() {
+        let content = r#"
+[metadata]
+name = test-package
+version = 1.0.0
+
+[options]
+install_requires =
+    qemu.qmp==0.0.5
+"#;
+
+        let (_temp_dir, file_path) = create_temp_file(content, "setup.cfg");
+        let package_data = PythonParser::extract_first_package(&file_path);
+
+        assert!(package_data.dependencies.iter().any(|dependency| {
+            dependency
+                .purl
+                .as_deref()
+                .is_some_and(|purl| purl.starts_with("pkg:pypi/qemu-qmp"))
+                && dependency.extracted_requirement.as_deref() == Some("qemu.qmp==0.0.5")
+        }));
+    }
+
+    #[test]
     fn test_setup_cfg_extracts_richer_metadata() {
         let path = PathBuf::from("testdata/python/golden/setup_cfg_wheel/setup.cfg");
         let package_data = PythonParser::extract_first_package(&path);

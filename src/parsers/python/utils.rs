@@ -238,7 +238,7 @@ pub(super) fn build_python_dependency(
 }
 
 pub(super) fn normalize_python_dependency_name(name: &str) -> String {
-    name.trim().to_ascii_lowercase().replace('_', "-")
+    normalize_python_distribution_name(name)
 }
 
 pub(super) fn build_python_dependency_purl(name: &str, version: Option<&str>) -> Option<String> {
@@ -496,10 +496,10 @@ fn parse_setup_py_dep_list(deps_str: &str, scope: &str, is_optional: bool) -> Ve
             }
 
             let name = extract_setup_cfg_dependency_name(dep_str)?;
-            let purl = PackageUrl::new(PythonParser::PACKAGE_TYPE.as_str(), &name).ok()?;
+            let purl = build_python_dependency_purl(&name, None)?;
 
             Some(Dependency {
-                purl: Some(purl.to_string()),
+                purl: Some(purl),
                 extracted_requirement: Some(dep_str.to_string()),
                 scope: Some(scope.to_string()),
                 is_runtime: Some(true),
@@ -520,7 +520,28 @@ pub(super) fn strip_python_archive_extension(file_name: &str) -> Option<&str> {
 }
 
 pub(super) fn normalize_python_package_name(name: &str) -> String {
-    name.to_ascii_lowercase().replace('_', "-")
+    normalize_python_distribution_name(name)
+}
+
+fn normalize_python_distribution_name(name: &str) -> String {
+    let lower = name.trim().to_ascii_lowercase();
+    let mut normalized = String::with_capacity(lower.len());
+    let mut last_was_separator = false;
+
+    for ch in lower.chars() {
+        let is_separator = matches!(ch, '-' | '_' | '.');
+        if is_separator {
+            if !last_was_separator {
+                normalized.push('-');
+                last_was_separator = true;
+            }
+        } else {
+            normalized.push(ch);
+            last_was_separator = false;
+        }
+    }
+
+    normalized
 }
 
 pub(super) fn detect_pkg_info_datasource_id(path: &Path) -> DatasourceId {
