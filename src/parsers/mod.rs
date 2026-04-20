@@ -43,6 +43,8 @@ mod cargo_scan_test;
 mod cargo_test;
 mod carthage;
 #[cfg(test)]
+mod carthage_scan_test;
+#[cfg(test)]
 mod carthage_test;
 mod chef;
 #[cfg(test)]
