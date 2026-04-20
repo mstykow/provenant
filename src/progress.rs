@@ -12,7 +12,7 @@ use log::LevelFilter;
 
 use crate::cli::ProcessMode;
 use crate::models::{
-    DiagnosticSeverity, FileInfo, FileType, ScanDiagnostic, is_legacy_warning_message,
+    DiagnosticSeverity, FileInfo, FileType, Header, ScanDiagnostic, is_legacy_warning_message,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -355,6 +355,15 @@ impl ScanProgress {
             .filter(|f| f.file_type == FileType::File)
             .map(|f| f.size)
             .sum();
+    }
+
+    pub fn record_final_header_counts(&self, headers: &[Header]) {
+        let mut stats = self.stats.lock().expect("stats lock poisoned");
+        let header_error_count: usize = headers.iter().map(|header| header.errors.len()).sum();
+        let header_warning_count: usize = headers.iter().map(|header| header.warnings.len()).sum();
+
+        stats.error_count = stats.error_count.max(header_error_count);
+        stats.warning_count = stats.warning_count.max(header_warning_count);
     }
 
     pub fn display_summary(&self, scan_start: &str, scan_end: &str) {
@@ -940,6 +949,42 @@ mod tests {
             42,
             &[ScanDiagnostic::warning("custom recoverable warning")],
         );
+
+        let stats = progress.stats.lock().expect("stats lock poisoned");
+        assert_eq!(stats.warning_count, 1);
+        assert_eq!(stats.error_count, 0);
+    }
+
+    #[test]
+    fn final_header_counts_raise_summary_warning_count() {
+        let progress = ScanProgress::new(ProgressMode::Quiet);
+
+        progress.record_final_header_counts(&[crate::models::Header {
+            tool_name: "provenant".to_string(),
+            tool_version: "0.0.0-test".to_string(),
+            options: serde_json::Map::new(),
+            notice: "test".to_string(),
+            start_timestamp: "start".to_string(),
+            end_timestamp: "end".to_string(),
+            output_format_version: "4.1.0".to_string(),
+            duration: 0.0,
+            errors: vec![],
+            warnings: vec!["custom replay warning".to_string()],
+            extra_data: crate::models::ExtraData {
+                system_environment: crate::models::SystemEnvironment {
+                    operating_system: "linux".to_string(),
+                    cpu_architecture: "x86_64".to_string(),
+                    platform: "linux".to_string(),
+                    platform_version: "test".to_string(),
+                    rust_version: "1.0.0".to_string(),
+                },
+                spdx_license_list_version: "test".to_string(),
+                files_count: 0,
+                directories_count: 0,
+                excluded_count: 0,
+                license_index_provenance: None,
+            },
+        }]);
 
         let stats = progress.stats.lock().expect("stats lock poisoned");
         assert_eq!(stats.warning_count, 1);
