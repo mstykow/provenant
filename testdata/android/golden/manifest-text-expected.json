@@ -1,0 +1,7 @@
+{
+  "type": "android",
+  "name": "com.example.textapp",
+  "version": "4.2.0",
+  "description": "Text Example App",
+  "datasource_id": "android_manifest_xml"
+}

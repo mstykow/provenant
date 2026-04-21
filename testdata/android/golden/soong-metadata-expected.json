@@ -1,0 +1,11 @@
+{
+  "type": "android",
+  "name": "libfmt",
+  "version": "11.0.1",
+  "description": "fmt formatting library used by Android builds",
+  "homepage_url": "https://fmt.dev",
+  "download_url": "https://github.com/fmtlib/fmt/archive/refs/tags/11.0.1.tar.gz",
+  "vcs_url": "https://github.com/fmtlib/fmt.git",
+  "extracted_license_statement": "NOTICE, RESTRICTED_IF_STATICALLY_LINKED",
+  "datasource_id": "android_soong_metadata"
+}

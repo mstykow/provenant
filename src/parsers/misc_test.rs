@@ -538,35 +538,6 @@ fn test_iso_image_recognizer() {
 // ============================================================================
 
 #[test]
-fn test_android_apk_recognizer() {
-    let android_apk = PathBuf::from("testdata/misc/test_android.apk");
-    let alpine_apk = PathBuf::from("testdata/misc/test_alpine.apk");
-
-    assert!(AndroidApkRecognizer::is_match(&android_apk));
-    assert!(!AndroidApkRecognizer::is_match(&alpine_apk));
-    assert!(!AndroidApkRecognizer::is_match(&PathBuf::from("app.jar")));
-
-    let packages = AndroidApkRecognizer::extract_packages(&android_apk);
-    assert_eq!(packages.len(), 1);
-    assert_eq!(packages[0].package_type, Some(PackageType::Android));
-    assert_eq!(packages[0].datasource_id, Some(DatasourceId::AndroidApk));
-}
-
-#[test]
-fn test_try_parse_file_prefers_android_apk_for_zip_based_apk() {
-    let result = try_parse_file(&PathBuf::from("testdata/misc/test_android.apk"))
-        .expect("android apk should be claimed by a handler");
-
-    assert_eq!(result.packages.len(), 1);
-    assert!(result.scan_errors.is_empty());
-    assert_eq!(result.packages[0].package_type, Some(PackageType::Android));
-    assert_eq!(
-        result.packages[0].datasource_id,
-        Some(DatasourceId::AndroidApk)
-    );
-}
-
-#[test]
 fn test_try_parse_file_ignores_malformed_non_alpine_apk_fixture() {
     let temp_dir = TempDir::new().expect("temp dir");
     let apk_path = temp_dir.path().join("broken.apk");

@@ -1,0 +1,7 @@
+{
+  "type": "android",
+  "name": "com.example.bundleapp",
+  "version": "2.5.1",
+  "description": "Bundle Example App",
+  "datasource_id": "android_aab"
+}

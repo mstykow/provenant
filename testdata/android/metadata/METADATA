@@ -1,0 +1,26 @@
+name: "libfmt"
+description: "fmt formatting library used by Android builds"
+
+third_party {
+  url: "https://github.com/fmtlib/fmt"
+  version: "11.0.1"
+  homepage: "https://fmt.dev"
+  license_type: NOTICE
+  license_type: RESTRICTED_IF_STATICALLY_LINKED
+
+  last_upgrade_date {
+    year: 2024
+    month: 5
+    day: 17
+  }
+
+  identifier {
+    type: "Archive"
+    value: "https://github.com/fmtlib/fmt/archive/refs/tags/11.0.1.tar.gz"
+  }
+
+  identifier {
+    type: "Git"
+    value: "https://github.com/fmtlib/fmt.git"
+  }
+}

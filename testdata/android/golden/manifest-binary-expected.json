@@ -1,0 +1,6 @@
+{
+  "type": "android",
+  "name": "eu.jgamba.myapplication",
+  "version": "1.0",
+  "datasource_id": "android_manifest_xml"
+}

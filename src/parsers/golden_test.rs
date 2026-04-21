@@ -2,6 +2,8 @@
 mod about_golden_test;
 #[path = "alpine_golden_test.rs"]
 mod alpine_golden_test;
+#[path = "android_golden_test.rs"]
+mod android_golden_test;
 #[path = "arch_golden_test.rs"]
 mod arch_golden_test;
 #[path = "autotools_golden_test.rs"]
