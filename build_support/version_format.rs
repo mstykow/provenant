@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 pub const MAX_BUILD_VERSION_LEN: usize = 128;
 
 pub fn sanitize_build_version(value: &str) -> Option<String> {

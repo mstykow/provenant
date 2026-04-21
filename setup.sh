@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: Provenant contributors
+# SPDX-License-Identifier: Apache-2.0
+
 #
 # Setup script for Provenant development
 #
