@@ -8,7 +8,7 @@ use std::time::Instant;
 use regex::Regex;
 
 use crate::copyright::candidates::is_raw_versioned_project_banner_line;
-use crate::copyright::line_tracking::{LineNumberIndex, PreparedLineCache};
+use crate::copyright::line_tracking::{LineNumberIndex, PreparedLines};
 use crate::copyright::refiner::{
     refine_author, refine_copyright, refine_holder, refine_holder_in_copyright_context,
 };
@@ -340,7 +340,7 @@ pub fn drop_shadowed_year_only_copyright_prefixes_same_start_line(
 
 pub fn drop_year_only_copyrights_shadowed_by_previous_software_copyright_line(
     raw_lines: &[&str],
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
 ) {
     if raw_lines.is_empty() || copyrights.is_empty() {
@@ -380,7 +380,7 @@ pub fn drop_year_only_copyrights_shadowed_by_previous_software_copyright_line(
 }
 
 pub fn merge_multiline_person_year_copyright_continuations(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -1105,7 +1105,7 @@ pub fn add_karlsruhe_university_short_variants(
 }
 
 pub fn add_intel_and_sun_non_portions_variants(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &[CopyrightDetection],
 ) -> Vec<CopyrightDetection> {
     if prepared_cache.is_empty() || copyrights.is_empty() {
@@ -1403,7 +1403,7 @@ pub fn add_at_affiliation_short_variants(
 }
 
 pub fn add_missing_copyrights_for_holder_lines_with_emails(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &[CopyrightDetection],
     holders: &[HolderDetection],
 ) -> Vec<CopyrightDetection> {
@@ -1460,7 +1460,7 @@ pub fn add_missing_copyrights_for_holder_lines_with_emails(
 }
 
 pub fn extend_inline_obfuscated_angle_email_suffixes(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut [CopyrightDetection],
 ) {
     if copyrights.is_empty() {
@@ -1618,7 +1618,7 @@ pub fn strip_lone_obfuscated_angle_email_user_tokens(
 }
 
 pub fn add_at_domain_variants_for_short_net_angle_emails(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &[CopyrightDetection],
 ) -> Vec<CopyrightDetection> {
     if copyrights.is_empty() {
@@ -1945,7 +1945,7 @@ pub fn drop_shadowed_email_comma_holders_same_span(holders: &mut Vec<HolderDetec
 }
 
 pub fn add_pipe_read_parenthetical_variants(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &[CopyrightDetection],
 ) -> Vec<CopyrightDetection> {
     if prepared_cache.len() < 2 || copyrights.is_empty() {
@@ -1988,7 +1988,7 @@ pub fn add_pipe_read_parenthetical_variants(
 }
 
 pub fn add_from_url_parenthetical_copyright_variants(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     _copyrights: &[CopyrightDetection],
 ) -> Vec<CopyrightDetection> {
     if prepared_cache.is_empty() {
@@ -2419,7 +2419,7 @@ pub fn expand_portions_copyright_variants(copyrights: &mut [CopyrightDetection])
 }
 
 pub fn expand_year_only_copyrights_with_by_name_prefix(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut [CopyrightDetection],
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -2485,7 +2485,7 @@ pub fn expand_year_only_copyrights_with_by_name_prefix(
 }
 
 pub fn add_missing_holders_from_preceding_name_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut [CopyrightDetection],
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -2662,7 +2662,7 @@ pub fn add_missing_holders_from_preceding_name_lines(
 }
 
 pub fn expand_year_only_copyrights_with_read_the_suffix(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -2730,7 +2730,7 @@ pub fn expand_year_only_copyrights_with_read_the_suffix(
 }
 
 pub fn merge_multiline_obfuscated_name_year_copyright_pairs(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -2824,7 +2824,7 @@ pub fn merge_multiline_obfuscated_name_year_copyright_pairs(
 }
 
 pub fn extend_copyrights_with_next_line_parenthesized_obfuscated_email(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut [CopyrightDetection],
 ) {
     if copyrights.is_empty() {
@@ -2924,7 +2924,7 @@ pub fn extend_copyrights_with_following_all_rights_reserved_line(
 }
 
 pub fn add_modify_suffix_holders(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     holders: &[HolderDetection],
 ) -> Vec<HolderDetection> {
     if prepared_cache.is_empty() || holders.is_empty() {
@@ -3247,7 +3247,7 @@ pub fn replace_holders_with_embedded_c_year_markers(
 }
 
 pub fn extend_year_only_copyrights_with_trailing_text(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut [CopyrightDetection],
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -3312,7 +3312,7 @@ pub fn extend_year_only_copyrights_with_trailing_text(
 }
 
 pub fn extract_licensed_material_of_company_bare_c_year_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -3387,7 +3387,7 @@ pub fn extract_licensed_material_of_company_bare_c_year_lines(
 }
 
 pub fn merge_year_only_copyrights_with_following_author_colon_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -3491,7 +3491,7 @@ pub fn merge_year_only_copyrights_with_following_author_colon_lines(
 }
 
 pub fn extract_question_mark_year_copyrights(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if prepared_cache.is_empty() {
         return (Vec::new(), Vec::new());
@@ -3592,7 +3592,7 @@ pub fn contains_year_placeholder(lower: &str) -> bool {
 }
 
 pub fn extend_copyrights_with_authors_blocks(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut [CopyrightDetection],
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -3797,7 +3797,7 @@ pub fn apply_openoffice_org_report_builder_bin_normalizations(
 }
 
 pub fn extract_midline_c_year_holder_with_leading_acronym(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static MIDLINE_C_YEAR_HOLDER_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
@@ -4699,7 +4699,7 @@ pub fn drop_from_source_attribution_copyrights(
 }
 
 pub fn merge_freebird_c_inc_urls(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -4771,7 +4771,7 @@ pub fn merge_freebird_c_inc_urls(
 }
 
 pub fn merge_debugging390_best_viewed_suffix(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -4834,7 +4834,7 @@ pub fn merge_debugging390_best_viewed_suffix(
 }
 
 pub fn merge_fsf_gdb_notice_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -4891,7 +4891,7 @@ pub fn merge_fsf_gdb_notice_lines(
 }
 
 pub fn merge_axis_ethereal_suffix(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -4944,7 +4944,7 @@ pub fn merge_axis_ethereal_suffix(
 }
 
 pub fn merge_kirkwood_converted_to(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -5089,7 +5089,7 @@ pub fn drop_combined_period_holders(holders: &mut Vec<HolderDetection>) {
 }
 
 pub fn extract_line_ending_copyright_then_by_holder(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     existing_holders: &[HolderDetection],
 ) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     let mut new_copyrights = Vec::new();
@@ -5159,7 +5159,7 @@ pub fn extract_line_ending_copyright_then_by_holder(
 }
 
 pub fn drop_trailing_software_line_from_holders(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     holders: &mut [HolderDetection],
 ) {
     for h in holders.iter_mut() {
@@ -5463,7 +5463,7 @@ pub fn drop_url_embedded_suffix_variants_same_span(
 
 pub fn extract_following_authors_holders(
     raw_lines: &[&str],
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     if raw_lines.is_empty() {
         return Vec::new();
@@ -5524,7 +5524,7 @@ pub fn extract_following_authors_holders(
 }
 
 pub fn drop_created_by_camelcase_identifier_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     authors: &mut Vec<AuthorDetection>,
 ) {
     if prepared_cache.is_empty() || authors.is_empty() {
@@ -5582,7 +5582,7 @@ pub fn drop_created_by_camelcase_identifier_authors(
 }
 
 pub fn merge_implemented_by_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
     authors: &mut Vec<AuthorDetection>,
@@ -5698,7 +5698,7 @@ pub fn merge_implemented_by_lines(
 }
 
 pub fn split_written_by_copyrights_into_holder_prefixed_clauses(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
     authors: &mut Vec<AuthorDetection>,
@@ -5764,7 +5764,7 @@ pub fn split_written_by_copyrights_into_holder_prefixed_clauses(
 }
 
 pub fn fix_shm_inline_copyrights(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -5861,7 +5861,7 @@ pub fn fix_n_tty_linus_torvalds_written_by_clause(
 }
 
 pub fn fix_sundry_contributors_truncation(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -6074,7 +6074,7 @@ pub fn split_embedded_copyright_detections(
 }
 
 pub fn extend_bare_c_year_detections_to_line_end_for_multi_c_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut [CopyrightDetection],
     holders: &mut Vec<HolderDetection>,
 ) {

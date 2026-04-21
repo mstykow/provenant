@@ -116,7 +116,7 @@ pub fn detect_copyrights_from_text_with_deadline(
     let allow_not_copyrighted_prefix = NOT_COPYRIGHTED_RE.find_iter(content).count() == 1;
 
     let raw_lines: Vec<&str> = content.lines().collect();
-    let mut prepared_cache = PreparedLineCache::new(&raw_lines);
+    let prepared_cache = PreparedLineCache::new(&raw_lines);
 
     if raw_lines.is_empty() {
         return (copyrights, holders, authors);
@@ -296,11 +296,13 @@ pub fn detect_copyrights_from_text_with_deadline(
         return (copyrights, holders, authors);
     }
 
+    let prepared_lines = prepared_cache.materialize();
+
     primary_phase::run_phase_primary_extractions(
         content,
         &groups,
         &line_number_index,
-        &mut prepared_cache,
+        &prepared_lines,
         &mut copyrights,
         &mut holders,
         &mut seen,
@@ -309,7 +311,7 @@ pub fn detect_copyrights_from_text_with_deadline(
     postprocess_phase::run_phase_postprocess(
         content,
         &raw_lines,
-        &mut prepared_cache,
+        &prepared_lines,
         did_expand_href,
         &mut copyrights,
         &mut holders,

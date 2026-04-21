@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Provenant contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::copyright::line_tracking::{LineNumberIndex, PreparedLineCache};
+use crate::copyright::line_tracking::{LineNumberIndex, PreparedLines};
 use crate::copyright::types::{CopyrightDetection, HolderDetection};
 
 use super::seen_text::SeenTextSets;
@@ -11,7 +11,7 @@ pub(super) fn run_phase_primary_extractions(
     content: &str,
     groups: &[Vec<(usize, String)>],
     line_number_index: &LineNumberIndex,
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
     seen: &mut SeenTextSets,

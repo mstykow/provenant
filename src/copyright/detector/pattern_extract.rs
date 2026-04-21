@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use crate::copyright::candidates::versioned_banner_holder_from_prepared;
-use crate::copyright::line_tracking::{LineNumberIndex, PreparedLineCache};
+use crate::copyright::line_tracking::{LineNumberIndex, PreparedLines};
 use crate::copyright::refiner::{
     refine_copyright, refine_holder, refine_holder_in_copyright_context,
 };
@@ -162,7 +162,7 @@ pub fn extract_html_meta_name_copyright_content(
 }
 
 pub fn extract_added_the_copyright_year_for_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     existing_holders: &[HolderDetection],
 ) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static ADDED_COPYRIGHT_YEAR_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -824,7 +824,7 @@ pub fn extract_copyright_years_by_name_paren_email_lines(
 }
 
 pub fn extract_copyright_years_by_name_then_paren_email_next_line(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
 ) {
@@ -1424,7 +1424,7 @@ pub fn extract_copyright_c_years_holder_lines(
 }
 
 pub fn extract_three_digit_copyright_year_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     existing_copyrights: &[CopyrightDetection],
     existing_holders: &[HolderDetection],
 ) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
@@ -1496,7 +1496,7 @@ pub fn extract_three_digit_copyright_year_lines(
 }
 
 pub fn extract_copyrighted_by_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     existing_copyrights: &[CopyrightDetection],
     existing_holders: &[HolderDetection],
 ) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
@@ -1572,7 +1572,7 @@ pub fn extract_copyrighted_by_lines(
 }
 
 pub fn extract_c_word_year_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     existing_copyrights: &[CopyrightDetection],
     existing_holders: &[HolderDetection],
 ) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
@@ -1654,7 +1654,7 @@ pub fn extract_c_word_year_lines(
 }
 
 pub fn extract_are_c_year_holder_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     existing_copyrights: &[CopyrightDetection],
     existing_holders: &[HolderDetection],
 ) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
@@ -1735,7 +1735,7 @@ pub fn extract_are_c_year_holder_lines(
 }
 
 pub fn extract_bare_c_by_holder_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     existing_copyrights: &[CopyrightDetection],
     existing_holders: &[HolderDetection],
 ) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
@@ -1799,7 +1799,7 @@ pub fn extract_bare_c_by_holder_lines(
 }
 
 pub fn extract_all_rights_reserved_by_holder_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     existing_copyrights: &[CopyrightDetection],
     existing_holders: &[HolderDetection],
 ) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
@@ -1867,7 +1867,7 @@ pub fn extract_all_rights_reserved_by_holder_lines(
 }
 
 pub fn extract_holder_is_name_paren_email_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     existing_copyrights: &[CopyrightDetection],
     existing_holders: &[HolderDetection],
 ) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
@@ -2645,7 +2645,7 @@ pub fn strip_trailing_c_year_suffix_from_comma_and_others(copyrights: &mut [Copy
 }
 
 pub fn extract_name_before_rewrited_by_copyrights(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static NAME_EMAIL_YEARS_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
@@ -2737,7 +2737,7 @@ pub fn extract_name_before_rewrited_by_copyrights(
 }
 
 pub fn extract_developed_at_software_copyrights(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     static DEVELOPED_AT_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
@@ -2792,7 +2792,7 @@ pub fn extract_developed_at_software_copyrights(
 }
 
 pub fn extract_confidential_proprietary_copyrights(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
 ) {
