@@ -218,6 +218,9 @@ Output architecture and compatibility approach are documented in:
 Contributions are welcome. Please feel free to submit a pull request.
 
 For contributor workflow, start with [CONTRIBUTING.md](CONTRIBUTING.md).
+Inbound contributions use the Developer Certificate of Origin (DCO) 1.1, so
+commits should be signed off with `git commit -s`. See [`DCO`](DCO) and
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for the policy details.
 
 For deeper contributor documentation, see the [Documentation Index](docs/DOCUMENTATION_INDEX.md), [How to Add a Parser](docs/HOW_TO_ADD_A_PARSER.md), and [Testing Strategy](docs/TESTING_STRATEGY.md).
 
