@@ -911,19 +911,14 @@ pub struct Package {
 impl Package {
     /// Create a `Package` from a `PackageData` and its source file path.
     ///
-    /// Generates a unique `package_uid` by appending a UUID qualifier to the PURL.
-    /// If the `PackageData` has no PURL, the package_uid will be an empty string.
+    /// Generates a unique `package_uid` from the package PURL when available.
+    /// For packages without a PURL but with enough manifest identity to assemble,
+    /// falls back to an opaque UID derived from datasource/name/version.
     pub fn from_package_data(package_data: &PackageData, datafile_path: String) -> Self {
         let mut package_data = package_data.clone();
         enrich_package_data_license_provenance(&mut package_data, &datafile_path);
 
-        let package_uid = package_data
-            .purl
-            .as_ref()
-            .map(|p| PackageUid::new(p))
-            .unwrap_or_else(PackageUid::empty);
-
-        Package {
+        let mut package = Package {
             package_type: package_data.package_type,
             namespace: package_data.namespace.clone(),
             name: package_data.name.clone(),
@@ -963,14 +958,21 @@ impl Package {
             repository_download_url: package_data.repository_download_url.clone(),
             api_data_url: package_data.api_data_url.clone(),
             purl: package_data.purl.clone(),
-            package_uid,
+            package_uid: PackageUid::empty(),
             datafile_paths: vec![datafile_path],
             datasource_ids: if let Some(dsid) = package_data.datasource_id {
                 vec![dsid]
             } else {
                 vec![]
             },
+        };
+
+        package.refresh_identity();
+        if package.package_uid.is_empty() {
+            package.package_uid = package.fallback_package_uid();
         }
+
+        package
     }
 
     /// Update this package with data from another `PackageData`.
@@ -1100,6 +1102,28 @@ impl Package {
         }
 
         self.purl = Some(next_purl);
+    }
+
+    fn fallback_package_uid(&self) -> PackageUid {
+        let name = self
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("unknown");
+        let version = self
+            .version
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("unknown");
+        let datasource = self
+            .datasource_ids
+            .first()
+            .map(DatasourceId::as_str)
+            .unwrap_or("unknown");
+
+        PackageUid::new_opaque(&format!("generated-package:{datasource}/{name}@{version}"))
     }
 
     fn build_current_purl(&self) -> Option<String> {

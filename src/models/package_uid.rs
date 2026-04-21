@@ -16,10 +16,20 @@ impl PackageUid {
     /// Creates a new `PackageUid` by appending a UUID to the given purl.
     pub fn new(purl: &str) -> Self {
         let uuid = Uuid::new_v4();
-        if purl.contains('?') {
-            PackageUid(format!("{}&uuid={}", purl, uuid))
+        Self::with_uuid_suffix(purl, uuid)
+    }
+
+    /// Creates a new `PackageUid` from a non-purl base string.
+    pub fn new_opaque(base: &str) -> Self {
+        let uuid = Uuid::new_v4();
+        Self::with_uuid_suffix(base, uuid)
+    }
+
+    fn with_uuid_suffix(base: &str, uuid: Uuid) -> Self {
+        if base.contains('?') {
+            PackageUid(format!("{}&uuid={}", base, uuid))
         } else {
-            PackageUid(format!("{}?uuid={}", purl, uuid))
+            PackageUid(format!("{}?uuid={}", base, uuid))
         }
     }
 
