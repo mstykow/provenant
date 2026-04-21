@@ -2159,9 +2159,10 @@ fn test_author_colon_multiline_keeps_emails() {
     let input = "/*\n * Authors: Jorge Cwik, <jorge@laser.satlink.net>\n *\t\tArnt Gulbrandsen, <agulbra@nvg.unit.no>\n */\n";
 
     let raw_lines: Vec<&str> = input.lines().collect();
-    let mut prepared_cache = crate::copyright::line_tracking::PreparedLineCache::new(&raw_lines);
+    let prepared_cache =
+        crate::copyright::line_tracking::PreparedLineCache::new(&raw_lines).materialize();
     let mut extracted: Vec<AuthorDetection> = Vec::new();
-    super::author_heuristics::extract_author_colon_blocks(&mut prepared_cache, &mut extracted);
+    super::author_heuristics::extract_author_colon_blocks(&prepared_cache, &mut extracted);
     assert!(
         extracted.iter().any(|ad| ad.author
             == "Jorge Cwik, <jorge@laser.satlink.net> Arnt Gulbrandsen, <agulbra@nvg.unit.no>"),
@@ -2185,9 +2186,10 @@ fn test_author_colon_empty_tail_collects_following_rst_roster_lines() {
         "Authors:\n\t Richard Walker,\n\t Jamie Honan,\n\t Michael Hunold\n\nGeneral information\n";
 
     let raw_lines: Vec<&str> = input.lines().collect();
-    let mut prepared_cache = crate::copyright::line_tracking::PreparedLineCache::new(&raw_lines);
+    let prepared_cache =
+        crate::copyright::line_tracking::PreparedLineCache::new(&raw_lines).materialize();
     let mut extracted: Vec<AuthorDetection> = Vec::new();
-    super::author_heuristics::extract_author_colon_blocks(&mut prepared_cache, &mut extracted);
+    super::author_heuristics::extract_author_colon_blocks(&prepared_cache, &mut extracted);
     assert!(
         extracted
             .iter()

@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use super::token_utils::normalize_whitespace;
-use crate::copyright::line_tracking::PreparedLineCache;
+use crate::copyright::line_tracking::PreparedLines;
 use crate::copyright::prepare::prepare_text_line;
 use crate::copyright::refiner::{looks_like_name_with_parenthesized_url, refine_author};
 use crate::copyright::types::{AuthorDetection, CopyrightDetection, HolderDetection};
@@ -224,7 +224,7 @@ fn extract_dash_bullet_attribution_author(line: &str) -> Option<String> {
 }
 
 pub(super) fn extract_dash_bullet_attribution_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     if prepared_cache.is_empty() {
         return Vec::new();
@@ -249,7 +249,7 @@ pub(super) fn extract_dash_bullet_attribution_authors(
 }
 
 pub(super) fn extract_name_contributed_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     if prepared_cache.is_empty() {
         return Vec::new();
@@ -322,7 +322,7 @@ fn is_contributed_non_person_token(word: &str) -> bool {
 }
 
 pub(super) fn extract_rst_field_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     if prepared_cache.is_empty() {
         return Vec::new();
@@ -423,7 +423,7 @@ fn extract_author_colon_bullet_roster(
 }
 
 pub(super) fn extract_multiline_written_by_author_blocks(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     authors: &mut Vec<AuthorDetection>,
 ) {
     if prepared_cache.is_empty() {
@@ -792,7 +792,7 @@ pub(super) fn extract_module_author_macros(
 }
 
 pub(super) fn extract_was_developed_by_author_blocks(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     let mut authors = Vec::new();
     if prepared_cache.is_empty() {
@@ -891,7 +891,7 @@ pub(super) fn extract_was_developed_by_author_blocks(
 }
 
 pub(super) fn extract_author_colon_blocks(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     authors: &mut Vec<AuthorDetection>,
 ) {
     if prepared_cache.is_empty() {
@@ -1210,7 +1210,7 @@ fn trim_author_label_prefix(line: &str) -> String {
 }
 
 pub(super) fn extract_code_written_by_author_blocks(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     let mut authors = Vec::new();
     if prepared_cache.is_empty() {
@@ -1298,7 +1298,7 @@ pub(super) fn extract_code_written_by_author_blocks(
 }
 
 pub(super) fn extract_developed_and_created_by_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     authors: &mut Vec<AuthorDetection>,
 ) {
     static PREFIX_RE: LazyLock<Regex> =
@@ -1374,7 +1374,7 @@ pub(super) fn extract_developed_and_created_by_authors(
 }
 
 pub(super) fn extract_with_additional_hacking_by_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     let mut authors = Vec::new();
     static RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -1444,7 +1444,7 @@ pub(super) fn extract_parenthesized_inline_by_authors(raw_lines: &[&str]) -> Vec
 }
 
 pub(super) fn merge_metadata_author_and_email_lines(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     authors: &mut Vec<AuthorDetection>,
 ) {
     let has_metadata = (0..prepared_cache.len()).any(|idx| {
@@ -1534,7 +1534,7 @@ pub(super) fn merge_metadata_author_and_email_lines(
 }
 
 pub(super) fn extract_debian_maintainer_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     let mut authors = Vec::new();
     if prepared_cache.is_empty() {
@@ -1594,7 +1594,7 @@ pub(super) fn extract_debian_maintainer_authors(
 }
 
 pub(super) fn extract_maintainers_label_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     let mut authors = Vec::new();
     if prepared_cache.is_empty() {
@@ -1643,7 +1643,7 @@ pub(super) fn extract_maintainers_label_authors(
 }
 
 pub(super) fn extract_created_by_project_author(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     let mut authors = Vec::new();
     if prepared_cache.is_empty() {
@@ -1673,7 +1673,7 @@ pub(super) fn extract_created_by_project_author(
 }
 
 pub(super) fn extract_created_by_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     authors: &mut Vec<AuthorDetection>,
 ) {
     if prepared_cache.is_empty() {
@@ -1786,7 +1786,7 @@ pub(super) fn extract_toml_author_assignment_authors(raw_lines: &[&str]) -> Vec<
 }
 
 pub(super) fn extract_written_by_comma_and_copyright_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     authors: &mut Vec<AuthorDetection>,
 ) {
     if prepared_cache.is_empty() {
@@ -1827,7 +1827,7 @@ pub(super) fn extract_written_by_comma_and_copyright_authors(
 }
 
 pub(super) fn extract_package_comment_named_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     let mut authors = Vec::new();
     if prepared_cache.is_empty() {
@@ -1882,7 +1882,7 @@ pub(super) fn extract_package_comment_named_authors(
 }
 
 pub(super) fn extract_developed_by_sentence_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     let mut authors = Vec::new();
     if prepared_cache.is_empty() {
@@ -1941,7 +1941,7 @@ pub(super) fn extract_developed_by_sentence_authors(
 }
 
 pub(super) fn extract_developed_by_phrase_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     let mut authors = Vec::new();
     if prepared_cache.is_empty() {
@@ -1989,7 +1989,7 @@ pub(super) fn extract_developed_by_phrase_authors(
 }
 
 pub(super) fn extract_developed_by_contributors_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     let mut authors = Vec::new();
     if prepared_cache.is_empty() {
@@ -2085,7 +2085,7 @@ pub(super) fn extract_json_author_object_authors(raw_lines: &[&str]) -> Vec<Auth
 }
 
 pub(super) fn extract_maintained_by_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     let mut authors = Vec::new();
     if prepared_cache.is_empty() {
@@ -2128,7 +2128,7 @@ pub(super) fn extract_maintained_by_authors(
 }
 
 pub(super) fn extract_converted_to_by_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     let mut authors = Vec::new();
     if prepared_cache.is_empty() {
@@ -2197,7 +2197,7 @@ pub(super) fn extract_converted_to_by_authors(
 }
 
 pub(super) fn extract_various_bugfixes_and_enhancements_by_authors(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     let mut authors = Vec::new();
     if prepared_cache.is_empty() {
@@ -2276,7 +2276,7 @@ pub(super) fn drop_authors_embedded_in_copyrights(
 }
 
 pub(super) fn drop_authors_from_copyright_by_lines(
-    prepared_cache: &PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     authors: &mut Vec<AuthorDetection>,
 ) {
     if authors.is_empty() || prepared_cache.is_empty() {
@@ -2329,7 +2329,7 @@ pub(super) fn drop_authors_from_copyright_by_lines(
 }
 
 pub(super) fn drop_author_colon_lines_absorbed_into_year_only_copyrights(
-    prepared_cache: &PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     copyrights: &[CopyrightDetection],
     authors: &mut Vec<AuthorDetection>,
 ) {
@@ -2770,7 +2770,7 @@ fn json_window_contains_developed_by(window: &str, author: &str) -> bool {
 }
 
 pub(super) fn drop_written_by_authors_preceded_by_copyright(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     authors: &mut Vec<AuthorDetection>,
 ) {
     if authors.is_empty() {
@@ -2819,7 +2819,7 @@ pub(super) fn drop_written_by_authors_preceded_by_copyright(
 }
 
 pub(super) fn extract_dense_name_email_author_lists(
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
 ) -> Vec<AuthorDetection> {
     let mut authors = Vec::new();
     if prepared_cache.is_empty() {

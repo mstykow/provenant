@@ -9,6 +9,11 @@ pub(super) struct PreparedLineCache<'a> {
     prepared: Vec<Option<String>>,
 }
 
+pub(super) struct PreparedLines<'a> {
+    raw_lines: &'a [&'a str],
+    prepared: Vec<String>,
+}
+
 impl<'a> PreparedLineCache<'a> {
     pub(super) fn new(raw_lines: &'a [&'a str]) -> Self {
         Self {
@@ -17,6 +22,22 @@ impl<'a> PreparedLineCache<'a> {
         }
     }
 
+    pub(super) fn materialize(self) -> PreparedLines<'a> {
+        let prepared = self
+            .prepared
+            .into_iter()
+            .zip(self.raw_lines.iter().copied())
+            .map(|(prepared, raw)| prepared.unwrap_or_else(|| prepare_text_line(raw)))
+            .collect();
+
+        PreparedLines {
+            raw_lines: self.raw_lines,
+            prepared,
+        }
+    }
+}
+
+impl<'a> PreparedLines<'a> {
     pub(super) fn raw_line_count(&self) -> usize {
         self.raw_lines.len()
     }
@@ -29,20 +50,13 @@ impl<'a> PreparedLineCache<'a> {
         self.raw_lines.len()
     }
 
-    pub(super) fn get(&mut self, line_number: usize) -> Option<&str> {
+    pub(super) fn get(&self, line_number: usize) -> Option<&str> {
         let idx = line_number.checked_sub(1)?;
         self.get_by_index(idx)
     }
 
-    pub(super) fn get_by_index(&mut self, idx: usize) -> Option<&str> {
-        if idx >= self.raw_lines.len() {
-            return None;
-        }
-        if self.prepared[idx].is_none() {
-            let raw = self.raw_lines[idx];
-            self.prepared[idx] = Some(prepare_text_line(raw));
-        }
-        self.prepared[idx].as_deref()
+    pub(super) fn get_by_index(&self, idx: usize) -> Option<&str> {
+        self.prepared.get(idx).map(String::as_str)
     }
 
     pub(super) fn raw_by_index(&self, idx: usize) -> Option<&str> {

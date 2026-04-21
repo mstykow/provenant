@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Provenant contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::copyright::line_tracking::PreparedLineCache;
+use crate::copyright::line_tracking::PreparedLines;
 use crate::copyright::types::{AuthorDetection, CopyrightDetection, HolderDetection};
 
 use super::seen_text::SeenTextSets;
@@ -10,7 +10,7 @@ use super::seen_text::SeenTextSets;
 pub(super) fn run_phase_postprocess(
     content: &str,
     raw_lines: &[&str],
-    prepared_cache: &mut PreparedLineCache<'_>,
+    prepared_cache: &PreparedLines<'_>,
     did_expand_href: bool,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
