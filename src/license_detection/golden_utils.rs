@@ -61,6 +61,7 @@ pub fn detect_license_expressions_for_golden(
     Ok(
         detect_matches_for_golden(engine, test_file, unknown_licenses)?
             .into_iter()
+            .filter(|m| !m.rule_kind.is_license_clue())
             .map(|m| m.license_expression)
             .collect(),
     )
