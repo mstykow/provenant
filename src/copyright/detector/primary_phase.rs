@@ -133,9 +133,11 @@ pub(super) fn run_phase_primary_extractions(
     seen.rebuild_copyrights_from(copyrights);
     seen.rebuild_holders_from(holders);
 
-    let h_before = holders.len();
-    super::postprocess_transforms::add_modify_suffix_holders(prepared_cache, holders);
-    seen.dedup_new_holders(holders, h_before);
+    let new_h =
+        super::postprocess_transforms::add_modify_suffix_holders(prepared_cache, &holders[..]);
+    holders.extend(new_h);
+
+    super::postprocess_transforms::dedupe_exact_span_holders(holders);
 
     super::postprocess_transforms::drop_shadowed_prefix_bare_c_copyrights_same_span(copyrights);
     seen.rebuild_copyrights_from(copyrights);

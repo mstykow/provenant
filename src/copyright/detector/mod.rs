@@ -328,7 +328,11 @@ pub fn detect_copyrights_from_text_with_deadline(
     }
     restore_linux_foundation_copyrights_from_raw_lines(&raw_lines, &mut copyrights);
 
-    add_missing_holders_for_bare_c_name_year_suffixes(&copyrights, &mut holders);
+    holders.extend(add_missing_holders_for_bare_c_name_year_suffixes(
+        &copyrights,
+    ));
+
+    dedupe_exact_span_holders(&mut holders);
 
     dedupe_exact_span_copyrights(&mut copyrights);
     dedupe_exact_span_holders(&mut holders);
