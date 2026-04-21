@@ -92,11 +92,14 @@ The header intentionally omits a year so maintainers do not have to rewrite the
 entire tree every calendar year just to keep boilerplate current.
 
 The current rollout intentionally covers repo-owned, comment-friendly files such
-as Rust sources, selected shell and Python scripts, and GitHub workflow/action
-YAML. It intentionally does **not** rewrite paths where prepended text would be
+as Rust sources, selected shell scripts, and GitHub workflow/action YAML. It
+intentionally does **not** rewrite paths where prepended text would be
 misleading or risky, including `reference/**`, `testdata/**`,
 `resources/license_detection/**`, and generated docs such as
 `docs/SUPPORTED_FORMATS.md`.
+
+The scope lives in `.license-headers.toml` using explicit `include` and
+`exclude` lists so the checker and hooks share one source of truth.
 
 To backfill or repair headers manually, run:
 
@@ -104,11 +107,17 @@ To backfill or repair headers manually, run:
 cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin check-license-headers -- --fix
 ```
 
-Lefthook auto-adds missing headers for staged in-scope files, and CI verifies
+Lefthook checks staged in-scope files without rewriting them, and CI verifies
 the full allowlist with:
 
 ```sh
 cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin check-license-headers -- --check
+```
+
+If the hook reports a missing header, repair it explicitly with:
+
+```sh
+cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin check-license-headers -- --fix
 ```
 
 ## Testing and validation
