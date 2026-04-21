@@ -227,4 +227,24 @@ mod tests {
 
         assert!(urls.is_empty(), "urls: {urls:#?}");
     }
+
+    #[test]
+    fn test_find_emails_ignores_file_like_domains() {
+        let text = "s@index.html version@.tar.gz real@rust-lang.org";
+        let config = DetectionConfig::default();
+        let emails = find_emails(text, &config);
+
+        let values: Vec<_> = emails.into_iter().map(|email| email.email).collect();
+        assert_eq!(values, vec!["real@rust-lang.org".to_string()]);
+    }
+
+    #[test]
+    fn test_find_urls_ignores_file_like_fake_hosts() {
+        let text = "http://ftp.sftp/ http://www.classes.hint/ http://www.conf.default/ https://rust-lang.org/real";
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        let values: Vec<_> = urls.into_iter().map(|url| url.url).collect();
+        assert_eq!(values, vec!["https://rust-lang.org/real".to_string()]);
+    }
 }
