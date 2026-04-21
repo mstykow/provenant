@@ -155,18 +155,6 @@ file_recognizer!(
 // Mobile Apps
 
 file_recognizer!(
-    AndroidApkRecognizer,
-    PackageType::Android,
-    DatasourceId::AndroidApk,
-    |path: &Path| {
-        path.extension()
-            .and_then(|e| e.to_str())
-            .is_some_and(|ext| ext == "apk")
-            && magic::is_zip(path)
-    }
-);
-
-file_recognizer!(
     AndroidLibraryRecognizer,
     PackageType::AndroidLib,
     DatasourceId::AndroidAarLibrary,
@@ -268,7 +256,7 @@ file_recognizer!(
 );
 
 crate::register_parser!(
-    "Misc file type recognizers (JAR, WAR, EAR, Android, iOS, Chrome, Mozilla, installers, disk images, etc.)",
+    "Misc file type recognizers (JAR, WAR, EAR, AAR, iOS, Chrome, Mozilla, installers, disk images, etc.)",
     &[
         "**/*.jar",
         "**/ivy.xml",
@@ -281,7 +269,6 @@ crate::register_parser!(
         "**/*.sar",
         "**/meta-inf/jboss-service.xml",
         "**/package.js",
-        "**/*.apk",
         "**/*.aar",
         "**/*.xpi",
         "**/*.crx",

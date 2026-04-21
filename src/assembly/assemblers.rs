@@ -839,8 +839,11 @@ pub static UNASSEMBLED_DATASOURCE_IDS: &[DatasourceId] = &[
     DatasourceId::EtcOsRelease,
     // Binary archives (require external extraction via ExtractCode before scanning)
     DatasourceId::AlpineApkArchive,
+    DatasourceId::AndroidAab,
     DatasourceId::AndroidAarLibrary,
     DatasourceId::AndroidApk,
+    DatasourceId::AndroidManifestXml,
+    DatasourceId::AndroidSoongMetadata,
     DatasourceId::AppleDmg,
     DatasourceId::Axis2Mar,
     DatasourceId::ChromeCrx,

@@ -47,8 +47,11 @@ pub enum DatasourceId {
     ArchSrcinfo,
 
     // ── Android ──
+    AndroidAab,
     AndroidAarLibrary,
     AndroidApk,
+    AndroidManifestXml,
+    AndroidSoongMetadata,
 
     // ── Apache Axis2 ──
     Axis2Mar,
@@ -372,8 +375,11 @@ impl DatasourceId {
             Self::ArchSrcinfo => "arch_srcinfo",
 
             // Android
+            Self::AndroidAab => "android_aab",
             Self::AndroidAarLibrary => "android_aar_library",
             Self::AndroidApk => "android_apk",
+            Self::AndroidManifestXml => "android_manifest_xml",
+            Self::AndroidSoongMetadata => "android_soong_metadata",
 
             // Apache Axis2
             Self::Axis2Mar => "axis2_mar",

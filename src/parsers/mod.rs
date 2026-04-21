@@ -6,6 +6,9 @@ mod about_test;
 mod alpine;
 #[cfg(test)]
 mod alpine_scan_test;
+mod android;
+#[cfg(test)]
+mod android_test;
 mod arch;
 #[cfg(test)]
 mod arch_scan_test;
@@ -537,6 +540,9 @@ pub(crate) fn path_looks_like_rpm_archive(path: &Path) -> bool {
 
 pub use self::about::AboutFileParser;
 pub use self::alpine::{AlpineApkParser, AlpineApkbuildParser, AlpineInstalledParser};
+pub use self::android::{
+    AndroidAabParser, AndroidApkParser, AndroidManifestParser, AndroidSoongMetadataParser,
+};
 pub use self::arch::{ArchPkginfoParser, ArchSrcinfoParser};
 pub use self::autotools::AutotoolsConfigureParser;
 pub use self::bazel::{BazelBuildParser, BazelModuleParser};
@@ -586,12 +592,12 @@ pub use self::maven::MavenParser;
 pub use self::meson::MesonParser;
 pub use self::microsoft_update_manifest::MicrosoftUpdateManifestParser;
 pub use self::misc::{
-    AndroidApkRecognizer, AndroidLibraryRecognizer, AppleDmgRecognizer, Axis2MarRecognizer,
-    Axis2ModuleXmlRecognizer, CabArchiveRecognizer, ChromeCrxRecognizer, InstallShieldRecognizer,
-    IosIpaRecognizer, IsoImageRecognizer, IvyXmlRecognizer, JBossSarRecognizer,
-    JBossServiceXmlRecognizer, JavaEarAppXmlRecognizer, JavaEarRecognizer, JavaJarRecognizer,
-    JavaWarRecognizer, JavaWarWebXmlRecognizer, MeteorPackageRecognizer, MozillaXpiRecognizer,
-    NsisRecognizer, SharArchiveRecognizer, SquashfsRecognizer,
+    AndroidLibraryRecognizer, AppleDmgRecognizer, Axis2MarRecognizer, Axis2ModuleXmlRecognizer,
+    CabArchiveRecognizer, ChromeCrxRecognizer, InstallShieldRecognizer, IosIpaRecognizer,
+    IsoImageRecognizer, IvyXmlRecognizer, JBossSarRecognizer, JBossServiceXmlRecognizer,
+    JavaEarAppXmlRecognizer, JavaEarRecognizer, JavaJarRecognizer, JavaWarRecognizer,
+    JavaWarWebXmlRecognizer, MeteorPackageRecognizer, MozillaXpiRecognizer, NsisRecognizer,
+    SharArchiveRecognizer, SquashfsRecognizer,
 };
 pub use self::nix::{NixDefaultParser, NixFlakeLockParser, NixFlakeParser};
 pub use self::npm::NpmParser;
@@ -787,6 +793,10 @@ mod tests {
 register_package_handlers! {
     parsers: [
         AboutFileParser,
+        AndroidAabParser,
+        AndroidApkParser,
+        AndroidManifestParser,
+        AndroidSoongMetadataParser,
         AlpineApkParser,
         AlpineApkbuildParser,
         AlpineInstalledParser,
@@ -920,7 +930,6 @@ register_package_handlers! {
         YarnPnpParser,
     ],
     recognizers: [
-        AndroidApkRecognizer,
         AndroidLibraryRecognizer,
         AppleDmgRecognizer,
         Axis2MarRecognizer,
