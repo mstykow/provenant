@@ -40,6 +40,17 @@ Example:
 ./scripts/check_dependency_policy.sh
 ```
 
+## `check_dco_signoff.sh`
+
+Validate that a commit message includes a Developer Certificate of Origin (DCO)
+sign-off trailer.
+
+Examples:
+
+```bash
+./scripts/check_dco_signoff.sh --commit-msg-file .git/COMMIT_EDITMSG
+```
+
 ## `check_crate_size.sh`
 
 Package the crate locally and fail if the resulting `.crate` archive exceeds the

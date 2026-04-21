@@ -1,5 +1,10 @@
 glob_matcher: doublestar
 
+commit-msg:
+  commands:
+    dco-signoff:
+      run: ./scripts/check_dco_signoff.sh --commit-msg-file {1}
+
 pre-commit:
   commands:
     cargo-sort:
