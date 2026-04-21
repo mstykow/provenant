@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Apache Maven pom.xml files.
 //!
 //! Extracts package metadata, dependencies, and license information from

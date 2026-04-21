@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for pnpm-lock.yaml lockfiles.
 //!
 //! Extracts resolved dependency information from pnpm lockfiles supporting

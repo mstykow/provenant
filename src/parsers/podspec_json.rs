@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for CocoaPods .podspec.json manifests.
 //!
 //! Extracts package metadata and dependencies from .podspec.json files used by

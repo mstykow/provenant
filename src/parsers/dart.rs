@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Dart/Flutter pubspec.yaml and pubspec.lock files.
 //!
 //! Extracts package metadata and dependencies from Dart/Flutter project manifest

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::{Result, anyhow};
 
 use crate::parser_warn as warn;

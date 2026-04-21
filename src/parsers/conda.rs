@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Conda/Anaconda package manifest files.
 //!
 //! Extracts package metadata and dependencies from Conda ecosystem manifest files

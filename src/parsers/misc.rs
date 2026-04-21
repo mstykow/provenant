@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! File type recognizers for various package archives and binary formats.
 //!
 //! This module contains simple file-type recognizers that identify packages by

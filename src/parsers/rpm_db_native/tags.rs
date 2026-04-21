@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 pub(crate) const RPMTAG_HEADERIMAGE: u32 = 61;
 pub(crate) const RPMTAG_HEADERSIGNATURES: u32 = 62;
 pub(crate) const RPMTAG_HEADERIMMUTABLE: u32 = 63;

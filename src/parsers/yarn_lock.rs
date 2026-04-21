@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Yarn yarn.lock lockfiles.
 //!
 //! Extracts resolved dependency information from Yarn lockfiles supporting both

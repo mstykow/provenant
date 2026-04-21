@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use std::fs::{self, File};
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;

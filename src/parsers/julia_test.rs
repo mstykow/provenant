@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::models::{DatasourceId, PackageType};
 use crate::parsers::PackageParser;
 use crate::parsers::julia::{JuliaManifestTomlParser, JuliaProjectTomlParser};

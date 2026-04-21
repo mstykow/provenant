@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::super::license_normalization::{
     DeclaredLicenseMatchMetadata, build_declared_license_data, normalize_spdx_declared_license,
     normalize_spdx_expression,

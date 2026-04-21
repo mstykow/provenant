@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for FreeBSD package manifest files.
 //!
 //! Extracts package metadata from FreeBSD compact manifest files (+COMPACT_MANIFEST)

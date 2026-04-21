@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for gradle.lockfile dependency lock files.
 //!
 //! Extracts resolved dependency information from Gradle's gradle.lockfile format.

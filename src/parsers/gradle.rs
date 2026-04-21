@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Gradle build files (Groovy and Kotlin DSL).
 //!
 //! Extracts dependencies from Gradle build scripts using a custom token-based

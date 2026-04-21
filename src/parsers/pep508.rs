@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::parser_warn as warn;
 use crate::parsers::utils::{MAX_FIELD_LENGTH, MAX_ITERATION_COUNT, truncate_field};
 

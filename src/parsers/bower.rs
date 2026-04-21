@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Bower package manifests (bower.json).
 //!
 //! Extracts package metadata, dependencies, and license information from

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 #[cfg(test)]
 mod tests {
     use crate::models::{DatasourceId, PackageType, Sha1Digest, Sha256Digest, Sha512Digest};

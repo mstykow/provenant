@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for AboutCode .ABOUT metadata files.
 //!
 //! Extracts package metadata from AboutCode .ABOUT YAML files which describe

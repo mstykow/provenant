@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 mod tests {
     use crate::models::{Dependency, PackageType, Sha1Digest};
     use crate::parsers::{ComposerJsonParser, ComposerLockParser, PackageParser};

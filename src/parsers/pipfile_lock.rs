@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Pipfile.lock lockfiles.
 //!
 //! Extracts resolved dependency information from Pipfile.lock files which store

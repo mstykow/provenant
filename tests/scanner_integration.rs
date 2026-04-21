@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use glob::Pattern;
 use provenant::license_detection::LicenseDetectionEngine;
 use provenant::models::{LineNumber, PackageType};

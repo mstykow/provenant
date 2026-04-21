@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for RPM .spec files.
 //!
 //! Extracts package metadata from RPM specfiles, which define how RPM packages

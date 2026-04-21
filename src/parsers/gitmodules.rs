@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Git submodule manifest files (`.gitmodules`).
 //!
 //! Extracts submodule dependencies from `.gitmodules` files, treating

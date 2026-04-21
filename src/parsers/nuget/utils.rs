@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use std::collections::HashMap;
 
 pub(super) fn resolve_string_property_reference(

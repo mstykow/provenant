@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::PackageParser;
 use super::bitbake::BitbakeRecipeParser;
 use crate::models::{DatasourceId, PackageType, Sha256Digest};

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use std::path::PathBuf;
 
 use crate::models::{DatasourceId, PackageType, Sha256Digest};

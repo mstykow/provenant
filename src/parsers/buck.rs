@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Buck BUILD and METADATA.bzl parsers
 //!
 //! Extracts package metadata from Buck build system files using Starlark (Python-like) syntax.

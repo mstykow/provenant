@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Cargo.lock lockfiles.
 //!
 //! Extracts resolved dependency information including exact versions and

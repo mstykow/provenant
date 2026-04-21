@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::PackageParser;
 use super::carthage::{CarthageCartfileParser, CarthageCartfileResolvedParser};
 use crate::models::{DatasourceId, PackageType};

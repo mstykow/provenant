@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Chef cookbook metadata files (JSON and Ruby).
 //!
 //! Extracts package metadata, dependencies, and maintainer information from

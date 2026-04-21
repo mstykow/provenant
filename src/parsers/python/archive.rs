@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::PythonParser;
 use super::utils::{
     build_pypi_urls, calculate_file_checksums, default_package_data, normalize_python_package_name,

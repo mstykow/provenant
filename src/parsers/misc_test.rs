@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Tests for file type recognizers in misc.rs
 
 use crate::models::PackageType;

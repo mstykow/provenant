@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Alpine Linux package metadata files.
 //!
 //! Extracts installed package metadata from Alpine Linux package database files

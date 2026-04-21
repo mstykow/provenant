@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for RPM Mariner container manifest files.
 //!
 //! Extracts package metadata from `container-manifest-2` files which contain

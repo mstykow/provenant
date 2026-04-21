@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Tests for Buck BUILD and METADATA.bzl parsers
 
 use crate::models::{PackageType, Sha1Digest};

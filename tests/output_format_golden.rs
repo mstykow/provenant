@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use provenant::models::{
     Copyright, DatasourceId, DependencyUid, ExtraData, FacetTallies, FileInfo, FileType, Header,
     Holder, LineNumber, MatchScore, Md5Digest, Output, Package, PackageData, PackageType,
