@@ -14,7 +14,7 @@ use crate::copyright::refiner::{
 use crate::copyright::types::{CopyrightDetection, HolderDetection};
 use crate::models::LineNumber;
 
-use super::token_utils::normalize_whitespace;
+use super::token_utils::{group_by, normalize_whitespace};
 
 pub fn extract_glide_3dfx_copyright_notice(content: &str) -> Vec<CopyrightDetection> {
     static GLIDE_3DFX_COPYRIGHT_NOTICE_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -3813,32 +3813,32 @@ pub fn drop_shadowed_and_or_holders(holders: &mut Vec<HolderDetection>) {
         return;
     }
 
-    let mut by_span: HashMap<(usize, usize), Vec<String>> = HashMap::new();
-    for h in holders.iter() {
-        by_span
-            .entry((h.start_line.get(), h.end_line.get()))
-            .or_default()
-            .push(h.holder.clone());
-    }
+    *holders = group_by(std::mem::take(holders), |h| {
+        (h.start_line.get(), h.end_line.get())
+    })
+    .into_iter()
+    .map(|(_, v)| v)
+    .flat_map(|group| {
+        let group_texts: Vec<String> = group.iter().map(|h| h.holder.clone()).collect();
+        group
+            .into_iter()
+            .filter(|h| {
+                let short = h.holder.as_str();
+                let shadow_prefix = format!("{short} and/or ");
 
-    holders.retain(|h| {
-        let Some(group) = by_span.get(&(h.start_line.get(), h.end_line.get())) else {
-            return true;
-        };
+                let is_shadowed = group_texts.iter().any(|other| {
+                    other.len() > short.len()
+                        && other.starts_with(&shadow_prefix)
+                        && other[shadow_prefix.len()..]
+                            .to_lowercase()
+                            .starts_with("its ")
+                });
 
-        let short = h.holder.as_str();
-        let shadow_prefix = format!("{short} and/or ");
-
-        let is_shadowed = group.iter().any(|other| {
-            other.len() > short.len()
-                && other.starts_with(&shadow_prefix)
-                && other[shadow_prefix.len()..]
-                    .to_lowercase()
-                    .starts_with("its ")
-        });
-
-        !is_shadowed
-    });
+                !is_shadowed
+            })
+            .collect::<Vec<_>>()
+    })
+    .collect();
 }
 
 pub fn drop_shadowed_prefix_holders(holders: &mut Vec<HolderDetection>) {
@@ -3846,72 +3846,72 @@ pub fn drop_shadowed_prefix_holders(holders: &mut Vec<HolderDetection>) {
         return;
     }
 
-    let mut by_span: HashMap<(usize, usize), Vec<String>> = HashMap::new();
-    for h in holders.iter() {
-        by_span
-            .entry((h.start_line.get(), h.end_line.get()))
-            .or_default()
-            .push(h.holder.clone());
-    }
-
-    holders.retain(|h| {
-        let Some(group) = by_span.get(&(h.start_line.get(), h.end_line.get())) else {
-            return true;
-        };
-
-        let short = h.holder.trim();
-        let is_short_acronym =
-            (2..=3).contains(&short.len()) && short.chars().all(|c| c.is_ascii_uppercase());
-        if short.len() < 4 && !is_short_acronym {
-            return true;
-        }
-
-        let mut shadowed = false;
-
-        if !short.contains(',') {
-            let shadow_prefix = format!("{short}, ");
-            shadowed = group
-                .iter()
-                .any(|other| other.len() > short.len() && other.starts_with(&shadow_prefix));
-        }
-
-        if !shadowed {
-            shadowed = group.iter().any(|other| {
-                other.len() > short.len()
-                    && other.starts_with(short)
-                    && other
-                        .as_bytes()
-                        .get(short.len())
-                        .is_some_and(|b| *b == b',')
-            });
-        }
-
-        if !shadowed {
-            shadowed = group.iter().any(|other| {
-                if other.len() <= short.len() {
-                    return false;
+    *holders = group_by(std::mem::take(holders), |h| {
+        (h.start_line.get(), h.end_line.get())
+    })
+    .into_iter()
+    .map(|(_, v)| v)
+    .flat_map(|group| {
+        let group_texts: Vec<String> = group.iter().map(|h| h.holder.clone()).collect();
+        group
+            .into_iter()
+            .filter(|h| {
+                let short = h.holder.trim();
+                let is_short_acronym =
+                    (2..=3).contains(&short.len()) && short.chars().all(|c| c.is_ascii_uppercase());
+                if short.len() < 4 && !is_short_acronym {
+                    return true;
                 }
-                if !other.starts_with(short) {
-                    return false;
+
+                let mut shadowed = false;
+
+                if !short.contains(',') {
+                    let shadow_prefix = format!("{short}, ");
+                    shadowed = group_texts.iter().any(|other| {
+                        other.len() > short.len() && other.starts_with(&shadow_prefix)
+                    });
                 }
-                let tail = other.get(short.len()..).unwrap_or("");
-                let tail = tail.trim_start();
-                tail.starts_with('-') || tail.starts_with('(')
-            });
-        }
 
-        if !shadowed
-            && short.split_whitespace().count() == 1
-            && short.chars().all(|c| c.is_ascii_lowercase())
-        {
-            let shadow_prefix = format!("{short} ");
-            shadowed = group
-                .iter()
-                .any(|other| other.len() > short.len() && other.starts_with(&shadow_prefix));
-        }
+                if !shadowed {
+                    shadowed = group_texts.iter().any(|other| {
+                        other.len() > short.len()
+                            && other.starts_with(short)
+                            && other
+                                .as_bytes()
+                                .get(short.len())
+                                .is_some_and(|b| *b == b',')
+                    });
+                }
 
-        !shadowed
-    });
+                if !shadowed {
+                    shadowed = group_texts.iter().any(|other| {
+                        if other.len() <= short.len() {
+                            return false;
+                        }
+                        if !other.starts_with(short) {
+                            return false;
+                        }
+                        let tail = other.get(short.len()..).unwrap_or("");
+                        let tail = tail.trim_start();
+                        tail.starts_with('-') || tail.starts_with('(')
+                    });
+                }
+
+                if !shadowed
+                    && short.split_whitespace().count() == 1
+                    && short.chars().all(|c| c.is_ascii_lowercase())
+                {
+                    let shadow_prefix = format!("{short} ");
+                    shadowed = group_texts.iter().any(|other| {
+                        other.len() > short.len() && other.starts_with(&shadow_prefix)
+                    });
+                }
+
+                !shadowed
+            })
+            .collect::<Vec<_>>()
+    })
+    .collect();
 }
 
 pub fn drop_shadowed_prefix_copyrights(copyrights: &mut Vec<CopyrightDetection>) {
@@ -3919,98 +3919,99 @@ pub fn drop_shadowed_prefix_copyrights(copyrights: &mut Vec<CopyrightDetection>)
         return;
     }
 
-    let mut by_span: HashMap<(usize, usize), Vec<String>> = HashMap::new();
-    for c in copyrights.iter() {
-        by_span
-            .entry((c.start_line.get(), c.end_line.get()))
-            .or_default()
-            .push(c.copyright.clone());
-    }
+    *copyrights = group_by(std::mem::take(copyrights), |c| {
+        (c.start_line.get(), c.end_line.get())
+    })
+    .into_iter()
+    .map(|(_, v)| v)
+    .flat_map(|group| {
+        let group_texts: Vec<String> = group.iter().map(|c| c.copyright.clone()).collect();
+        group
+            .into_iter()
+            .filter(|c| {
+                let short = c.copyright.as_str();
+                if short.len() < 10 {
+                    return true;
+                }
 
-    copyrights.retain(|c| {
-        let Some(group) = by_span.get(&(c.start_line.get(), c.end_line.get())) else {
-            return true;
-        };
-        let short = c.copyright.as_str();
-        if short.len() < 10 {
-            return true;
-        }
+                if group_texts.iter().any(|other| {
+                    if other.len() <= short.len() {
+                        return false;
+                    }
+                    if !other.starts_with(short) {
+                        return false;
+                    }
+                    let tail = other.get(short.len()..).unwrap_or("");
+                    let tail = tail.trim_start();
+                    tail.starts_with('-')
+                }) {
+                    return false;
+                }
 
-        if group.iter().any(|other| {
-            if other.len() <= short.len() {
-                return false;
-            }
-            if !other.starts_with(short) {
-                return false;
-            }
-            let tail = other.get(short.len()..).unwrap_or("");
-            let tail = tail.trim_start();
-            tail.starts_with('-')
-        }) {
-            return false;
-        }
+                if group_texts.iter().any(|other| {
+                    other.len() > short.len()
+                        && other.starts_with(short)
+                        && other
+                            .as_bytes()
+                            .get(short.len())
+                            .is_some_and(|b| *b == b',')
+                }) {
+                    return false;
+                }
+                let words: Vec<&str> = short.split_whitespace().collect();
+                if words.is_empty() {
+                    return true;
+                }
+                if !words[0].eq_ignore_ascii_case("copyright") {
+                    return true;
+                }
 
-        if group.iter().any(|other| {
-            other.len() > short.len()
-                && other.starts_with(short)
-                && other
-                    .as_bytes()
-                    .get(short.len())
-                    .is_some_and(|b| *b == b',')
-        }) {
-            return false;
-        }
-        let words: Vec<&str> = short.split_whitespace().collect();
-        if words.is_empty() {
-            return true;
-        }
-        if !words[0].eq_ignore_ascii_case("copyright") {
-            return true;
-        }
+                if words.len() == 2 {
+                    let tail = words[1];
+                    let is_acronym = (2..=10).contains(&tail.len())
+                        && tail.chars().all(|c| c.is_ascii_uppercase());
+                    if !is_acronym {
+                        return true;
+                    }
+                    let shadow_prefix_comma = format!("{short},");
+                    return !group_texts.iter().any(|other| {
+                        other.len() > short.len() && other.starts_with(&shadow_prefix_comma)
+                    });
+                }
 
-        if words.len() == 2 {
-            let tail = words[1];
-            let is_acronym =
-                (2..=10).contains(&tail.len()) && tail.chars().all(|c| c.is_ascii_uppercase());
-            if !is_acronym {
-                return true;
-            }
-            let shadow_prefix_comma = format!("{short},");
-            return !group
-                .iter()
-                .any(|other| other.len() > short.len() && other.starts_with(&shadow_prefix_comma));
-        }
+                if group_texts.iter().any(|other| {
+                    if other.len() <= short.len() {
+                        return false;
+                    }
+                    if !other.starts_with(short) {
+                        return false;
+                    }
+                    let tail = other.get(short.len()..).unwrap_or("");
+                    let tail = tail.trim_start();
+                    tail.starts_with('(')
+                }) {
+                    return false;
+                }
 
-        if group.iter().any(|other| {
-            if other.len() <= short.len() {
-                return false;
-            }
-            if !other.starts_with(short) {
-                return false;
-            }
-            let tail = other.get(short.len()..).unwrap_or("");
-            let tail = tail.trim_start();
-            tail.starts_with('(')
-        }) {
-            return false;
-        }
+                if words.len() != 3 {
+                    return true;
+                }
+                if !words[2].chars().all(|c| c.is_ascii_lowercase()) {
+                    return true;
+                }
 
-        if words.len() != 3 {
-            return true;
-        }
-        if !words[2].chars().all(|c| c.is_ascii_lowercase()) {
-            return true;
-        }
-
-        !group.iter().any(|other| {
-            other.len() > short.len()
-                && other.starts_with(short)
-                && other
-                    .as_bytes()
-                    .get(short.len())
-                    .is_some_and(|b| *b == b' ')
-        })
-    });
+                !group_texts.iter().any(|other| {
+                    other.len() > short.len()
+                        && other.starts_with(short)
+                        && other
+                            .as_bytes()
+                            .get(short.len())
+                            .is_some_and(|b| *b == b' ')
+                })
+            })
+            .collect::<Vec<_>>()
+    })
+    .collect();
 }
 
 pub fn drop_shadowed_bare_c_copyrights_same_span(copyrights: &mut Vec<CopyrightDetection>) {
