@@ -4,8 +4,7 @@ license_expressions:
   - gpl-2.0 WITH classpath-exception-2.0
   - gpl-2.0
   - agpl-3.0-plus
-  - gpl-2.0 WITH oracle-openjdk-classpath-exception-2.0 AND gpl-2.0 WITH openjdk-assembly-exception-1.0
-    AND other-copyleft AND other-permissive
+  - gpl-2.0 WITH oracle-openjdk-classpath-exception-2.0 AND gpl-2.0 WITH openjdk-assembly-exception-1.0 AND other-copyleft AND other-permissive
   - lgpl-2.0
   - apache-2.0
   - oracle-openjdk-classpath-exception-2.0
@@ -59,10 +58,6 @@ license_expressions:
   - apache-2.0
   - apache-2.0
   - unknown-license-reference
-  - unknown
-  - free-unknown
-  - free-unknown
-  - warranty-disclaimer
   - unknown-license-reference
   - apache-2.0
   - mit-no-advert-export-control
@@ -86,7 +81,6 @@ license_expressions:
   - unknown-license-reference
   - json
   - unknown-license-reference
-  - free-unknown
   - zlib
   - apache-1.1
   - apache-1.1
@@ -110,8 +104,4 @@ license_expressions:
   - mit
   - gpl-2.0-plus
   - gpl-2.0-plus
-notes: This tests behaves differently between Python 2 and Python 3 due to differences in rounding
-  causing different license match candidates to be selected for the license sequence matcher
-  The expectations here are for Python 3 and the test is expected to fail on Python 2, but is
-  marked to fail everywhere When the Python 3 migration is complete, the expected failure should
-  be removed.
+notes: This tests behaves differently between Python 2 and Python 3 due to differences in rounding causing different license match candidates to be selected for the license sequence matcher The expectations here are for Python 3 and the test is expected to fail on Python 2, but is marked to fail everywhere When the Python 3 migration is complete, the expected failure should be removed.
