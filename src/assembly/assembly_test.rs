@@ -942,7 +942,14 @@ mod tests {
         assert_eq!(package.package_type, None);
         assert_eq!(package.name.as_deref(), Some("example"));
         assert_eq!(package.version.as_deref(), Some("0.0.1"));
+        assert!(!package.package_uid.is_empty());
+        assert!(
+            package
+                .package_uid
+                .starts_with("generated-package:buck_metadata/example@0.0.1?uuid=")
+        );
         assert!(package.datasource_ids.contains(&DatasourceId::BuckMetadata));
+        assert_eq!(files[0].for_packages, vec![package.package_uid.clone()]);
     }
 
     #[test]
