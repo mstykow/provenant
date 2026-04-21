@@ -236,6 +236,9 @@ ScanCode: 298.91s</title></rect>
     <rect x="581.98" y="365.01" width="8" height="8" fill="#d97706" rx="1.5"><title>astral-sh/uv @ 9581f2b
 Files: 1225
 ScanCode: 261.33s</title></rect>
+    <rect x="596.63" y="368.99" width="8" height="8" fill="#d97706" rx="1.5"><title>aosp-mirror/platform_build @ 045a3d6
+Files: 1515
+ScanCode: 240.24s</title></rect>
     <rect x="599.48" y="398.28" width="8" height="8" fill="#d97706" rx="1.5"><title>Fedora 26 rootfs fixture @ sha256:140ce3f
 Files: 1579
 ScanCode: 129.25s</title></rect>
@@ -610,6 +613,9 @@ Provenant: 17.94s</title></circle>
     <circle cx="585.98" cy="411.39" r="4.5" fill="#2563eb"><title>astral-sh/uv @ 9581f2b
 Files: 1225
 Provenant: 106.58s</title></circle>
+    <circle cx="600.63" cy="479.47" r="4.5" fill="#2563eb"><title>aosp-mirror/platform_build @ 045a3d6
+Files: 1515
+Provenant: 25.23s</title></circle>
     <circle cx="603.48" cy="486.27" r="4.5" fill="#2563eb"><title>Fedora 26 rootfs fixture @ sha256:140ce3f
 Files: 1579
 Provenant: 21.85s</title></circle>

@@ -11,7 +11,7 @@ The chart below uses a log-log scatter plot: file count on the x-axis, wall-cloc
 
 ![Scan duration vs. file count for Provenant and ScanCode](benchmarks/scan-duration-vs-files.svg)
 
-> Provenant is faster on 122 of 124 recorded runs, with a **11.5× median speedup** and **9.8× geometric-mean speedup** overall; the median gap grows from **5.1×** on sub-100-file targets to **19.7×** on 10k+ file targets.
+> Provenant is faster on 123 of 125 recorded runs, with a **11.4× median speedup** and **9.8× geometric-mean speedup** overall; the median gap grows from **5.1×** on sub-100-file targets to **19.7×** on 10k+ file targets.
 > Generated from the benchmark timing rows in this document via `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart`.
 
 ## Current benchmark examples
@@ -19,6 +19,12 @@ The chart below uses a log-log scatter plot: file count on the x-axis, wall-cloc
 The tables below provide the per-target detail behind the chart. Each row is one recorded `compare-outputs` run; the Run context column shows the benchmark date plus run ID suffix and machine information, and the Timing snapshot column shows same-host wall-clock timings with the relative result in **bold**.
 
 ### Repository-backed targets
+
+#### Android / AOSP
+
+| Target snapshot                                                                                                                                    | Run context                                                                              | Timing snapshot                                                     | Advantages over ScanCode                                                                                                                                                                                                                                                                                    |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [aosp-mirror/platform_build @ 045a3d6](https://github.com/aosp-mirror/platform_build/tree/045a3d6a3e359633a14853a5a5e1e4f2a11cbdae)<br>1,515 files | 2026-04-20 · platform_build-95360 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc | Provenant: 25.23s<br>ScanCode: 240.24s<br>**9.52× faster (-89.5%)** | Broader Android package visibility (`14` vs `0` file-level package records) across committed Soong `METADATA`, `AndroidManifest.xml`, and `TestApp.apk` surfaces, plus extra `go.work` and Docker metadata detection, with cleaner rejection of bare-word GPL/LGPL, placeholder-author, and URL-shape noise |
 
 #### Python / Conda / Pixi
 
@@ -201,6 +207,12 @@ The tables below provide the per-target detail behind the chart. Each row is one
 | [Humanizer.Core 3.0.10 .nupkg @ sha256:99f9521](https://api.nuget.org/v3-flatcontainer/humanizer.core/3.0.10/humanizer.core.3.0.10.nupkg)<br>1 file | 2026-04-13 · nuget-humanizer-core-3.0.10-69313 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc     | Provenant: 19.19s<br>ScanCode: 4.22s<br>**4.55× slower (+354.7%)** | Real NuGet package-archive extraction on the shipped `.nupkg` (`1` vs `0` packages, `6` vs `0` dependencies), with a named `pkg:nuget/Humanizer.Core@3.0.10` identity instead of ScanCode's generic unnamed archive row, plus an `MIT` license detection from modern package metadata      |
 | [rubocop 1.86.1 .gem @ sha256:44415f3](https://rubygems.org/gems/rubocop/versions/1.86.1)<br>1 file                                                 | 2026-04-14 · rubocop-1.86.1-dir-88509 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc              | Provenant: 19.82s<br>ScanCode: 73.62s<br>**3.71× faster (-73.1%)** | Matched shipped gem package and dependency coverage (`1` vs `1` packages, `10` vs `10` dependencies), with semantically combined author/email party data and an extra parser-declared `MIT` license detection on the archive file itself                                                   |
 | [setup 2.5.49-b1 src.rpm](../testdata/rpm/setup-2.5.49-b1.src.rpm)<br>1 file                                                                        | 2026-04-19 · setup-2.5.49-b1.src.rpm-10783 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc         | Provenant: 9.58s<br>ScanCode: 69.83s<br>**7.29× faster (-86.3%)**  | Matched shipped source-RPM package visibility (`1` vs `1`) with broader dependency extraction (`3` vs `0`) from the archive header metadata, plus normalized legacy RPM declared-license aliases and parser-owned declared-license detections instead of only file-level bare-word matches |
+
+#### Mobile app artifacts
+
+| Target snapshot                                 | Run context                                                                                    | Timing snapshot                                                    | Advantages over ScanCode                                                                                                                                                                                                                                                                                         |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| repo-owned Android artifact snapshot<br>3 files | 2026-04-20 · android-row-8a-local-88568 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc | Provenant: 10.28s<br>ScanCode: 75.97s<br>**7.39× faster (-86.5%)** | Direct Android package visibility on the staged `.aab`, `.apk`, and standalone binary `AndroidManifest.xml` inputs (`3` file-level package records vs `1` generic APK row), with concrete app identity/version extraction from proto AAB and binary AXML surfaces where ScanCode stays unnamed or manifest-blind |
 
 #### Release binaries and extracted app snapshots
 
