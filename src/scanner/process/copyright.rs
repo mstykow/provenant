@@ -4,8 +4,10 @@ use super::binary_text::{
 };
 use crate::copyright::{self, AuthorDetection, CopyrightDetection, HolderDetection};
 use crate::models::{Author, Copyright, FileInfoBuilder, Holder, LineNumber};
+use regex::Regex;
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::LazyLock;
 use std::time::Duration;
 
 pub(super) fn extract_copyright_information(
@@ -65,6 +67,14 @@ pub(super) fn extract_copyright_information(
             })
             .collect::<Vec<Holder>>(),
     );
+    let mut authors = authors;
+    authors.extend(extract_patch_header_author_supplements(text_content));
+    authors.extend(extract_comment_author_supplements(text_content));
+    let mut seen_authors = HashSet::new();
+    authors.retain(|author| {
+        seen_authors.insert((author.author.clone(), author.start_line, author.end_line))
+    });
+
     file_info_builder.authors(
         authors
             .into_iter()
@@ -178,6 +188,81 @@ fn extract_binary_string_author_supplements(text_content: &str) -> Vec<AuthorDet
                 author,
                 start_line: LineNumber::from_0_indexed(line_index),
                 end_line: LineNumber::from_0_indexed(line_index),
+            });
+        }
+    }
+
+    authors
+}
+
+fn extract_patch_header_author_supplements(text_content: &str) -> Vec<AuthorDetection> {
+    static PATCH_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)^(?:from:|patch by|signed-off-by:|co-developed-by:|authored-by:)\s+(?P<author>[^<\n]+<[^>]+>)\s*$",
+        )
+        .expect("valid patch header author regex")
+    });
+
+    text_content
+        .lines()
+        .enumerate()
+        .filter_map(|(line_index, line)| {
+            let captures = PATCH_AUTHOR_RE.captures(line.trim())?;
+            let author = captures.name("author")?.as_str().trim();
+            Some(AuthorDetection {
+                author: author.to_string(),
+                start_line: LineNumber::from_0_indexed(line_index),
+                end_line: LineNumber::from_0_indexed(line_index),
+            })
+        })
+        .collect()
+}
+
+fn extract_comment_author_supplements(text_content: &str) -> Vec<AuthorDetection> {
+    static COMMENT_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)\b(?:written|edited|modified)\s+by\s+(?P<author>[^<\n]+<[^>]+>)\s*\.?$|^(?:[#;/*!\-\s]+)?by\s+(?P<author2>[^<\n]+<[^>]+>)\s*\.?$",
+        )
+        .expect("valid comment author regex")
+    });
+    static EMAIL_PAREN_NAME_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)(?P<email>[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,63})\s*\((?P<name>[^)]+)\)")
+            .expect("valid email paren name regex")
+    });
+
+    let mut authors = Vec::new();
+
+    for (line_index, line) in text_content.lines().enumerate() {
+        let trimmed = line.trim();
+        let line_number = LineNumber::from_0_indexed(line_index);
+
+        if let Some(captures) = COMMENT_AUTHOR_RE.captures(trimmed)
+            && let Some(author) = captures
+                .name("author")
+                .or_else(|| captures.name("author2"))
+                .map(|m| m.as_str().trim())
+        {
+            authors.push(AuthorDetection {
+                author: author.to_string(),
+                start_line: line_number,
+                end_line: line_number,
+            });
+        }
+
+        for captures in EMAIL_PAREN_NAME_RE.captures_iter(trimmed) {
+            let Some(email) = captures.name("email").map(|m| m.as_str().trim()) else {
+                continue;
+            };
+            let Some(name) = captures.name("name").map(|m| m.as_str().trim()) else {
+                continue;
+            };
+            if name.is_empty() {
+                continue;
+            }
+            authors.push(AuthorDetection {
+                author: format!("{name} <{email}>"),
+                start_line: line_number,
+                end_line: line_number,
             });
         }
     }
