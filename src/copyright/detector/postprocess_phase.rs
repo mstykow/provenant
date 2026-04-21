@@ -34,9 +34,11 @@ pub(super) fn run_phase_postprocess(
     seen.rebuild_holders_from(holders);
 
     super::postprocess_transforms::split_embedded_copyright_detections(copyrights, holders);
-    super::postprocess_transforms::add_missing_holders_from_email_bearing_copyrights(
-        copyrights, holders,
+    let new_h = super::postprocess_transforms::add_missing_holders_from_email_bearing_copyrights(
+        &copyrights[..],
+        &holders[..],
     );
+    holders.extend(new_h);
     super::postprocess_transforms::extend_bare_c_year_detections_to_line_end_for_multi_c_lines(
         prepared_cache,
         copyrights,
@@ -45,9 +47,11 @@ pub(super) fn run_phase_postprocess(
     super::postprocess_transforms::replace_holders_with_embedded_c_year_markers(
         copyrights, holders,
     );
-    super::postprocess_transforms::add_missing_holders_for_debian_modifications(
-        content, copyrights, holders,
+    let new_h = super::postprocess_transforms::add_missing_holders_for_debian_modifications(
+        content,
+        &copyrights[..],
     );
+    holders.extend(new_h);
     super::postprocess_transforms::fix_sundry_contributors_truncation(
         prepared_cache,
         copyrights,
@@ -411,7 +415,13 @@ pub(super) fn run_phase_postprocess(
     super::postprocess_transforms::drop_shadowed_year_prefixed_holders(holders);
 
     super::postprocess_transforms::truncate_lonely_svox_baslerstr_address(copyrights, holders);
-    super::postprocess_transforms::add_short_svox_baslerstr_variants(copyrights, holders);
+    let (new_c, new_h) = super::postprocess_transforms::add_short_svox_baslerstr_variants(
+        &copyrights[..],
+        &holders[..],
+        seen,
+    );
+    copyrights.extend(new_c);
+    holders.extend(new_h);
 
     super::postprocess_transforms::drop_shadowed_year_only_copyright_prefixes_same_start_line(
         copyrights,
@@ -422,34 +432,64 @@ pub(super) fn run_phase_postprocess(
         copyrights,
     );
 
-    super::postprocess_transforms::add_embedded_copyright_clause_variants(copyrights);
-    super::postprocess_transforms::add_found_at_short_variants(copyrights, holders);
+    let new_c =
+        super::postprocess_transforms::add_embedded_copyright_clause_variants(&copyrights[..]);
+    copyrights.extend(new_c);
+    let (new_c, new_h) =
+        super::postprocess_transforms::add_found_at_short_variants(&copyrights[..], &holders[..]);
+    copyrights.extend(new_c);
+    holders.extend(new_h);
     super::postprocess_transforms::drop_shadowed_linux_foundation_holder_copyrights_same_line(
         copyrights,
     );
-    super::postprocess_transforms::add_bare_email_variants_for_escaped_angle_lines(
-        raw_lines, copyrights,
+    let new_c = super::postprocess_transforms::add_bare_email_variants_for_escaped_angle_lines(
+        raw_lines,
+        &copyrights[..],
     );
+    copyrights.extend(new_c);
     super::postprocess_transforms::drop_comma_holders_shadowed_by_space_version_same_span(holders);
     super::postprocess_transforms::normalize_company_suffix_period_holder_variants(holders);
-    super::postprocess_transforms::add_confidential_short_variants_late(copyrights, holders);
-    super::postprocess_transforms::add_karlsruhe_university_short_variants(copyrights, holders);
-    super::postprocess_transforms::add_intel_and_sun_non_portions_variants(
-        prepared_cache,
-        copyrights,
+    let (new_c, new_h) = super::postprocess_transforms::add_confidential_short_variants_late(
+        &copyrights[..],
+        &holders[..],
     );
-    super::postprocess_transforms::add_pipe_read_parenthetical_variants(prepared_cache, copyrights);
-    super::postprocess_transforms::add_from_url_parenthetical_copyright_variants(
-        prepared_cache,
-        copyrights,
+    copyrights.extend(new_c);
+    holders.extend(new_h);
+    let (new_c, new_h) = super::postprocess_transforms::add_karlsruhe_university_short_variants(
+        &copyrights[..],
+        &holders[..],
     );
-    super::postprocess_transforms::add_at_affiliation_short_variants(copyrights, holders);
-    super::postprocess_transforms::add_but_suffix_short_variants(copyrights);
-    super::postprocess_transforms::add_missing_copyrights_for_holder_lines_with_emails(
+    copyrights.extend(new_c);
+    holders.extend(new_h);
+    let new_c = super::postprocess_transforms::add_intel_and_sun_non_portions_variants(
         prepared_cache,
-        copyrights,
-        holders,
+        &copyrights[..],
     );
+    copyrights.extend(new_c);
+    let new_c = super::postprocess_transforms::add_pipe_read_parenthetical_variants(
+        prepared_cache,
+        &copyrights[..],
+    );
+    copyrights.extend(new_c);
+    let new_c = super::postprocess_transforms::add_from_url_parenthetical_copyright_variants(
+        prepared_cache,
+        &copyrights[..],
+    );
+    copyrights.extend(new_c);
+    let (new_c, new_h) = super::postprocess_transforms::add_at_affiliation_short_variants(
+        &copyrights[..],
+        &holders[..],
+    );
+    copyrights.extend(new_c);
+    holders.extend(new_h);
+    let new_c = super::postprocess_transforms::add_but_suffix_short_variants(&copyrights[..]);
+    copyrights.extend(new_c);
+    let new_c = super::postprocess_transforms::add_missing_copyrights_for_holder_lines_with_emails(
+        prepared_cache,
+        &copyrights[..],
+        &holders[..],
+    );
+    copyrights.extend(new_c);
     super::postprocess_transforms::extend_inline_obfuscated_angle_email_suffixes(
         prepared_cache,
         copyrights,
@@ -457,10 +497,15 @@ pub(super) fn run_phase_postprocess(
     super::postprocess_transforms::strip_lone_obfuscated_angle_email_user_tokens(
         raw_lines, copyrights, holders,
     );
-    super::postprocess_transforms::add_at_domain_variants_for_short_net_angle_emails(
+    let new_c = super::postprocess_transforms::add_at_domain_variants_for_short_net_angle_emails(
         prepared_cache,
-        copyrights,
+        &copyrights[..],
     );
+    copyrights.extend(new_c);
+
+    super::postprocess_transforms::dedupe_exact_span_copyrights(copyrights);
+    super::postprocess_transforms::dedupe_exact_span_holders(holders);
+
     super::postprocess_transforms::normalize_french_support_disclaimer_copyrights(
         copyrights, holders,
     );
@@ -481,13 +526,22 @@ pub(super) fn run_phase_postprocess(
         copyrights,
         holders,
     );
-    super::postprocess_transforms::add_first_angle_email_only_variants(copyrights);
+    let new_c = super::postprocess_transforms::add_first_angle_email_only_variants(&copyrights[..]);
+    copyrights.extend(new_c);
     super::postprocess_transforms::drop_shadowed_angle_email_prefix_copyrights_same_span(
         copyrights,
     );
     super::postprocess_transforms::drop_shadowed_quote_before_email_variants_same_span(copyrights);
     super::postprocess_transforms::drop_url_embedded_suffix_variants_same_span(copyrights, holders);
-    super::postprocess_transforms::add_missing_holder_from_single_copyright(copyrights, holders);
+    if let Some(h) = super::postprocess_transforms::add_missing_holder_from_single_copyright(
+        &copyrights[..],
+        &holders[..],
+    ) {
+        holders.push(h);
+    }
+
+    super::postprocess_transforms::dedupe_exact_span_copyrights(copyrights);
+    super::postprocess_transforms::dedupe_exact_span_holders(holders);
 
     super::postprocess_transforms::drop_shadowed_acronym_location_suffix_copyrights_same_span(
         copyrights,

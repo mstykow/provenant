@@ -15,6 +15,8 @@ use crate::copyright::refiner::{
 use crate::copyright::types::{AuthorDetection, CopyrightDetection, HolderDetection};
 use crate::models::LineNumber;
 
+use super::seen_text::SeenTextSets;
+
 pub fn refine_final_copyrights(copyrights: &mut Vec<CopyrightDetection>) {
     if copyrights.is_empty() {
         return;
@@ -162,12 +164,12 @@ pub fn deadline_exceeded(deadline: Option<Instant>) -> bool {
 
 pub fn add_missing_holders_for_bare_c_name_year_suffixes(
     copyrights: &[CopyrightDetection],
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> Vec<HolderDetection> {
     static BARE_C_NAME_YEAR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?ix)^\(c\)\s+(?P<name>.+?)\s+(?P<year>(?:19\d{2}|20\d{2}))\s*$").unwrap()
     });
 
+    let mut result = Vec::new();
     for c in copyrights {
         let trimmed = c.copyright.trim();
         let Some(cap) = BARE_C_NAME_YEAR_RE.captures(trimmed) else {
@@ -193,19 +195,13 @@ pub fn add_missing_holders_for_bare_c_name_year_suffixes(
         if holder.is_empty() {
             continue;
         }
-        if holders.iter().any(|h| {
-            h.start_line.get() == c.start_line.get()
-                && h.end_line.get() == c.end_line.get()
-                && h.holder == holder
-        }) {
-            continue;
-        }
-        holders.push(HolderDetection {
+        result.push(HolderDetection {
             holder,
             start_line: c.start_line,
             end_line: c.end_line,
         });
     }
+    result
 }
 
 pub fn truncate_lonely_svox_baslerstr_address(
@@ -247,11 +243,12 @@ pub fn truncate_lonely_svox_baslerstr_address(
 }
 
 pub fn add_short_svox_baslerstr_variants(
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    copyrights: &[CopyrightDetection],
+    holders: &[HolderDetection],
+    seen: &SeenTextSets,
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if copyrights.is_empty() || holders.is_empty() {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     fn truncate_at_baslerstr(s: &str) -> Option<String> {
@@ -270,24 +267,21 @@ pub fn add_short_svox_baslerstr_variants(
         c.copyright.contains("SVOX") && c.copyright.to_ascii_lowercase().contains("baslerstr")
     });
     if !has_full {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     if copyrights.len() == 1 && holders.len() == 1 {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
-    let existing_c: HashSet<String> = copyrights.iter().map(|c| c.copyright.clone()).collect();
-    let existing_h: HashSet<String> = holders.iter().map(|h| h.holder.clone()).collect();
-
     let mut new_c = Vec::new();
-    for c in copyrights.iter() {
+    for c in copyrights {
         if !c.copyright.contains("SVOX") || !c.copyright.to_ascii_lowercase().contains("baslerstr")
         {
             continue;
         }
         if let Some(short) = truncate_at_baslerstr(&c.copyright)
-            && !existing_c.contains(&short)
+            && !seen.copyrights.contains(&short)
         {
             new_c.push(CopyrightDetection {
                 copyright: short,
@@ -296,15 +290,14 @@ pub fn add_short_svox_baslerstr_variants(
             });
         }
     }
-    copyrights.extend(new_c);
 
     let mut new_h = Vec::new();
-    for h in holders.iter() {
+    for h in holders {
         if !h.holder.contains("SVOX") || !h.holder.to_ascii_lowercase().contains("baslerstr") {
             continue;
         }
         if let Some(short) = truncate_at_baslerstr(&h.holder)
-            && !existing_h.contains(&short)
+            && !seen.holders.contains(&short)
         {
             new_h.push(HolderDetection {
                 holder: short,
@@ -313,7 +306,7 @@ pub fn add_short_svox_baslerstr_variants(
             });
         }
     }
-    holders.extend(new_h);
+    (new_c, new_h)
 }
 
 pub fn drop_shadowed_year_only_copyright_prefixes_same_start_line(
@@ -489,21 +482,18 @@ pub fn merge_multiline_person_year_copyright_continuations(
     }
 }
 
-pub fn add_embedded_copyright_clause_variants(copyrights: &mut Vec<CopyrightDetection>) {
+pub fn add_embedded_copyright_clause_variants(
+    copyrights: &[CopyrightDetection],
+) -> Vec<CopyrightDetection> {
     if copyrights.is_empty() {
-        return;
+        return Vec::new();
     }
     if copyrights.len() < 50 {
-        return;
+        return Vec::new();
     }
 
-    let existing: HashSet<(usize, usize, String)> = copyrights
-        .iter()
-        .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
-        .collect();
-
     let mut to_add = Vec::new();
-    for c in copyrights.iter() {
+    for c in copyrights {
         let lower = c.copyright.to_ascii_lowercase();
         if !lower.starts_with("portions created by the initial developer are ") {
             continue;
@@ -524,41 +514,29 @@ pub fn add_embedded_copyright_clause_variants(copyrights: &mut Vec<CopyrightDete
         {
             continue;
         }
-        let key = (c.start_line.get(), c.end_line.get(), refined.clone());
-        if !existing.contains(&key) {
-            to_add.push(CopyrightDetection {
-                copyright: refined,
-                start_line: c.start_line,
-                end_line: c.end_line,
-            });
-        }
+        to_add.push(CopyrightDetection {
+            copyright: refined,
+            start_line: c.start_line,
+            end_line: c.end_line,
+        });
     }
-    copyrights.extend(to_add);
+    to_add
 }
 
 pub fn add_found_at_short_variants(
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    copyrights: &[CopyrightDetection],
+    _holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if copyrights.is_empty() {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     static FOUND_AT_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)^\(c\)\s+by\s+(?P<name>.+?)\s+found\s+at\b").unwrap());
 
-    let existing_c: HashSet<(usize, usize, String)> = copyrights
-        .iter()
-        .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
-        .collect();
-    let existing_h: HashSet<(usize, usize, String)> = holders
-        .iter()
-        .map(|h| (h.start_line.get(), h.end_line.get(), h.holder.clone()))
-        .collect();
-
     let mut new_c = Vec::new();
     let mut new_h = Vec::new();
-    for c in copyrights.iter() {
+    for c in copyrights {
         let Some(cap) = FOUND_AT_RE.captures(c.copyright.trim()) else {
             continue;
         };
@@ -567,33 +545,26 @@ pub fn add_found_at_short_variants(
             continue;
         }
         let short = format!("(c) by {name}");
-        let key = (c.start_line.get(), c.end_line.get(), short.clone());
-        if !existing_c.contains(&key) {
-            new_c.push(CopyrightDetection {
-                copyright: short,
-                start_line: c.start_line,
-                end_line: c.end_line,
-            });
-        }
+        new_c.push(CopyrightDetection {
+            copyright: short,
+            start_line: c.start_line,
+            end_line: c.end_line,
+        });
 
         let holder_short = name.to_string();
-        let hkey = (c.start_line.get(), c.end_line.get(), holder_short.clone());
-        if !existing_h.contains(&hkey) {
-            new_h.push(HolderDetection {
-                holder: holder_short,
-                start_line: c.start_line,
-                end_line: c.end_line,
-            });
-        }
+        new_h.push(HolderDetection {
+            holder: holder_short,
+            start_line: c.start_line,
+            end_line: c.end_line,
+        });
     }
-    copyrights.extend(new_c);
-    holders.extend(new_h);
+    (new_c, new_h)
 }
 
 pub fn add_missing_holders_from_email_bearing_copyrights(
     copyrights: &[CopyrightDetection],
-    holders: &mut Vec<HolderDetection>,
-) {
+    _holders: &[HolderDetection],
+) -> Vec<HolderDetection> {
     static COPYRIGHT_NAME_EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?i)^copyright(?:\s*\(c\))?\s+[0-9][0-9,\-–/ ]*\s+(?:by\s+)?(?P<name>[^<]+?)\s*<[^>\s]*@[^>\s]*>\s*$",
@@ -601,18 +572,7 @@ pub fn add_missing_holders_from_email_bearing_copyrights(
         .unwrap()
     });
 
-    let existing: HashSet<(usize, usize, String)> = holders
-        .iter()
-        .map(|h| {
-            (
-                h.start_line.get(),
-                h.end_line.get(),
-                super::token_utils::normalize_whitespace(&h.holder),
-            )
-        })
-        .collect();
-
-    let mut additions = Vec::new();
+    let mut result = Vec::new();
     for c in copyrights {
         let Some(cap) = COPYRIGHT_NAME_EMAIL_RE.captures(c.copyright.trim()) else {
             continue;
@@ -634,19 +594,14 @@ pub fn add_missing_holders_from_email_bearing_copyrights(
             continue;
         }
 
-        let key = (c.start_line.get(), c.end_line.get(), name.clone());
-        if existing.contains(&key) {
-            continue;
-        }
-
-        additions.push(HolderDetection {
+        result.push(HolderDetection {
             holder: name,
             start_line: c.start_line,
             end_line: c.end_line,
         });
     }
 
-    holders.extend(additions);
+    result
 }
 
 pub fn normalize_email_copyright_holder_candidate(raw_name: &str) -> String {
@@ -790,19 +745,14 @@ pub fn restore_linux_foundation_copyrights_from_raw_lines(
 
 pub fn add_bare_email_variants_for_escaped_angle_lines(
     raw_lines: &[&str],
-    copyrights: &mut Vec<CopyrightDetection>,
-) {
+    copyrights: &[CopyrightDetection],
+) -> Vec<CopyrightDetection> {
     if raw_lines.is_empty() || copyrights.is_empty() {
-        return;
+        return Vec::new();
     }
 
     static ANGLE_EMAIL_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"<\s*([^\s<>]+@[^\s<>]+)\s*>").unwrap());
-
-    let existing: HashSet<(usize, usize, String)> = copyrights
-        .iter()
-        .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
-        .collect();
 
     let mut to_add = Vec::new();
     for c in copyrights.iter() {
@@ -825,16 +775,13 @@ pub fn add_bare_email_variants_for_escaped_angle_lines(
         let Some(refined) = refine_copyright(&bare) else {
             continue;
         };
-        let key = (c.start_line.get(), c.end_line.get(), refined.clone());
-        if !existing.contains(&key) {
-            to_add.push(CopyrightDetection {
-                copyright: refined,
-                start_line: c.start_line,
-                end_line: c.end_line,
-            });
-        }
+        to_add.push(CopyrightDetection {
+            copyright: refined,
+            start_line: c.start_line,
+            end_line: c.end_line,
+        });
     }
-    copyrights.extend(to_add);
+    to_add
 }
 
 pub fn drop_comma_holders_shadowed_by_space_version_same_span(holders: &mut Vec<HolderDetection>) {
@@ -969,27 +916,20 @@ pub fn normalize_company_suffix_period_holder_variants(holders: &mut Vec<HolderD
 }
 
 pub fn add_confidential_short_variants_late(
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    copyrights: &[CopyrightDetection],
+    _holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if copyrights.is_empty() {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     static CONF_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)^copyright\s+(?P<year>\d{4})\s+confidential\s+information\b").unwrap()
     });
 
-    let mut existing_c: HashSet<(usize, usize, String)> = copyrights
-        .iter()
-        .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
-        .collect();
-    let mut existing_h: HashSet<(usize, usize, String)> = holders
-        .iter()
-        .map(|h| (h.start_line.get(), h.end_line.get(), h.holder.clone()))
-        .collect();
-
-    for c in copyrights.clone() {
+    let mut new_c = Vec::new();
+    let mut new_h = Vec::new();
+    for c in copyrights {
         let Some(cap) = CONF_RE.captures(c.copyright.as_str()) else {
             continue;
         };
@@ -1001,25 +941,20 @@ pub fn add_confidential_short_variants_late(
         let Some(short_c) = refine_copyright(&short_c_raw) else {
             continue;
         };
-        let key = (c.start_line.get(), c.end_line.get(), short_c.clone());
-        if existing_c.insert(key) {
-            copyrights.push(CopyrightDetection {
-                copyright: short_c,
-                start_line: c.start_line,
-                end_line: c.end_line,
-            });
-        }
+        new_c.push(CopyrightDetection {
+            copyright: short_c,
+            start_line: c.start_line,
+            end_line: c.end_line,
+        });
 
         let short_h = "Confidential".to_string();
-        let hkey = (c.start_line.get(), c.end_line.get(), short_h.clone());
-        if existing_h.insert(hkey) {
-            holders.push(HolderDetection {
-                holder: short_h,
-                start_line: c.start_line,
-                end_line: c.end_line,
-            });
-        }
+        new_h.push(HolderDetection {
+            holder: short_h,
+            start_line: c.start_line,
+            end_line: c.end_line,
+        });
     }
+    (new_c, new_h)
 }
 
 pub fn split_multiline_holder_lists_from_copyright_email_sequences(
@@ -1123,11 +1058,11 @@ pub fn split_multiline_holder_lists_from_copyright_email_sequences(
 }
 
 pub fn add_karlsruhe_university_short_variants(
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    copyrights: &[CopyrightDetection],
+    holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if copyrights.is_empty() && holders.is_empty() {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
     static KARLSRUHE_RE: LazyLock<Regex> =
@@ -1136,16 +1071,8 @@ pub fn add_karlsruhe_university_short_variants(
         Regex::new(r"(?i)\bUniversity\s+of\s+Karlsruhe\b\s*[)\]\.\,;:]?\s*$").unwrap()
     });
 
-    let mut existing_c: HashSet<(usize, usize, String)> = copyrights
-        .iter()
-        .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
-        .collect();
-    let mut existing_h: HashSet<(usize, usize, String)> = holders
-        .iter()
-        .map(|h| (h.start_line.get(), h.end_line.get(), h.holder.clone()))
-        .collect();
-
-    for c in copyrights.clone() {
+    let mut new_c = Vec::new();
+    for c in copyrights {
         if !KARLSRUHE_RE.is_match(c.copyright.as_str()) {
             continue;
         }
@@ -1159,17 +1086,15 @@ pub fn add_karlsruhe_university_short_variants(
         if short == c.copyright {
             continue;
         }
-        let key = (c.start_line.get(), c.end_line.get(), short.clone());
-        if existing_c.insert(key) {
-            copyrights.push(CopyrightDetection {
-                copyright: short,
-                start_line: c.start_line,
-                end_line: c.end_line,
-            });
-        }
+        new_c.push(CopyrightDetection {
+            copyright: short,
+            start_line: c.start_line,
+            end_line: c.end_line,
+        });
     }
 
-    for h in holders.clone() {
+    let mut new_h = Vec::new();
+    for h in holders {
         if !KARLSRUHE_RE.is_match(h.holder.as_str()) {
             continue;
         }
@@ -1183,23 +1108,21 @@ pub fn add_karlsruhe_university_short_variants(
         if short == h.holder {
             continue;
         }
-        let key = (h.start_line.get(), h.end_line.get(), short.clone());
-        if existing_h.insert(key) {
-            holders.push(HolderDetection {
-                holder: short,
-                start_line: h.start_line,
-                end_line: h.end_line,
-            });
-        }
+        new_h.push(HolderDetection {
+            holder: short,
+            start_line: h.start_line,
+            end_line: h.end_line,
+        });
     }
+    (new_c, new_h)
 }
 
 pub fn add_intel_and_sun_non_portions_variants(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-) {
+    copyrights: &[CopyrightDetection],
+) -> Vec<CopyrightDetection> {
     if prepared_cache.is_empty() || copyrights.is_empty() {
-        return;
+        return Vec::new();
     }
 
     static PORTIONS_SUN_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -1216,12 +1139,8 @@ pub fn add_intel_and_sun_non_portions_variants(
             .unwrap()
     });
 
-    let mut existing: HashSet<(usize, usize, String)> = copyrights
-        .iter()
-        .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
-        .collect();
-
-    for c in copyrights.clone() {
+    let mut result = Vec::new();
+    for c in copyrights {
         let trimmed = c.copyright.trim();
         if let Some(cap) = PORTIONS_SUN_RE.captures(trimmed) {
             let year = cap.name("year").map(|m| m.as_str()).unwrap_or("").trim();
@@ -1231,14 +1150,11 @@ pub fn add_intel_and_sun_non_portions_variants(
                     "Copyright {year} Sun Microsystems{tail}"
                 ));
                 if let Some(refined) = refine_copyright(&candidate) {
-                    let key = (c.start_line.get(), c.end_line.get(), refined.clone());
-                    if existing.insert(key) {
-                        copyrights.push(CopyrightDetection {
-                            copyright: refined,
-                            start_line: c.start_line,
-                            end_line: c.end_line,
-                        });
-                    }
+                    result.push(CopyrightDetection {
+                        copyright: refined,
+                        start_line: c.start_line,
+                        end_line: c.end_line,
+                    });
                 }
             }
         }
@@ -1263,36 +1179,32 @@ pub fn add_intel_and_sun_non_portions_variants(
                         "Copyright 2002 Intel ({emails})"
                     ));
                     if let Some(refined) = refine_copyright(&candidate) {
-                        let key = (c.start_line.get(), c.end_line.get(), refined.clone());
-                        if existing.insert(key) {
-                            copyrights.push(CopyrightDetection {
-                                copyright: refined,
-                                start_line: c.start_line,
-                                end_line: c.end_line,
-                            });
-                        }
+                        result.push(CopyrightDetection {
+                            copyright: refined,
+                            start_line: c.start_line,
+                            end_line: c.end_line,
+                        });
                     }
                 }
             }
         }
     }
+    result
 }
 
-pub fn add_first_angle_email_only_variants(copyrights: &mut Vec<CopyrightDetection>) {
+pub fn add_first_angle_email_only_variants(
+    copyrights: &[CopyrightDetection],
+) -> Vec<CopyrightDetection> {
     if copyrights.is_empty() {
-        return;
+        return Vec::new();
     }
 
     static MULTI_EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"^(?P<prefix>Copyright\b.*?<[^>\s]*@[^>\s]+>)(?:\s*,\s*.+)$").unwrap()
     });
 
-    let mut existing: HashSet<(usize, usize, String)> = copyrights
-        .iter()
-        .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
-        .collect();
-
-    for c in copyrights.clone() {
+    let mut result = Vec::new();
+    for c in copyrights {
         let trimmed = c.copyright.trim();
         let Some(cap) = MULTI_EMAIL_RE.captures(trimmed) else {
             continue;
@@ -1304,15 +1216,13 @@ pub fn add_first_angle_email_only_variants(copyrights: &mut Vec<CopyrightDetecti
         let Some(refined) = refine_copyright(prefix) else {
             continue;
         };
-        let key = (c.start_line.get(), c.end_line.get(), refined.clone());
-        if existing.insert(key) {
-            copyrights.push(CopyrightDetection {
-                copyright: refined,
-                start_line: c.start_line,
-                end_line: c.end_line,
-            });
-        }
+        result.push(CopyrightDetection {
+            copyright: refined,
+            start_line: c.start_line,
+            end_line: c.end_line,
+        });
     }
+    result
 }
 
 pub fn drop_shadowed_angle_email_prefix_copyrights_same_span(
@@ -1410,51 +1320,42 @@ pub fn drop_shadowed_quote_before_email_variants_same_span(
 }
 
 pub fn add_missing_holder_from_single_copyright(
-    copyrights: &mut [CopyrightDetection],
-    holders: &mut Vec<HolderDetection>,
-) {
+    copyrights: &[CopyrightDetection],
+    holders: &[HolderDetection],
+) -> Option<HolderDetection> {
     if !holders.is_empty() || copyrights.len() != 1 {
-        return;
+        return None;
     }
     let c = &copyrights[0];
-    let Some(h) = derive_holder_from_simple_copyright_string(&c.copyright) else {
-        return;
-    };
-    let Some(h) = refine_holder_in_copyright_context(&h) else {
-        return;
-    };
+    let h = derive_holder_from_simple_copyright_string(&c.copyright)?;
+    let h = refine_holder_in_copyright_context(&h)?;
 
     let trimmed = h.trim();
     if trimmed.to_ascii_lowercase().starts_with("copyright ") {
-        return;
+        return None;
     }
     static YEAR_ONLY_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"^\d{4}(?:\s*[-–]\s*\d{4})?$").unwrap());
     if YEAR_ONLY_RE.is_match(trimmed) {
-        return;
+        return None;
     }
-    holders.push(HolderDetection {
+    Some(HolderDetection {
         holder: h,
         start_line: c.start_line,
         end_line: c.end_line,
-    });
+    })
 }
 
-pub fn add_but_suffix_short_variants(copyrights: &mut Vec<CopyrightDetection>) {
+pub fn add_but_suffix_short_variants(copyrights: &[CopyrightDetection]) -> Vec<CopyrightDetection> {
     if copyrights.is_empty() {
-        return;
+        return Vec::new();
     }
 
     static BUT_SUFFIX_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)^(?P<prefix>.+?),\s*but\s*$").unwrap());
 
-    let existing: HashSet<(usize, usize, String)> = copyrights
-        .iter()
-        .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
-        .collect();
-
-    let mut to_add = Vec::new();
-    for c in copyrights.iter() {
+    let mut result = Vec::new();
+    for c in copyrights {
         let trimmed = c.copyright.trim();
         let Some(cap) = BUT_SUFFIX_RE.captures(trimmed) else {
             continue;
@@ -1466,38 +1367,26 @@ pub fn add_but_suffix_short_variants(copyrights: &mut Vec<CopyrightDetection>) {
         let Some(refined) = refine_copyright(prefix) else {
             continue;
         };
-        let key = (c.start_line.get(), c.end_line.get(), refined.clone());
-        if !existing.contains(&key) {
-            to_add.push(CopyrightDetection {
-                copyright: refined,
-                start_line: c.start_line,
-                end_line: c.end_line,
-            });
-        }
+        result.push(CopyrightDetection {
+            copyright: refined,
+            start_line: c.start_line,
+            end_line: c.end_line,
+        });
     }
 
-    copyrights.extend(to_add);
+    result
 }
 
 pub fn add_at_affiliation_short_variants(
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    copyrights: &[CopyrightDetection],
+    holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     if copyrights.is_empty() && holders.is_empty() {
-        return;
+        return (Vec::new(), Vec::new());
     }
 
-    let existing_c: HashSet<(usize, usize, String)> = copyrights
-        .iter()
-        .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
-        .collect();
-    let existing_h: HashSet<(usize, usize, String)> = holders
-        .iter()
-        .map(|h| (h.start_line.get(), h.end_line.get(), h.holder.clone()))
-        .collect();
-
-    let mut to_add_c = Vec::new();
-    for c in copyrights.iter() {
+    let mut new_c = Vec::new();
+    for c in copyrights {
         let Some((head, _tail)) = c.copyright.split_once(" @ ") else {
             continue;
         };
@@ -1508,19 +1397,15 @@ pub fn add_at_affiliation_short_variants(
         let Some(refined) = refine_copyright(head) else {
             continue;
         };
-        let key = (c.start_line.get(), c.end_line.get(), refined.clone());
-        if !existing_c.contains(&key) {
-            to_add_c.push(CopyrightDetection {
-                copyright: refined,
-                start_line: c.start_line,
-                end_line: c.end_line,
-            });
-        }
+        new_c.push(CopyrightDetection {
+            copyright: refined,
+            start_line: c.start_line,
+            end_line: c.end_line,
+        });
     }
-    copyrights.extend(to_add_c);
 
-    let mut to_add_h = Vec::new();
-    for h in holders.iter() {
+    let mut new_h = Vec::new();
+    for h in holders {
         let Some((head, tail)) = h.holder.split_once(" @ ") else {
             continue;
         };
@@ -1534,41 +1419,33 @@ pub fn add_at_affiliation_short_variants(
         let Some(refined) = refine_holder_in_copyright_context(head) else {
             continue;
         };
-        let key = (h.start_line.get(), h.end_line.get(), refined.clone());
-        if !existing_h.contains(&key) {
-            to_add_h.push(HolderDetection {
-                holder: refined,
-                start_line: h.start_line,
-                end_line: h.end_line,
-            });
-        }
+        new_h.push(HolderDetection {
+            holder: refined,
+            start_line: h.start_line,
+            end_line: h.end_line,
+        });
     }
-    holders.extend(to_add_h);
+    (new_c, new_h)
 }
 
 pub fn add_missing_copyrights_for_holder_lines_with_emails(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
+    copyrights: &[CopyrightDetection],
     holders: &[HolderDetection],
-) {
+) -> Vec<CopyrightDetection> {
     if prepared_cache.is_empty() || holders.is_empty() {
-        return;
+        return Vec::new();
     }
 
     let mut copyright_lines: HashSet<usize> = HashSet::new();
-    for c in copyrights.iter() {
+    for c in copyrights {
         if c.start_line.get() == c.end_line.get() {
             copyright_lines.insert(c.start_line.get());
         }
     }
 
-    let existing: HashSet<(usize, usize, String)> = copyrights
-        .iter()
-        .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
-        .collect();
-
-    let mut to_add = Vec::new();
-    for h in holders.iter() {
+    let mut result = Vec::new();
+    for h in holders {
         if h.start_line.get() != h.end_line.get() {
             continue;
         }
@@ -1599,17 +1476,13 @@ pub fn add_missing_copyrights_for_holder_lines_with_emails(
         let Some(refined) = refine_copyright(prepared) else {
             continue;
         };
-        let key = (ln, ln, refined.clone());
-        if existing.contains(&key) {
-            continue;
-        }
-        to_add.push(CopyrightDetection {
+        result.push(CopyrightDetection {
             copyright: refined,
             start_line: LineNumber::new(ln).expect("invalid line number"),
             end_line: LineNumber::new(ln).expect("invalid line number"),
         });
     }
-    copyrights.extend(to_add);
+    result
 }
 
 pub fn extend_inline_obfuscated_angle_email_suffixes(
@@ -1772,26 +1645,21 @@ pub fn strip_lone_obfuscated_angle_email_user_tokens(
 
 pub fn add_at_domain_variants_for_short_net_angle_emails(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-) {
+    copyrights: &[CopyrightDetection],
+) -> Vec<CopyrightDetection> {
     if copyrights.is_empty() {
-        return;
+        return Vec::new();
     }
 
     if !prepared_cache.contains_ci("pipe read code from") {
-        return;
+        return Vec::new();
     }
 
     static SHORT_NET_EMAIL_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)<(?P<user>[a-z]{3})@(?P<domain>[^>\s]+\.net)>").unwrap());
 
-    let existing: HashSet<(usize, usize, String)> = copyrights
-        .iter()
-        .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
-        .collect();
-
-    let mut to_add = Vec::new();
-    for c in copyrights.iter() {
+    let mut result = Vec::new();
+    for c in copyrights {
         let Some(cap) = SHORT_NET_EMAIL_RE.captures(c.copyright.as_str()) else {
             continue;
         };
@@ -1806,17 +1674,13 @@ pub fn add_at_domain_variants_for_short_net_angle_emails(
         let Some(refined) = refine_copyright(&replaced) else {
             continue;
         };
-        let key = (c.start_line.get(), c.end_line.get(), refined.clone());
-        if existing.contains(&key) {
-            continue;
-        }
-        to_add.push(CopyrightDetection {
+        result.push(CopyrightDetection {
             copyright: refined,
             start_line: c.start_line,
             end_line: c.end_line,
         });
     }
-    copyrights.extend(to_add);
+    result
 }
 
 pub fn drop_shadowed_plain_email_prefix_copyrights_same_span(
@@ -2100,20 +1964,16 @@ pub fn drop_shadowed_email_org_location_suffixes_same_span(
 
 pub fn add_pipe_read_parenthetical_variants(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-) {
+    copyrights: &[CopyrightDetection],
+) -> Vec<CopyrightDetection> {
     if prepared_cache.len() < 2 || copyrights.is_empty() {
-        return;
+        return Vec::new();
     }
 
     static PIPE_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)^\(\s*pipe\s+read\s+code\s+from\s+[^)]+\)\s*$").unwrap());
 
-    let existing: HashSet<(usize, usize, String)> = copyrights
-        .iter()
-        .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
-        .collect();
-
+    let mut result = Vec::new();
     for i in 0..prepared_cache.len().saturating_sub(1) {
         let ln1 = i + 1;
         let ln2 = i + 2;
@@ -2136,33 +1996,27 @@ pub fn add_pipe_read_parenthetical_variants(
         let Some(refined) = refine_copyright(&combined) else {
             continue;
         };
-        let key = (ln1, ln2, refined.clone());
-        if !existing.contains(&key) {
-            copyrights.push(CopyrightDetection {
-                copyright: refined,
-                start_line: LineNumber::new(ln1).expect("valid"),
-                end_line: LineNumber::new(ln2).expect("valid"),
-            });
-        }
+        result.push(CopyrightDetection {
+            copyright: refined,
+            start_line: LineNumber::new(ln1).expect("valid"),
+            end_line: LineNumber::new(ln2).expect("valid"),
+        });
     }
+    result
 }
 
 pub fn add_from_url_parenthetical_copyright_variants(
     prepared_cache: &mut PreparedLineCache<'_>,
-    copyrights: &mut Vec<CopyrightDetection>,
-) {
+    _copyrights: &[CopyrightDetection],
+) -> Vec<CopyrightDetection> {
     if prepared_cache.is_empty() {
-        return;
+        return Vec::new();
     }
 
     static FROM_URL_COPY_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\bfrom\s+https?://\S+\s*\(\s*copyright\b").unwrap());
 
-    let existing: HashSet<(usize, usize, String)> = copyrights
-        .iter()
-        .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
-        .collect();
-
+    let mut result = Vec::new();
     for i in 0..prepared_cache.len() {
         let ln = i + 1;
         let Some(line) = prepared_cache.get_by_index(i).map(|s| s.trim().to_string()) else {
@@ -2182,15 +2036,13 @@ pub fn add_from_url_parenthetical_copyright_variants(
         let Some(refined) = refine_copyright(&s) else {
             continue;
         };
-        let key = (ln, ln, refined.clone());
-        if !existing.contains(&key) {
-            copyrights.push(CopyrightDetection {
-                copyright: refined,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
-            });
-        }
+        result.push(CopyrightDetection {
+            copyright: refined,
+            start_line: LineNumber::new(ln).unwrap(),
+            end_line: LineNumber::new(ln).unwrap(),
+        });
     }
+    result
 }
 
 pub fn drop_shadowed_acronym_location_suffix_copyrights_same_span(
@@ -3091,18 +2943,14 @@ pub fn extend_copyrights_with_following_all_rights_reserved_line(
 
 pub fn add_modify_suffix_holders(
     prepared_cache: &mut PreparedLineCache<'_>,
-    holders: &mut Vec<HolderDetection>,
-) {
+    holders: &[HolderDetection],
+) -> Vec<HolderDetection> {
     if prepared_cache.is_empty() || holders.is_empty() {
-        return;
+        return Vec::new();
     }
 
-    let mut existing: HashSet<(usize, usize, String)> = holders
-        .iter()
-        .map(|h| (h.start_line.get(), h.end_line.get(), h.holder.clone()))
-        .collect();
-
-    for h in holders.clone() {
+    let mut result = Vec::new();
+    for h in holders {
         let idx = h.end_line.get() + 1;
         let Some(next) = prepared_cache.get(idx) else {
             continue;
@@ -3125,15 +2973,13 @@ pub fn add_modify_suffix_holders(
             continue;
         }
         let combined = super::token_utils::normalize_whitespace(&format!("{} {t}", h.holder));
-        let key = (h.start_line.get(), h.end_line.get() + 1, combined.clone());
-        if existing.insert(key) {
-            holders.push(HolderDetection {
-                holder: combined,
-                start_line: h.start_line,
-                end_line: h.end_line + 1,
-            });
-        }
+        result.push(HolderDetection {
+            holder: combined,
+            start_line: h.start_line,
+            end_line: h.end_line + 1,
+        });
     }
+    result
 }
 
 pub fn drop_shadowed_c_sign_variants(copyrights: &mut Vec<CopyrightDetection>) {
@@ -3229,12 +3075,11 @@ pub fn drop_shadowed_for_clause_holders_with_email_copyrights(
 
     use std::collections::{HashMap, HashSet};
 
-    let mut spans_with_email: HashSet<(usize, usize)> = HashSet::new();
-    for c in copyrights {
-        if c.copyright.contains('@') {
-            spans_with_email.insert((c.start_line.get(), c.end_line.get()));
-        }
-    }
+    let spans_with_email: HashSet<(usize, usize)> = copyrights
+        .iter()
+        .filter(|c| c.copyright.contains('@'))
+        .map(|c| (c.start_line.get(), c.end_line.get()))
+        .collect();
     if spans_with_email.is_empty() {
         return;
     }
@@ -6097,26 +5942,27 @@ pub fn fix_sundry_contributors_truncation(
 pub fn add_missing_holders_for_debian_modifications(
     content: &str,
     copyrights: &[CopyrightDetection],
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> Vec<HolderDetection> {
     let has_debian_mods_line = content.lines().any(|l| {
         let lower = l.trim().to_ascii_lowercase();
         lower.starts_with("modifications for debian copyright")
     });
     if !has_debian_mods_line {
-        return;
+        return Vec::new();
     }
 
+    let mut result = Vec::new();
     for cr in copyrights {
         let Some(holder) = derive_holder_from_simple_copyright_string(&cr.copyright) else {
             continue;
         };
-        holders.push(HolderDetection {
+        result.push(HolderDetection {
             holder,
             start_line: cr.start_line,
             end_line: cr.end_line,
         });
     }
+    result
 }
 
 pub fn split_embedded_copyright_detections(
@@ -6223,7 +6069,9 @@ pub fn split_embedded_copyright_detections(
 
     *copyrights = out;
 
-    add_missing_holders_derived_from_split_copyrights(&split_copyrights, holders);
+    holders.extend(add_missing_holders_derived_from_split_copyrights(
+        &split_copyrights,
+    ));
 }
 
 pub fn extend_bare_c_year_detections_to_line_end_for_multi_c_lines(
@@ -6297,18 +6145,19 @@ pub fn extend_bare_c_year_detections_to_line_end_for_multi_c_lines(
 
 pub fn add_missing_holders_derived_from_split_copyrights(
     copyrights: &[CopyrightDetection],
-    holders: &mut Vec<HolderDetection>,
-) {
+) -> Vec<HolderDetection> {
+    let mut result = Vec::new();
     for cr in copyrights {
         let Some(holder) = derive_holder_from_simple_copyright_string(&cr.copyright) else {
             continue;
         };
-        holders.push(HolderDetection {
+        result.push(HolderDetection {
             holder,
             start_line: cr.start_line,
             end_line: cr.end_line,
         });
     }
+    result
 }
 
 pub fn derive_holder_from_simple_copyright_string(s: &str) -> Option<String> {
