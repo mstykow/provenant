@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 #[cfg(all(test, feature = "golden-tests"))]
 mod golden_tests {
     use crate::parsers::PackageParser;

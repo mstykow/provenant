@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for pip requirements.txt files.
 //!
 //! Extracts Python package dependencies from requirements.txt files using PEP 508

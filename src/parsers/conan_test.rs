@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Unit tests for Conan parsers (conanfile.py, conanfile.txt, conan.lock)
 
 use crate::models::{DatasourceId, PackageType};

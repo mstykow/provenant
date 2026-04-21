@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Conda metadata JSON files.
 //!
 //! Extracts package metadata from `conda-meta/*.json` files which contain

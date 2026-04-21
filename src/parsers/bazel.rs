@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Bazel BUILD file parser
 //!
 //! Extracts package metadata from Bazel BUILD files using Starlark (Python-like) syntax.

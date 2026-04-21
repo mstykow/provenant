@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Haxe package manifests (haxelib.json).
 //!
 //! Extracts package metadata and dependencies from Haxe haxelib.json files.

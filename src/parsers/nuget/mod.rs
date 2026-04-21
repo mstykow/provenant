@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for NuGet package manifests and configuration files.
 //!
 //! Extracts package metadata and dependencies from .NET/NuGet ecosystem files:

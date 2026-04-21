@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 /// Shared utility functions for package parsers
 ///
 /// This module provides common file I/O and parsing utilities

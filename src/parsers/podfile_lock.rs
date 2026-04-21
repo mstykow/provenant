@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for CocoaPods Podfile.lock lockfiles.
 //!
 //! Extracts resolved dependency information from Podfile.lock files which maintain

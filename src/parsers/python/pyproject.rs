@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::super::license_normalization::normalize_spdx_declared_license;
 use super::PythonParser;
 use super::rfc822_meta::{build_extracted_license_statement, split_classifiers};

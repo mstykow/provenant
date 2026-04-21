@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Swift show-dependencies deplock files.
 //!
 //! Extracts dependency information from `swift-show-dependencies.deplock` files

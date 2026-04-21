@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Ruby/RubyGems package manifests.
 //!
 //! Extracts package metadata, dependencies, and platform information from

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Poetry poetry.lock lockfiles.
 //!
 //! Extracts resolved dependency information from Poetry lockfiles which use TOML format

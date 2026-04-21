@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Python package manifests and metadata files.
 //!
 //! Comprehensive parser supporting multiple Python packaging formats including

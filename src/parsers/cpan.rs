@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for CPAN Perl package manifests.
 //!
 //! Extracts package metadata, dependencies, and author information from

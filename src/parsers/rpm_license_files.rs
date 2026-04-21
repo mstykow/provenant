@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for RPM license files in /usr/share/licenses/ directories.
 //!
 //! Identifies packages from their license files installed in the standard

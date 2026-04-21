@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Microsoft Update Manifest (.mum) files.
 //!
 //! Extracts Windows Update package metadata from .mum XML manifest files.

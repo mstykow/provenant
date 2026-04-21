@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for RPM database files.
 //!
 //! Extracts installed package metadata from the RPM database maintained by the

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 /// Parser metadata for auto-generating documentation.
 ///
 /// This module provides infrastructure for registering parser metadata

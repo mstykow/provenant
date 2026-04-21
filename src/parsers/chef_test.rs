@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Tests for Chef metadata.json and metadata.rb parsers.
 
 use crate::models::{DatasourceId, PackageType};

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::PythonParser;
 use super::archive::is_likely_python_sdist_filename;
 use crate::models::{DatasourceId, Dependency, PackageData, Sha256Digest};

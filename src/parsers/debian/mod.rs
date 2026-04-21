@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Debian package metadata files.
 //!
 //! Extracts package metadata from Debian package management files using RFC 822

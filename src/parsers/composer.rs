@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //!
 //! Extracts package metadata and dependencies from PHP Composer manifests
 //! (composer.json) and lockfiles (composer.lock).

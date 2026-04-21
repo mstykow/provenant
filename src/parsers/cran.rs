@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for CRAN R package DESCRIPTION files.
 //!
 //! Extracts package metadata and dependencies from R package DESCRIPTION files

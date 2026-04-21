@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for CPAN dist.ini files.
 //!
 //! Extracts Perl package metadata from `dist.ini` files used by Dist::Zilla.

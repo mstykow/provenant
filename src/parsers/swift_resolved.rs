@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Swift Package.resolved lockfiles (v1, v2, v3).
 //!
 //! Format differences:

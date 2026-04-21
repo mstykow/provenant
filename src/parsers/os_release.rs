@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Linux OS release metadata files.
 //!
 //! Extracts distribution information from `/etc/os-release` and `/usr/lib/os-release`

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for CocoaPods Podfile manifest files.
 //!
 //! Extracts dependency declarations from Podfile using regex-based Ruby Domain-Specific

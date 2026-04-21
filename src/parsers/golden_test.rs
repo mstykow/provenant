@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 #[path = "about_golden_test.rs"]
 mod about_golden_test;
 #[path = "alpine_golden_test.rs"]

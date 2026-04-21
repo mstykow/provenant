@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Tests for Ruby/RubyGems parser (Gemfile and Gemfile.lock).
 //!
 //! Following TDD approach - tests written first (RED phase).

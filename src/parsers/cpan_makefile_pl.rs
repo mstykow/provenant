@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for CPAN Perl Makefile.PL files.
 //!
 //! Extracts Perl package metadata from `Makefile.PL` files used by ExtUtils::MakeMaker.

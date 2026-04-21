@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for npm package-lock.json and npm-shrinkwrap.json lockfiles.
 //!
 //! Extracts resolved dependency information including exact versions, integrity hashes,

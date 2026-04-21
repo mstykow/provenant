@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Shared RFC822-style metadata parser.
 //!
 //! This module provides a reusable parser for RFC822/RFC2822-like metadata formats

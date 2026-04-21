@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Autotools configure scripts.
 //!
 //! Extracts basic package metadata from Autotools configure files by using

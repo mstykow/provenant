@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for OCaml OPAM package manager manifests.
 //!
 //! Extracts package metadata and dependencies from OPAM files used by the

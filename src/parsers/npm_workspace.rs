@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for npm/pnpm workspace configuration files.
 //!
 //! Extracts workspace package patterns and monorepo structure from workspace

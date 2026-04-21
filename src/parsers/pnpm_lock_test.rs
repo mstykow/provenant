@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::pnpm_lock::*;
 use crate::models::PackageType;
 use crate::parsers::PackageParser;

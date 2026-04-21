@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for third-party attribution README files.
 //!
 //! Extracts package metadata from semi-structured README files used to document

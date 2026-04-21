@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Parser for Conan C/C++ package manager manifests.
 //!
 //! Extracts package metadata and dependencies from Conan manifest files.
