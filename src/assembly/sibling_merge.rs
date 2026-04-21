@@ -477,7 +477,10 @@ fn normalized_identity_value(value: Option<&str>) -> Option<&str> {
 }
 
 fn has_assemblable_identity(pkg_data: &PackageData) -> bool {
-    pkg_data.package_type.is_some() && normalized_identity_value(pkg_data.name.as_deref()).is_some()
+    let has_name = normalized_identity_value(pkg_data.name.as_deref()).is_some();
+    has_name
+        && (pkg_data.package_type.is_some()
+            || pkg_data.datasource_id == Some(DatasourceId::BuckMetadata))
 }
 
 fn should_skip_python_uv_lock_merge(package: &Package, pkg_data: &PackageData) -> bool {
