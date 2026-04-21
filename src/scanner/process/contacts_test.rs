@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::extract_email_url_information;
 use crate::models::{FileInfoBuilder, FileType};
 use crate::scanner::TextDetectionOptions;

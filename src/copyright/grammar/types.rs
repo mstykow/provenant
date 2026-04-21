@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Grammar rules for copyright parse tree construction.
 //!
 //! Rules are applied bottom-up to a sequence of POS-tagged tokens.

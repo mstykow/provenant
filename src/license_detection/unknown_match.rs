@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Unknown license detection using ngram matching.
 
 use crate::license_detection::automaton::Automaton;

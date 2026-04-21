@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Source map file processing for license detection.
 //!
 //! Source map files (.js.map, .css.map) are JSON files containing embedded

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Common license-specific word dictionary (legalese).
 //!
 //! This module defines legalese tokens - common words specific to licenses

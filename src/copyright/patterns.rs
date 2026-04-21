@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! POS tag regex patterns for copyright token classification.
 //!
 //! Contains ~1100 ordered regex patterns that map tokens to POS tags.

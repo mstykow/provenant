@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Low quality match filtering functions.
 //!
 //! This module contains functions for filtering matches based on quality criteria

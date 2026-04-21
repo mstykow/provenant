@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Lexer (tokenizer + POS tagger) for copyright detection.
 //!
 //! Splits prepared text lines into tokens, then assigns each token a

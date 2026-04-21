@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Loader-stage license type.
 //!
 //! This module defines `LoadedLicense`, which represents a parsed and normalized

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Query processing - tokenized input for license matching.
 
 use crate::license_detection::index::LicenseIndex;

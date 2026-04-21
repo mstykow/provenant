@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Sequence matching algorithms for finding matching blocks.
 
 use crate::license_detection::index::LicenseIndex;

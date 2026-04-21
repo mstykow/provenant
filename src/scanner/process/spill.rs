@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::models::FileInfo;
 use std::fs::{self, File};
 use std::io::{Read, Write};

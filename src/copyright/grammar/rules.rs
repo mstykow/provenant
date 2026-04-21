@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Grammar rule data for copyright parse tree construction.
 
 use super::types::{GrammarRule, TagMatcher};

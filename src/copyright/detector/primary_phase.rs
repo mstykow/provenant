@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::copyright::line_tracking::{LineNumberIndex, PreparedLineCache};
 use crate::copyright::types::{CopyrightDetection, HolderDetection};
 

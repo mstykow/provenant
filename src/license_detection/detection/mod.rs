@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! License detection assembly and grouping logic.
 //!
 //! This module implements Phase 6 of the license detection pipeline:

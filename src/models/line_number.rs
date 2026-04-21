@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use std::num::NonZeroUsize;
 use std::ops::{Add, AddAssign, Sub};
 

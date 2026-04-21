@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use serde::ser::Error as SerError;
 use serde::{Serialize, Serializer};
 use serde_json::{Map, Value};

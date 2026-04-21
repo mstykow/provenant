@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::test_utils::{dir, file};
 use super::*;
 use crate::models::{FileInfo, Tallies, TallyEntry};

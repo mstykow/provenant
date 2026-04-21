@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Match refinement - merge, filter, and finalize license matches.
 //!
 //! This module implements the final phase of license matching where raw matches

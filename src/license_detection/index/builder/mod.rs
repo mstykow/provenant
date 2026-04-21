@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! License index builder.
 //!
 //! This module implements the `build_index()` and `build_index_from_loaded()`

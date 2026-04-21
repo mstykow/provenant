@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::assembly;
 use crate::cache::{
     CACHE_DIR_ENV_VAR, CacheConfig, IncrementalManifest, IncrementalManifestEntry,

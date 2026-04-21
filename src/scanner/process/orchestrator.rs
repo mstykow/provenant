@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::pipeline::process_file;
 use super::special_cases::process_directory;
 use super::spill::{FileInfoSpillStore, MemoryMode, retain_or_spill_chunk};

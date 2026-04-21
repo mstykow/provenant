@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Overlap handling for license matches.
 //!
 //! This module contains functions for detecting and resolving overlapping matches

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Debug test for GFDL-1.1 selection issue.
 
 #[cfg(test)]

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use std::fs;
 
 use super::test_utils::{dir, file, package, scan_and_assemble_with_keyfiles};

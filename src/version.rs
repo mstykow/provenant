@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use std::sync::OnceLock;
 
 pub const BUILD_VERSION: &str = match option_env!("PROVENANT_BUILD_VERSION") {

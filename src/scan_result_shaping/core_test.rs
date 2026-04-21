@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::*;
 use crate::models::{
     Author, Copyright, DatasourceId, Dependency, FileReference, LineNumber, MatchScore,

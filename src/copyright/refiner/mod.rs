@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Refinement and cleanup functions for detected copyright strings.
 //!
 //! After the parser produces raw detection text from parse tree nodes,

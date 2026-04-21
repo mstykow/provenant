@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Core detection data structures.
 
 use crate::license_detection::models::LicenseMatch;

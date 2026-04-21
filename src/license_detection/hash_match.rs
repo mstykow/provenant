@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Hash-based exact matching for license detection.
 //!
 //! This module implements the hash matching strategy which computes a hash of the

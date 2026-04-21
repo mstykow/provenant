@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::{
     extract_named_author_from_binary_line, is_binary_string_author_candidate,
     is_binary_string_email_candidate, is_binary_string_url_candidate, normalize_binary_string_url,

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! False positive detection for license matches.
 //!
 //! This module contains functions for detecting and filtering false positive

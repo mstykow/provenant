@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Map;
 

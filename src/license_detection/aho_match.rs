@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Aho-Corasick exact matching for license detection.
 //!
 //! This module implements Aho-Corasick multi-pattern matching for license detection.

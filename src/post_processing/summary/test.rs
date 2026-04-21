@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::super::classification::{apply_file_classification, classify_key_files};
 use super::super::output_indexes::{OutputIndexMode, OutputIndexes};
 use super::super::package_file_index::PackageFileIndex;

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::is_go_non_production_source;
 use std::fs;
 use tempfile::tempdir;

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Bottom-up grammar parser for copyright detection.
 //!
 //! Applies grammar rules to a sequence of POS-tagged tokens, building

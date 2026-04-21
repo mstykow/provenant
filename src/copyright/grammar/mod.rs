@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Grammar facade for copyright parse tree construction.
 //!
 //! Types and rule data are split into dedicated submodules to keep this module

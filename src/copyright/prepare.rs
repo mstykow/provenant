@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Text preparation and normalization for copyright detection.
 //!
 //! Normalizes raw text lines before copyright detection:

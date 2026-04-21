@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Approximate sequence matching for license detection.
 //!
 //! This module implements sequence-based matching using set similarity for

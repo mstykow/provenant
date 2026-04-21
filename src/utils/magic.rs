@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! File magic byte detection utilities.
 //!
 //! Provides low-level file format detection by reading and checking magic bytes

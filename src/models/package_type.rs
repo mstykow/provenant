@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Package type identifiers for package parsers.
 //!
 //! Each variant uniquely identifies the package ecosystem/registry type.
