@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Match grouping functions.
 
 use super::LINES_THRESHOLD;

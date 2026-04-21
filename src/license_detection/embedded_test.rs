@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::*;
 use crate::license_detection::embedded::index::load_embedded_license_index_from_bytes;
 use crate::license_detection::embedded::schema::{

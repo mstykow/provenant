@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Copyright detection module.
 //!
 //! Detects copyright statements, holder names, and author information

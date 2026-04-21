@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::prepare::prepare_text_line;
 use crate::models::LineNumber;
 

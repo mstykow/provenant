@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Candidate selection using set and multiset similarity.
 
 use crate::license_detection::TokenMultiset;

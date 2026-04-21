@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Golden tests for license detection against Python ScanCode reference.
 //!
 //! These tests validate that the Rust license detection engine produces

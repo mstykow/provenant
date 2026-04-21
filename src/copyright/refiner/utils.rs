@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::*;
 
 /// Refine a name string (shared logic for holders and authors).

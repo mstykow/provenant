@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use std::path::Path;
 
 const FONT_ASSET_EXTENSIONS: &[&str] = &["ttf", "otf", "woff", "woff2", "eot"];

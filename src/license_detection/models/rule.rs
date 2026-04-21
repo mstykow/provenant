@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Rule metadata loaded from .LICENSE and .RULE files.
 
 use std::collections::HashMap;

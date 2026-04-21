@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::*;
 
 /// Refine a detected author name. Returns `None` if junk or empty.

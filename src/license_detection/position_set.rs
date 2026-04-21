@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use bit_set::BitSet;
 
 use crate::license_detection::models::position_span::PositionSpan;

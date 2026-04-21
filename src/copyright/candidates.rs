@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Candidate line selection and grouping for copyright detection.
 //!
 //! Identifies lines that may contain copyright statements and groups them

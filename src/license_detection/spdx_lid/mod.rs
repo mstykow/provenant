@@ -1,4 +1,6 @@
-//! SPDX-License-Identifier detection and parsing.
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //!
 //! This module handles detection of SPDX license identifier tags in source code,
 //! such as "SPDX-License-Identifier: MIT" or variations with different comment

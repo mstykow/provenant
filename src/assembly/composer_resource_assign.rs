@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use std::path::{Path, PathBuf};
 
 use crate::cache::DEFAULT_CACHE_DIR_NAME;

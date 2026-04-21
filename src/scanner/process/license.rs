@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::license_detection::LicenseDetection as InternalLicenseDetection;
 use crate::license_detection::LicenseDetectionEngine;
 use crate::license_detection::PositionSet;

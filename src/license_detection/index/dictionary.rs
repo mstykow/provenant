@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Token string to integer ID mapping.
 //!
 //! TokenDictionary maps token strings to unique integer IDs. This enables

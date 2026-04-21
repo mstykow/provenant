@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::*;
 use std::sync::{LazyLock, Once};
 use std::time::{Duration, Instant};

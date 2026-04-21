@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use chrono::{TimeZone, Timelike, Utc};
 use std::collections::HashMap;
 

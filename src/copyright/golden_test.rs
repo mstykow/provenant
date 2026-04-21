@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Golden tests for copyright detection.
 //!
 //! These tests load YAML expected outputs (copied from the Python ScanCode test

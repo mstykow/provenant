@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 pub(crate) fn parent_dir(path: &str) -> &str {
     path.rsplit_once('/').map_or("", |(parent, _)| parent)
 }

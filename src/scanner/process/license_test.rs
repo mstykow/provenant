@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::{
     LicenseExtractionInput, compute_percentage_of_license_text, convert_detection_to_model,
     extract_license_information,

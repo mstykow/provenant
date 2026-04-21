@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! License expression parsing implementation.
 
 use super::{LicenseExpression, ParseError};

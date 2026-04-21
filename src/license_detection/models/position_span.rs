@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Position span types for license detection.
 
 use crate::license_detection::position_set::PositionSet;

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Linux CREDITS file detection and parsing.
 //!
 //! Detects structured `N:/E:/W:` format used by Linux kernel, LLVM, Botan, u-boot, etc.

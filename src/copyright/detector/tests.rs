@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::postprocess_transforms::{
     drop_shadowed_c_sign_variants, drop_shadowed_year_only_copyright_prefixes_same_start_line,
 };

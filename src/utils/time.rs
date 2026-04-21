@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use chrono::{DateTime, Datelike, NaiveDateTime, Timelike, Utc};
 
 const ISO_UTC_TIMESTAMP_FALLBACK: &str = "1970-01-01T00:00:00Z";

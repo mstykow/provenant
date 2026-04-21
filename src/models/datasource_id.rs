@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Datasource identifiers for package parsers.
 //!
 //! Each variant uniquely identifies the type of package data source (file format)

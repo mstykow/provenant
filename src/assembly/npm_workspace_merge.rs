@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! npm/pnpm workspace assembly for monorepos.
 //!
 //! This module implements a post-processing pass that detects npm/pnpm workspace

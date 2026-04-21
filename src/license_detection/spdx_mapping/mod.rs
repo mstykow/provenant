@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! SPDX license key mapping for license expressions.
 //!
 //! This module provides mapping between ScanCode license keys and SPDX license

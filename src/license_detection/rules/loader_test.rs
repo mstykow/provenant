@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Tests for rule/license file parsing.
 //!
 //! Tests for YAML frontmatter parsing edge cases including:

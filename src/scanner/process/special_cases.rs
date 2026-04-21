@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::models::{FileInfo, FileType};
 use std::fs;
 use std::path::Path;

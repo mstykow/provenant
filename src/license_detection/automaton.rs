@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Aho-Corasick automaton wrapper using daachorse.
 //!
 //! This module provides a `DoubleArrayAhoCorasick`-based automaton that is

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::contacts::extract_email_url_information;
 use super::copyright::extract_copyright_information;
 use super::license::{LicenseExtractionInput, extract_license_information};

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::models::{DatasourceId, FileInfo, Package, PackageData, PackageUid, TopLevelDependency};
 
 struct HackageSource<'a> {

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use md5::{Digest as Md5Digest, Md5};
 use sha1::Sha1;
 use sha2::Sha256;

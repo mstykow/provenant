@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::{
     LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES, cap_non_source_json_license_text,
     maybe_record_processing_timeout, process_file,

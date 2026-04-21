@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use chrono::{DateTime, Datelike, Timelike, Utc};
 
 pub(crate) fn format_scancode_timestamp(timestamp: &DateTime<Utc>) -> String {

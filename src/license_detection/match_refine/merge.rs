@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Match merging functions.
 //!
 //! This module contains functions for merging overlapping and adjacent matches,

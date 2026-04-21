@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! License metadata loaded from .LICENSE files.
 
 use rkyv::Archive;

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{self, Write};
 use std::path::PathBuf;

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Shared test utilities for license detection tests.
 //!
 //! This module provides common helper functions used across multiple test modules

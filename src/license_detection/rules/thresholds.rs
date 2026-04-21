@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Compute match thresholds for license detection rules.
 
 /// Minimum match length for token-based matching.

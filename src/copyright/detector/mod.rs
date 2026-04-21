@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Copyright detection orchestrator.
 //!
 //! Runs the full detection pipeline: text → numbered lines → candidate groups

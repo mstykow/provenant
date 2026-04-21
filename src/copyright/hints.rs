@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Copyright hint markers and year detection.
 //!
 //! Provides functions to identify lines that may contain copyright information

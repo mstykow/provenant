@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! License expression parsing and manipulation.
 //!
 //! This module provides a parser for ScanCode license expressions, supporting:

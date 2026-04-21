@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 mod assemblers;
 #[cfg(all(test, feature = "golden-tests"))]
 mod assembly_golden_test;

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::ops::Deref;

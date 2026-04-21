@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 mod datasource_id;
 mod dependency_uid;
 mod diagnostic;

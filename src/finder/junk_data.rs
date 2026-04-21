@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 const JUNK_EMAILS: &[&str] = &[
     "test@test.com",
     "exmaple.com",

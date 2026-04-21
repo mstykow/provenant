@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::binary_text::{is_binary_string_email_candidate, normalize_binary_string_url};
 use crate::finder::{self, DetectionConfig};
 use crate::models::{FileInfoBuilder, OutputEmail, OutputURL};

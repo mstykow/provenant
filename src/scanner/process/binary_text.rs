@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::finder::{self, DetectionConfig};
 use crate::parsers::utils::split_name_email;
 

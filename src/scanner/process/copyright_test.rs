@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use super::{
     extract_comment_author_supplements, extract_patch_header_author_supplements,
     is_binary_string_copyright_candidate,

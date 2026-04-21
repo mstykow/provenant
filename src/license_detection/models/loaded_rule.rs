@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Provenant contributors
+// SPDX-License-Identifier: Apache-2.0
+
 //! Loader-stage rule type.
 //!
 //! This module defines `LoadedRule`, which represents a parsed and normalized
