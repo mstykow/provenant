@@ -226,77 +226,65 @@ fn extract_dash_bullet_attribution_author(line: &str) -> Option<String> {
 pub(super) fn extract_dash_bullet_attribution_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
 ) -> Vec<AuthorDetection> {
-    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return authors;
+        return Vec::new();
     }
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(raw_line) = prepared_cache.raw_by_index(idx) else {
-            continue;
-        };
-        let trimmed = raw_line.trim_start();
-        if !trimmed.starts_with("- ") {
-            continue;
-        }
-        let Some(author) = extract_dash_bullet_attribution_author(trimmed) else {
-            continue;
-        };
-        authors.push(AuthorDetection {
-            author,
-            start_line: LineNumber::new(ln).expect("invalid line number"),
-            end_line: LineNumber::new(ln).expect("invalid line number"),
-        });
-    }
-
-    authors
+    (0..prepared_cache.len())
+        .filter_map(|idx| {
+            let ln = idx + 1;
+            let raw_line = prepared_cache.raw_by_index(idx)?;
+            let trimmed = raw_line.trim_start();
+            if !trimmed.starts_with("- ") {
+                return None;
+            }
+            let author = extract_dash_bullet_attribution_author(trimmed)?;
+            Some(AuthorDetection {
+                author,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
+            })
+        })
+        .collect()
 }
 
 pub(super) fn extract_name_contributed_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
 ) -> Vec<AuthorDetection> {
-    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return authors;
+        return Vec::new();
     }
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(raw_line) = prepared_cache.raw_by_index(idx) else {
-            continue;
-        };
-        let trimmed = raw_line.trim();
-        let Some((who, _)) = trimmed.split_once(" contributed") else {
-            continue;
-        };
-        let words: Vec<&str> = who.split_whitespace().collect();
-        if !(2..=4).contains(&words.len()) {
-            continue;
-        }
-        if !words
-            .iter()
-            .all(|word| looks_like_contributed_person_name_token(word))
-        {
-            continue;
-        }
-        if words
-            .iter()
-            .any(|word| is_contributed_non_person_token(word))
-        {
-            continue;
-        }
-        let Some(author) = refine_author(who) else {
-            continue;
-        };
-        authors.push(AuthorDetection {
-            author,
-            start_line: LineNumber::new(ln).expect("invalid line number"),
-            end_line: LineNumber::new(ln).expect("invalid line number"),
-        });
-    }
-
-    authors
+    (0..prepared_cache.len())
+        .filter_map(|idx| {
+            let ln = idx + 1;
+            let raw_line = prepared_cache.raw_by_index(idx)?;
+            let trimmed = raw_line.trim();
+            let (who, _) = trimmed.split_once(" contributed")?;
+            let words: Vec<&str> = who.split_whitespace().collect();
+            if !(2..=4).contains(&words.len()) {
+                return None;
+            }
+            if !words
+                .iter()
+                .all(|word| looks_like_contributed_person_name_token(word))
+            {
+                return None;
+            }
+            if words
+                .iter()
+                .any(|word| is_contributed_non_person_token(word))
+            {
+                return None;
+            }
+            let author = refine_author(who)?;
+            Some(AuthorDetection {
+                author,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
+            })
+        })
+        .collect()
 }
 
 fn looks_like_contributed_person_name_token(word: &str) -> bool {
@@ -336,9 +324,8 @@ fn is_contributed_non_person_token(word: &str) -> bool {
 pub(super) fn extract_rst_field_authors(
     prepared_cache: &mut PreparedLineCache<'_>,
 ) -> Vec<AuthorDetection> {
-    let mut authors = Vec::new();
     if prepared_cache.is_empty() {
-        return authors;
+        return Vec::new();
     }
 
     static RST_FIELD_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -350,36 +337,30 @@ pub(super) fn extract_rst_field_authors(
             .unwrap()
     });
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
+    (0..prepared_cache.len())
+        .filter_map(|idx| {
+            let ln = idx + 1;
+            let prepared = prepared_cache.get_by_index(idx)?;
+            let line = prepared.trim();
+            if line.is_empty() {
+                return None;
+            }
 
-        let Some(cap) = RST_FIELD_AUTHOR_RE.captures(line) else {
-            continue;
-        };
-        let tail = cap.name("tail").map(|m| m.as_str()).unwrap_or("").trim();
-        if tail.is_empty() {
-            continue;
-        }
-        let stripped_tail = ATTRIBUTION_PREFIX_RE.replace(tail, "");
-        let trimmed = trim_attribution_tail(stripped_tail.as_ref());
-        let Some(author) = refine_author(&trimmed) else {
-            continue;
-        };
-        authors.push(AuthorDetection {
-            author,
-            start_line: LineNumber::new(ln).expect("invalid line number"),
-            end_line: LineNumber::new(ln).expect("invalid line number"),
-        });
-    }
-
-    authors
+            let cap = RST_FIELD_AUTHOR_RE.captures(line)?;
+            let tail = cap.name("tail").map(|m| m.as_str()).unwrap_or("").trim();
+            if tail.is_empty() {
+                return None;
+            }
+            let stripped_tail = ATTRIBUTION_PREFIX_RE.replace(tail, "");
+            let trimmed = trim_attribution_tail(stripped_tail.as_ref());
+            let author = refine_author(&trimmed)?;
+            Some(AuthorDetection {
+                author,
+                start_line: LineNumber::new(ln).expect("invalid line number"),
+                end_line: LineNumber::new(ln).expect("invalid line number"),
+            })
+        })
+        .collect()
 }
 
 fn extract_author_colon_bullet_roster(
@@ -685,9 +666,8 @@ pub(super) fn drop_merged_dash_bullet_attribution_authors(authors: &mut Vec<Auth
 }
 
 pub(super) fn extract_json_excerpt_developed_by_authors(content: &str) -> Vec<AuthorDetection> {
-    let mut authors = Vec::new();
     if content.is_empty() {
-        return authors;
+        return Vec::new();
     }
 
     static JSON_DEVELOPED_BY_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -697,27 +677,26 @@ pub(super) fn extract_json_excerpt_developed_by_authors(content: &str) -> Vec<Au
         .unwrap()
     });
 
-    for cap in JSON_DEVELOPED_BY_RE.captures_iter(content) {
-        let who = cap
-            .name("who")
-            .map(|m| m.as_str())
-            .unwrap_or("")
-            .trim()
-            .trim_end_matches(&['.', ';', ','][..]);
-        if who.is_empty() {
-            continue;
-        }
-        let Some(author) = refine_author(who) else {
-            continue;
-        };
-        authors.push(AuthorDetection {
-            author,
-            start_line: LineNumber::ONE,
-            end_line: LineNumber::ONE,
-        });
-    }
-
-    authors
+    JSON_DEVELOPED_BY_RE
+        .captures_iter(content)
+        .filter_map(|cap| {
+            let who = cap
+                .name("who")
+                .map(|m| m.as_str())
+                .unwrap_or("")
+                .trim()
+                .trim_end_matches(&['.', ';', ','][..]);
+            if who.is_empty() {
+                return None;
+            }
+            let author = refine_author(who)?;
+            Some(AuthorDetection {
+                author,
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::ONE,
+            })
+        })
+        .collect()
 }
 
 pub(super) fn extract_modified_portion_developed_by_authors(content: &str) -> Vec<AuthorDetection> {
@@ -2398,16 +2377,15 @@ pub(super) fn drop_shadowed_prefix_authors(authors: &mut Vec<AuthorDetection>) {
     if authors.len() < 2 {
         return;
     }
-    let mut drop: Vec<bool> = vec![false; authors.len()];
-    for i in 0..authors.len() {
-        let a = authors[i].author.trim();
+    let originals = authors.clone();
+
+    authors.retain(|author| {
+        let a = author.author.trim();
         if a.is_empty() {
-            continue;
+            return true;
         }
-        for (j, other) in authors.iter().enumerate() {
-            if i == j {
-                continue;
-            }
+
+        for other in &originals {
             let b = other.author.trim();
             if b.len() <= a.len() {
                 continue;
@@ -2427,12 +2405,10 @@ pub(super) fn drop_shadowed_prefix_authors(authors: &mut Vec<AuthorDetection>) {
                     if a.chars().all(|c| c.is_ascii_lowercase()) {
                         continue;
                     }
-                    drop[i] = true;
-                    break;
+                    return false;
                 }
                 if !a_has_email && b_has_email && boundary {
-                    drop[i] = true;
-                    break;
+                    return false;
                 }
                 if boundary {
                     let tail_lower = tail.to_ascii_lowercase();
@@ -2445,23 +2421,14 @@ pub(super) fn drop_shadowed_prefix_authors(authors: &mut Vec<AuthorDetection>) {
                         || tail_lower.starts_with("and")
                         || tail_lower.starts_with("author-email")
                     {
-                        drop[i] = true;
-                        break;
+                        return false;
                     }
                 }
             }
         }
-    }
-    if drop.iter().all(|d| !*d) {
-        return;
-    }
-    let mut kept = Vec::with_capacity(authors.len());
-    for (i, a) in authors.iter().cloned().enumerate() {
-        if !drop[i] {
-            kept.push(a);
-        }
-    }
-    *authors = kept;
+
+        true
+    });
 }
 
 pub(super) fn drop_shadowed_compound_email_authors(authors: &mut Vec<AuthorDetection>) {

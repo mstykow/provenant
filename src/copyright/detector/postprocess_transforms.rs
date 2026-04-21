@@ -23,18 +23,17 @@ pub fn refine_final_copyrights(copyrights: &mut Vec<CopyrightDetection>) {
         return;
     }
 
-    let mut refined: Vec<CopyrightDetection> = Vec::with_capacity(copyrights.len());
-    for c in copyrights.drain(..) {
-        let Some(text) = refine_copyright(&c.copyright) else {
-            continue;
-        };
-        refined.push(CopyrightDetection {
-            copyright: text,
-            start_line: c.start_line,
-            end_line: c.end_line,
-        });
-    }
-    *copyrights = refined;
+    *copyrights = copyrights
+        .iter()
+        .filter_map(|c| {
+            let text = refine_copyright(&c.copyright)?;
+            Some(CopyrightDetection {
+                copyright: text,
+                start_line: c.start_line,
+                end_line: c.end_line,
+            })
+        })
+        .collect();
 }
 
 fn strip_trailing_license_tail(s: &str) -> Option<String> {
@@ -170,39 +169,34 @@ pub fn add_missing_holders_for_bare_c_name_year_suffixes(
         Regex::new(r"(?ix)^\(c\)\s+(?P<name>.+?)\s+(?P<year>(?:19\d{2}|20\d{2}))\s*$").unwrap()
     });
 
-    let mut result = Vec::new();
-    for c in copyrights {
-        let trimmed = c.copyright.trim();
-        let Some(cap) = BARE_C_NAME_YEAR_RE.captures(trimmed) else {
-            continue;
-        };
-        let name = cap.name("name").map(|m| m.as_str()).unwrap_or("").trim();
-        if name.is_empty() {
-            continue;
-        }
-        if name.split_whitespace().count() != 1 {
-            continue;
-        }
-        if !name
-            .chars()
-            .all(|ch| ch.is_alphabetic() || ch == '\'' || ch == '’' || ch == '-')
-        {
-            continue;
-        }
+    copyrights
+        .iter()
+        .filter_map(|c| {
+            let trimmed = c.copyright.trim();
+            let cap = BARE_C_NAME_YEAR_RE.captures(trimmed)?;
+            let name = cap.name("name").map(|m| m.as_str()).unwrap_or("").trim();
+            if name.is_empty() || name.split_whitespace().count() != 1 {
+                return None;
+            }
+            if !name
+                .chars()
+                .all(|ch| ch.is_alphabetic() || ch == '\'' || ch == '’' || ch == '-')
+            {
+                return None;
+            }
 
-        let Some(holder) = refine_holder_in_copyright_context(name) else {
-            continue;
-        };
-        if holder.is_empty() {
-            continue;
-        }
-        result.push(HolderDetection {
-            holder,
-            start_line: c.start_line,
-            end_line: c.end_line,
-        });
-    }
-    result
+            let holder = refine_holder_in_copyright_context(name)?;
+            if holder.is_empty() {
+                return None;
+            }
+
+            Some(HolderDetection {
+                holder,
+                start_line: c.start_line,
+                end_line: c.end_line,
+            })
+        })
+        .collect()
 }
 
 pub fn truncate_lonely_svox_baslerstr_address(
@@ -493,35 +487,32 @@ pub fn add_embedded_copyright_clause_variants(
         return Vec::new();
     }
 
-    let mut to_add = Vec::new();
-    for c in copyrights {
-        let lower = c.copyright.to_ascii_lowercase();
-        if !lower.starts_with("portions created by the initial developer are ") {
-            continue;
-        }
-        let Some(pos) = lower.find(" copyright") else {
-            continue;
-        };
-        let embedded = c.copyright[pos + 1..].trim();
-        if embedded.is_empty() {
-            continue;
-        }
-        let Some(refined) = refine_copyright(embedded) else {
-            continue;
-        };
-        if refined
-            .to_ascii_lowercase()
-            .contains("the initial developer")
-        {
-            continue;
-        }
-        to_add.push(CopyrightDetection {
-            copyright: refined,
-            start_line: c.start_line,
-            end_line: c.end_line,
-        });
-    }
-    to_add
+    copyrights
+        .iter()
+        .filter_map(|c| {
+            let lower = c.copyright.to_ascii_lowercase();
+            if !lower.starts_with("portions created by the initial developer are ") {
+                return None;
+            }
+            let pos = lower.find(" copyright")?;
+            let embedded = c.copyright[pos + 1..].trim();
+            if embedded.is_empty() {
+                return None;
+            }
+            let refined = refine_copyright(embedded)?;
+            if refined
+                .to_ascii_lowercase()
+                .contains("the initial developer")
+            {
+                return None;
+            }
+            Some(CopyrightDetection {
+                copyright: refined,
+                start_line: c.start_line,
+                end_line: c.end_line,
+            })
+        })
+        .collect()
 }
 
 pub fn add_found_at_short_variants(
@@ -573,36 +564,32 @@ pub fn add_missing_holders_from_email_bearing_copyrights(
         .unwrap()
     });
 
-    let mut result = Vec::new();
-    for c in copyrights {
-        let Some(cap) = COPYRIGHT_NAME_EMAIL_RE.captures(c.copyright.trim()) else {
-            continue;
-        };
-        let raw_name = cap.name("name").map(|m| m.as_str()).unwrap_or("");
-        let cleaned_name = normalize_email_copyright_holder_candidate(raw_name);
-        if cleaned_name.is_empty() {
-            continue;
-        }
+    copyrights
+        .iter()
+        .filter_map(|c| {
+            let cap = COPYRIGHT_NAME_EMAIL_RE.captures(c.copyright.trim())?;
+            let raw_name = cap.name("name").map(|m| m.as_str()).unwrap_or("");
+            let cleaned_name = normalize_email_copyright_holder_candidate(raw_name);
+            if cleaned_name.is_empty() {
+                return None;
+            }
 
-        let Some(name) = refine_holder_in_copyright_context(&cleaned_name) else {
-            continue;
-        };
-        let domain_only = name.contains('.')
-            && name
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'));
-        if domain_only {
-            continue;
-        }
+            let name = refine_holder_in_copyright_context(&cleaned_name)?;
+            let domain_only = name.contains('.')
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'));
+            if domain_only {
+                return None;
+            }
 
-        result.push(HolderDetection {
-            holder: name,
-            start_line: c.start_line,
-            end_line: c.end_line,
-        });
-    }
-
-    result
+            Some(HolderDetection {
+                holder: name,
+                start_line: c.start_line,
+                end_line: c.end_line,
+            })
+        })
+        .collect()
 }
 
 pub fn normalize_email_copyright_holder_candidate(raw_name: &str) -> String {
@@ -671,15 +658,17 @@ pub fn drop_shadowed_linux_foundation_holder_copyrights_same_line(
             .unwrap()
     });
 
-    let mut years_by_line: HashSet<(usize, String)> = HashSet::new();
-    for c in copyrights.iter() {
-        if let Some(cap) = WITH_C_RE.captures(c.copyright.trim()) {
+    let years_by_line: HashSet<(usize, String)> = copyrights
+        .iter()
+        .filter_map(|c| {
+            let cap = WITH_C_RE.captures(c.copyright.trim())?;
             let years = cap.name("years").map(|m| m.as_str()).unwrap_or("").trim();
-            if !years.is_empty() {
-                years_by_line.insert((c.start_line.get(), years.to_string()));
+            if years.is_empty() {
+                return None;
             }
-        }
-    }
+            Some((c.start_line.get(), years.to_string()))
+        })
+        .collect();
 
     copyrights.retain(|c| {
         let Some(cap) = WITH_HOLDER_RE.captures(c.copyright.trim()) else {
@@ -790,25 +779,23 @@ pub fn drop_comma_holders_shadowed_by_space_version_same_span(holders: &mut Vec<
         return;
     }
 
-    *holders = group_by(std::mem::take(holders), |h| {
-        (h.start_line.get(), h.end_line.get())
-    })
-    .into_iter()
-    .map(|(_, v)| v)
-    .flat_map(|group| {
-        let set: HashSet<String> = group.iter().map(|h| h.holder.clone()).collect();
-        group
+    let by_span: HashMap<(usize, usize), HashSet<String>> =
+        group_by(holders.clone(), |h| (h.start_line.get(), h.end_line.get()))
             .into_iter()
-            .filter(|h| {
-                if !h.holder.contains(',') {
-                    return true;
-                }
-                let no_comma = super::token_utils::normalize_whitespace(&h.holder.replace(',', ""));
-                !(no_comma != h.holder && set.contains(&no_comma))
-            })
-            .collect::<Vec<_>>()
-    })
-    .collect();
+            .map(|(span, group)| (span, group.into_iter().map(|h| h.holder).collect()))
+            .collect();
+
+    holders.retain(|h| {
+        if !h.holder.contains(',') {
+            return true;
+        }
+        let no_comma = super::token_utils::normalize_whitespace(&h.holder.replace(',', ""));
+        let span = (h.start_line.get(), h.end_line.get());
+        !(no_comma != h.holder
+            && by_span
+                .get(&span)
+                .is_some_and(|set| set.contains(&no_comma)))
+    });
 }
 
 pub fn normalize_company_suffix_period_holder_variants(holders: &mut Vec<HolderDetection>) {
@@ -1203,26 +1190,23 @@ pub fn add_first_angle_email_only_variants(
         Regex::new(r"^(?P<prefix>Copyright\b.*?<[^>\s]*@[^>\s]+>)(?:\s*,\s*.+)$").unwrap()
     });
 
-    let mut result = Vec::new();
-    for c in copyrights {
-        let trimmed = c.copyright.trim();
-        let Some(cap) = MULTI_EMAIL_RE.captures(trimmed) else {
-            continue;
-        };
-        let prefix = cap.name("prefix").map(|m| m.as_str()).unwrap_or("").trim();
-        if prefix.is_empty() {
-            continue;
-        }
-        let Some(refined) = refine_copyright(prefix) else {
-            continue;
-        };
-        result.push(CopyrightDetection {
-            copyright: refined,
-            start_line: c.start_line,
-            end_line: c.end_line,
-        });
-    }
-    result
+    copyrights
+        .iter()
+        .filter_map(|c| {
+            let trimmed = c.copyright.trim();
+            let cap = MULTI_EMAIL_RE.captures(trimmed)?;
+            let prefix = cap.name("prefix").map(|m| m.as_str()).unwrap_or("").trim();
+            if prefix.is_empty() {
+                return None;
+            }
+            let refined = refine_copyright(prefix)?;
+            Some(CopyrightDetection {
+                copyright: refined,
+                start_line: c.start_line,
+                end_line: c.end_line,
+            })
+        })
+        .collect()
 }
 
 pub fn drop_shadowed_angle_email_prefix_copyrights_same_span(
@@ -1293,28 +1277,24 @@ pub fn drop_shadowed_quote_before_email_variants_same_span(
         super::token_utils::normalize_whitespace(&QUOTED_RE.replace_all(s, " $1"))
     }
 
-    *copyrights = group_by(std::mem::take(copyrights), |c| {
+    let by_span: HashMap<(usize, usize), HashSet<String>> = group_by(copyrights.clone(), |c| {
         (c.start_line.get(), c.end_line.get())
     })
     .into_iter()
-    .map(|(_, v)| v)
-    .flat_map(|group| {
-        let set: HashSet<String> = group.iter().map(|c| c.copyright.clone()).collect();
-        group
-            .into_iter()
-            .filter(|c| {
-                if !c.copyright.contains('\'') || !c.copyright.contains('@') {
-                    return true;
-                }
-                let canon = canonical(&c.copyright);
-                if canon == c.copyright {
-                    return true;
-                }
-                !set.contains(&canon)
-            })
-            .collect::<Vec<_>>()
-    })
+    .map(|(span, group)| (span, group.into_iter().map(|c| c.copyright).collect()))
     .collect();
+
+    copyrights.retain(|c| {
+        if !c.copyright.contains('\'') || !c.copyright.contains('@') {
+            return true;
+        }
+        let canon = canonical(&c.copyright);
+        if canon == c.copyright {
+            return true;
+        }
+        let span = (c.start_line.get(), c.end_line.get());
+        !by_span.get(&span).is_some_and(|set| set.contains(&canon))
+    });
 }
 
 pub fn add_missing_holder_from_single_copyright(
@@ -1352,27 +1332,23 @@ pub fn add_but_suffix_short_variants(copyrights: &[CopyrightDetection]) -> Vec<C
     static BUT_SUFFIX_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)^(?P<prefix>.+?),\s*but\s*$").unwrap());
 
-    let mut result = Vec::new();
-    for c in copyrights {
-        let trimmed = c.copyright.trim();
-        let Some(cap) = BUT_SUFFIX_RE.captures(trimmed) else {
-            continue;
-        };
-        let prefix = cap.name("prefix").map(|m| m.as_str()).unwrap_or("").trim();
-        if prefix.is_empty() {
-            continue;
-        }
-        let Some(refined) = refine_copyright(prefix) else {
-            continue;
-        };
-        result.push(CopyrightDetection {
-            copyright: refined,
-            start_line: c.start_line,
-            end_line: c.end_line,
-        });
-    }
-
-    result
+    copyrights
+        .iter()
+        .filter_map(|c| {
+            let trimmed = c.copyright.trim();
+            let cap = BUT_SUFFIX_RE.captures(trimmed)?;
+            let prefix = cap.name("prefix").map(|m| m.as_str()).unwrap_or("").trim();
+            if prefix.is_empty() {
+                return None;
+            }
+            let refined = refine_copyright(prefix)?;
+            Some(CopyrightDetection {
+                copyright: refined,
+                start_line: c.start_line,
+                end_line: c.end_line,
+            })
+        })
+        .collect()
 }
 
 pub fn add_at_affiliation_short_variants(
@@ -1745,25 +1721,23 @@ pub fn drop_single_line_copyrights_shadowed_by_multiline_same_start(
         .unwrap()
     });
 
-    let mut multi_keys: HashSet<(usize, String, String)> = HashSet::new();
-    for c in copyrights.iter() {
-        if c.end_line.get() <= c.start_line.get() {
-            continue;
-        }
-        let Some(cap) = YEARS_EMAIL_RE.captures(c.copyright.trim()) else {
-            continue;
-        };
-        let years = cap.name("years").map(|m| m.as_str()).unwrap_or("");
-        let email = cap.name("email").map(|m| m.as_str()).unwrap_or("");
-        let years_norm = years
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect::<String>();
-        if years_norm.is_empty() || email.is_empty() {
-            continue;
-        }
-        multi_keys.insert((c.start_line.get(), years_norm, email.to_ascii_lowercase()));
-    }
+    let multi_keys: HashSet<(usize, String, String)> = copyrights
+        .iter()
+        .filter(|c| c.end_line.get() > c.start_line.get())
+        .filter_map(|c| {
+            let cap = YEARS_EMAIL_RE.captures(c.copyright.trim())?;
+            let years = cap.name("years").map(|m| m.as_str()).unwrap_or("");
+            let email = cap.name("email").map(|m| m.as_str()).unwrap_or("");
+            let years_norm = years
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect::<String>();
+            if years_norm.is_empty() || email.is_empty() {
+                return None;
+            }
+            Some((c.start_line.get(), years_norm, email.to_ascii_lowercase()))
+        })
+        .collect();
 
     if multi_keys.is_empty() {
         return;
@@ -1867,32 +1841,28 @@ pub fn drop_shadowed_inria_location_copyrights_same_span(copyrights: &mut Vec<Co
         Regex::new(r"^(?P<prefix>.+\bINRIA)\s+(?P<loc>[A-Z][a-z]{2,64})$").unwrap()
     });
 
-    *copyrights = group_by(std::mem::take(copyrights), |c| {
+    let by_span: HashMap<(usize, usize), HashSet<String>> = group_by(copyrights.clone(), |c| {
         (c.start_line.get(), c.end_line.get())
     })
     .into_iter()
-    .map(|(_, v)| v)
-    .flat_map(|group| {
-        let set: HashSet<String> = group.iter().map(|c| c.copyright.clone()).collect();
-        group
-            .into_iter()
-            .filter(|c| {
-                let Some(cap) = INRIA_LOC_RE.captures(c.copyright.trim()) else {
-                    return true;
-                };
-                let prefix = cap
-                    .name("prefix")
-                    .map(|m| m.as_str())
-                    .unwrap_or("")
-                    .trim_end();
-                if prefix.is_empty() {
-                    return true;
-                }
-                !set.contains(prefix)
-            })
-            .collect::<Vec<_>>()
-    })
+    .map(|(span, group)| (span, group.into_iter().map(|c| c.copyright).collect()))
     .collect();
+
+    copyrights.retain(|c| {
+        let Some(cap) = INRIA_LOC_RE.captures(c.copyright.trim()) else {
+            return true;
+        };
+        let prefix = cap
+            .name("prefix")
+            .map(|m| m.as_str())
+            .unwrap_or("")
+            .trim_end();
+        if prefix.is_empty() {
+            return true;
+        }
+        let span = (c.start_line.get(), c.end_line.get());
+        !by_span.get(&span).is_some_and(|set| set.contains(prefix))
+    });
 }
 
 pub fn add_email_holders_from_leading_email_comma_holders(
@@ -1954,32 +1924,24 @@ pub fn drop_shadowed_email_comma_holders_same_span(holders: &mut Vec<HolderDetec
         Regex::new(r"(?i)^(?P<email>[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,15})\s*,\s+.+$").unwrap()
     });
 
-    *holders = group_by(std::mem::take(holders), |h| {
-        (h.start_line.get(), h.end_line.get())
-    })
-    .into_iter()
-    .map(|(_, v)| v)
-    .flat_map(|group| {
-        let set: HashSet<String> = group.iter().map(|h| h.holder.clone()).collect();
-        group
+    let by_span: HashMap<(usize, usize), HashSet<String>> =
+        group_by(holders.clone(), |h| (h.start_line.get(), h.end_line.get()))
             .into_iter()
-            .filter(|h| {
-                let trimmed = h.holder.trim();
-                let Some(cap) = LEADING_EMAIL_COMMA_RE.captures(trimmed) else {
-                    return true;
-                };
-                let email = cap.name("email").map(|m| m.as_str()).unwrap_or("").trim();
-                if email.is_empty() {
-                    return true;
-                }
-                if trimmed.eq_ignore_ascii_case(email) {
-                    return true;
-                }
-                !set.contains(email)
-            })
-            .collect::<Vec<_>>()
-    })
-    .collect();
+            .map(|(span, group)| (span, group.into_iter().map(|h| h.holder).collect()))
+            .collect();
+
+    holders.retain(|h| {
+        let trimmed = h.holder.trim();
+        let Some(cap) = LEADING_EMAIL_COMMA_RE.captures(trimmed) else {
+            return true;
+        };
+        let email = cap.name("email").map(|m| m.as_str()).unwrap_or("").trim();
+        if email.is_empty() || trimmed.eq_ignore_ascii_case(email) {
+            return true;
+        }
+        let span = (h.start_line.get(), h.end_line.get());
+        !by_span.get(&span).is_some_and(|set| set.contains(email))
+    });
 }
 
 pub fn add_pipe_read_parenthetical_variants(
@@ -3016,29 +2978,33 @@ pub fn drop_shadowed_c_sign_variants(copyrights: &mut Vec<CopyrightDetection>) {
         super::token_utils::normalize_whitespace(&C_SIGN_RE.replace_all(s, " "))
     }
 
-    *copyrights = group_by(std::mem::take(copyrights), |c| {
-        (c.start_line.get(), c.end_line.get())
-    })
-    .into_iter()
-    .map(|(_, v)| v)
-    .flat_map(|group| {
-        let with_c_set: HashSet<String> = group
-            .iter()
-            .filter(|c| contains_c_sign(&c.copyright))
-            .map(|c| canonical_without_c_sign(&c.copyright))
-            .collect();
-        group
-            .into_iter()
-            .filter(|c| {
-                if contains_c_sign(&c.copyright) {
-                    return true;
-                }
-                let canon = canonical_without_c_sign(&c.copyright);
-                !with_c_set.contains(&canon)
-            })
-            .collect::<Vec<_>>()
-    })
-    .collect();
+    let with_c_by_span: HashMap<(usize, usize), HashSet<String>> =
+        group_by(copyrights.clone(), |c| {
+            (c.start_line.get(), c.end_line.get())
+        })
+        .into_iter()
+        .map(|(span, group)| {
+            (
+                span,
+                group
+                    .into_iter()
+                    .filter(|c| contains_c_sign(&c.copyright))
+                    .map(|c| canonical_without_c_sign(&c.copyright))
+                    .collect(),
+            )
+        })
+        .collect();
+
+    copyrights.retain(|c| {
+        if contains_c_sign(&c.copyright) {
+            return true;
+        }
+        let canon = canonical_without_c_sign(&c.copyright);
+        let span = (c.start_line.get(), c.end_line.get());
+        !with_c_by_span
+            .get(&span)
+            .is_some_and(|set| set.contains(&canon))
+    });
 }
 
 pub fn drop_shadowed_year_prefixed_holders(holders: &mut Vec<HolderDetection>) {
@@ -3061,28 +3027,30 @@ pub fn drop_shadowed_year_prefixed_holders(holders: &mut Vec<HolderDetection>) {
         Some(super::token_utils::normalize_whitespace(rest))
     }
 
-    *holders = group_by(std::mem::take(holders), |h| {
-        (h.start_line.get(), h.end_line.get())
-    })
-    .into_iter()
-    .map(|(_, v)| v)
-    .flat_map(|group| {
-        let set: HashSet<String> = group
-            .iter()
-            .map(|h| super::token_utils::normalize_whitespace(&h.holder))
-            .collect();
-        group
+    let by_span: HashMap<(usize, usize), HashSet<String>> =
+        group_by(holders.clone(), |h| (h.start_line.get(), h.end_line.get()))
             .into_iter()
-            .filter(|h| {
-                let normalized = super::token_utils::normalize_whitespace(&h.holder);
-                let Some(stripped) = strip_leading_year_token(&normalized) else {
-                    return true;
-                };
-                !set.contains(&stripped)
+            .map(|(span, group)| {
+                (
+                    span,
+                    group
+                        .into_iter()
+                        .map(|h| super::token_utils::normalize_whitespace(&h.holder))
+                        .collect(),
+                )
             })
-            .collect::<Vec<_>>()
-    })
-    .collect();
+            .collect();
+
+    holders.retain(|h| {
+        let normalized = super::token_utils::normalize_whitespace(&h.holder);
+        let Some(stripped) = strip_leading_year_token(&normalized) else {
+            return true;
+        };
+        let span = (h.start_line.get(), h.end_line.get());
+        !by_span
+            .get(&span)
+            .is_some_and(|set| set.contains(&stripped))
+    });
 }
 
 pub fn drop_shadowed_for_clause_holders_with_email_copyrights(
@@ -3153,38 +3121,40 @@ pub fn drop_shadowed_multiline_prefix_copyrights(copyrights: &mut Vec<CopyrightD
         return;
     }
 
-    *copyrights = group_by(std::mem::take(copyrights), |c| (c.start_line.get(),))
-        .into_iter()
-        .map(|(_, v)| v)
-        .flat_map(|group| {
-            let group_data: Vec<(usize, usize, String)> = group
-                .iter()
-                .map(|c| (c.start_line.get(), c.end_line.get(), c.copyright.clone()))
-                .collect();
-            group
-                .into_iter()
-                .filter(|c| {
-                    if c.start_line.get() != c.end_line.get() {
-                        return true;
-                    }
-                    let short = c.copyright.as_str();
-                    if short.len() < 10 {
-                        return true;
-                    }
+    let by_start: HashMap<usize, Vec<(usize, String)>> =
+        group_by(copyrights.clone(), |c| (c.start_line.get(),))
+            .into_iter()
+            .map(|((start,), group)| {
+                (
+                    start,
+                    group
+                        .into_iter()
+                        .map(|c| (c.end_line.get(), c.copyright))
+                        .collect(),
+                )
+            })
+            .collect();
 
-                    !group_data.iter().any(|(s, e, other)| {
-                        *s == c.start_line.get()
-                            && *e > c.end_line.get()
-                            && other.len() > short.len()
-                            && other.starts_with(short)
-                            && other.as_bytes().get(short.len()).is_some_and(|b| {
-                                b.is_ascii_whitespace() || b.is_ascii_punctuation()
-                            })
-                    })
-                })
-                .collect::<Vec<_>>()
+    copyrights.retain(|c| {
+        if c.start_line.get() != c.end_line.get() {
+            return true;
+        }
+        let short = c.copyright.as_str();
+        if short.len() < 10 {
+            return true;
+        }
+        !by_start.get(&c.start_line.get()).is_some_and(|group| {
+            group.iter().any(|(end, other)| {
+                *end > c.end_line.get()
+                    && other.len() > short.len()
+                    && other.starts_with(short)
+                    && other
+                        .as_bytes()
+                        .get(short.len())
+                        .is_some_and(|b| b.is_ascii_whitespace() || b.is_ascii_punctuation())
+            })
         })
-        .collect();
+    });
 }
 
 pub fn drop_shadowed_multiline_prefix_holders(holders: &mut Vec<HolderDetection>) {
@@ -3192,42 +3162,45 @@ pub fn drop_shadowed_multiline_prefix_holders(holders: &mut Vec<HolderDetection>
         return;
     }
 
-    *holders = group_by(std::mem::take(holders), |h| (h.start_line.get(),))
-        .into_iter()
-        .map(|(_, v)| v)
-        .flat_map(|group| {
-            let group_data: Vec<(usize, usize, String)> = group
-                .iter()
-                .map(|h| (h.start_line.get(), h.end_line.get(), h.holder.clone()))
-                .collect();
-            group
-                .into_iter()
-                .filter(|h| {
-                    if h.start_line.get() != h.end_line.get() {
-                        return true;
-                    }
-                    let short = h.holder.as_str();
-                    if short.len() < 3 {
-                        return true;
-                    }
+    let by_start: HashMap<usize, Vec<(usize, String)>> =
+        group_by(holders.clone(), |h| (h.start_line.get(),))
+            .into_iter()
+            .map(|((start,), group)| {
+                (
+                    start,
+                    group
+                        .into_iter()
+                        .map(|h| (h.end_line.get(), h.holder))
+                        .collect(),
+                )
+            })
+            .collect();
 
-                    !group_data.iter().any(|(s, e, other)| {
-                        *s == h.start_line.get()
-                            && *e > h.end_line.get()
-                            && other.len() > short.len()
-                            && other.starts_with(short)
-                            && {
-                                let tail = other.get(short.len()..).unwrap_or("").trim_start();
-                                !tail.to_ascii_lowercase().starts_with("modify ")
-                            }
-                            && other.as_bytes().get(short.len()).is_some_and(|b| {
-                                b.is_ascii_whitespace() || b.is_ascii_punctuation()
-                            })
-                    })
-                })
-                .collect::<Vec<_>>()
+    holders.retain(|h| {
+        if h.start_line.get() != h.end_line.get() {
+            return true;
+        }
+        let short = h.holder.as_str();
+        if short.len() < 3 {
+            return true;
+        }
+
+        !by_start.get(&h.start_line.get()).is_some_and(|group| {
+            group.iter().any(|(end, other)| {
+                *end > h.end_line.get()
+                    && other.len() > short.len()
+                    && other.starts_with(short)
+                    && {
+                        let tail = other.get(short.len()..).unwrap_or("").trim_start();
+                        !tail.to_ascii_lowercase().starts_with("modify ")
+                    }
+                    && other
+                        .as_bytes()
+                        .get(short.len())
+                        .is_some_and(|b| b.is_ascii_whitespace() || b.is_ascii_punctuation())
+            })
         })
-        .collect();
+    });
 }
 
 pub fn replace_holders_with_embedded_c_year_markers(
@@ -3922,40 +3895,35 @@ pub fn drop_shadowed_prefix_bare_c_copyrights_same_span(copyrights: &mut Vec<Cop
         return;
     }
 
-    *copyrights = group_by(std::mem::take(copyrights), |c| {
+    let by_span: HashMap<(usize, usize), Vec<String>> = group_by(copyrights.clone(), |c| {
         (c.start_line.get(), c.end_line.get())
     })
     .into_iter()
-    .map(|(_, v)| v)
-    .flat_map(|group| {
-        let texts: Vec<String> = group.iter().map(|c| c.copyright.clone()).collect();
-        group
-            .into_iter()
-            .filter(|c| {
-                let short = c.copyright.trim();
-                if !short.to_ascii_lowercase().starts_with("(c) ") {
-                    return true;
-                }
-                if short.contains(',')
-                    || short.contains('<')
-                    || short.contains('>')
-                    || short.contains('@')
-                {
-                    return true;
-                }
-
-                !texts.iter().any(|other| {
-                    other.len() > short.len()
-                        && other.starts_with(short)
-                        && other
-                            .as_bytes()
-                            .get(short.len())
-                            .is_some_and(|b| *b == b',')
-                })
-            })
-            .collect::<Vec<_>>()
-    })
+    .map(|(span, group)| (span, group.into_iter().map(|c| c.copyright).collect()))
     .collect();
+
+    copyrights.retain(|c| {
+        let short = c.copyright.trim();
+        if !short.to_ascii_lowercase().starts_with("(c) ") {
+            return true;
+        }
+        if short.contains(',') || short.contains('<') || short.contains('>') || short.contains('@')
+        {
+            return true;
+        }
+
+        let span = (c.start_line.get(), c.end_line.get());
+        !by_span.get(&span).is_some_and(|texts| {
+            texts.iter().any(|other| {
+                other.len() > short.len()
+                    && other.starts_with(short)
+                    && other
+                        .as_bytes()
+                        .get(short.len())
+                        .is_some_and(|b| *b == b',')
+            })
+        })
+    });
 }
 
 pub fn drop_shadowed_acronym_extended_holders(holders: &mut Vec<HolderDetection>) {
@@ -5983,18 +5951,17 @@ pub fn add_missing_holders_for_debian_modifications(
         return Vec::new();
     }
 
-    let mut result = Vec::new();
-    for cr in copyrights {
-        let Some(holder) = derive_holder_from_simple_copyright_string(&cr.copyright) else {
-            continue;
-        };
-        result.push(HolderDetection {
-            holder,
-            start_line: cr.start_line,
-            end_line: cr.end_line,
-        });
-    }
-    result
+    copyrights
+        .iter()
+        .filter_map(|cr| {
+            let holder = derive_holder_from_simple_copyright_string(&cr.copyright)?;
+            Some(HolderDetection {
+                holder,
+                start_line: cr.start_line,
+                end_line: cr.end_line,
+            })
+        })
+        .collect()
 }
 
 pub fn split_embedded_copyright_detections(
@@ -6178,18 +6145,17 @@ pub fn extend_bare_c_year_detections_to_line_end_for_multi_c_lines(
 pub fn add_missing_holders_derived_from_split_copyrights(
     copyrights: &[CopyrightDetection],
 ) -> Vec<HolderDetection> {
-    let mut result = Vec::new();
-    for cr in copyrights {
-        let Some(holder) = derive_holder_from_simple_copyright_string(&cr.copyright) else {
-            continue;
-        };
-        result.push(HolderDetection {
-            holder,
-            start_line: cr.start_line,
-            end_line: cr.end_line,
-        });
-    }
-    result
+    copyrights
+        .iter()
+        .filter_map(|cr| {
+            let holder = derive_holder_from_simple_copyright_string(&cr.copyright)?;
+            Some(HolderDetection {
+                holder,
+                start_line: cr.start_line,
+                end_line: cr.end_line,
+            })
+        })
+        .collect()
 }
 
 pub fn derive_holder_from_simple_copyright_string(s: &str) -> Option<String> {
