@@ -94,21 +94,18 @@ impl SeenTextSets {
     }
 
     pub(crate) fn register_copyrights(&mut self, copyrights: &[CopyrightDetection]) {
-        for c in copyrights {
-            self.copyrights.insert(c.copyright.clone());
-        }
+        self.copyrights
+            .extend(copyrights.iter().map(|c| c.copyright.clone()));
     }
 
     pub(crate) fn register_holders(&mut self, holders: &[HolderDetection]) {
-        for h in holders {
-            self.holders.insert(h.holder.clone());
-        }
+        self.holders
+            .extend(holders.iter().map(|h| h.holder.clone()));
     }
 
     pub(crate) fn register_authors(&mut self, authors: &[AuthorDetection]) {
-        for a in authors {
-            self.authors.insert(a.author.clone());
-        }
+        self.authors
+            .extend(authors.iter().map(|a| a.author.clone()));
     }
 
     pub(crate) fn rebuild_copyrights_from(&mut self, copyrights: &[CopyrightDetection]) {

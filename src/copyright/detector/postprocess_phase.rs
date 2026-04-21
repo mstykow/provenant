@@ -76,9 +76,8 @@ pub(super) fn run_phase_postprocess(
 
     let a_before_markup = authors.len();
     super::author_heuristics::extract_markup_authors(content, authors);
-    for a in &authors[a_before_markup..] {
-        seen.authors.insert(a.author.clone());
-    }
+    seen.authors
+        .extend(authors[a_before_markup..].iter().map(|a| a.author.clone()));
 
     let mut new_a = super::author_heuristics::extract_rst_field_authors(prepared_cache);
     seen.dedup_new_authors(&mut new_a, 0);
