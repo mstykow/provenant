@@ -238,6 +238,19 @@ fn test_extract_packages_bbappend_wildcard_filename_keeps_name() {
 }
 
 #[test]
+fn test_extract_packages_bbappend_trims_trailing_wildcard_without_version_segment() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("u-boot%.bbappend");
+    std::fs::write(&path, "SUMMARY = \"U-Boot append\"\n").unwrap();
+
+    let packages = BitbakeRecipeParser::extract_packages(&path);
+    let pkg = &packages[0];
+    assert_eq!(pkg.datasource_id, Some(DatasourceId::BitbakeRecipeAppend));
+    assert_eq!(pkg.name.as_deref(), Some("u-boot"));
+    assert_eq!(pkg.version, None);
+}
+
+#[test]
 fn test_extract_packages_nonexistent_file() {
     let path = Path::new("testdata/bitbake/nonexistent/recipe_1.0.bb");
     let packages = BitbakeRecipeParser::extract_packages(path);
@@ -374,6 +387,63 @@ fn test_multiple_remote_src_uri_entries_do_not_guess_single_download_url() {
     let pkg = &packages[0];
     assert_eq!(pkg.download_url, None);
     assert_eq!(pkg.sha256, None);
+}
+
+#[test]
+fn test_shell_function_local_assignment_with_unmatched_quote_does_not_panic() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("example_1.0.bb");
+    std::fs::write(
+        &path,
+        "SUMMARY = \"Example\"\n\
+         do_install() {\n\
+             files=\"\n\
+             echo done\n\
+         }\n",
+    )
+    .unwrap();
+
+    let packages = BitbakeRecipeParser::extract_packages(&path);
+    let pkg = &packages[0];
+    assert_eq!(pkg.name.as_deref(), Some("example"));
+    assert_eq!(pkg.description.as_deref(), Some("Example"));
+}
+
+#[test]
+fn test_dependency_parsing_skips_inline_python_expression_fragments() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("packagegroup_1.0.bb");
+    std::fs::write(
+        &path,
+        "PN = \"packagegroup\"\n\
+         RDEPENDS:${PN} = \"ifuse ${@bb.utils.contains(\"DISTRO_FEATURES\", \"pam\", \"smbnetfs\", \"\", d)} simple-mtpfs\"\n",
+    )
+    .unwrap();
+
+    let packages = BitbakeRecipeParser::extract_packages(&path);
+    let pkg = &packages[0];
+    let runtime_purls: Vec<_> = pkg
+        .dependencies
+        .iter()
+        .filter(|dep| dep.scope.as_deref() == Some("runtime"))
+        .filter_map(|dep| dep.purl.as_deref())
+        .collect();
+
+    assert_eq!(
+        runtime_purls,
+        vec!["pkg:bitbake/ifuse", "pkg:bitbake/simple-mtpfs"]
+    );
+}
+
+#[test]
+fn test_dependency_parsing_skips_leading_fragment_after_expansion() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("pru_1.0.bbappend");
+    std::fs::write(&path, "RDEPENDS:${PN}:append = \"${PN}-examples\"\n").unwrap();
+
+    let packages = BitbakeRecipeParser::extract_packages(&path);
+    let pkg = &packages[0];
+    assert!(pkg.dependencies.is_empty());
 }
 
 #[test]

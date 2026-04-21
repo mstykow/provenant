@@ -194,7 +194,15 @@ fn parse_recipe_filename(path: &Path) -> (Option<String>, Option<String>) {
             let version = (!version.contains('%')).then_some(version.to_string());
             (Some(name.to_string()), version)
         }
-        _ => (Some(stem.to_string()), None),
+        _ => {
+            let trimmed_stem = stem.trim_end_matches('%');
+            let name = if trimmed_stem.is_empty() {
+                stem.to_string()
+            } else {
+                trimmed_stem.to_string()
+            };
+            (Some(name), None)
+        }
     }
 }
 
@@ -512,8 +520,9 @@ fn is_valid_var_name(s: &str) -> bool {
 
 fn strip_quotes(s: &str) -> String {
     let trimmed = s.trim();
-    if (trimmed.starts_with('"') && trimmed.ends_with('"'))
-        || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+    if trimmed.len() >= 2
+        && ((trimmed.starts_with('"') && trimmed.ends_with('"'))
+            || (trimmed.starts_with('\'') && trimmed.ends_with('\'')))
     {
         trimmed[1..trimmed.len() - 1].to_string()
     } else {
@@ -562,18 +571,18 @@ struct SrcUriEntry {
 }
 
 fn parse_dependency_list(value: &str) -> Vec<ParsedDependency> {
-    let tokens: Vec<&str> = value.split_whitespace().collect();
+    let cleaned_value = strip_bitbake_expansions(value);
+    let tokens: Vec<&str> = cleaned_value.split_whitespace().collect();
     let mut dependencies = Vec::new();
     let mut index = 0;
 
     while index < tokens.len() {
         let token = tokens[index];
-        if token.starts_with("${") || token.contains('$') {
+        let Some(name) = normalize_dependency_name_token(token) else {
             index += 1;
             continue;
-        }
+        };
 
-        let name = token.to_string();
         let mut requirement = None;
 
         if tokens
@@ -609,6 +618,55 @@ fn parse_dependency_list(value: &str) -> Vec<ParsedDependency> {
     }
 
     dependencies
+}
+
+fn strip_bitbake_expansions(value: &str) -> String {
+    let mut result = String::with_capacity(value.len());
+    let chars: Vec<char> = value.chars().collect();
+    let mut index = 0;
+
+    while index < chars.len() {
+        if chars[index] == '$' && chars.get(index + 1) == Some(&'{') {
+            index += 2;
+            let mut depth = 1;
+            while index < chars.len() && depth > 0 {
+                match chars[index] {
+                    '{' => depth += 1,
+                    '}' => depth -= 1,
+                    _ => {}
+                }
+                index += 1;
+            }
+            result.push(' ');
+            continue;
+        }
+
+        result.push(chars[index]);
+        index += 1;
+    }
+
+    result
+}
+
+fn normalize_dependency_name_token(token: &str) -> Option<String> {
+    let trimmed = token.trim_matches(|c| matches!(c, '"' | '\'' | ','));
+    if trimmed.is_empty() || trimmed.contains('$') {
+        return None;
+    }
+
+    let first = trimmed.chars().next()?;
+    if !first.is_ascii_alphanumeric() {
+        return None;
+    }
+
+    if trimmed
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '+' | '.' | '/'))
+    {
+        Some(trimmed.to_string())
+    } else {
+        None
+    }
 }
 
 fn extract_src_uri_data(src_uri: &str) -> (Vec<SrcUriEntry>, Vec<FileReference>) {
