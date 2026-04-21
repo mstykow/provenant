@@ -5,6 +5,7 @@ This guide provides essential information for AI coding agents working on the `P
 ## Documentation Map
 
 - **Architecture & Design Decisions**: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - System design, components, principles
+- **Contributor Workflow & Compliance**: [`CONTRIBUTING.md`](CONTRIBUTING.md) - Canonical contributor expectations including DCO sign-off and SPDX header policy
 - **Documentation Index**: [`docs/DOCUMENTATION_INDEX.md`](docs/DOCUMENTATION_INDEX.md) - Best entry point for navigating the broader docs set
 - **How-To Guides**: [`docs/HOW_TO_ADD_A_PARSER.md`](docs/HOW_TO_ADD_A_PARSER.md) - Step-by-step guide for adding new parsers
 - **Architectural Decision Records**: [`docs/adr/`](docs/adr/) - Index of accepted design decisions and contributor guidance
@@ -46,6 +47,7 @@ When an upstream test fixture is needed for Provenant tests, copy it into Proven
 Treat the executable sources of truth as canonical:
 
 - [`README.md`](README.md) for local setup, bootstrap, and routine developer commands
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) for contributor policy, DCO requirements, and license-header workflow
 - [`package.json`](package.json) for documentation formatting/lint scripts
 - [`xtask/README.md`](xtask/README.md) for maintainer workflows such as benchmarking, compare runs, golden maintenance, and generated artifacts
 - [`docs/TESTING_STRATEGY.md`](docs/TESTING_STRATEGY.md) for test-layer definitions and current command guidance
@@ -98,6 +100,13 @@ Canonical hook and CI definitions live in [`lefthook.yml`](lefthook.yml), [`pack
 - Use [`.github/pull_request_template.md`](.github/pull_request_template.md) for every agent-authored PR. The final PR body should follow its section structure, complete the applicable sections, and omit sections that do not apply.
 - With `gh`, use `--template .github/pull_request_template.md` only for interactive/editor-driven PR creation. When supplying `--body` or `--body-file`, do **not** combine them with `--template`; instead, render the template structure manually into the provided body.
 - Keep PR scope disciplined. For ecosystem/parser work, prefer one ecosystem family per PR and do not hide unrelated refactors inside the same review unit.
+
+### Contributor Compliance Metadata
+
+- Inbound contributions use the Developer Certificate of Origin (DCO) 1.1. Agent-authored commits should include a matching sign-off via `git commit -s`, and rewritten commits must preserve that trailer. See [`DCO`](DCO) and [`CONTRIBUTING.md`](CONTRIBUTING.md) for the canonical policy text.
+- First-party code and automation files in the repo's allowlisted rollout carry SPDX-style headers using `SPDX-FileCopyrightText: Provenant contributors` and `SPDX-License-Identifier: Apache-2.0`.
+- Header scope is configured centrally in [`.license-headers.toml`](.license-headers.toml). Do not add headers to excluded paths such as `reference/**`, `testdata/**`, `resources/license_detection/**`, or generated docs unless the policy is intentionally expanded.
+- Use the xtask command documented in [`xtask/README.md`](xtask/README.md) to check or repair headers. Lefthook checks staged in-scope files without mutating them; CI verifies the full configured scope.
 
 ## Performance and Architecture
 
