@@ -13,12 +13,28 @@ usage() {
     exit 1
 }
 
+confirm_execute() {
+    local response
+
+    printf "Proceed with %s release? [y/N] " "$RELEASE_TYPE"
+    read -r response
+
+    case "$response" in
+        y|Y|yes|YES)
+            ;;
+        *)
+            echo "Release cancelled."
+            exit 1
+            ;;
+    esac
+}
+
 run_release_step() {
     local step="$1"
     shift
 
     if [ -n "$EXECUTE_FLAG" ]; then
-        cargo release "$step" "$@" --execute
+        cargo release "$step" "$@" --execute --no-confirm
     else
         cargo release "$step" "$@"
     fi
@@ -38,6 +54,7 @@ EXECUTE_FLAG=""
 if [ "${2:-}" = "--execute" ]; then
     EXECUTE_FLAG="--execute"
     echo "⚠️  This will perform an actual release!"
+    confirm_execute
 elif [ -n "${2:-}" ]; then
     usage
 else

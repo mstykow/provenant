@@ -85,7 +85,7 @@ On every release attempt, the script:
 4. Verifies that Provenant's output-format version is still aligned with the pinned ScanCode submodule and stops early if contract updates are required.
 5. Regenerates `resources/license_detection/license_index.zst` from the pinned ScanCode dataset plus the checked-in build policy manifest at `resources/license_detection/index_build_policy.toml` and any local overlay files under `resources/license_detection/overlay/`.
 6. In `--execute` mode, commits that license-data refresh as `chore: update license rules/licenses to latest` with `git commit -s` when needed.
-7. Runs the `cargo release` step subcommands in order: `version`, `replace`, `hook`, manual `git commit -s`, then `publish`, `tag`, and `push`.
+7. Confirms the overall release once, then runs the `cargo release` step subcommands in order: `version`, `replace`, `hook`, manual `git commit -s`, then `publish`, `tag`, and `push` with cargo-release's per-step confirmations suppressed.
 
 The repository is configured so the `cargo release` steps used by `release.sh`:
 
