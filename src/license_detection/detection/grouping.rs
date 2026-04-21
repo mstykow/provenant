@@ -38,7 +38,7 @@ pub(super) fn group_matches_by_region_with_threshold(
 
         if previous_match.is_license_intro() {
             current_group.push(match_item.clone());
-        } else if match_item.is_license_intro() {
+        } else if previous_match.is_license_clue() || match_item.is_license_intro() {
             if !current_group.is_empty() {
                 groups.push(DetectionGroup::new(current_group.clone()));
             }
@@ -276,6 +276,36 @@ mod tests {
         let matches = vec![match1, match2];
         let groups = group_matches_by_region(&matches);
         assert_eq!(groups.len(), 2);
+    }
+
+    #[test]
+    fn test_group_matches_keeps_leading_clue_standalone() {
+        let mut clue = create_test_match(10, 10, "2-aho", "gpl-1.0-plus_351.RULE");
+        clue.rule_kind = crate::license_detection::models::RuleKind::Clue;
+
+        let mut reference = create_test_match(10, 10, "2-aho", "gpl_bare_word_only.RULE");
+        reference.rule_kind = crate::license_detection::models::RuleKind::Reference;
+
+        let groups = group_matches_by_region(&[clue.clone(), reference.clone()]);
+
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].matches, vec![clue]);
+        assert_eq!(groups[1].matches, vec![reference]);
+    }
+
+    #[test]
+    fn test_group_matches_keeps_trailing_clue_standalone() {
+        let mut reference = create_test_match(10, 10, "2-aho", "gpl_bare_word_only.RULE");
+        reference.rule_kind = crate::license_detection::models::RuleKind::Reference;
+
+        let mut clue = create_test_match(10, 10, "2-aho", "gpl-1.0-plus_351.RULE");
+        clue.rule_kind = crate::license_detection::models::RuleKind::Clue;
+
+        let groups = group_matches_by_region(&[reference.clone(), clue.clone()]);
+
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].matches, vec![reference]);
+        assert_eq!(groups[1].matches, vec![clue]);
     }
 
     #[test]
