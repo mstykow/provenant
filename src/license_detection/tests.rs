@@ -402,7 +402,85 @@ fn test_engine_detect_gpl_notice() {
         .detect_with_kind(text, false, false)
         .expect("Detection should succeed");
 
-    assert!(!detections.is_empty(), "Should detect GPL notice");
+    assert!(
+        detections.iter().any(|detection| {
+            detection
+                .license_expression
+                .as_deref()
+                .is_some_and(|expression| expression.contains("gpl"))
+        }),
+        "Should detect a GPL expression, got: {:?}",
+        detections
+            .iter()
+            .map(|d| d.license_expression.as_deref().unwrap_or("none"))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_engine_surfaces_bare_gpl_as_clue_not_detection() {
+    let engine = get_engine();
+
+    let detections = engine
+        .detect_with_kind(
+            "// It is valid to have null DSL (using GPL) so need to find the first valid",
+            false,
+            false,
+        )
+        .expect("Detection should succeed");
+
+    assert!(
+        detections.iter().any(|detection| {
+            detection
+                .detection_log
+                .iter()
+                .any(|log| log == "license-clues")
+                && detection.license_expression.is_none()
+                && detection
+                    .matches
+                    .iter()
+                    .any(|m| m.rule_identifier == "gpl_bare_word_only.RULE")
+        }),
+        "bare GPL should remain visible as clue-only evidence: {:?}",
+        detections
+            .iter()
+            .map(|d| (
+                d.license_expression.as_deref().unwrap_or("none"),
+                d.detection_log.clone(),
+                d.matches
+                    .iter()
+                    .map(|m| m.rule_identifier.as_str())
+                    .collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_engine_does_not_detect_graphics_pipeline_library_as_gpl() {
+    let engine = get_engine();
+
+    let text = "// This outer loop is the main difference between the GPL and non-GPL version and why its hard to merge them";
+    let detections = engine
+        .detect_with_kind(text, false, false)
+        .expect("Detection should succeed");
+
+    assert!(
+        detections
+            .iter()
+            .all(|detection| { detection.license_expression.as_deref() != Some("gpl-1.0-plus") }),
+        "Graphics Pipeline Library acronym should not yield GPL-1.0-plus: {:?}",
+        detections
+            .iter()
+            .map(|d| (
+                d.license_expression.as_deref().unwrap_or("none"),
+                d.matches
+                    .iter()
+                    .map(|m| m.rule_identifier.as_str())
+                    .collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>()
+    );
 }
 
 #[test]

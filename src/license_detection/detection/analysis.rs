@@ -67,7 +67,7 @@ pub(super) fn has_extra_words(matches: &[LicenseMatch]) -> bool {
 ///
 /// False positives are identified based on:
 /// - Single matches with bare identifiers and low relevance
-/// - GPL matches with short length
+/// - All-GPL match groups where every matched rule is one token long
 /// - Late matches with short rules and low relevance
 /// - Tag matches with short length
 ///
@@ -332,14 +332,19 @@ pub(super) fn analyze_detection(matches: &[LicenseMatch], package_license: bool)
         return "unknown-reference-to-local-file";
     }
 
-    // Check 4: False positive (unless package_license is set)
-    if !package_license && is_false_positive(matches) {
-        return "false-positive";
-    }
-
-    // Check 5: License clues
+    // Check 4: License clues
+    //
+    // Clue-only matches should remain visible as clues rather than being
+    // swallowed by the false-positive branch. This matters for weak GPL
+    // shorthand such as bare "GPL", where maintainer sentiment favors
+    // preserving the weak evidence without asserting a detected GPL license.
     if !package_license && has_correct_license_clue_matches(matches) {
         return DETECTION_LOG_LICENSE_CLUES;
+    }
+
+    // Check 5: False positive (unless package_license is set)
+    if !package_license && is_false_positive(matches) {
+        return "false-positive";
     }
 
     // Check 6: Perfect detection (correct AND no unknowns AND no extra words)
@@ -602,7 +607,8 @@ pub(super) fn classify_detection(detection: &LicenseDetection, min_score: f32) -
 
     let score = compute_detection_score(&detection.matches);
     let meets_score_threshold = score >= min_score - 0.01;
-    let not_false_positive = !is_false_positive(&detection.matches);
+    let is_true_license_clue = has_correct_license_clue_matches(&detection.matches);
+    let not_false_positive = is_true_license_clue || !is_false_positive(&detection.matches);
 
     // Python does NOT filter out low-quality matches - it returns them with
     // "low-quality-matches" in detection_log but still includes them.
@@ -1618,6 +1624,34 @@ mod tests {
     }
 
     #[test]
+    fn test_classify_detection_keeps_true_license_clue_even_if_false_positive_heuristic_matches() {
+        let mut m = create_test_match_full(
+            "gpl-1.0-plus",
+            "2-aho",
+            1,
+            1,
+            MatchScore::MAX,
+            1,
+            1,
+            100.0,
+            50,
+            "gpl_bare_word_only.RULE",
+        );
+        m.rule_kind = crate::license_detection::models::RuleKind::Clue;
+
+        let detection = LicenseDetection {
+            license_expression: None,
+            license_expression_spdx: None,
+            matches: vec![m],
+            detection_log: vec![DETECTION_LOG_LICENSE_CLUES.to_string()],
+            identifier: None,
+            file_regions: Vec::new(),
+        };
+
+        assert!(classify_detection(&detection, 0.0));
+    }
+
+    #[test]
     fn test_classify_detection_invalid_empty() {
         let detection = LicenseDetection {
             license_expression: None,
@@ -1837,6 +1871,28 @@ mod tests {
             "gpl_bare.LICENSE",
         )];
         assert_eq!(analyze_detection(&matches, false), "false-positive");
+    }
+
+    #[test]
+    fn test_analyze_detection_clue_takes_precedence_over_false_positive_for_bare_gpl() {
+        let mut clue = create_test_match_full(
+            "gpl-1.0-plus",
+            "2-aho",
+            1,
+            1,
+            MatchScore::MAX,
+            1,
+            1,
+            100.0,
+            50,
+            "gpl_bare_word_only.RULE",
+        );
+        clue.rule_kind = crate::license_detection::models::RuleKind::Clue;
+
+        assert_eq!(
+            analyze_detection(&[clue], false),
+            DETECTION_LOG_LICENSE_CLUES
+        );
     }
 
     #[test]
