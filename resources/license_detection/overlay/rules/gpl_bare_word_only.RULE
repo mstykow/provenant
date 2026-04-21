@@ -1,0 +1,8 @@
+---
+license_expression: gpl-1.0-plus
+is_license_clue: yes
+relevance: 50
+notes: Bare versionless GPL shorthand is too weak for a hard detection; preserve it as clue-only evidence.
+---
+
+GPL
