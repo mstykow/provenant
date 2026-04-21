@@ -55,6 +55,33 @@ Repo-specific expectations:
 - Do not add dependencies lightly; make sure they clearly justify their maintenance cost.
 - Keep PR scope disciplined. For ecosystem or parser work, prefer one ecosystem family per PR.
 
+## Inbound licensing policy
+
+Provenant uses the Developer Certificate of Origin (DCO) 1.1 for inbound
+contributions. The DCO text is stored in [`DCO`](DCO).
+
+Unless a path says otherwise, contributions are accepted under the same license
+terms that already apply to the material you are changing in this repository.
+For the main project code that is Apache-2.0. Third-party and reference
+material kept in-tree continues to use its existing notices and licenses.
+
+Every commit you author must include a `Signed-off-by:` trailer that matches
+your commit author identity. The easiest way to do that is to use:
+
+```sh
+git commit -s
+```
+
+If you forgot to sign off the latest commit, fix it with:
+
+```sh
+git commit --amend -s --no-edit
+```
+
+If you rewrite or squash commits before merge, make sure the resulting commits
+still carry the sign-off. The local git hook can catch missing sign-offs early,
+and the GitHub DCO app enforces PR-level compliance.
+
 ## Testing and validation
 
 Keep local validation tightly scoped. This repository has many slow and specialized tests, so the default is the smallest command that proves your change.
@@ -85,6 +112,7 @@ That guide covers parser invariants, registration, datasource wiring, assembly i
 
 - Write commit messages in Conventional Commits format: `type(scope): short summary` when a scope helps, or `type: short summary` otherwise.
 - Use the same Conventional Commits format for pull request titles.
+- Sign off every commit with `git commit -s` so the branch satisfies the DCO policy.
 - Follow the structure in [`.github/pull_request_template.md`](.github/pull_request_template.md) and omit sections that do not apply.
 - Keep summaries focused on why the change exists, not just what changed.
 
