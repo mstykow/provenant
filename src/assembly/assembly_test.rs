@@ -925,6 +925,27 @@ mod tests {
     }
 
     #[test]
+    fn test_assemble_creates_package_for_buck_metadata_without_package_type() {
+        let mut files = vec![create_test_file_info(
+            "repo/METADATA.bzl",
+            DatasourceId::BuckMetadata,
+            None,
+            Some("example"),
+            Some("0.0.1"),
+            vec![],
+        )];
+
+        let result = assemble(&mut files);
+
+        assert_eq!(result.packages.len(), 1);
+        let package = &result.packages[0];
+        assert_eq!(package.package_type, None);
+        assert_eq!(package.name.as_deref(), Some("example"));
+        assert_eq!(package.version.as_deref(), Some("0.0.1"));
+        assert!(package.datasource_ids.contains(&DatasourceId::BuckMetadata));
+    }
+
+    #[test]
     fn test_assemble_nuget_cpm_prefers_version_override_when_enabled() {
         let mut props_file = create_test_file_info(
             "repo/Directory.Packages.props",
