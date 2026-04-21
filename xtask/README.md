@@ -17,6 +17,7 @@ cargo run --manifest-path xtask/Cargo.toml --bin <command> -- ...
 | `update-copyright-golden`    | Maintain copyright golden YAML fixtures with parity-gated or Rust-owned update modes.          |
 | `update-license-golden`      | Maintain license golden YAML fixtures with parity-gated or Rust-owned update modes.            |
 | `validate-urls`              | Validate URLs in production docs and Rust docstrings.                                          |
+| `check-license-headers`      | Check or repair SPDX-style headers on the repo's allowlisted first-party files.                |
 | `generate-supported-formats` | Regenerate `docs/SUPPORTED_FORMATS.md` from parser metadata.                                   |
 | `generate-benchmark-chart`   | Regenerate the benchmark duration-vs-files SVG from timing rows in `docs/BENCHMARKS.md`.       |
 | `generate-index-artifact`    | Regenerate the embedded license index artifact from ScanCode rules and licenses.               |
@@ -311,6 +312,34 @@ Exit codes:
 - `1`: some URLs failed validation
 
 This command is informational in CI and does not block PRs.
+
+## `check-license-headers`
+
+`check-license-headers` checks or repairs the repo's SPDX-style header rollout
+for first-party code and automation files.
+
+The current rollout intentionally covers repo-owned, comment-friendly files
+such as Rust sources, selected shell and Python scripts, and GitHub
+workflow/action YAML. It intentionally excludes `reference/**`, `testdata/**`,
+`resources/license_detection/**`, and generated docs such as
+`docs/SUPPORTED_FORMATS.md`.
+
+The header intentionally uses a holder-only copyright line:
+
+```text
+SPDX-FileCopyrightText: Provenant contributors
+SPDX-License-Identifier: Apache-2.0
+```
+
+This avoids pointless repo-wide churn from updating years every calendar year.
+
+Examples:
+
+```bash
+cargo run --manifest-path xtask/Cargo.toml --bin check-license-headers -- --check
+cargo run --manifest-path xtask/Cargo.toml --bin check-license-headers -- --fix
+cargo run --manifest-path xtask/Cargo.toml --bin check-license-headers -- --fix src/lib.rs .github/workflows/check.yml
+```
 
 ## `generate-supported-formats`
 

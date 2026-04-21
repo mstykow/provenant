@@ -45,6 +45,10 @@ path = "src/bin/generate_benchmark_chart.rs"
 name = "generate-legalese-artifact"
 path = "src/bin/generate_legalese_artifact/main.rs"
 
+[[bin]]
+name = "check-license-headers"
+path = "src/bin/check_license_headers.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
