@@ -40,6 +40,11 @@ const JUNK_EXACT_DOMAIN_NAMES: &[&str] = &[
 const JUNK_DOMAIN_SUFFIXES: &[&str] =
     &[".png", ".jpg", ".gif", ".jpeg", ".local", ".blank", ".fill"];
 
+const JUNK_EMAIL_AND_HOST_SUFFIXES: &[&str] = &[
+    ".html", ".htm", ".txt", ".conf", ".cfg", ".default", ".patch", ".diff", ".tar.gz", ".tar.bz2",
+    ".tar.xz", ".gz", ".bz2", ".xz", ".hint", ".sftp",
+];
+
 const JUNK_URLS: &[&str] = &[
     "http://www.adobe.com/2006/mxml",
     "http://www.w3.org/1999/xsl/transform",
@@ -193,14 +198,19 @@ pub(crate) fn classify_ip(ip: &str) -> bool {
 }
 
 pub(crate) fn classify_host(host: &str) -> bool {
-    classify(host, JUNK_HOSTS_AND_DOMAINS, JUNK_DOMAIN_SUFFIXES, &[])
+    classify(
+        host,
+        JUNK_HOSTS_AND_DOMAINS,
+        JUNK_EMAIL_AND_HOST_SUFFIXES,
+        &[],
+    )
 }
 
 pub(crate) fn classify_email(email: &str) -> bool {
     classify(
         email,
         JUNK_EMAILS,
-        JUNK_DOMAIN_SUFFIXES,
+        JUNK_EMAIL_AND_HOST_SUFFIXES,
         JUNK_EXACT_DOMAIN_NAMES,
     )
 }
