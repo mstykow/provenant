@@ -4,12 +4,16 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use glob::Pattern;
+use serde::Deserialize;
 
 const COPYRIGHT_LINE: &str = "SPDX-FileCopyrightText: Provenant contributors";
 const LICENSE_LINE: &str = "SPDX-License-Identifier: Apache-2.0";
+const SCOPE_CONFIG_PATH: &str = ".license-headers.toml";
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -25,15 +29,104 @@ struct Args {
     paths: Vec<PathBuf>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+struct ScopePatterns {
+    #[serde(default)]
+    include: Vec<String>,
+    #[serde(default)]
+    exclude: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct ScopeConfigFile {
+    #[serde(default)]
+    license_headers: ScopePatterns,
+}
+
+#[derive(Debug)]
+struct CompiledScopePatterns {
+    include: Vec<Pattern>,
+    exclude: Vec<Pattern>,
+}
+
+#[derive(Debug)]
+struct ScopeConfig {
+    patterns: CompiledScopePatterns,
+}
+
+impl ScopeConfig {
+    fn load(repo_root: &Path) -> Result<Self> {
+        let config_path = repo_root.join(SCOPE_CONFIG_PATH);
+        let contents = fs::read_to_string(&config_path)
+            .with_context(|| format!("failed to read {}", config_path.display()))?;
+        let parsed: ScopeConfigFile = toml::from_str(&contents)
+            .with_context(|| format!("failed to parse {}", config_path.display()))?;
+
+        let include = compile_patterns(&config_path, "include", parsed.license_headers.include)?;
+        let exclude = compile_patterns(&config_path, "exclude", parsed.license_headers.exclude)?;
+
+        anyhow::ensure!(
+            !include.is_empty(),
+            "{} must define at least one include pattern",
+            config_path.display()
+        );
+
+        Ok(Self {
+            patterns: CompiledScopePatterns { include, exclude },
+        })
+    }
+
+    fn includes(&self, relative_path: &str) -> bool {
+        let path = Path::new(relative_path);
+        self.patterns
+            .include
+            .iter()
+            .any(|pattern| pattern.matches_path(path))
+            && !self
+                .patterns
+                .exclude
+                .iter()
+                .any(|pattern| pattern.matches_path(path))
+    }
+}
+
+fn compile_patterns(
+    config_path: &Path,
+    kind: &'static str,
+    patterns: Vec<String>,
+) -> Result<Vec<Pattern>> {
+    patterns
+        .into_iter()
+        .map(|pattern| {
+            let normalized = pattern.trim().trim_start_matches('/').to_string();
+            anyhow::ensure!(
+                !normalized.is_empty(),
+                "{} contains an empty {} pattern",
+                config_path.display(),
+                kind
+            );
+            Pattern::new(&normalized).with_context(|| {
+                format!(
+                    "invalid {} pattern {:?} in {}",
+                    kind,
+                    normalized,
+                    config_path.display()
+                )
+            })
+        })
+        .collect()
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
     anyhow::ensure!(args.check || args.fix, "pass either --check or --fix");
 
     let repo_root = provenant_xtask::common::project_root();
+    let scope = ScopeConfig::load(&repo_root)?;
     let candidates = if args.paths.is_empty() {
-        collect_all_candidates(&repo_root)?
+        collect_all_candidates(&repo_root, &scope)?
     } else {
-        collect_requested_candidates(&repo_root, &args.paths)?
+        collect_requested_candidates(&repo_root, &scope, &args.paths)?
     };
 
     if args.fix {
@@ -80,42 +173,28 @@ fn main() -> Result<()> {
         eprintln!("  {path}");
     }
     eprintln!();
+    eprintln!("Scope rules live in {SCOPE_CONFIG_PATH}.");
     eprintln!(
         "Fix them with: cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin check-license-headers -- --fix"
     );
     anyhow::bail!("license header check failed");
 }
 
-fn collect_all_candidates(repo_root: &Path) -> Result<Vec<PathBuf>> {
+fn collect_all_candidates(repo_root: &Path, scope: &ScopeConfig) -> Result<Vec<PathBuf>> {
     let mut candidates = BTreeSet::new();
-    walk_dir(repo_root, repo_root, &mut candidates)?;
-    Ok(candidates.into_iter().collect())
-}
-
-fn walk_dir(repo_root: &Path, dir: &Path, candidates: &mut BTreeSet<PathBuf>) -> Result<()> {
-    for entry in fs::read_dir(dir).with_context(|| format!("failed to read {}", dir.display()))? {
-        let entry = entry.with_context(|| format!("failed to read entry in {}", dir.display()))?;
-        let path = entry.path();
-        let file_type = entry
-            .file_type()
-            .with_context(|| format!("failed to stat {}", path.display()))?;
-
-        if file_type.is_dir() {
-            if should_skip_dir(repo_root, &path)? {
-                continue;
-            }
-            walk_dir(repo_root, &path, candidates)?;
-            continue;
-        }
-
-        if file_type.is_file() && is_in_scope(repo_root, &path)? {
+    for path in git_tracked_files(repo_root)? {
+        if is_in_scope(repo_root, scope, &path)? {
             candidates.insert(path);
         }
     }
-    Ok(())
+    Ok(candidates.into_iter().collect())
 }
 
-fn collect_requested_candidates(repo_root: &Path, raw_paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
+fn collect_requested_candidates(
+    repo_root: &Path,
+    scope: &ScopeConfig,
+    raw_paths: &[PathBuf],
+) -> Result<Vec<PathBuf>> {
     let mut candidates = BTreeSet::new();
     for raw_path in raw_paths {
         let path = normalize_requested_path(raw_path)?;
@@ -125,11 +204,39 @@ fn collect_requested_candidates(repo_root: &Path, raw_paths: &[PathBuf]) -> Resu
         if !path.starts_with(repo_root) {
             continue;
         }
-        if is_in_scope(repo_root, &path)? {
+        if is_in_scope(repo_root, scope, &path)? {
             candidates.insert(path);
         }
     }
     Ok(candidates.into_iter().collect())
+}
+
+fn git_tracked_files(repo_root: &Path) -> Result<Vec<PathBuf>> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .arg("ls-files")
+        .arg("-z")
+        .output()
+        .with_context(|| {
+            format!(
+                "failed to enumerate tracked files in {}",
+                repo_root.display()
+            )
+        })?;
+
+    anyhow::ensure!(
+        output.status.success(),
+        "git ls-files failed for {}",
+        repo_root.display()
+    );
+
+    Ok(output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|bytes| !bytes.is_empty())
+        .map(|bytes| repo_root.join(String::from_utf8_lossy(bytes).into_owned()))
+        .collect())
 }
 
 fn normalize_requested_path(raw_path: &Path) -> Result<PathBuf> {
@@ -149,48 +256,15 @@ fn rel_path(repo_root: &Path, path: &Path) -> Result<String> {
         .replace('\\', "/"))
 }
 
-fn should_skip_dir(repo_root: &Path, path: &Path) -> Result<bool> {
+fn is_in_scope(repo_root: &Path, scope: &ScopeConfig, path: &Path) -> Result<bool> {
     let relative = rel_path(repo_root, path)?;
-    Ok(matches!(
-        relative.as_str(),
-        ".git"
-            | "node_modules"
-            | "reference"
-            | "resources"
-            | "target"
-            | "testdata"
-            | ".provenant"
-            | ".sisyphus"
-    ))
-}
-
-fn is_in_scope(repo_root: &Path, path: &Path) -> Result<bool> {
-    let relative = rel_path(repo_root, path)?;
-
-    if matches!(relative.as_str(), "build.rs" | "release.sh" | "setup.sh") {
-        return Ok(true);
-    }
-
-    if relative == "docs/SUPPORTED_FORMATS.md" {
-        return Ok(false);
-    }
-
-    let ext = path.extension().and_then(|value| value.to_str());
-
-    Ok((relative.starts_with("src/") && ext == Some("rs"))
-        || (relative.starts_with("tests/") && ext == Some("rs"))
-        || (relative.starts_with("xtask/src/") && ext == Some("rs"))
-        || (relative.starts_with("build_support/") && ext == Some("rs"))
-        || (relative.starts_with("scripts/") && matches!(ext, Some("sh") | Some("py")))
-        || (relative.starts_with(".github/workflows/")
-            && matches!(ext, Some("yml") | Some("yaml")))
-        || (relative.starts_with(".github/actions/") && matches!(ext, Some("yml") | Some("yaml"))))
+    Ok(scope.includes(&relative))
 }
 
 fn comment_prefix(path: &Path) -> Option<&'static str> {
     match path.extension().and_then(|value| value.to_str()) {
         Some("rs") => Some("//"),
-        Some("sh") | Some("py") | Some("yml") | Some("yaml") => Some("#"),
+        Some("sh") | Some("yml") | Some("yaml") => Some("#"),
         _ if path.file_name().and_then(|value| value.to_str()) == Some("build.rs") => Some("//"),
         _ => None,
     }

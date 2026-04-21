@@ -1,0 +1,25 @@
+# SPDX license header scope rules.
+
+[license_headers]
+include = [
+  "build.rs",
+  "lefthook.yml",
+  "release.sh",
+  "setup.sh",
+  "src/**/*.rs",
+  "tests/**/*.rs",
+  "xtask/src/**/*.rs",
+  "build_support/**/*.rs",
+  "scripts/**/*.sh",
+  ".github/workflows/**/*.yml",
+  ".github/workflows/**/*.yaml",
+  ".github/actions/**/*.yml",
+  ".github/actions/**/*.yaml",
+]
+
+exclude = [
+  "reference/**",
+  "testdata/**",
+  "resources/license_detection/**",
+  "docs/SUPPORTED_FORMATS.md",
+]
