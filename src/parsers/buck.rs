@@ -81,7 +81,6 @@ impl PackageParser for BuckMetadataBzlParser {
             Err(e) => {
                 warn!("Failed to parse Buck METADATA.bzl {:?}: {}", path, e);
                 PackageData {
-                    package_type: Some(Self::PACKAGE_TYPE),
                     datasource_id: Some(DatasourceId::BuckMetadata),
                     ..Default::default()
                 }
@@ -125,7 +124,6 @@ fn parse_metadata_bzl(path: &Path) -> Result<PackageData, String> {
 
     // No METADATA found
     Ok(PackageData {
-        package_type: Some(BuckMetadataBzlParser::PACKAGE_TYPE),
         datasource_id: Some(DatasourceId::BuckMetadata),
         ..Default::default()
     })
@@ -311,7 +309,6 @@ fn insert_license_reference_extra_data(
 /// Build PackageData from extracted metadata fields
 fn build_package_from_metadata(fields: HashMap<String, MetadataValue>) -> PackageData {
     let mut pkg = PackageData {
-        package_type: Some(BuckMetadataBzlParser::PACKAGE_TYPE),
         datasource_id: Some(DatasourceId::BuckMetadata),
         ..Default::default()
     };
