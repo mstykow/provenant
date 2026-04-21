@@ -1861,19 +1861,13 @@ pub fn normalize_french_support_disclaimer_copyrights(
     });
 }
 
-pub fn drop_shadowed_email_org_location_suffixes_same_span(
-    copyrights: &mut Vec<CopyrightDetection>,
-    holders: &mut Vec<HolderDetection>,
-) {
-    if copyrights.len() < 2 && holders.len() < 2 {
+pub fn drop_shadowed_inria_location_copyrights_same_span(copyrights: &mut Vec<CopyrightDetection>) {
+    if copyrights.len() < 2 {
         return;
     }
 
     static INRIA_LOC_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"^(?P<prefix>.+\bINRIA)\s+(?P<loc>[A-Z][a-z]{2,64})$").unwrap()
-    });
-    static LEADING_EMAIL_COMMA_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?i)^(?P<email>[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,15})\s*,\s+.+$").unwrap()
     });
 
     let mut exact_c_by_span: HashMap<(usize, usize), HashSet<String>> = HashMap::new();
@@ -1902,6 +1896,18 @@ pub fn drop_shadowed_email_org_location_suffixes_same_span(
         }
         !set.contains(prefix)
     });
+}
+
+pub fn add_email_holders_from_leading_email_comma_holders(
+    holders: &[HolderDetection],
+) -> Vec<HolderDetection> {
+    if holders.len() < 2 {
+        return Vec::new();
+    }
+
+    static LEADING_EMAIL_COMMA_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)^(?P<email>[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,15})\s*,\s+.+$").unwrap()
+    });
 
     let mut exact_h_by_span: HashMap<(usize, usize), HashSet<String>> = HashMap::new();
     for h in holders.iter() {
@@ -1911,7 +1917,7 @@ pub fn drop_shadowed_email_org_location_suffixes_same_span(
             .insert(h.holder.clone());
     }
 
-    let mut to_add_h = Vec::new();
+    let mut to_add = Vec::new();
     for h in holders.iter() {
         let Some(cap) = LEADING_EMAIL_COMMA_RE.captures(h.holder.trim()) else {
             continue;
@@ -1923,24 +1929,41 @@ pub fn drop_shadowed_email_org_location_suffixes_same_span(
         let Some(refined_email) = refine_holder_in_copyright_context(email) else {
             continue;
         };
-        let key = (h.start_line.get(), h.end_line.get(), refined_email.clone());
         if exact_h_by_span
             .get(&(h.start_line.get(), h.end_line.get()))
             .is_some_and(|set| set.contains(&refined_email))
         {
             continue;
         }
-        to_add_h.push(HolderDetection {
+        exact_h_by_span
+            .entry((h.start_line.get(), h.end_line.get()))
+            .or_default()
+            .insert(refined_email.clone());
+        to_add.push(HolderDetection {
             holder: refined_email,
             start_line: h.start_line,
             end_line: h.end_line,
         });
+    }
+    to_add
+}
+
+pub fn drop_shadowed_email_comma_holders_same_span(holders: &mut Vec<HolderDetection>) {
+    if holders.len() < 2 {
+        return;
+    }
+
+    static LEADING_EMAIL_COMMA_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)^(?P<email>[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,15})\s*,\s+.+$").unwrap()
+    });
+
+    let mut exact_h_by_span: HashMap<(usize, usize), HashSet<String>> = HashMap::new();
+    for h in holders.iter() {
         exact_h_by_span
             .entry((h.start_line.get(), h.end_line.get()))
             .or_default()
-            .insert(key.2);
+            .insert(h.holder.clone());
     }
-    holders.extend(to_add_h);
 
     holders.retain(|h| {
         let span = (h.start_line.get(), h.end_line.get());

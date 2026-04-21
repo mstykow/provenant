@@ -509,9 +509,12 @@ pub(super) fn run_phase_postprocess(
     super::postprocess_transforms::normalize_french_support_disclaimer_copyrights(
         copyrights, holders,
     );
-    super::postprocess_transforms::drop_shadowed_email_org_location_suffixes_same_span(
-        copyrights, holders,
-    );
+    super::postprocess_transforms::drop_shadowed_inria_location_copyrights_same_span(copyrights);
+    let extra_holders =
+        super::postprocess_transforms::add_email_holders_from_leading_email_comma_holders(holders);
+    holders.extend(extra_holders);
+    super::postprocess_transforms::dedupe_exact_span_holders(holders);
+    super::postprocess_transforms::drop_shadowed_email_comma_holders_same_span(holders);
     super::postprocess_transforms::drop_shadowed_plain_email_prefix_copyrights_same_span(
         copyrights,
     );
