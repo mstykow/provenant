@@ -1127,6 +1127,22 @@ impl Package {
     }
 
     fn build_current_purl(&self) -> Option<String> {
+        if let Some(existing_purl) = self.purl.as_deref() {
+            let mut purl = PackageUrl::from_str(existing_purl).ok()?;
+
+            if let Some(version) = self
+                .version
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            {
+                purl.with_version(version).ok()?;
+            } else {
+                purl.without_version();
+            }
+
+            return Some(purl.to_string());
+        }
+
         if let (Some(package_type), Some(name)) = (
             self.package_type.as_ref(),
             self.name
@@ -1172,21 +1188,7 @@ impl Package {
 
             return Some(purl.to_string());
         }
-
-        let existing_purl = self.purl.as_deref()?;
-        let mut purl = PackageUrl::from_str(existing_purl).ok()?;
-
-        if let Some(version) = self
-            .version
-            .as_deref()
-            .filter(|value| !value.trim().is_empty())
-        {
-            purl.with_version(version).ok()?;
-        } else {
-            purl.without_version();
-        }
-
-        Some(purl.to_string())
+        None
     }
 }
 
@@ -1323,6 +1325,30 @@ mod tests {
             Some("parser-declared-license")
         );
         assert!(package.license_detections[0].identifier.is_some());
+    }
+
+    #[test]
+    fn package_from_package_data_preserves_existing_purl_qualifiers() {
+        let package_data = PackageData {
+            package_type: Some(PackageType::Alpine),
+            namespace: Some("alpine".to_string()),
+            name: Some("busybox".to_string()),
+            version: Some("1.35.0-r17".to_string()),
+            purl: Some("pkg:alpine/busybox@1.35.0-r17?arch=x86_64".to_string()),
+            ..PackageData::default()
+        };
+
+        let package = Package::from_package_data(&package_data, "lib/apk/db/installed".to_string());
+
+        assert_eq!(
+            package.purl.as_deref(),
+            Some("pkg:alpine/busybox@1.35.0-r17?arch=x86_64")
+        );
+        assert!(
+            package
+                .package_uid
+                .starts_with("pkg:alpine/busybox@1.35.0-r17?arch=x86_64&uuid=")
+        );
     }
 }
 
