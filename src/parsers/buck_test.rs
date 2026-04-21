@@ -3,7 +3,7 @@
 
 //! Tests for Buck BUILD and METADATA.bzl parsers
 
-use crate::models::{PackageType, Sha1Digest};
+use crate::models::{DatasourceId, PackageType, Sha1Digest};
 
 use std::path::PathBuf;
 
@@ -158,7 +158,8 @@ fn test_parse_metadata_bzl_basic() {
     let path = PathBuf::from("testdata/buck/metadata/METADATA.bzl");
     let pkg = BuckMetadataBzlParser::extract_first_package(&path);
 
-    assert_eq!(pkg.package_type, Some(PackageType::Buck));
+    assert_eq!(pkg.package_type, None);
+    assert_eq!(pkg.datasource_id, Some(DatasourceId::BuckMetadata));
     assert_eq!(pkg.name, Some("example".to_string()));
     assert_eq!(pkg.version, Some("0.0.1".to_string()));
     assert_eq!(
@@ -321,7 +322,8 @@ fn test_metadata_bzl_empty_file() {
     std::fs::write(&metadata_path, content).unwrap();
 
     let pkg = BuckMetadataBzlParser::extract_first_package(&metadata_path);
-    assert_eq!(pkg.package_type, Some(PackageType::Buck));
+    assert_eq!(pkg.package_type, None);
+    assert_eq!(pkg.datasource_id, Some(DatasourceId::BuckMetadata));
     assert_eq!(pkg.name, None);
 }
 
@@ -337,7 +339,8 @@ OTHER_VAR = {
     std::fs::write(&metadata_path, content).unwrap();
 
     let pkg = BuckMetadataBzlParser::extract_first_package(&metadata_path);
-    assert_eq!(pkg.package_type, Some(PackageType::Buck));
+    assert_eq!(pkg.package_type, None);
+    assert_eq!(pkg.datasource_id, Some(DatasourceId::BuckMetadata));
     assert_eq!(pkg.name, None);
 }
 
@@ -351,7 +354,8 @@ METADATA = {{{
     std::fs::write(&metadata_path, content).unwrap();
 
     let pkg = BuckMetadataBzlParser::extract_first_package(&metadata_path);
-    assert_eq!(pkg.package_type, Some(PackageType::Buck));
+    assert_eq!(pkg.package_type, None);
+    assert_eq!(pkg.datasource_id, Some(DatasourceId::BuckMetadata));
 }
 
 #[test]
@@ -539,5 +543,6 @@ METADATA = {
 
     let pkg = BuckMetadataBzlParser::extract_first_package(&metadata_path);
 
-    assert_eq!(pkg.package_type, Some(PackageType::Buck));
+    assert_eq!(pkg.package_type, None);
+    assert_eq!(pkg.datasource_id, Some(DatasourceId::BuckMetadata));
 }
