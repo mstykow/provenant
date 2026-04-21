@@ -7,6 +7,34 @@ commit-msg:
 
 pre-commit:
   commands:
+    license-headers:
+      glob:
+        - build.rs
+        - release.sh
+        - setup.sh
+        - "src/*.rs"
+        - "src/**/*.rs"
+        - "tests/*.rs"
+        - "tests/**/*.rs"
+        - "xtask/src/*.rs"
+        - "xtask/src/**/*.rs"
+        - "build_support/*.rs"
+        - "build_support/**/*.rs"
+        - "scripts/*.sh"
+        - "scripts/**/*.sh"
+        - "scripts/*.py"
+        - "scripts/**/*.py"
+        - ".github/workflows/*.yml"
+        - ".github/workflows/*.yaml"
+        - ".github/workflows/**/*.yml"
+        - ".github/workflows/**/*.yaml"
+        - ".github/actions/*.yml"
+        - ".github/actions/*.yaml"
+        - ".github/actions/**/*.yml"
+        - ".github/actions/**/*.yaml"
+      run: cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin check-license-headers -- --fix {staged_files}
+      stage_fixed: true
+
     cargo-sort:
       glob:
         - Cargo.toml

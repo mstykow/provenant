@@ -82,6 +82,35 @@ If you rewrite or squash commits before merge, make sure the resulting commits
 still carry the sign-off. The local git hook can catch missing sign-offs early,
 and the GitHub DCO app enforces PR-level compliance.
 
+## License headers
+
+Provenant's first-party code and automation files carry SPDX-style license
+headers using the Apache-2.0 expression and a `Provenant contributors`
+copyright line.
+
+The header intentionally omits a year so maintainers do not have to rewrite the
+entire tree every calendar year just to keep boilerplate current.
+
+The current rollout intentionally covers repo-owned, comment-friendly files such
+as Rust sources, selected shell and Python scripts, and GitHub workflow/action
+YAML. It intentionally does **not** rewrite paths where prepended text would be
+misleading or risky, including `reference/**`, `testdata/**`,
+`resources/license_detection/**`, and generated docs such as
+`docs/SUPPORTED_FORMATS.md`.
+
+To backfill or repair headers manually, run:
+
+```sh
+cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin check-license-headers -- --fix
+```
+
+Lefthook auto-adds missing headers for staged in-scope files, and CI verifies
+the full allowlist with:
+
+```sh
+cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin check-license-headers -- --check
+```
+
 ## Testing and validation
 
 Keep local validation tightly scoped. This repository has many slow and specialized tests, so the default is the smallest command that proves your change.

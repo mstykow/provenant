@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Provenant contributors
+# SPDX-License-Identifier: Apache-2.0
+
 name: CI
 
 on:
@@ -73,6 +76,9 @@ jobs:
 
       - name: Set up Rust cache
         uses: Swatinem/rust-cache@v2
+
+      - name: Check SPDX-style license headers
+        run: cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin check-license-headers -- --check
 
       - name: Check release version sync
         run: ./scripts/check_release_version_sync.sh
