@@ -5,22 +5,48 @@
 # Release script that updates license data before releasing
 # Usage: ./release.sh <patch|minor|major> [--execute]
 
-set -e
+set -euo pipefail
 
-if [ -z "$1" ]; then
+usage() {
     echo "Usage: ./release.sh <patch|minor|major> [--execute]"
     echo "  --execute: Actually perform the release (default is dry-run)"
     exit 1
-fi
+}
 
-RELEASE_TYPE=$1
+run_release_step() {
+    local step="$1"
+    shift
+
+    if [ -n "$EXECUTE_FLAG" ]; then
+        cargo release "$step" "$@" --execute
+    else
+        cargo release "$step" "$@"
+    fi
+}
+
+case "${1:-}" in
+    patch|minor|major)
+        RELEASE_TYPE="$1"
+        ;;
+    *)
+        usage
+        ;;
+esac
+
 EXECUTE_FLAG=""
 
-if [ "$2" = "--execute" ]; then
+if [ "${2:-}" = "--execute" ]; then
     EXECUTE_FLAG="--execute"
     echo "⚠️  This will perform an actual release!"
+elif [ -n "${2:-}" ]; then
+    usage
 else
     echo "ℹ️  Dry-run mode (use --execute to perform actual release)"
+fi
+
+if [ -n "$(git status --porcelain)" ]; then
+    echo "⚠️  Working tree is not clean. Commit or stash changes before releasing."
+    exit 1
 fi
 
 echo "📦 Preparing for $RELEASE_TYPE release..."
@@ -52,7 +78,7 @@ cargo run --manifest-path xtask/Cargo.toml --bin generate-index-artifact
 
 if [ -n "$EXECUTE_FLAG" ] && [ "$CURRENT_COMMIT" != "$NEW_COMMIT" ]; then
     git add reference/scancode-toolkit resources/license_detection/license_index.zst
-    git commit -m "chore: update license rules/licenses to latest"
+    git commit -s -m "chore: update license rules/licenses to latest"
     echo "✅ Committed license data update"
 elif [ -z "$EXECUTE_FLAG" ]; then
     echo "ℹ️  Embedded license index artifact regenerated for validation (dry-run mode)"
@@ -63,19 +89,26 @@ elif [ -z "$EXECUTE_FLAG" ]; then
     fi
 fi
 
-# Run cargo-release
-echo "🚀 Running cargo-release $RELEASE_TYPE..."
+echo "🚀 Running cargo-release versioning steps..."
+run_release_step version "$RELEASE_TYPE"
+run_release_step replace
+run_release_step hook
+
 if [ -n "$EXECUTE_FLAG" ]; then
-    cargo release $RELEASE_TYPE --execute
-else
-    cargo release $RELEASE_TYPE
+    echo "📝 Creating DCO-signed release commit..."
+    git add -u
+
+    if git diff --cached --quiet; then
+        echo "⚠️  No release changes were staged for commit."
+        exit 1
+    fi
+
+    git commit -s -m "chore: release"
 fi
 
-RELEASE_EXIT_CODE=$?
+echo "🚀 Running cargo-release publish, tag, and push steps..."
+run_release_step publish
+run_release_step tag
+run_release_step push
 
-if [ $RELEASE_EXIT_CODE -eq 0 ]; then
-    echo "✅ Release completed successfully!"
-else
-    echo "❌ Release failed with exit code $RELEASE_EXIT_CODE"
-    exit $RELEASE_EXIT_CODE
-fi
+echo "✅ Release completed successfully!"

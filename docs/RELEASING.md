@@ -84,22 +84,20 @@ On every release attempt, the script:
 3. Updates the submodule checkout if the upstream commit changed.
 4. Verifies that Provenant's output-format version is still aligned with the pinned ScanCode submodule and stops early if contract updates are required.
 5. Regenerates `resources/license_detection/license_index.zst` from the pinned ScanCode dataset plus the checked-in build policy manifest at `resources/license_detection/index_build_policy.toml` and any local overlay files under `resources/license_detection/overlay/`.
-6. In `--execute` mode, commits that license-data refresh as `chore: update license rules/licenses to latest` when needed.
-7. Runs `cargo release <patch|minor|major>` in dry-run or execute mode.
+6. In `--execute` mode, commits that license-data refresh as `chore: update license rules/licenses to latest` with `git commit -s` when needed.
+7. Runs the `cargo release` step subcommands in order: `version`, `replace`, `hook`, manual `git commit -s`, then `publish`, `tag`, and `push`.
 
-The repository is configured so `cargo release`:
+The repository is configured so the `cargo release` steps used by `release.sh`:
 
-- Creates the release commit as `chore: release`
 - Rewrites `CITATION.cff` so its `version` field matches the release version
 - Regenerates the workspace `Cargo.lock` after bumping the crate version and before creating the release commit
 - Creates a GPG-signed tag `vX.Y.Z`
 - Publishes the crate to crates.io
 - Pushes the commit and tag to GitHub
 
-The release commit subject is intentionally versionless because `cargo release`
-uses the workspace-level commit configuration during release commits, and in
-`cargo-release` `0.25.x` the `{{version}}` placeholder is not reliable in that
-path.
+The release commit created by `release.sh` is intentionally versionless
+(`chore: release`) and is written with `git commit -s` so the release flow stays
+DCO compliant.
 
 ## GitHub Release Automation
 
