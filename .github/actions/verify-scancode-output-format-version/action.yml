@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Provenant contributors
+# SPDX-License-Identifier: Apache-2.0
+
 name: Verify ScanCode output format version sync
 description: Verify that Provenant's output format version matches the pinned ScanCode submodule
 runs:

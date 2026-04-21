@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: Provenant contributors
+# SPDX-License-Identifier: Apache-2.0
 
 # Release script that updates license data before releasing
 # Usage: ./release.sh <patch|minor|major> [--execute]

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Provenant contributors
+# SPDX-License-Identifier: Apache-2.0
+
 name: Verify embedded license index
 description: Regenerate and verify the checked-in embedded license index artifact
 inputs:
