@@ -2985,6 +2985,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "glob",
  "inventory",
  "postcard",
  "provenant-cli",
@@ -2995,6 +2996,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
+ "toml",
  "url",
  "yaml_serde",
  "zstd",
