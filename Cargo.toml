@@ -134,7 +134,7 @@ rancor = "0.1.1"
 rayon = { workspace = true }
 regex = { workspace = true }
 rkyv = { workspace = true, features = ["smallvec-1"] }
-rpm = { version = "0.21.0", default-features = false, features = ["gzip-compression", "xz-compression", "zstd-compression", "bzip2-compression"] }
+rpm = { version = "0.22.0", default-features = false, features = ["gzip-compression", "xz-compression", "zstd-compression", "bzip2-compression"] }
 ruff_python_ast = { version = "0.15.8", package = "rustpython-ruff_python_ast" }
 ruff_python_parser = { version = "0.15.8", package = "rustpython-ruff_python_parser" }
 rusqlite = { version = "0.39.0", features = ["bundled"], optional = true }
