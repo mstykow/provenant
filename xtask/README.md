@@ -319,10 +319,16 @@ This command is informational in CI and does not block PRs.
 for first-party code and automation files.
 
 The current rollout intentionally covers repo-owned, comment-friendly files
-such as Rust sources, selected shell and Python scripts, and GitHub
-workflow/action YAML. It intentionally excludes `reference/**`, `testdata/**`,
+such as Rust sources, selected shell scripts, and GitHub workflow/action YAML.
+It intentionally excludes `reference/**`, `testdata/**`,
 `resources/license_detection/**`, and generated docs such as
 `docs/SUPPORTED_FORMATS.md`.
+
+Scope rules live in `.license-headers.toml` with explicit `include` and
+`exclude` lists over repo-root-relative glob patterns.
+
+Lefthook checks staged in-scope files without rewriting them. If a header is
+missing, repair it explicitly with the `--fix` form below.
 
 The header intentionally uses a holder-only copyright line:
 
