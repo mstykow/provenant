@@ -215,6 +215,9 @@ ScanCode: 265.28s</title></rect>
     <rect x="560.43" y="407.11" width="8" height="8" fill="#d97706" rx="1.5"><title>facebook/watchman @ 426a7b7
 Files: 896
 ScanCode: 107.21s</title></rect>
+    <rect x="566.54" y="319.22" width="8" height="8" fill="#d97706" rx="1.5"><title>KhronosGroup/Vulkan-ValidationLayers @ d72c5f5
+Files: 979
+ScanCode: 688.72s</title></rect>
     <rect x="567.10" y="418.44" width="8" height="8" fill="#d97706" rx="1.5"><title>python-poetry/poetry @ bfce511
 Files: 987
 ScanCode: 84.36s</title></rect>
@@ -601,6 +604,9 @@ Provenant: 17.56s</title></circle>
     <circle cx="564.43" cy="492.80" r="4.5" fill="#2563eb"><title>facebook/watchman @ 426a7b7
 Files: 896
 Provenant: 19.03s</title></circle>
+    <circle cx="570.54" cy="459.72" r="4.5" fill="#2563eb"><title>KhronosGroup/Vulkan-ValidationLayers @ d72c5f5
+Files: 979
+Provenant: 38.32s</title></circle>
     <circle cx="571.10" cy="490.24" r="4.5" fill="#2563eb"><title>python-poetry/poetry @ bfce511
 Files: 987
 Provenant: 20.09s</title></circle>
