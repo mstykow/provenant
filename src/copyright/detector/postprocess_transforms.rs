@@ -2727,29 +2727,15 @@ pub fn merge_multiline_obfuscated_name_year_copyright_pairs(
             .unwrap()
     });
 
-    for i in 0..prepared_cache.len().saturating_sub(1) {
-        let Some(prepared) = prepared_cache.get_by_index(i) else {
-            continue;
-        };
-        if !(prepared.contains("Copyright") || prepared.contains("copyright")) {
+    for (first, second) in prepared_cache.adjacent_pairs() {
+        if !(first.prepared.contains("Copyright") || first.prepared.contains("copyright")) {
             continue;
         }
 
-        let ln1 = i + 1;
-        let ln2 = i + 2;
-
-        let Some(l1p) = prepared_cache.get(ln1).map(|s| s.to_string()) else {
+        let Some(c1) = FIRST_RE.captures(first.prepared) else {
             continue;
         };
-        let Some(l2p) = prepared_cache.get(ln2).map(|s| s.to_string()) else {
-            continue;
-        };
-        let l1 = l1p.trim();
-        let l2 = l2p.trim();
-        let Some(c1) = FIRST_RE.captures(l1) else {
-            continue;
-        };
-        let Some(c2) = SECOND_RE.captures(l2) else {
+        let Some(c2) = SECOND_RE.captures(second.prepared) else {
             continue;
         };
 
@@ -2767,9 +2753,12 @@ pub fn merge_multiline_obfuscated_name_year_copyright_pairs(
         };
         let mut updated = false;
         for c in copyrights.iter_mut() {
-            if c.start_line.get() == ln1 && c.end_line.get() == ln1 && c.copyright.contains(name1) {
+            if c.start_line == first.line_number
+                && c.end_line == first.line_number
+                && c.copyright.contains(name1)
+            {
                 c.copyright = refined.clone();
-                c.end_line = LineNumber::new(ln2).expect("valid");
+                c.end_line = second.line_number;
                 updated = true;
                 break;
             }
@@ -2777,26 +2766,27 @@ pub fn merge_multiline_obfuscated_name_year_copyright_pairs(
         if !updated {
             copyrights.push(CopyrightDetection {
                 copyright: refined.clone(),
-                start_line: LineNumber::new(ln1).expect("valid"),
-                end_line: LineNumber::new(ln2).expect("valid"),
+                start_line: first.line_number,
+                end_line: second.line_number,
             });
         }
 
         let combined_holder_raw = format!("{name1}, {name2}");
         if let Some(h) = refine_holder_in_copyright_context(&combined_holder_raw) {
             holders.retain(|x| {
-                !(x.start_line.get() == ln1
-                    && x.end_line.get() == ln1
+                !(x.start_line == first.line_number
+                    && x.end_line == first.line_number
                     && (x.holder == name1 || x.holder.contains(name1)))
             });
-            if !holders
-                .iter()
-                .any(|x| x.start_line.get() == ln1 && x.end_line.get() == ln2 && x.holder == h)
-            {
+            if !holders.iter().any(|x| {
+                x.start_line == first.line_number
+                    && x.end_line == second.line_number
+                    && x.holder == h
+            }) {
                 holders.push(HolderDetection {
                     holder: h,
-                    start_line: LineNumber::new(ln1).expect("valid"),
-                    end_line: LineNumber::new(ln2).expect("valid"),
+                    start_line: first.line_number,
+                    end_line: second.line_number,
                 });
             }
         }
@@ -5004,18 +4994,8 @@ pub fn extract_line_ending_copyright_then_by_holder(
     let mut new_copyrights = Vec::new();
     let mut new_holders = Vec::new();
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache
-            .get_by_index(idx)
-            .map(|p| p.trim().to_string())
-        else {
-            continue;
-        };
-        if prepared.is_empty() {
-            continue;
-        }
-        let lower = prepared.to_ascii_lowercase();
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let lower = prepared_line.prepared.to_ascii_lowercase();
         if !lower.ends_with("copyright") {
             continue;
         }
@@ -5026,18 +5006,8 @@ pub fn extract_line_ending_copyright_then_by_holder(
             continue;
         }
 
-        let mut j = idx + 1;
-        while j < prepared_cache.len() {
-            let next_ln = j + 1;
-            let Some(next_prepared) = prepared_cache.get_by_index(j).map(|p| p.trim().to_string())
-            else {
-                break;
-            };
-            if next_prepared.is_empty() {
-                j += 1;
-                continue;
-            }
-
+        if let Some(next_line) = prepared_cache.next_non_empty_line(prepared_line.line_number) {
+            let next_prepared = next_line.prepared;
             let next_lower = next_prepared.to_ascii_lowercase();
             if next_lower.starts_with("by ") {
                 let holder_raw = next_prepared[3..].trim();
@@ -5045,8 +5015,8 @@ pub fn extract_line_ending_copyright_then_by_holder(
                 if let Some(copyright_text) = refine_copyright(&copyright_raw) {
                     new_copyrights.push(CopyrightDetection {
                         copyright: copyright_text,
-                        start_line: LineNumber::new(ln).unwrap(),
-                        end_line: LineNumber::new(next_ln).expect("valid"),
+                        start_line: prepared_line.line_number,
+                        end_line: next_line.line_number,
                     });
                 }
 
@@ -5055,12 +5025,11 @@ pub fn extract_line_ending_copyright_then_by_holder(
                 {
                     new_holders.push(HolderDetection {
                         holder,
-                        start_line: LineNumber::new(next_ln).expect("valid"),
-                        end_line: LineNumber::new(next_ln).expect("valid"),
+                        start_line: next_line.line_number,
+                        end_line: next_line.line_number,
                     });
                 }
             }
-            break;
         }
     }
 
