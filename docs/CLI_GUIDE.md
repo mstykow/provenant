@@ -485,7 +485,22 @@ These native multi-input paths still follow the current common-prefix behavior. 
 
 You can also pass multiple JSON inputs with `--from-json`.
 
-### 20. "I have an explicit list of files or directories to scan"
+### 20. "I want to scan only files matching certain patterns"
+
+```sh
+provenant --json-pp scan.json --license /path/to/repo --include "*.rs" --include "src/**/*.toml"
+```
+
+Use `--include` when you want glob-style path filtering inside one scan root.
+
+Current behavior:
+
+- `--include` matches file/path patterns; repeated flags are additive
+- use `**` when you want recursion across directory boundaries
+- plain directory-looking tokens such as `src/foo` are treated as literal path patterns, not as an implicit “scan this whole subtree” shortcut
+- if you already know the exact files or directories you want, prefer `--paths-file` instead of encoding that selection indirectly through globs
+
+### 21. "I have an explicit list of files or directories to scan"
 
 ```sh
 provenant --json-pp scan.json --license /path/to/repo --paths-file changed-files.txt
@@ -545,6 +560,8 @@ If you are not sure where to start, use this rule of thumb:
 - Want browser-friendly review? → `--html`
 - Want policy-aware license review? → add `--license-references`, `--filter-clues`, and optionally `--license-policy`
 - Want summary/tally/facet review? → add `--classify`, `--summary`, and optionally `--tallies*` / `--facet`
+- Want glob-style file filtering inside one scan root? → add one or more `--include` patterns
+- Want an explicit rooted list of files/directories? → use `--paths-file`
 - Already have JSON and only want to filter or reshape it? → `--from-json`
 
 ## Where to Go Next
