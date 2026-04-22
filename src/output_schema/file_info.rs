@@ -118,14 +118,14 @@ impl OutputFileInfo {
     }
 
     pub(crate) fn detected_license_expression_spdx(&self) -> Option<String> {
-        crate::utils::spdx::combine_license_expressions(
+        crate::utils::spdx::combine_license_expressions_preserving_structure(
             self.license_detections
                 .iter()
                 .filter(|detection| !detection.license_expression_spdx.is_empty())
                 .map(|detection| detection.license_expression_spdx.clone()),
         )
         .or_else(|| {
-            crate::utils::spdx::combine_license_expressions(
+            crate::utils::spdx::combine_license_expressions_preserving_structure(
                 self.package_data
                     .iter()
                     .flat_map(|package_data| package_data.license_detections.iter())
