@@ -5,10 +5,13 @@
 
 use super::types::LicenseDetection;
 use super::*;
-use crate::license_detection::expression::{combine_expressions_and, combine_expressions_or};
+use crate::license_detection::expression::{
+    combine_expressions_and_preserving_structure, combine_expressions_or_preserving_structure,
+};
 use crate::license_detection::models::{LicenseMatch, MatcherKind};
 use crate::utils::spdx::{
-    ExpressionRelation, combine_license_expressions, combine_license_expressions_with_relation,
+    ExpressionRelation, combine_license_expressions_preserving_structure,
+    combine_license_expressions_with_relation_preserving_structure,
 };
 
 /// Coverage value below which detections are not perfect.
@@ -427,7 +430,7 @@ pub fn determine_license_expression(
         .map(|m| m.license_expression.as_str())
         .collect();
 
-    combine_expressions_and(&expressions, true)
+    combine_expressions_and_preserving_structure(&expressions, true)
         .map_err(|e| format!("Failed to combine expressions: {}", e))
 }
 
@@ -456,7 +459,7 @@ pub fn determine_spdx_expression(
     let expressions = expressions
         .ok_or_else(|| "Missing SPDX expressions for one or more matches".to_string())?;
 
-    combine_license_expressions(expressions.into_iter().map(str::to_string))
+    combine_license_expressions_preserving_structure(expressions.into_iter().map(str::to_string))
         .ok_or_else(|| "Failed to combine SPDX expressions".to_string())
 }
 
@@ -480,8 +483,9 @@ fn determine_alternative_notice_expression(
         .iter()
         .map(|m| m.license_expression.as_str())
         .collect();
-    let alternative_expression = combine_expressions_or(&alternative_expressions, true)
-        .map_err(|e| format!("Failed to combine alternative expressions: {}", e))?;
+    let alternative_expression =
+        combine_expressions_or_preserving_structure(&alternative_expressions, true)
+            .map_err(|e| format!("Failed to combine alternative expressions: {}", e))?;
 
     let mut parts = vec![alternative_expression];
     parts.extend(
@@ -492,7 +496,7 @@ fn determine_alternative_notice_expression(
     );
 
     let part_refs: Vec<&str> = parts.iter().map(String::as_str).collect();
-    combine_expressions_and(&part_refs, true)
+    combine_expressions_and_preserving_structure(&part_refs, true)
         .map(Some)
         .map_err(|e| format!("Failed to combine alternative expression parts: {}", e))
 }
@@ -520,9 +524,11 @@ fn determine_alternative_notice_spdx_expression(
     let alternative_expressions = alternative_expressions.ok_or_else(|| {
         "Missing SPDX expressions for one or more alternative-license matches".to_string()
     })?;
-    let alternative_expression =
-        combine_license_expressions_with_relation(alternative_expressions, ExpressionRelation::Or)
-            .ok_or_else(|| "Failed to combine alternative SPDX expressions".to_string())?;
+    let alternative_expression = combine_license_expressions_with_relation_preserving_structure(
+        alternative_expressions,
+        ExpressionRelation::Or,
+    )
+    .ok_or_else(|| "Failed to combine alternative SPDX expressions".to_string())?;
 
     let mut parts = vec![alternative_expression];
     let supplemental_expressions: Option<Vec<String>> = supplemental
@@ -533,7 +539,7 @@ fn determine_alternative_notice_spdx_expression(
         "Missing SPDX expressions for one or more supplemental matches".to_string()
     })?);
 
-    combine_license_expressions_with_relation(parts, ExpressionRelation::And)
+    combine_license_expressions_with_relation_preserving_structure(parts, ExpressionRelation::And)
         .ok_or_else(|| "Failed to combine alternative SPDX expression parts".to_string())
         .map(Some)
 }
@@ -1414,7 +1420,7 @@ mod tests {
     }
 
     #[test]
-    fn test_determine_license_expression_simplifies_absorbed_compound() {
+    fn test_determine_license_expression_preserves_distinct_nested_operands() {
         let m1 = create_test_match_full(
             "mit",
             "1-hash",
@@ -1439,11 +1445,11 @@ mod tests {
             100,
             "apache.LICENSE",
         );
-        m2.license_expression = "mit OR apache-2.0".to_string();
+        m2.license_expression = "apache-2.0 OR mit".to_string();
 
         let result = determine_license_expression(&[m1, m2], None);
 
-        assert_eq!(result.as_deref(), Ok("mit"));
+        assert_eq!(result.as_deref(), Ok("mit AND (apache-2.0 OR mit)"));
     }
 
     #[test]
@@ -1756,7 +1762,7 @@ mod tests {
     }
 
     #[test]
-    fn test_determine_spdx_expression_simplifies_absorbed_compound() {
+    fn test_determine_spdx_expression_preserves_distinct_nested_operands() {
         let mut m1 = create_test_match_full(
             "mit",
             "1-hash",
@@ -1783,11 +1789,11 @@ mod tests {
             100,
             "apache.LICENSE",
         );
-        m2.license_expression_spdx = Some("MIT OR Apache-2.0".to_string());
+        m2.license_expression_spdx = Some("Apache-2.0 OR MIT".to_string());
 
         let result = determine_spdx_expression(&[m1, m2], None);
 
-        assert_eq!(result.as_deref(), Ok("MIT"));
+        assert_eq!(result.as_deref(), Ok("MIT AND (Apache-2.0 OR MIT)"));
     }
 
     #[test]

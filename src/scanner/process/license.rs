@@ -126,7 +126,10 @@ pub(super) fn extract_license_information(
                     .collect();
 
                 if !expressions.is_empty() {
-                    let combined = crate::utils::spdx::combine_license_expressions(expressions);
+                    let combined =
+                        crate::utils::spdx::combine_license_expressions_preserving_structure(
+                            expressions,
+                        );
                     if let Some(expr) = combined {
                         file_info_builder.license_expression(Some(expr));
                     }
@@ -225,17 +228,18 @@ fn promote_reference_url_clue_detection(
         return None;
     }
 
-    let license_expression = crate::utils::spdx::combine_license_expressions(
+    let license_expression = crate::utils::spdx::combine_license_expressions_preserving_structure(
         promoted_matches
             .iter()
             .map(|license_match| license_match.license_expression.clone()),
     )?;
-    let license_expression_spdx = crate::utils::spdx::combine_license_expressions(
-        promoted_matches
-            .iter()
-            .filter_map(|license_match| license_match.license_expression_spdx.clone()),
-    )
-    .unwrap_or_default();
+    let license_expression_spdx =
+        crate::utils::spdx::combine_license_expressions_preserving_structure(
+            promoted_matches
+                .iter()
+                .filter_map(|license_match| license_match.license_expression_spdx.clone()),
+        )
+        .unwrap_or_default();
     let matches = promoted_matches
         .into_iter()
         .map(|license_match| {
