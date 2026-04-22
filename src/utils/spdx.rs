@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::license_detection::expression::{
     LicenseExpression, parse_expression, simplify_expression,
+    simplify_expression_preserving_structure,
 };
 
 #[derive(Clone, Copy)]
@@ -25,9 +26,30 @@ pub fn combine_license_expressions(
     combine_license_expressions_with_relation(expressions, ExpressionRelation::And)
 }
 
+pub fn combine_license_expressions_preserving_structure(
+    expressions: impl IntoIterator<Item = String>,
+) -> Option<String> {
+    combine_license_expressions_with_relation_and_mode(expressions, ExpressionRelation::And, true)
+}
+
+pub(crate) fn combine_license_expressions_with_relation_preserving_structure(
+    expressions: impl IntoIterator<Item = String>,
+    relation: ExpressionRelation,
+) -> Option<String> {
+    combine_license_expressions_with_relation_and_mode(expressions, relation, true)
+}
+
 pub(crate) fn combine_license_expressions_with_relation(
     expressions: impl IntoIterator<Item = String>,
     relation: ExpressionRelation,
+) -> Option<String> {
+    combine_license_expressions_with_relation_and_mode(expressions, relation, false)
+}
+
+fn combine_license_expressions_with_relation_and_mode(
+    expressions: impl IntoIterator<Item = String>,
+    relation: ExpressionRelation,
+    preserve_structure: bool,
 ) -> Option<String> {
     let expressions: Vec<String> = expressions
         .into_iter()
@@ -39,13 +61,14 @@ pub(crate) fn combine_license_expressions_with_relation(
         return None;
     }
 
-    combine_parsed_expressions(&expressions, relation)
+    combine_parsed_expressions(&expressions, relation, preserve_structure)
         .or_else(|| combine_license_expressions_fallback(&expressions, relation))
 }
 
 fn combine_parsed_expressions(
     expressions: &[String],
     relation: ExpressionRelation,
+    preserve_structure: bool,
 ) -> Option<String> {
     let mut case_map = HashMap::new();
     let parsed_expressions: Vec<LicenseExpression> = expressions
@@ -61,7 +84,11 @@ fn combine_parsed_expressions(
         ExpressionRelation::Or => LicenseExpression::or(parsed_expressions),
     }?;
 
-    let combined = simplify_expression(&combined);
+    let combined = if preserve_structure {
+        simplify_expression_preserving_structure(&combined)
+    } else {
+        simplify_expression(&combined)
+    };
     Some(render_expression_with_case_map(&combined, &case_map))
 }
 
@@ -255,6 +282,16 @@ mod tests {
         ]);
 
         assert_eq!(result.as_deref(), Some("Apache-2.0"));
+    }
+
+    #[test]
+    fn combine_license_expressions_preserving_structure_keeps_distinct_nested_operands() {
+        let result = combine_license_expressions_preserving_structure(vec![
+            "MIT".to_string(),
+            "Apache-2.0 OR MIT".to_string(),
+        ]);
+
+        assert_eq!(result.as_deref(), Some("MIT AND (Apache-2.0 OR MIT)"));
     }
 
     #[test]
