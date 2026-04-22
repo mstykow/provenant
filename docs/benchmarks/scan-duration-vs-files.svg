@@ -122,6 +122,9 @@ ScanCode: 37.57s</title></rect>
     <rect x="407.94" y="420.39" width="8" height="8" fill="#d97706" rx="1.5"><title>libwww-perl/libwww-perl @ 7420d1b
 Files: 98
 ScanCode: 80.95s</title></rect>
+    <rect x="411.37" y="403.50" width="8" height="8" fill="#d97706" rx="1.5"><title>oakserver/oak @ 185baef
+Files: 103
+ScanCode: 115.73s</title></rect>
     <rect x="415.27" y="418.23" width="8" height="8" fill="#d97706" rx="1.5"><title>SwiftFiddle/swiftfiddle-web @ df09b80
 Files: 109
 ScanCode: 84.73s</title></rect>
@@ -191,6 +194,9 @@ ScanCode: 33.50s</title></rect>
     <rect x="528.90" y="383.91" width="8" height="8" fill="#d97706" rx="1.5"><title>Alamofire/Alamofire @ ac01666
 Files: 567
 ScanCode: 175.16s</title></rect>
+    <rect x="528.90" y="389.48" width="8" height="8" fill="#d97706" rx="1.5"><title>denoland/fresh @ 49c4be1
+Files: 567
+ScanCode: 155.71s</title></rect>
     <rect x="529.99" y="373.16" width="8" height="8" fill="#d97706" rx="1.5"><title>catchorg/Catch2 @ 10f6248
 Files: 576
 ScanCode: 219.94s</title></rect>
@@ -281,6 +287,9 @@ ScanCode: 270.61s</title></rect>
     <rect x="638.16" y="353.58" width="8" height="8" fill="#d97706" rx="1.5"><title>jgm/pandoc @ d9838eb
 Files: 2768
 ScanCode: 332.82s</title></rect>
+    <rect x="639.24" y="345.52" width="8" height="8" fill="#d97706" rx="1.5"><title>denoland/std @ a864f62
+Files: 2812
+ScanCode: 394.76s</title></rect>
     <rect x="640.96" y="398.96" width="8" height="8" fill="#d97706" rx="1.5"><title>rust-lang/cargo @ b54fe55
 Files: 2883
 ScanCode: 127.38s</title></rect>
@@ -511,6 +520,9 @@ Provenant: 10.57s</title></circle>
     <circle cx="411.94" cy="518.95" r="4.5" fill="#2563eb"><title>libwww-perl/libwww-perl @ 7420d1b
 Files: 98
 Provenant: 10.94s</title></circle>
+    <circle cx="415.37" cy="510.99" r="4.5" fill="#2563eb"><title>oakserver/oak @ 185baef
+Files: 103
+Provenant: 12.95s</title></circle>
     <circle cx="419.27" cy="522.22" r="4.5" fill="#2563eb"><title>SwiftFiddle/swiftfiddle-web @ df09b80
 Files: 109
 Provenant: 10.21s</title></circle>
@@ -580,6 +592,9 @@ Provenant: 19.91s</title></circle>
     <circle cx="532.90" cy="504.96" r="4.5" fill="#2563eb"><title>Alamofire/Alamofire @ ac01666
 Files: 567
 Provenant: 14.71s</title></circle>
+    <circle cx="532.90" cy="509.65" r="4.5" fill="#2563eb"><title>denoland/fresh @ 49c4be1
+Files: 567
+Provenant: 13.32s</title></circle>
     <circle cx="533.99" cy="505.42" r="4.5" fill="#2563eb"><title>catchorg/Catch2 @ 10f6248
 Files: 576
 Provenant: 14.57s</title></circle>
@@ -670,6 +685,9 @@ Provenant: 35.66s</title></circle>
     <circle cx="642.16" cy="484.30" r="4.5" fill="#2563eb"><title>jgm/pandoc @ d9838eb
 Files: 2768
 Provenant: 22.78s</title></circle>
+    <circle cx="643.24" cy="500.11" r="4.5" fill="#2563eb"><title>denoland/std @ a864f62
+Files: 2812
+Provenant: 16.30s</title></circle>
     <circle cx="644.96" cy="503.26" r="4.5" fill="#2563eb"><title>rust-lang/cargo @ b54fe55
 Files: 2883
 Provenant: 15.25s</title></circle>
