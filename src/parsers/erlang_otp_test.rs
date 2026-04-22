@@ -148,6 +148,35 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_app_src_with_maps_and_link_map() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let path = temp_dir.path().join("myapp.app.src");
+        fs::write(
+            &path,
+            r#"{application, myapp, [
+                {vsn, "1.2.3"},
+                {description, "Map-aware app"},
+                {env, #{transport => <<"mqtt">>, retries => 3, nested => #{}}},
+                {links, #{"Docs" => "https://example.com/docs", "Github" => "https://github.com/example/myapp"}}
+            ]}."#,
+        )
+        .expect("write");
+
+        let package = ErlangAppSrcParser::extract_first_package(&path);
+        assert_eq!(package.name.as_deref(), Some("myapp"));
+        assert_eq!(package.version.as_deref(), Some("1.2.3"));
+        assert_eq!(package.description.as_deref(), Some("Map-aware app"));
+        assert_eq!(
+            package.homepage_url.as_deref(),
+            Some("https://example.com/docs")
+        );
+        assert_eq!(
+            package.vcs_url.as_deref(),
+            Some("https://github.com/example/myapp")
+        );
+    }
+
+    #[test]
     fn test_parse_app_src_with_non_stdlib_runtime_deps() {
         let temp_dir = TempDir::new().expect("temp dir");
         let path = temp_dir.path().join("myapp.app.src");
@@ -256,6 +285,54 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_rebar_config_skips_conditional_wrappers_instead_of_guessing() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let path = temp_dir.path().join("rebar.config");
+        fs::write(
+            &path,
+            r#"{deps, [{if_var_true, coverage, {proper, "1.4.0"}}, {cowboy, "2.10.0"}]}.
+"#,
+        )
+        .expect("write");
+
+        let package = RebarConfigParser::extract_first_package(&path);
+        assert_eq!(package.dependencies.len(), 1);
+        assert_eq!(
+            package.dependencies[0].purl.as_deref(),
+            Some("pkg:hex/cowboy@2.10.0")
+        );
+    }
+
+    #[test]
+    fn test_parse_rebar_config_pkg_alias_dep() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let path = temp_dir.path().join("rebar.config");
+        fs::write(
+            &path,
+            r#"{deps, [{uuid, "1.2.0", {pkg, uuid_erl}}, {cowboy_alias, {pkg, cowboy}}]}."#,
+        )
+        .expect("write");
+
+        let package = RebarConfigParser::extract_first_package(&path);
+        assert_eq!(package.dependencies.len(), 2);
+
+        let uuid = &package.dependencies[0];
+        assert_eq!(uuid.purl.as_deref(), Some("pkg:hex/uuid_erl@1.2.0"));
+        assert_eq!(uuid.extracted_requirement.as_deref(), Some("1.2.0"));
+        assert_eq!(
+            uuid.extra_data
+                .as_ref()
+                .and_then(|extra| extra.get("app_name"))
+                .and_then(|value| value.as_str()),
+            Some("uuid")
+        );
+
+        let cowboy = &package.dependencies[1];
+        assert_eq!(cowboy.purl.as_deref(), Some("pkg:hex/cowboy"));
+        assert!(cowboy.extracted_requirement.is_none());
+    }
+
+    #[test]
     fn test_parse_rebar_config_malformed_returns_fallback() {
         let temp_dir = TempDir::new().expect("temp dir");
         let path = temp_dir.path().join("rebar.config");
@@ -311,6 +388,38 @@ mod tests {
         // cowboy has a pkg_hash entry
         let cowboy = &package.dependencies[0];
         let resolved = cowboy.resolved_package.as_ref().unwrap();
+        assert!(resolved.sha256.is_some());
+    }
+
+    #[test]
+    fn test_parse_rebar_lock_pkg_alias_dep() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let path = temp_dir.path().join("rebar.lock");
+        fs::write(
+            &path,
+            concat!(
+                "{\"1.2.0\", [{<<\"uuid\">>, {pkg, <<\"uuid_erl\">>, <<\"1.2.0\">>}, 0}]}.\n",
+                "[{pkg_hash, [{<<\"uuid\">>, <<\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\">>}]}].\n"
+            ),
+        )
+        .expect("write");
+
+        let package = RebarLockParser::extract_first_package(&path);
+        assert_eq!(package.dependencies.len(), 1);
+
+        let dep = &package.dependencies[0];
+        assert_eq!(dep.purl.as_deref(), Some("pkg:hex/uuid_erl@1.2.0"));
+        assert_eq!(dep.extracted_requirement.as_deref(), Some("1.2.0"));
+        assert_eq!(
+            dep.extra_data
+                .as_ref()
+                .and_then(|extra| extra.get("app_name"))
+                .and_then(|value| value.as_str()),
+            Some("uuid")
+        );
+
+        let resolved = dep.resolved_package.as_ref().expect("resolved package");
+        assert_eq!(resolved.name, "uuid_erl");
         assert!(resolved.sha256.is_some());
     }
 
