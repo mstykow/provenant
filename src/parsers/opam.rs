@@ -233,7 +233,7 @@ fn parse_opam_data(text: &str) -> OpamData {
                 "version" => data.version = clean_value(&value),
                 "synopsis" => data.synopsis = clean_value(&value),
                 "description" => {
-                    data.description = parse_multiline_string(&lines, &mut i);
+                    data.description = parse_description_field(&lines, &mut i, &value);
                 }
                 "homepage" => data.homepage = clean_value(&value),
                 "dev-repo" => data.dev_repo = clean_value(&value),
@@ -301,13 +301,49 @@ fn clean_value(value: &str) -> Option<String> {
     }
 }
 
-/// Parse a multiline string enclosed in triple quotes
-fn parse_multiline_string(lines: &[&str], i: &mut usize) -> Option<String> {
+/// Parse an OPAM description field.
+///
+/// OPAM descriptions can be encoded as an inline quoted string, a quoted string
+/// on the following line, or a triple-quoted multiline string.
+fn parse_description_field(lines: &[&str], i: &mut usize, first_value: &str) -> Option<String> {
+    let trimmed = first_value.trim();
+
+    if trimmed.is_empty() {
+        let next_trimmed = lines.get(*i + 1)?.trim();
+
+        if next_trimmed.starts_with("\"\"\"") {
+            *i += 1;
+            return parse_triple_quoted_string(lines, i, next_trimmed);
+        }
+
+        if next_trimmed.starts_with('"') {
+            *i += 1;
+            return clean_value(next_trimmed);
+        }
+
+        return None;
+    }
+
+    if trimmed.starts_with("\"\"\"") {
+        return parse_triple_quoted_string(lines, i, trimmed);
+    }
+
+    clean_value(trimmed)
+}
+
+/// Parse a multiline string enclosed in triple quotes.
+fn parse_triple_quoted_string(lines: &[&str], i: &mut usize, first_value: &str) -> Option<String> {
     let mut result = String::new();
     let mut iteration_count: usize = 0;
 
-    if let Some((_, value)) = parse_key_value(lines[*i]) {
-        result.push_str(value.trim_matches('"').trim());
+    let first_content = first_value.trim().trim_start_matches("\"\"\"");
+    if let Some(end_index) = first_content.find("\"\"\"") {
+        let cleaned = first_content[..end_index].trim();
+        return (!cleaned.is_empty()).then(|| truncate_field(cleaned.to_string()));
+    }
+
+    if !first_content.trim().is_empty() {
+        result.push_str(first_content.trim());
     }
 
     *i += 1;
@@ -317,13 +353,24 @@ fn parse_multiline_string(lines: &[&str], i: &mut usize) -> Option<String> {
             warn!("parse_multiline_string: exceeded MAX_ITERATION_COUNT, breaking");
             break;
         }
-        let line = lines[*i];
-        result.push(' ');
-        result.push_str(line.trim_matches('"').trim());
+        let line = lines[*i].trim();
 
-        if line.contains("\"\"\"") {
+        if let Some(end_index) = line.find("\"\"\"") {
+            let before_end = line[..end_index].trim();
+            if !before_end.is_empty() {
+                if !result.is_empty() {
+                    result.push(' ');
+                }
+                result.push_str(before_end);
+            }
             break;
         }
+
+        let content = line.trim_matches('"').trim();
+        if !result.is_empty() {
+            result.push(' ');
+        }
+        result.push_str(content);
         *i += 1;
     }
 
@@ -673,6 +720,114 @@ mod tests {
         assert_eq!(
             result,
             Some("Short description\nLong description".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_opam_keeps_fields_after_single_line_description() {
+        let package = parse_opam(
+            r#"opam-version: "2.0"
+name: "dune-rpc"
+version: "3.23.0"
+description: "Library to connect and control a running dune instance"
+maintainer: ["Jane Street Group, LLC <opensource@janestreet.com>"]
+authors: ["Jane Street Group, LLC <opensource@janestreet.com>"]
+license: "MIT"
+homepage: "https://github.com/ocaml/dune"
+bug-reports: "https://github.com/ocaml/dune/issues"
+depends: [
+  "dune" {>= "3.23"}
+  "ocamlc-loc"
+  "stdune" {= version}
+  "odoc" {with-doc}
+]
+dev-repo: "git+https://github.com/ocaml/dune.git"
+"#,
+        );
+
+        assert_eq!(package.name.as_deref(), Some("dune-rpc"));
+        assert_eq!(package.version.as_deref(), Some("3.23.0"));
+        assert_eq!(
+            package.description.as_deref(),
+            Some("Library to connect and control a running dune instance")
+        );
+        assert_eq!(
+            package.homepage_url.as_deref(),
+            Some("https://github.com/ocaml/dune")
+        );
+        assert_eq!(
+            package.bug_tracking_url.as_deref(),
+            Some("https://github.com/ocaml/dune/issues")
+        );
+        assert_eq!(
+            package.vcs_url.as_deref(),
+            Some("git+https://github.com/ocaml/dune.git")
+        );
+        assert_eq!(
+            package.declared_license_expression_spdx.as_deref(),
+            Some("MIT")
+        );
+        assert_eq!(package.dependencies.len(), 4);
+        assert_eq!(
+            package.dependencies[0].purl.as_deref(),
+            Some("pkg:opam/dune")
+        );
+        assert_eq!(
+            package.dependencies[0].extracted_requirement.as_deref(),
+            Some(">= 3.23")
+        );
+        assert_eq!(
+            package.dependencies[2].extracted_requirement.as_deref(),
+            Some("= version")
+        );
+        assert_eq!(
+            package.dependencies[3].extracted_requirement.as_deref(),
+            Some("with-doc")
+        );
+    }
+
+    #[test]
+    fn test_parse_opam_keeps_fields_after_next_line_description() {
+        let package = parse_opam(
+            r#"opam-version: "2.0"
+name: "chrome-trace"
+version: "3.23.0"
+description:
+  "This library offers no backwards compatibility guarantees. Use at your own risk."
+maintainer: ["Jane Street Group, LLC <opensource@janestreet.com>"]
+license: "MIT"
+depends: [
+  "dune" {>= "3.23"}
+  "ocaml" {>= "4.14"}
+  "odoc" {with-doc}
+]
+dev-repo: "git+https://github.com/ocaml/dune.git"
+"#,
+        );
+
+        assert_eq!(package.name.as_deref(), Some("chrome-trace"));
+        assert_eq!(
+            package.description.as_deref(),
+            Some(
+                "This library offers no backwards compatibility guarantees. Use at your own risk."
+            )
+        );
+        assert_eq!(
+            package.vcs_url.as_deref(),
+            Some("git+https://github.com/ocaml/dune.git")
+        );
+        assert_eq!(package.dependencies.len(), 3);
+        assert_eq!(
+            package.dependencies[1].purl.as_deref(),
+            Some("pkg:opam/ocaml")
+        );
+        assert_eq!(
+            package.dependencies[1].extracted_requirement.as_deref(),
+            Some(">= 4.14")
+        );
+        assert_eq!(
+            package.dependencies[2].extracted_requirement.as_deref(),
+            Some("with-doc")
         );
     }
 
