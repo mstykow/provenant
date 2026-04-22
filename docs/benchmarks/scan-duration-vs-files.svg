@@ -119,6 +119,9 @@ ScanCode: 23.84s</title></rect>
     <rect x="397.32" y="456.66" width="8" height="8" fill="#d97706" rx="1.5"><title>numtide/devshell @ 255a2b1
 Files: 84
 ScanCode: 37.57s</title></rect>
+    <rect x="403.59" y="423.65" width="8" height="8" fill="#d97706" rx="1.5"><title>sous-chefs/mysql @ 6b7110b
+Files: 92
+ScanCode: 75.55s</title></rect>
     <rect x="407.94" y="420.39" width="8" height="8" fill="#d97706" rx="1.5"><title>libwww-perl/libwww-perl @ 7420d1b
 Files: 98
 ScanCode: 80.95s</title></rect>
@@ -152,6 +155,9 @@ ScanCode: 120.75s</title></rect>
     <rect x="468.50" y="426.47" width="8" height="8" fill="#d97706" rx="1.5"><title>boostorg/boost @ 4f1cbeb
 Files: 236
 ScanCode: 71.17s</title></rect>
+    <rect x="471.36" y="416.81" width="8" height="8" fill="#d97706" rx="1.5"><title>sous-chefs/apache2 @ 420d824
+Files: 246
+ScanCode: 87.31s</title></rect>
     <rect x="475.18" y="444.77" width="8" height="8" fill="#d97706" rx="1.5"><title>libevent/libevent @ 4829651
 Files: 260
 ScanCode: 48.32s</title></rect>
@@ -293,6 +299,9 @@ ScanCode: 182.30s</title></rect>
     <rect x="619.78" y="321.51" width="8" height="8" fill="#d97706" rx="1.5"><title>ocaml/merlin @ 30b4f24
 Files: 2120
 ScanCode: 656.13s</title></rect>
+    <rect x="624.61" y="348.51" width="8" height="8" fill="#d97706" rx="1.5"><title>chef/chef @ 0e353ff
+Files: 2274
+ScanCode: 370.51s</title></rect>
     <rect x="627.52" y="334.06" width="8" height="8" fill="#d97706" rx="1.5"><title>prefix-dev/pixi @ 6458b15
 Files: 2372
 ScanCode: 503.12s</title></rect>
@@ -544,6 +553,9 @@ Provenant: 19.47s</title></circle>
     <circle cx="401.32" cy="520.58" r="4.5" fill="#2563eb"><title>numtide/devshell @ 255a2b1
 Files: 84
 Provenant: 10.57s</title></circle>
+    <circle cx="407.59" cy="515.70" r="4.5" fill="#2563eb"><title>sous-chefs/mysql @ 6b7110b
+Files: 92
+Provenant: 11.72s</title></circle>
     <circle cx="411.94" cy="518.95" r="4.5" fill="#2563eb"><title>libwww-perl/libwww-perl @ 7420d1b
 Files: 98
 Provenant: 10.94s</title></circle>
@@ -577,6 +589,9 @@ Provenant: 10.48s</title></circle>
     <circle cx="472.50" cy="506.33" r="4.5" fill="#2563eb"><title>boostorg/boost @ 4f1cbeb
 Files: 236
 Provenant: 14.29s</title></circle>
+    <circle cx="475.36" cy="514.55" r="4.5" fill="#2563eb"><title>sous-chefs/apache2 @ 420d824
+Files: 246
+Provenant: 12.01s</title></circle>
     <circle cx="479.18" cy="515.90" r="4.5" fill="#2563eb"><title>libevent/libevent @ 4829651
 Files: 260
 Provenant: 11.67s</title></circle>
@@ -718,6 +733,9 @@ Provenant: 24.15s</title></circle>
     <circle cx="623.78" cy="468.34" r="4.5" fill="#2563eb"><title>ocaml/merlin @ 30b4f24
 Files: 2120
 Provenant: 31.93s</title></circle>
+    <circle cx="628.61" cy="470.20" r="4.5" fill="#2563eb"><title>chef/chef @ 0e353ff
+Files: 2274
+Provenant: 30.70s</title></circle>
     <circle cx="631.52" cy="436.83" r="4.5" fill="#2563eb"><title>prefix-dev/pixi @ 6458b15
 Files: 2372
 Provenant: 62.21s</title></circle>
