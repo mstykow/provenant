@@ -331,6 +331,46 @@ fn validate_scan_option_compatibility_allows_multiple_paths_without_from_json() 
 }
 
 #[test]
+fn validate_scan_option_compatibility_rejects_paths_file_with_from_json() {
+    let cli = crate::cli::Cli::try_parse_from([
+        "provenant",
+        "--json-pp",
+        "scan.json",
+        "--from-json",
+        "--paths-file",
+        "changed-files.txt",
+        "sample-scan.json",
+    ])
+    .unwrap();
+
+    let error = validate_scan_option_compatibility(&cli).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("--paths-file is only supported for native scan mode")
+    );
+}
+
+#[test]
+fn validate_scan_option_compatibility_rejects_paths_file_without_single_root() {
+    let cli = crate::cli::Cli::try_parse_from([
+        "provenant",
+        "--json-pp",
+        "scan.json",
+        "--paths-file",
+        "changed-files.txt",
+    ])
+    .unwrap();
+
+    let error = validate_scan_option_compatibility(&cli).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("--paths-file requires exactly one positional scan root")
+    );
+}
+
+#[test]
 fn validate_scan_option_compatibility_rejects_mark_source_without_info() {
     let mut cli =
         crate::cli::Cli::try_parse_from(["provenant", "--json-pp", "scan.json", "sample-dir"])
@@ -1229,4 +1269,85 @@ fn build_collection_exclude_patterns_skips_vcs_metadata_directories() {
     );
     assert_eq!(collected.file_count(), 1);
     assert!(collected.excluded_count >= 3);
+}
+
+#[test]
+fn resolve_native_scan_selection_uses_paths_file_under_explicit_root() {
+    let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+    let scan_root = temp_dir.path().join("repo");
+    fs::create_dir_all(scan_root.join("src")).expect("create src dir");
+    fs::create_dir_all(scan_root.join("docs")).expect("create docs dir");
+    fs::write(scan_root.join("src/lib.rs"), "pub fn demo() {}\n").expect("write lib");
+    fs::write(scan_root.join("docs/guide.md"), "# guide\n").expect("write guide");
+
+    let paths_file_a = temp_dir.path().join("changed-a.txt");
+    let paths_file_b = temp_dir.path().join("changed-b.txt");
+    fs::write(&paths_file_a, "src/lib.rs\r\nmissing.rs\n").expect("write first paths file");
+    fs::write(&paths_file_b, "docs\nsrc/lib.rs\n").expect("write second paths file");
+
+    let other_cwd = tempfile::TempDir::new().expect("create alternate cwd");
+    let old_cwd = std::env::current_dir().expect("current dir");
+    std::env::set_current_dir(other_cwd.path()).expect("set cwd");
+
+    let cli = crate::cli::Cli::try_parse_from([
+        "provenant",
+        "--json-pp",
+        "scan.json",
+        "--paths-file",
+        paths_file_a.to_str().expect("utf-8 path"),
+        "--paths-file",
+        paths_file_b.to_str().expect("utf-8 path"),
+        scan_root.to_str().expect("utf-8 path"),
+    ])
+    .expect("cli parse should succeed");
+
+    let result = resolve_native_scan_selection(&cli);
+
+    std::env::set_current_dir(old_cwd).expect("restore cwd");
+
+    let (resolved_root, includes, missing_entries) =
+        result.expect("paths file selection should resolve");
+    assert_eq!(resolved_root, scan_root.to_str().expect("utf-8 path"));
+    assert_eq!(includes, vec!["src/lib.rs", "docs"]);
+    assert_eq!(missing_entries, vec!["missing.rs"]);
+}
+
+#[test]
+fn resolve_native_scan_selection_errors_when_paths_file_keeps_no_existing_entries() {
+    let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+    let scan_root = temp_dir.path().join("repo");
+    fs::create_dir_all(&scan_root).expect("create scan root");
+    let paths_file = temp_dir.path().join("changed.txt");
+    fs::write(&paths_file, "missing.rs\n").expect("write paths file");
+
+    let cli = crate::cli::Cli::try_parse_from([
+        "provenant",
+        "--json-pp",
+        "scan.json",
+        "--paths-file",
+        paths_file.to_str().expect("utf-8 path"),
+        scan_root.to_str().expect("utf-8 path"),
+    ])
+    .expect("cli parse should succeed");
+
+    let error = resolve_native_scan_selection(&cli).expect_err("selection should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("did not resolve to any existing files or directories")
+    );
+}
+
+#[test]
+fn build_paths_file_warning_messages_formats_missing_entries_for_headers() {
+    let warnings =
+        build_paths_file_warning_messages(&["missing.rs".to_string(), "docs/guide.md".to_string()]);
+
+    assert_eq!(
+        warnings,
+        vec![
+            "Skipping missing --paths-file entry: missing.rs".to_string(),
+            "Skipping missing --paths-file entry: docs/guide.md".to_string(),
+        ]
+    );
 }
