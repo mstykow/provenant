@@ -439,11 +439,12 @@ pub(super) fn extract_multiline_written_by_author_blocks(
         .unwrap()
     });
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(raw_line) = prepared_cache.raw_by_index(idx) else {
+    for prepared_line in prepared_cache.iter() {
+        let raw_line = prepared_line.raw;
+        let ln = prepared_line.line_number;
+        if raw_line.is_empty() {
             continue;
-        };
+        }
         let line = strip_leading_dash_bullet(raw_line.trim());
         if line.is_empty() {
             continue;
@@ -476,21 +477,16 @@ pub(super) fn extract_multiline_written_by_author_blocks(
             if let Some(author) = refine_author(who) {
                 authors.push(AuthorDetection {
                     author,
-                    start_line: LineNumber::new(ln).expect("invalid line number"),
-                    end_line: LineNumber::new(ln).expect("invalid line number"),
+                    start_line: ln,
+                    end_line: ln,
                 });
             }
         }
     }
 
-    let mut i = 0;
-    while i < prepared_cache.len() {
-        let ln = i + 1;
-        let Some(prepared) = prepared_cache.get_by_index(i) else {
-            i += 1;
-            continue;
-        };
-        let line = prepared.trim();
+    let mut line_number = LineNumber::ONE;
+    while let Some(prepared_line) = prepared_cache.line(line_number) {
+        let line = prepared_line.prepared;
         let normalized_line = strip_leading_dash_bullet(line);
         let lower = normalized_line.to_ascii_lowercase();
 
@@ -503,20 +499,16 @@ pub(super) fn extract_multiline_written_by_author_blocks(
                 || lower.contains(" written by "));
 
         if !is_start {
-            i += 1;
+            line_number += 1usize;
             continue;
         }
 
-        let mut block_lines: Vec<(usize, String)> = Vec::new();
-        block_lines.push((ln, line.to_string()));
+        let mut block_lines: Vec<(LineNumber, String)> = Vec::new();
+        block_lines.push((prepared_line.line_number, line.to_string()));
 
-        let mut j = i + 1;
-        while j < prepared_cache.len() {
-            let next_ln = j + 1;
-            let Some(next_prepared) = prepared_cache.get_by_index(j) else {
-                break;
-            };
-            let next_line = next_prepared.trim();
+        let mut next_line_number = prepared_line.line_number + 1usize;
+        while let Some(next_line) = prepared_cache.line(next_line_number) {
+            let next_line = next_line.prepared;
             if next_line.is_empty() {
                 break;
             }
@@ -537,17 +529,23 @@ pub(super) fn extract_multiline_written_by_author_blocks(
                 break;
             }
 
-            block_lines.push((next_ln, next_line.to_string()));
-            j += 1;
+            block_lines.push((next_line_number, next_line.to_string()));
+            next_line_number += 1usize;
         }
 
         if block_lines.len() < 2 {
-            i += 1;
+            line_number += 1usize;
             continue;
         }
 
-        let start_line = block_lines.first().map(|(l, _)| *l).unwrap_or(ln);
-        let end_line = block_lines.last().map(|(l, _)| *l).unwrap_or(ln);
+        let start_line = block_lines
+            .first()
+            .map(|(line_number, _)| *line_number)
+            .unwrap_or(prepared_line.line_number);
+        let end_line = block_lines
+            .last()
+            .map(|(line_number, _)| *line_number)
+            .unwrap_or(prepared_line.line_number);
 
         let prefer_combined_block = block_lines.iter().skip(1).any(|(_, raw_line)| {
             let lower = raw_line.trim().to_ascii_lowercase();
@@ -575,13 +573,13 @@ pub(super) fn extract_multiline_written_by_author_blocks(
                 .trim_end_matches('.')
                 .trim();
             if let Some(combined) = refine_author(combined_candidate) {
-                authors.retain(|a| a.start_line.get() < start_line || a.end_line.get() > end_line);
+                authors.retain(|a| a.start_line < start_line || a.end_line > end_line);
                 authors.push(AuthorDetection {
                     author: combined,
-                    start_line: LineNumber::new(start_line).expect("valid"),
-                    end_line: LineNumber::new(end_line).expect("valid"),
+                    start_line,
+                    end_line,
                 });
-                i = j;
+                line_number = next_line_number;
                 continue;
             }
         }
@@ -600,8 +598,8 @@ pub(super) fn extract_multiline_written_by_author_blocks(
                         if let Some(author) = refine_author(who) {
                             authors.push(AuthorDetection {
                                 author,
-                                start_line: LineNumber::new(start_line).expect("valid"),
-                                end_line: LineNumber::new(end_line).expect("valid"),
+                                start_line,
+                                end_line,
                             });
                         }
                         extracted_any = true;
@@ -625,16 +623,16 @@ pub(super) fn extract_multiline_written_by_author_blocks(
                 .trim_end_matches('.')
                 .trim();
             if let Some(combined) = refine_author(combined_candidate) {
-                authors.retain(|a| a.start_line.get() < start_line || a.end_line.get() > end_line);
+                authors.retain(|a| a.start_line < start_line || a.end_line > end_line);
                 authors.push(AuthorDetection {
                     author: combined,
-                    start_line: LineNumber::new(start_line).expect("valid"),
-                    end_line: LineNumber::new(end_line).expect("valid"),
+                    start_line,
+                    end_line,
                 });
             }
         }
 
-        i = j;
+        line_number = next_line_number;
     }
 }
 
@@ -889,43 +887,36 @@ pub(super) fn extract_author_colon_blocks(
         Regex::new(r"(?i)^copyright\s+\(c\)\s*(?:\d{4}(?:\s*,\s*\d{4})*|\d{4}-\d{4})\s*$").unwrap()
     });
 
-    let mut i = 0;
-    while i < prepared_cache.len() {
-        let ln = i + 1;
-        let Some(line) = prepared_cache.get_by_index(i).map(trim_author_label_prefix) else {
-            i += 1;
-            continue;
-        };
+    let mut line_number = LineNumber::ONE;
+    while let Some(prepared_line) = prepared_cache.line(line_number) {
+        let line = trim_author_label_prefix(prepared_line.prepared);
         if line.is_empty() {
-            i += 1;
+            line_number += 1usize;
             continue;
         }
 
         let Some(cap) = AUTHOR_COLON_RE.captures(&line) else {
-            i += 1;
+            line_number += 1usize;
             continue;
         };
 
         let mut skip = false;
-        let mut prev_idx = i;
-        while prev_idx > 0 {
-            prev_idx -= 1;
-            let Some(prev) = prepared_cache
-                .get_by_index(prev_idx)
-                .map(|p| p.trim().to_string())
-            else {
+        let mut prev_line_number = prepared_line.line_number;
+        while prev_line_number > LineNumber::ONE {
+            prev_line_number = LineNumber::new(prev_line_number.get() - 1).expect("valid");
+            let Some(prev) = prepared_cache.line(prev_line_number) else {
                 break;
             };
-            if prev.is_empty() {
+            if prev.prepared.is_empty() {
                 continue;
             }
-            if YEAR_ONLY_COPY_RE.is_match(&prev) {
+            if YEAR_ONLY_COPY_RE.is_match(prev.prepared) {
                 skip = true;
             }
             break;
         }
         if skip {
-            i += 1;
+            line_number += 1usize;
             continue;
         }
 
@@ -947,93 +938,97 @@ pub(super) fn extract_author_colon_blocks(
             && label_raw.chars().any(|c| c.is_ascii_uppercase())
             && !label_raw.chars().any(|c| c.is_ascii_lowercase());
         if label_is_all_caps {
-            i += 1;
+            line_number += 1usize;
             continue;
         }
 
         let mut segments: Vec<String> = Vec::new();
         if !tail.is_empty() {
             let Some(initial_tail) = sanitize_author_colon_tail(tail) else {
-                i += 1;
+                line_number += 1usize;
                 continue;
             };
             segments.push(initial_tail);
         }
-        let mut j = i + 1;
+        let mut next_line_number = prepared_line.line_number + 1usize;
         let mut added = 0usize;
-        while (!single_line_original_or_primary || collect_following_original_authors)
-            && j < prepared_cache.len()
-        {
-            let Some(next_prepared) = prepared_cache.get_by_index(j) else {
-                break;
-            };
-            let next_line_buf = trim_author_label_prefix(next_prepared);
-            let next_line = next_line_buf.as_str();
-            if next_line.is_empty() {
-                break;
-            }
-            let next_lower = next_line.to_ascii_lowercase();
-            if is_author_metadata_line(next_line) {
-                break;
-            }
-            if next_lower.starts_with("copyright") {
-                break;
-            }
-            if next_lower.starts_with("fixed") || next_lower.starts_with("software") {
-                break;
-            }
-            if next_lower.starts_with("updated")
-                || next_lower.starts_with("date")
-                || next_lower.starts_with("borrows")
-                || next_lower.starts_with("files")
-            {
-                break;
-            }
-            if next_lower.starts_with("et al") {
-                break;
-            }
-
-            if next_line.contains(':') {
-                break;
-            }
-
-            let mut include = false;
-            if !include {
-                include = next_line.contains('@')
-                    || next_line.contains('<')
-                    || next_line.contains(',')
-                    || next_line
-                        .chars()
-                        .find(|c| !c.is_whitespace())
-                        .is_some_and(|c| c.is_ascii_uppercase());
-            }
-            if include {
-                segments.push(next_line.to_string());
-                added += 1;
-                j += 1;
-                if added >= 4 {
+        if !single_line_original_or_primary || collect_following_original_authors {
+            loop {
+                let Some(next_prepared) = prepared_cache.line(next_line_number) else {
+                    break;
+                };
+                let next_line_buf = trim_author_label_prefix(next_prepared.prepared);
+                let next_line = next_line_buf.as_str();
+                if next_line.is_empty() {
                     break;
                 }
-                let combined_len: usize = segments.iter().map(|s| s.len()).sum();
-                if combined_len > 320 {
+                let next_lower = next_line.to_ascii_lowercase();
+                if is_author_metadata_line(next_line) {
                     break;
                 }
-                continue;
+                if next_lower.starts_with("copyright") {
+                    break;
+                }
+                if next_lower.starts_with("fixed") || next_lower.starts_with("software") {
+                    break;
+                }
+                if next_lower.starts_with("updated")
+                    || next_lower.starts_with("date")
+                    || next_lower.starts_with("borrows")
+                    || next_lower.starts_with("files")
+                {
+                    break;
+                }
+                if next_lower.starts_with("et al") {
+                    break;
+                }
+
+                if next_line.contains(':') {
+                    break;
+                }
+
+                let mut include = false;
+                if !include {
+                    include = next_line.contains('@')
+                        || next_line.contains('<')
+                        || next_line.contains(',')
+                        || next_line
+                            .chars()
+                            .find(|c| !c.is_whitespace())
+                            .is_some_and(|c| c.is_ascii_uppercase());
+                }
+                if include {
+                    segments.push(next_line.to_string());
+                    added += 1;
+                    next_line_number += 1usize;
+                    if added >= 4 {
+                        break;
+                    }
+                    let combined_len: usize = segments.iter().map(|s| s.len()).sum();
+                    if combined_len > 320 {
+                        break;
+                    }
+                    continue;
+                }
+                break;
             }
-            break;
         }
 
         if segments.is_empty() {
-            i += 1;
+            line_number += 1usize;
             continue;
         }
 
-        let start_line = ln;
-        let end_line = if j == i + 1 { start_line } else { j };
-        let bullet_results = extract_author_colon_bullet_roster(&segments, start_line);
+        let start_line = prepared_line.line_number;
+        let end_line = if next_line_number == prepared_line.line_number + 1usize {
+            start_line
+        } else {
+            LineNumber::new(next_line_number.get() - 1).expect("valid")
+        };
+        let bullet_results = extract_author_colon_bullet_roster(&segments, start_line.get());
         if !bullet_results.is_empty() {
             authors.extend(bullet_results);
-            i = j;
+            line_number = next_line_number;
             continue;
         }
         if collect_following_original_authors {
@@ -1044,38 +1039,38 @@ pub(super) fn extract_author_colon_blocks(
                 };
                 authors.push(AuthorDetection {
                     author,
-                    start_line: LineNumber::new(start_line).expect("valid"),
-                    end_line: LineNumber::new(end_line).expect("valid"),
+                    start_line,
+                    end_line,
                 });
                 extracted_any = true;
             }
             if extracted_any {
-                i = j;
+                line_number = next_line_number;
                 continue;
             }
         }
         if segments.len() == 1 {
-            let inline_results = extract_author_colon_inline_roster(&segments[0], start_line);
+            let inline_results = extract_author_colon_inline_roster(&segments[0], start_line.get());
             if !inline_results.is_empty() {
                 authors.extend(inline_results);
-                i = j;
+                line_number = next_line_number;
                 continue;
             }
         }
         let combined_raw = segments.join(" ");
         let Some(combined) = refine_author_with_optional_handle_suffix(&combined_raw) else {
-            i += 1;
+            line_number += 1usize;
             continue;
         };
 
-        authors.retain(|a| a.start_line.get() < start_line || a.end_line.get() > end_line);
+        authors.retain(|a| a.start_line < start_line || a.end_line > end_line);
         authors.push(AuthorDetection {
             author: combined,
-            start_line: LineNumber::new(start_line).expect("valid"),
-            end_line: LineNumber::new(end_line).expect("valid"),
+            start_line,
+            end_line,
         });
 
-        i = j;
+        line_number = next_line_number;
     }
 }
 
@@ -1206,30 +1201,22 @@ pub(super) fn extract_code_written_by_author_blocks(
         Regex::new(r"(?is)(?P<prefix>.+?\bDonald\s+wrote\s+the\s+SMC\s+91c92\s+code)\b").unwrap()
     });
 
-    let mut i = 0;
-    while i < prepared_cache.len() {
-        let ln = i + 1;
-        let Some(prepared) = prepared_cache.get_by_index(i) else {
-            i += 1;
-            continue;
-        };
-        let line = prepared.trim();
+    let mut line_number = LineNumber::ONE;
+    while let Some(prepared_line) = prepared_cache.line(line_number) {
+        let line = prepared_line.prepared;
         if line.is_empty() {
-            i += 1;
+            line_number += 1usize;
             continue;
         }
         if !HEADER_RE.is_match(line) {
-            i += 1;
+            line_number += 1usize;
             continue;
         }
 
         let mut combined = line.to_string();
-        let mut j = i + 1;
-        while j < prepared_cache.len() {
-            let Some(next_prepared) = prepared_cache.get_by_index(j) else {
-                break;
-            };
-            let next = next_prepared.trim();
+        let mut next_line_number = prepared_line.line_number + 1usize;
+        while let Some(next_prepared) = prepared_cache.line(next_line_number) {
+            let next = next_prepared.prepared;
             if next.is_empty() {
                 break;
             }
@@ -1241,16 +1228,16 @@ pub(super) fn extract_code_written_by_author_blocks(
             if combined.len() > 800 {
                 break;
             }
-            j += 1;
+            next_line_number += 1usize;
         }
 
         let Some(cap) = BODY_RE.captures(&combined) else {
-            i = j;
+            line_number = next_line_number;
             continue;
         };
         let body = cap.name("body").map(|m| m.as_str()).unwrap_or("").trim();
         if body.is_empty() {
-            i = j;
+            line_number = next_line_number;
             continue;
         }
 
@@ -1263,16 +1250,16 @@ pub(super) fn extract_code_written_by_author_blocks(
         }
 
         let Some(author) = refine_author(&candidate) else {
-            i = j;
+            line_number = next_line_number;
             continue;
         };
         authors.push(AuthorDetection {
             author,
-            start_line: LineNumber::new(ln).expect("invalid line number"),
-            end_line: LineNumber::new(j).expect("invalid line number"),
+            start_line: prepared_line.line_number,
+            end_line: LineNumber::new(next_line_number.get() - 1).expect("valid"),
         });
 
-        i = j;
+        line_number = next_line_number;
     }
 
     authors
@@ -1293,22 +1280,17 @@ pub(super) fn extract_developed_and_created_by_authors(
         return;
     }
 
-    for start_idx in 0..prepared_cache.len() {
-        let Some(prepared0) = prepared_cache.get_by_index(start_idx) else {
-            continue;
-        };
-        if !PREFIX_RE.is_match(prepared0.trim()) {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        if !PREFIX_RE.is_match(prepared_line.prepared) {
             continue;
         }
 
         let mut parts: Vec<String> = Vec::new();
-        let mut end_idx = start_idx;
+        let mut line_number = prepared_line.line_number;
+        let mut end_line = prepared_line.line_number;
 
-        for idx in start_idx..prepared_cache.len() {
-            let Some(prepared) = prepared_cache.get_by_index(idx) else {
-                break;
-            };
-            let line = prepared.trim();
+        while let Some(current_line) = prepared_cache.line(line_number) {
+            let line = current_line.prepared;
             if line.is_empty() {
                 break;
             }
@@ -1316,7 +1298,7 @@ pub(super) fn extract_developed_and_created_by_authors(
                 break;
             }
 
-            let piece = if idx == start_idx {
+            let piece = if line_number == prepared_line.line_number {
                 PREFIX_RE.replace(line, "").to_string()
             } else {
                 line.to_string()
@@ -1324,7 +1306,8 @@ pub(super) fn extract_developed_and_created_by_authors(
             if !piece.trim().is_empty() {
                 parts.push(piece);
             }
-            end_idx = idx;
+            end_line = line_number;
+            line_number += 1usize;
         }
 
         if parts.is_empty() {
@@ -1346,8 +1329,8 @@ pub(super) fn extract_developed_and_created_by_authors(
         };
         authors.push(AuthorDetection {
             author: author.clone(),
-            start_line: LineNumber::from_0_indexed(start_idx),
-            end_line: LineNumber::from_0_indexed(end_idx),
+            start_line: prepared_line.line_number,
+            end_line,
         });
 
         authors.retain(|a| !(author.starts_with(&a.author) && a.author.len() < author.len()));
@@ -1362,16 +1345,8 @@ pub(super) fn extract_with_additional_hacking_by_authors(
         Regex::new(r"(?i)^\s*with\s+additional\s+hacking\s+by\s+(?P<who>.+?)\s*$").unwrap()
     });
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let Some(cap) = RE.captures(line) else {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let Some(cap) = RE.captures(prepared_line.prepared) else {
             continue;
         };
         let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
@@ -1381,8 +1356,8 @@ pub(super) fn extract_with_additional_hacking_by_authors(
         if let Some(author) = refine_author(who) {
             authors.push(AuthorDetection {
                 author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
+                start_line: prepared_line.line_number,
+                end_line: prepared_line.line_number,
             });
         }
     }
@@ -1428,24 +1403,16 @@ pub(super) fn merge_metadata_author_and_email_lines(
     prepared_cache: &PreparedLines<'_>,
     authors: &mut Vec<AuthorDetection>,
 ) {
-    let has_metadata = (0..prepared_cache.len()).any(|idx| {
-        prepared_cache
-            .get_by_index(idx)
-            .is_some_and(|l| l.trim_start().starts_with("Metadata-Version:"))
-    });
+    let has_metadata = prepared_cache
+        .iter()
+        .any(|line| line.prepared.trim_start().starts_with("Metadata-Version:"));
 
     if !has_metadata {
         return;
     }
 
-    for idx in 0..prepared_cache.len() {
-        let author_ln = idx + 1;
-        let Some(author_line) = prepared_cache
-            .get_by_index(idx)
-            .map(|p| p.trim().to_string())
-        else {
-            continue;
-        };
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let author_line = prepared_line.prepared;
         if author_line.is_empty() {
             continue;
         }
@@ -1460,12 +1427,9 @@ pub(super) fn merge_metadata_author_and_email_lines(
             continue;
         }
 
-        for j in (idx + 1)..prepared_cache.len() {
-            let email_ln = j + 1;
-            let Some(email_line) = prepared_cache.get_by_index(j).map(|p| p.trim().to_string())
-            else {
-                break;
-            };
+        let mut next_line_number = prepared_line.line_number + 1usize;
+        while let Some(email_line) = prepared_cache.line(next_line_number) {
+            let email_line = email_line.prepared;
             if email_line.is_empty() {
                 break;
             }
@@ -1474,6 +1438,7 @@ pub(super) fn merge_metadata_author_and_email_lines(
             }
 
             if !email_line.to_ascii_lowercase().starts_with("author-email") {
+                next_line_number += 1usize;
                 continue;
             }
             let Some((_, email_raw)) = email_line.split_once(':') else {
@@ -1489,19 +1454,19 @@ pub(super) fn merge_metadata_author_and_email_lines(
 
             authors.push(AuthorDetection {
                 author: combined,
-                start_line: LineNumber::new(author_ln).expect("invalid line number"),
-                end_line: LineNumber::new(email_ln).expect("invalid line number"),
+                start_line: prepared_line.line_number,
+                end_line: next_line_number,
             });
 
             authors.retain(|a| {
-                if a.start_line.get() == author_ln
-                    && a.end_line.get() == author_ln
+                if a.start_line == prepared_line.line_number
+                    && a.end_line == prepared_line.line_number
                     && a.author == name
                 {
                     return false;
                 }
-                if a.start_line.get() == email_ln
-                    && a.end_line.get() == email_ln
+                if a.start_line == next_line_number
+                    && a.end_line == next_line_number
                     && a.author.to_ascii_lowercase() == format!("author-email {email}")
                 {
                     return false;
@@ -2726,22 +2691,15 @@ pub(super) fn extract_dense_name_email_author_lists(
         Regex::new(r"^(?P<name>[^<\n]{2,120})\s*<(?P<email>[^>\s]+@[^>\s]+)>\s*$").unwrap()
     });
 
-    let mut non_empty_lines: Vec<(usize, String)> = Vec::new();
-    for idx in 0..prepared_cache.len() {
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-        non_empty_lines.push((idx + 1, line.to_string()));
-    }
+    let non_empty_lines: Vec<(LineNumber, String)> = prepared_cache
+        .iter_non_empty()
+        .map(|line| (line.line_number, line.prepared.to_string()))
+        .collect();
     if non_empty_lines.len() < 2 {
         return authors;
     }
 
-    let mut matched: Vec<(usize, String)> = Vec::new();
+    let mut matched: Vec<(LineNumber, String)> = Vec::new();
     for (ln, line) in &non_empty_lines {
         let Some(cap) = NAME_EMAIL_LINE_RE.captures(line) else {
             continue;
@@ -2775,8 +2733,8 @@ pub(super) fn extract_dense_name_email_author_lists(
         };
         authors.push(AuthorDetection {
             author,
-            start_line: LineNumber::new(ln).expect("invalid line number"),
-            end_line: LineNumber::new(ln).expect("invalid line number"),
+            start_line: ln,
+            end_line: ln,
         });
     }
 

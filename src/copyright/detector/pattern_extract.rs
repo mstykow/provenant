@@ -1426,16 +1426,8 @@ pub fn extract_three_digit_copyright_year_lines(
     let mut copyrights = Vec::new();
     let mut holders = Vec::new();
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let Some(cap) = COPYRIGHT_C_3DIGIT_RE.captures(line) else {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let Some(cap) = COPYRIGHT_C_3DIGIT_RE.captures(prepared_line.prepared) else {
             continue;
         };
         let year = cap.name("year").map(|m| m.as_str()).unwrap_or("").trim();
@@ -1451,21 +1443,21 @@ pub fn extract_three_digit_copyright_year_lines(
         let Some(refined) = refine_copyright(&raw) else {
             continue;
         };
-        if seen_cr.insert((ln, refined.clone())) {
+        if seen_cr.insert((prepared_line.line_number.get(), refined.clone())) {
             copyrights.push(CopyrightDetection {
                 copyright: refined,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
+                start_line: prepared_line.line_number,
+                end_line: prepared_line.line_number,
             });
         }
 
         if let Some(h) = refine_holder_in_copyright_context(tail)
-            && seen_h.insert((ln, h.clone()))
+            && seen_h.insert((prepared_line.line_number.get(), h.clone()))
         {
             holders.push(HolderDetection {
                 holder: h,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
+                start_line: prepared_line.line_number,
+                end_line: prepared_line.line_number,
             });
         }
     }
@@ -1498,19 +1490,15 @@ pub fn extract_copyrighted_by_lines(
     let mut copyrights = Vec::new();
     let mut holders = Vec::new();
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-        if line.to_ascii_lowercase().contains("not copyrighted") {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        if prepared_line
+            .prepared
+            .to_ascii_lowercase()
+            .contains("not copyrighted")
+        {
             continue;
         }
-        for cap in COPYRIGHTED_BY_RE.captures_iter(line) {
+        for cap in COPYRIGHTED_BY_RE.captures_iter(prepared_line.prepared) {
             let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
             if who.is_empty() {
                 continue;
@@ -1526,21 +1514,21 @@ pub fn extract_copyrighted_by_lines(
             let Some(refined) = refine_copyright(&raw) else {
                 continue;
             };
-            if seen_cr.insert((ln, refined.clone())) {
+            if seen_cr.insert((prepared_line.line_number.get(), refined.clone())) {
                 copyrights.push(CopyrightDetection {
                     copyright: refined,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(ln).unwrap(),
+                    start_line: prepared_line.line_number,
+                    end_line: prepared_line.line_number,
                 });
             }
 
             if let Some(h) = refine_holder_in_copyright_context(who)
-                && seen_h.insert((ln, h.clone()))
+                && seen_h.insert((prepared_line.line_number.get(), h.clone()))
             {
                 holders.push(HolderDetection {
                     holder: h,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(ln).unwrap(),
+                    start_line: prepared_line.line_number,
+                    end_line: prepared_line.line_number,
                 });
             }
         }
@@ -1574,19 +1562,11 @@ pub fn extract_c_word_year_lines(
     let mut copyrights = Vec::new();
     let mut holders = Vec::new();
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        if !prepared_line.prepared.to_ascii_lowercase().contains("(c)") {
             continue;
         }
-        if !line.to_ascii_lowercase().contains("(c)") {
-            continue;
-        }
-        for cap in C_WORD_YEAR_RE.captures_iter(line) {
+        for cap in C_WORD_YEAR_RE.captures_iter(prepared_line.prepared) {
             let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
             let year = cap.name("year").map(|m| m.as_str()).unwrap_or("").trim();
             if who.is_empty() || year.is_empty() {
@@ -1608,21 +1588,21 @@ pub fn extract_c_word_year_lines(
             let Some(refined) = refine_copyright(&raw) else {
                 continue;
             };
-            if seen_cr.insert((ln, refined.clone())) {
+            if seen_cr.insert((prepared_line.line_number.get(), refined.clone())) {
                 copyrights.push(CopyrightDetection {
                     copyright: refined,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(ln).unwrap(),
+                    start_line: prepared_line.line_number,
+                    end_line: prepared_line.line_number,
                 });
             }
 
             if let Some(h) = refine_holder_in_copyright_context(who)
-                && seen_h.insert((ln, h.clone()))
+                && seen_h.insert((prepared_line.line_number.get(), h.clone()))
             {
                 holders.push(HolderDetection {
                     holder: h,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(ln).unwrap(),
+                    start_line: prepared_line.line_number,
+                    end_line: prepared_line.line_number,
                 });
             }
         }
@@ -2766,19 +2746,10 @@ pub fn extract_confidential_proprietary_copyrights(
         return;
     }
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(line) = prepared_cache
-            .get_by_index(idx)
-            .map(|p| p.trim().to_string())
-        else {
-            continue;
-        };
-        if line.is_empty() {
-            continue;
-        }
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let line = prepared_line.prepared;
 
-        if let Some(cap) = HOLDER_C_COPYRIGHT_YEAR_RE.captures(&line) {
+        if let Some(cap) = HOLDER_C_COPYRIGHT_YEAR_RE.captures(line) {
             let holder = cap.name("holder").map(|m| m.as_str()).unwrap_or("").trim();
             let year = cap.name("year").map(|m| m.as_str()).unwrap_or("").trim();
             if !holder.is_empty() && !year.is_empty() {
@@ -2786,15 +2757,15 @@ pub fn extract_confidential_proprietary_copyrights(
                 if let Some(refined) = refine_copyright(&cr) {
                     copyrights.push(CopyrightDetection {
                         copyright: refined,
-                        start_line: LineNumber::new(ln).unwrap(),
-                        end_line: LineNumber::new(ln).unwrap(),
+                        start_line: prepared_line.line_number,
+                        end_line: prepared_line.line_number,
                     });
                 }
                 if let Some(h) = refine_holder_in_copyright_context(holder) {
                     holders.push(HolderDetection {
                         holder: h,
-                        start_line: LineNumber::new(ln).unwrap(),
-                        end_line: LineNumber::new(ln).unwrap(),
+                        start_line: prepared_line.line_number,
+                        end_line: prepared_line.line_number,
                     });
                 }
 
@@ -2805,17 +2776,21 @@ pub fn extract_confidential_proprietary_copyrights(
             }
         }
 
-        if let Some(cap) = ABC_LINE_RE.captures(&line) {
+        if let Some(cap) = ABC_LINE_RE.captures(line) {
             let year = cap.name("year").map(|m| m.as_str()).unwrap_or("").trim();
             let tag = cap.name("tag").map(|m| m.as_str()).unwrap_or("").trim();
             if year.is_empty() || tag.is_empty() {
                 continue;
             }
-            let Some(next_clean) = prepared_cache.get_by_index(idx + 1).map(|p| {
-                p.trim()
-                    .trim_start_matches(|c: char| !c.is_ascii_alphanumeric())
-                    .to_string()
-            }) else {
+            let Some(next_clean) =
+                prepared_cache
+                    .line(prepared_line.line_number + 1usize)
+                    .map(|p| {
+                        p.prepared
+                            .trim_start_matches(|c: char| !c.is_ascii_alphanumeric())
+                            .to_string()
+                    })
+            else {
                 continue;
             };
             if !next_clean.is_empty() && CONFIDENTIAL_RE.is_match(&next_clean) {
@@ -2823,32 +2798,36 @@ pub fn extract_confidential_proprietary_copyrights(
                 if let Some(cr) = refine_copyright(&cr_raw) {
                     copyrights.push(CopyrightDetection {
                         copyright: cr,
-                        start_line: LineNumber::new(ln).unwrap(),
-                        end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+                        start_line: prepared_line.line_number,
+                        end_line: prepared_line.line_number + 1usize,
                     });
                 }
                 let holder_raw = format!("{tag} {next_clean}");
                 if let Some(h) = refine_holder_in_copyright_context(&holder_raw) {
                     holders.push(HolderDetection {
                         holder: h,
-                        start_line: LineNumber::new(ln).unwrap(),
-                        end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+                        start_line: prepared_line.line_number,
+                        end_line: prepared_line.line_number + 1usize,
                     });
                 }
             }
         }
 
-        if let Some(cap) = MOTOROLA_RE.captures(&line) {
+        if let Some(cap) = MOTOROLA_RE.captures(line) {
             let year = cap.name("year").map(|m| m.as_str()).unwrap_or("").trim();
             let base_holder = cap.name("holder").map(|m| m.as_str()).unwrap_or("").trim();
             if year.is_empty() || base_holder.is_empty() {
                 continue;
             }
-            let Some(next_clean) = prepared_cache.get_by_index(idx + 1).map(|p| {
-                p.trim()
-                    .trim_start_matches(|c: char| !c.is_ascii_alphanumeric())
-                    .to_string()
-            }) else {
+            let Some(next_clean) =
+                prepared_cache
+                    .line(prepared_line.line_number + 1usize)
+                    .map(|p| {
+                        p.prepared
+                            .trim_start_matches(|c: char| !c.is_ascii_alphanumeric())
+                            .to_string()
+                    })
+            else {
                 continue;
             };
             if !next_clean.is_empty() && CONFIDENTIAL_RE.is_match(&next_clean) {
@@ -2856,8 +2835,8 @@ pub fn extract_confidential_proprietary_copyrights(
                 if let Some(cr) = refine_copyright(&cr_raw) {
                     copyrights.push(CopyrightDetection {
                         copyright: cr,
-                        start_line: LineNumber::new(ln).unwrap(),
-                        end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+                        start_line: prepared_line.line_number,
+                        end_line: prepared_line.line_number + 1usize,
                     });
                 }
 
@@ -2870,8 +2849,8 @@ pub fn extract_confidential_proprietary_copyrights(
                 if let Some(h) = refine_holder_in_copyright_context(&holder_raw) {
                     holders.push(HolderDetection {
                         holder: h,
-                        start_line: LineNumber::new(ln).unwrap(),
-                        end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+                        start_line: prepared_line.line_number,
+                        end_line: prepared_line.line_number + 1usize,
                     });
                 }
             }
