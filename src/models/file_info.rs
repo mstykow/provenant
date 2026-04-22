@@ -269,7 +269,8 @@ impl FileInfo {
             let expressions = license_detections
                 .iter()
                 .map(|detection| detection.license_expression.clone());
-            license_expression = combine_license_expressions(expressions);
+            license_expression =
+                crate::utils::spdx::combine_license_expressions_preserving_structure(expressions);
         }
 
         let mut file_info = FileInfo {

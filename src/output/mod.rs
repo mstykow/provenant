@@ -394,6 +394,26 @@ mod tests {
     }
 
     #[test]
+    fn test_detected_license_expression_spdx_preserves_distinct_nested_operands() {
+        let mut internal = sample_internal_output();
+        internal.files[0].license_detections = vec![crate::models::LicenseDetection {
+            license_expression: "mit AND (apache-2.0 OR mit)".to_string(),
+            license_expression_spdx: "MIT AND (Apache-2.0 OR MIT)".to_string(),
+            matches: vec![],
+            detection_log: vec![],
+            identifier: None,
+        }];
+        internal.files[0].license_expression = None;
+
+        let schema_file = OutputFileInfo::from(&internal.files[0]);
+        let schema_value = serde_json::to_value(&schema_file).expect("file info serializes");
+        assert_eq!(
+            schema_value["detected_license_expression_spdx"],
+            "MIT AND (Apache-2.0 OR MIT)"
+        );
+    }
+
+    #[test]
     fn test_json_lines_writer_sorts_files_by_path_for_reproducibility() {
         let mut internal = sample_internal_output();
         internal.files.reverse();
