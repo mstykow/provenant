@@ -21,6 +21,26 @@ pub(super) struct PreparedLine<'a> {
     pub(super) prepared: &'a str,
 }
 
+pub(super) struct PreparedLinesIter<'a> {
+    lines: &'a PreparedLines<'a>,
+    idx: usize,
+}
+
+pub(super) struct PreparedLinesNonEmptyIter<'a> {
+    lines: &'a PreparedLines<'a>,
+    idx: usize,
+}
+
+pub(super) struct PreparedLinesAdjacentPairsIter<'a> {
+    lines: &'a PreparedLines<'a>,
+    idx: usize,
+}
+
+pub(super) struct PreparedLinesAdjacentTriplesIter<'a> {
+    lines: &'a PreparedLines<'a>,
+    idx: usize,
+}
+
 impl<'a> PreparedLineCache<'a> {
     pub(super) fn new(raw_lines: &'a [&'a str]) -> Self {
         Self {
@@ -45,6 +65,14 @@ impl<'a> PreparedLineCache<'a> {
 }
 
 impl<'a> PreparedLines<'a> {
+    fn prepared_line_at_index(&self, idx: usize) -> PreparedLine<'_> {
+        PreparedLine {
+            line_number: LineNumber::from_0_indexed(idx),
+            raw: self.raw_lines[idx],
+            prepared: self.prepared[idx].as_str(),
+        }
+    }
+
     pub(super) fn raw_line_count(&self) -> usize {
         self.raw_lines.len()
     }
@@ -59,104 +87,46 @@ impl<'a> PreparedLines<'a> {
 
     pub(super) fn line(&self, line_number: LineNumber) -> Option<PreparedLine<'_>> {
         let idx = line_number - 1;
-        Some(PreparedLine {
-            line_number,
-            raw: self.raw_lines.get(idx).copied()?,
-            prepared: self.prepared.get(idx).map(String::as_str)?,
-        })
+        (idx < self.len()).then(|| self.prepared_line_at_index(idx))
     }
 
-    pub(super) fn iter(&self) -> impl Iterator<Item = PreparedLine<'_>> + '_ {
-        self.raw_lines
-            .iter()
-            .copied()
-            .zip(self.prepared.iter().map(String::as_str))
-            .enumerate()
-            .map(|(idx, (raw, prepared))| PreparedLine {
-                line_number: LineNumber::from_0_indexed(idx),
-                raw,
-                prepared,
-            })
+    pub(super) fn iter(&self) -> PreparedLinesIter<'_> {
+        PreparedLinesIter {
+            lines: self,
+            idx: 0,
+        }
     }
 
-    pub(super) fn iter_non_empty(&self) -> impl Iterator<Item = PreparedLine<'_>> + '_ {
-        self.iter().filter(|line| !line.prepared.is_empty())
+    pub(super) fn iter_non_empty(&self) -> PreparedLinesNonEmptyIter<'_> {
+        PreparedLinesNonEmptyIter {
+            lines: self,
+            idx: 0,
+        }
     }
 
-    pub(super) fn adjacent_pairs(
-        &self,
-    ) -> impl Iterator<Item = (PreparedLine<'_>, PreparedLine<'_>)> + '_ {
-        self.raw_lines
-            .iter()
-            .copied()
-            .zip(self.prepared.iter().map(String::as_str))
-            .zip(
-                self.raw_lines
-                    .iter()
-                    .copied()
-                    .skip(1)
-                    .zip(self.prepared.iter().skip(1).map(String::as_str)),
-            )
-            .enumerate()
-            .map(|(idx, ((raw1, prepared1), (raw2, prepared2)))| {
-                (
-                    PreparedLine {
-                        line_number: LineNumber::from_0_indexed(idx),
-                        raw: raw1,
-                        prepared: prepared1,
-                    },
-                    PreparedLine {
-                        line_number: LineNumber::from_0_indexed(idx + 1),
-                        raw: raw2,
-                        prepared: prepared2,
-                    },
-                )
-            })
+    pub(super) fn next_non_empty_line(&self, line_number: LineNumber) -> Option<PreparedLine<'_>> {
+        let mut idx = line_number.get();
+        while idx < self.len() {
+            if !self.prepared[idx].is_empty() {
+                return Some(self.prepared_line_at_index(idx));
+            }
+            idx += 1;
+        }
+        None
     }
 
-    pub(super) fn adjacent_triples(
-        &self,
-    ) -> impl Iterator<Item = (PreparedLine<'_>, PreparedLine<'_>, PreparedLine<'_>)> + '_ {
-        self.raw_lines
-            .iter()
-            .copied()
-            .zip(self.prepared.iter().map(String::as_str))
-            .zip(
-                self.raw_lines
-                    .iter()
-                    .copied()
-                    .skip(1)
-                    .zip(self.prepared.iter().skip(1).map(String::as_str)),
-            )
-            .zip(
-                self.raw_lines
-                    .iter()
-                    .copied()
-                    .skip(2)
-                    .zip(self.prepared.iter().skip(2).map(String::as_str)),
-            )
-            .enumerate()
-            .map(
-                |(idx, (((raw1, prepared1), (raw2, prepared2)), (raw3, prepared3)))| {
-                    (
-                        PreparedLine {
-                            line_number: LineNumber::from_0_indexed(idx),
-                            raw: raw1,
-                            prepared: prepared1,
-                        },
-                        PreparedLine {
-                            line_number: LineNumber::from_0_indexed(idx + 1),
-                            raw: raw2,
-                            prepared: prepared2,
-                        },
-                        PreparedLine {
-                            line_number: LineNumber::from_0_indexed(idx + 2),
-                            raw: raw3,
-                            prepared: prepared3,
-                        },
-                    )
-                },
-            )
+    pub(super) fn adjacent_pairs(&self) -> PreparedLinesAdjacentPairsIter<'_> {
+        PreparedLinesAdjacentPairsIter {
+            lines: self,
+            idx: 0,
+        }
+    }
+
+    pub(super) fn adjacent_triples(&self) -> PreparedLinesAdjacentTriplesIter<'_> {
+        PreparedLinesAdjacentTriplesIter {
+            lines: self,
+            idx: 0,
+        }
     }
 
     pub(super) fn get(&self, line_number: usize) -> Option<&str> {
@@ -182,6 +152,72 @@ impl<'a> PreparedLines<'a> {
                 .windows(pattern_bytes.len())
                 .any(|w| w.eq_ignore_ascii_case(pattern_bytes))
         })
+    }
+}
+
+impl<'a> Iterator for PreparedLinesIter<'a> {
+    type Item = PreparedLine<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx >= self.lines.len() {
+            return None;
+        }
+
+        let line = self.lines.prepared_line_at_index(self.idx);
+        self.idx += 1;
+        Some(line)
+    }
+}
+
+impl<'a> Iterator for PreparedLinesNonEmptyIter<'a> {
+    type Item = PreparedLine<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.idx < self.lines.len() {
+            let idx = self.idx;
+            self.idx += 1;
+            if self.lines.prepared[idx].is_empty() {
+                continue;
+            }
+            return Some(self.lines.prepared_line_at_index(idx));
+        }
+
+        None
+    }
+}
+
+impl<'a> Iterator for PreparedLinesAdjacentPairsIter<'a> {
+    type Item = (PreparedLine<'a>, PreparedLine<'a>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx + 1 >= self.lines.len() {
+            return None;
+        }
+
+        let pair = (
+            self.lines.prepared_line_at_index(self.idx),
+            self.lines.prepared_line_at_index(self.idx + 1),
+        );
+        self.idx += 1;
+        Some(pair)
+    }
+}
+
+impl<'a> Iterator for PreparedLinesAdjacentTriplesIter<'a> {
+    type Item = (PreparedLine<'a>, PreparedLine<'a>, PreparedLine<'a>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx + 2 >= self.lines.len() {
+            return None;
+        }
+
+        let triple = (
+            self.lines.prepared_line_at_index(self.idx),
+            self.lines.prepared_line_at_index(self.idx + 1),
+            self.lines.prepared_line_at_index(self.idx + 2),
+        );
+        self.idx += 1;
+        Some(triple)
     }
 }
 
