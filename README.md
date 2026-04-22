@@ -166,6 +166,7 @@ provenant --json-pp scan-results.json --license --package ~/projects/my-codebase
 Use `-` as `FILE` to write an output stream to stdout, for example `--json-pp -`.
 Multiple output flags can be used in a single run, matching ScanCode CLI behavior.
 When using `--from-json`, you can pass multiple JSON inputs. Native directory scans also support multiple input paths, matching ScanCode's common-prefix behavior.
+When you need to scan an explicit allowlist of files or directories under one root (for example PR-changed files from CI), use `--paths-file <FILE>` with one explicit scan root instead of expanding the list into positional args.
 Use `--incremental` for repeated scans of the same tree. After a completed scan, Provenant keeps
 an incremental manifest and uses it on the next run to skip unchanged files. That is useful for
 local iteration, CI-style reruns, and retrying after a later failed or interrupted scan. The

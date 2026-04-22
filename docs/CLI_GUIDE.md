@@ -481,7 +481,39 @@ This is useful for:
 - scanning split source trees in one run
 - collecting one combined report for several directories
 
+These native multi-input paths still follow the current common-prefix behavior. They work best when you can invoke Provenant from a cwd where the relative input paths share a usable common ancestor.
+
 You can also pass multiple JSON inputs with `--from-json`.
+
+### 20. "I have an explicit list of files or directories to scan"
+
+```sh
+provenant --json-pp scan.json --license /path/to/repo --paths-file changed-files.txt
+```
+
+Use this when you already have a selected path list under one known root, especially for CI and pull-request workflows where cwd cannot be the repo root.
+
+`--paths-file` is the preferred workflow when:
+
+- `git diff --name-only` or another tool already produced the changed-file list
+- Provenant must run from a fixed mount location or other non-repo cwd
+- you want Provenant itself, not shell `xargs`, to own the selection semantics
+
+v1 semantics:
+
+- pass exactly one native scan root as the positional input
+- entries in the paths file are interpreted relative to that root
+- one path per line, with blank lines ignored and CRLF tolerated
+- directory entries select that subtree
+- missing entries are skipped with a warning
+- `--paths-file -` reads the list from stdin
+- `--paths-file` cannot be combined with `--from-json` in v1
+
+Example with stdin:
+
+```sh
+git diff --name-only --diff-filter=d origin/main...HEAD | provenant --json-pp - --license /path/to/repo --paths-file -
+```
 
 ## Important Flag Combinations
 
@@ -497,6 +529,7 @@ These are worth learning early because they change what the output means:
 - `--tallies-key-files` requires `--tallies` and `--classify`
 - `--tallies-by-facet` requires `--facet` and `--tallies`
 - `--debian <FILE>` requires `--license`, `--copyright`, and `--license-text`
+- `--paths-file <FILE>` requires exactly one native scan root and is native-scan only in v1 (no `--from-json`)
 - `--reindex` only matters when the license engine is initialized (`--license` and some `--from-json` reference-recompute flows)
 - `--no-license-index-cache` only matters when the license engine is initialized
 
