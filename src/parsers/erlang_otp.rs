@@ -351,13 +351,18 @@ impl ErlParser {
 }
 
 fn parse_dotted_terms(content: &str) -> Result<Vec<ErlTerm>, String> {
-    let mut parser = ErlParser::new(content);
+    let normalized = strip_template_placeholders(content);
+    let mut parser = ErlParser::new(&normalized);
     let mut terms = Vec::new();
     let mut count = 0usize;
     loop {
         parser.skip_whitespace_and_comments();
         if parser.is_eof() {
             break;
+        }
+        if parser.peek() == Some('.') {
+            parser.pos += 1;
+            continue;
         }
         if count >= MAX_ITERATION_COUNT {
             break;
@@ -371,6 +376,99 @@ fn parse_dotted_terms(content: &str) -> Result<Vec<ErlTerm>, String> {
         }
     }
     Ok(terms)
+}
+
+fn strip_template_placeholders(source: &str) -> String {
+    let chars: Vec<char> = source.chars().collect();
+    let mut result = String::with_capacity(source.len());
+    let mut i = 0usize;
+    let mut in_string = false;
+    let mut in_quoted_atom = false;
+
+    while i < chars.len() {
+        let c = chars[i];
+
+        if in_string {
+            result.push(c);
+            i += 1;
+            if c == '\\' && i < chars.len() {
+                result.push(chars[i]);
+                i += 1;
+                continue;
+            }
+            if c == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+
+        if in_quoted_atom {
+            result.push(c);
+            i += 1;
+            if c == '\\' && i < chars.len() {
+                result.push(chars[i]);
+                i += 1;
+                continue;
+            }
+            if c == '\'' {
+                in_quoted_atom = false;
+            }
+            continue;
+        }
+
+        match c {
+            '"' => {
+                in_string = true;
+                result.push(c);
+                i += 1;
+            }
+            '\'' => {
+                in_quoted_atom = true;
+                result.push(c);
+                i += 1;
+            }
+            '%' if chars.get(i + 1) != Some(&'%') => {
+                let line_end = chars[i..]
+                    .iter()
+                    .position(|&ch| ch == '\n')
+                    .map(|offset| i + offset)
+                    .unwrap_or(chars.len());
+
+                let last_percent = chars[i + 1..line_end]
+                    .iter()
+                    .rposition(|&ch| ch == '%')
+                    .map(|offset| i + 1 + offset);
+
+                if let Some(last_percent) = last_percent {
+                    let placeholder_body: String = chars[i + 1..last_percent].iter().collect();
+                    let trailing: String = chars[last_percent + 1..line_end].iter().collect();
+                    let looks_like_placeholder = !placeholder_body.is_empty()
+                        && placeholder_body.chars().all(|ch| {
+                            ch.is_ascii_uppercase()
+                                || ch.is_ascii_digit()
+                                || matches!(ch, '_' | ',' | '%')
+                        })
+                        && trailing
+                            .chars()
+                            .all(|ch| ch.is_whitespace() || matches!(ch, ',' | ']' | '}' | ')'));
+
+                    if looks_like_placeholder {
+                        i = last_percent + 1;
+                        continue;
+                    }
+                }
+
+                result.push(c);
+                i += 1;
+            }
+            _ => {
+                result.push(c);
+                i += 1;
+            }
+        }
+    }
+
+    result
 }
 
 // ── Helpers ──
