@@ -2633,7 +2633,9 @@ pub fn add_missing_holders_from_preceding_name_lines(
         if seen_h.insert(holder_key) {
             holders.push(HolderDetection {
                 holder,
-                start_line: LineNumber::new(copyright.start_line.get() - 1)
+                start_line: copyright
+                    .start_line
+                    .prev()
                     .expect("valid preceding line number"),
                 end_line: copyright.end_line,
             });
@@ -2840,7 +2842,7 @@ pub fn extend_copyrights_with_next_line_parenthesized_obfuscated_email(
         };
 
         c.copyright = refined;
-        c.end_line += 1usize;
+        c.end_line = c.end_line.next();
     }
 }
 
@@ -2889,7 +2891,7 @@ pub fn extend_copyrights_with_following_all_rights_reserved_line(
         } else {
             merged_normalized
         };
-        c.end_line += 1usize;
+        c.end_line = c.end_line.next();
     }
 }
 
@@ -5353,12 +5355,12 @@ pub fn extract_following_authors_holders(
     let mut line_number = LineNumber::ONE;
     while let Some(header_line) = prepared_cache.line(line_number) {
         if header_line.prepared.is_empty() || !HEADER_RE.is_match(header_line.prepared) {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         }
 
         let mut extracted_any = false;
-        let mut next_line_number = header_line.line_number + 1usize;
+        let mut next_line_number = header_line.line_number.next();
         while let Some(next_line) = prepared_cache.line(next_line_number) {
             let raw = next_line.raw;
             if raw.trim().is_empty() {
@@ -5379,13 +5381,13 @@ pub fn extract_following_authors_holders(
                 });
                 extracted_any = true;
             }
-            next_line_number += 1usize;
+            next_line_number = next_line_number.next();
         }
 
         line_number = if extracted_any {
             next_line_number
         } else {
-            header_line.line_number + 1usize
+            header_line.line_number.next()
         };
     }
 
@@ -5528,7 +5530,7 @@ pub fn merge_implemented_by_lines(
             copyrights.push(CopyrightDetection {
                 copyright: cr,
                 start_line: line_number,
-                end_line: line_number + 1usize,
+                end_line: line_number.next(),
             });
         }
 
@@ -5544,7 +5546,7 @@ pub fn merge_implemented_by_lines(
             holders.push(HolderDetection {
                 holder: h,
                 start_line: line_number,
-                end_line: line_number + 1usize,
+                end_line: line_number.next(),
             });
         }
 
