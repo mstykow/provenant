@@ -113,6 +113,26 @@ These are not random incompatibilities; they are documented behavior improvement
 
 See [Beyond-Parity Improvements](improvements/README.md) for the full index.
 
+### 6. Path selection is split more explicitly between patterns and exact rooted paths
+
+If you previously relied on `--include` as a rough way to express “scan this subtree”, pay close attention to Provenant's newer split here.
+
+- `--include` is for glob-style path filtering
+- recursion should be explicit in the pattern (for example `src/**`)
+- `--paths-file` is the explicit rooted workflow for “scan exactly these files or directories under this root”
+
+That means Provenant now prefers:
+
+- `--include '*.rs' --include 'src/**/*.toml'` when you mean pattern filtering
+- `--paths-file changed-files.txt /path/to/repo` when you already know the exact rooted file or directory list
+
+This is a workflow-level difference worth knowing when you migrate existing ScanCode habits or shell wrappers.
+
+See also:
+
+- [CLI Guide](CLI_GUIDE.md)
+- [CLI Workflows](improvements/cli-workflows.md)
+
 ## Practical migration advice
 
 If you are moving an existing ScanCode workflow to Provenant:
@@ -121,6 +141,7 @@ If you are moving an existing ScanCode workflow to Provenant:
 2. compare outputs on one representative codebase
 3. check this guide if you see a meaningful delta
 4. use the exported dataset workflow if you previously customized license/rule data in a ScanCode checkout
+5. if your old workflow used `--include` to approximate explicit path lists, consider switching that part to `--paths-file`
 
 ## Other differences worth knowing
 
