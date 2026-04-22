@@ -5,9 +5,11 @@
 [![CI](https://github.com/mstykow/provenant/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/mstykow/provenant/actions/workflows/check.yml)
 [![License](https://img.shields.io/crates/l/provenant-cli.svg)](LICENSE)
 
-Provenant is a Rust-based code scanner for licenses, package metadata, file metadata, and related provenance data. It is built as an independent Rust implementation for ScanCode-aligned workflows, with a strong focus on correctness, feature parity, safe static parsing, and native execution.
+Provenant is a Rust-based code scanner for licenses, package metadata, file metadata, and related provenance data. It is an independent Rust implementation for ScanCode-aligned workflows, focused on correctness, safe static parsing, and native execution.
 
-Provenant reimplements the scanning engine in Rust while continuing to rely on the upstream [ScanCode Toolkit](https://github.com/aboutcode-org/scancode-toolkit) license and rule data. That upstream dataset is extraordinarily valuable and maintained by domain experts; Provenant's goal is to preserve and build on that work, not replace it.
+On recorded package-detection targets, Provenant is frequently about an order of magnitude faster than ScanCode while also surfacing broader package and dependency metadata, cleaner, lower-noise results on many documented targets, and workflows such as incremental rescans and `--paths-file` selected-file scanning.
+
+Provenant reimplements the scanning engine in Rust while continuing to use the upstream [ScanCode Toolkit](https://github.com/aboutcode-org/scancode-toolkit) license and rule data. That expert-maintained dataset is foundational to Provenant's work; the goal is to preserve and build on it, not replace it.
 
 ## Quick Start
 
@@ -20,10 +22,12 @@ Prefer release binaries? Download precompiled archives from [GitHub Releases](ht
 
 ## Why Provenant?
 
-- [Benchmark-backed](docs/BENCHMARKS.md) package-detection speedups that are frequently about an order of magnitude faster than ScanCode on recorded runs
+- [Benchmark-backed](docs/BENCHMARKS.md) package-detection speedups that are frequently about an order of magnitude faster than ScanCode on recorded same-host runs
+- Broader package and dependency extraction across [many ecosystems](docs/SUPPORTED_FORMATS.md), including beyond-parity parsers and improvements in overlapping parser families
+- [Documented parser and detection fixes](docs/improvements/README.md) that reduce noisy results and false-positive classes, including better bare-word GPL/LGPL clue handling
+- Native workflows such as `--incremental` cache reuse and `--paths-file` rooted file lists for CI or changed-file scans
 - Single self-contained binary for simpler installation and CI use
 - [ScanCode-compatible](docs/SCANCODE_COMPARISON.md) workflows and output formats, including ScanCode-style JSON, SPDX, CycloneDX, YAML, JSON Lines, HTML, and custom templates
-- Broad package-manifest and lockfile coverage across [many ecosystems](docs/SUPPORTED_FORMATS.md)
 - [Security-first](docs/adr/0004-security-first-parsing.md) static parsing with explicit safeguards and compatibility-focused tradeoffs where needed
 - Built on upstream ScanCode license and rule data maintained by experts
 
@@ -31,20 +35,6 @@ Prefer release binaries? Download precompiled archives from [GitHub Releases](ht
 
 > **Status:** active, usable, and under rapid development.
 > Provenant already supports production-style scanning workflows and many ScanCode-compatible outputs, while compatibility gaps and edge cases are still being closed.
-
-## Overview
-
-Today the repository covers high-level scanning workflows for:
-
-- License detection and ScanCode-style license-result output
-- Package and dependency metadata extraction across many ecosystems
-- Package assembly for related manifests and lockfiles
-- File metadata and scan environment metadata
-- Optional copyright, holder, and author detection
-- Optional email and URL extraction
-- Multiple output formats, including ScanCode-style JSON, YAML, JSON Lines, SPDX, CycloneDX, HTML, Debian copyright, and custom templates
-
-For architecture, comparison notes, supported formats, testing, and contributor guidance, start with the [Documentation Index](docs/DOCUMENTATION_INDEX.md).
 
 ## Relationship to ScanCode
 
@@ -59,11 +49,12 @@ For architecture, comparison notes, supported formats, testing, and contributor 
 
 - Single, self-contained binary
 - Parallel scanning with native concurrency
-- ScanCode-compatible JSON output and broad output-format support
 - Broad package-manifest and lockfile coverage across many ecosystems
+- Cleaner normalization and lower-noise detection results from documented parser and detection fixes
 - Package assembly for sibling, nested, and workspace-style inputs
 - Include and exclude filtering, path normalization, and scan-result filtering
 - Incremental reuse for repeated scans of the same tree
+- Explicit rooted selected-file scans via `--paths-file`
 - Security-first parsing with explicit safeguards and compatibility-focused tradeoffs where needed
 
 ## Installation
@@ -163,17 +154,24 @@ For guided workflows and important flag combinations, see the [CLI Guide](docs/C
 provenant --json-pp scan-results.json --license --package ~/projects/my-codebase --ignore "*.git*" --ignore "target/*" --ignore "node_modules/*"
 ```
 
+### Highlighted Workflows
+
+For PR-scoped or CI-selected scans, use `--paths-file` with one explicit scan root instead of expanding the file list into positional args:
+
+```sh
+provenant --json-pp scan-results.json --license /path/to/repo --paths-file changed-files.txt
+```
+
+For repeated scans of the same checkout, use `--incremental` so Provenant can reuse unchanged file results from the shared cache:
+
+```sh
+provenant --json-pp scan-results.json --license --package --incremental /path/to/repo
+```
+
 Use `-` as `FILE` to write an output stream to stdout, for example `--json-pp -`.
 Multiple output flags can be used in a single run, matching ScanCode CLI behavior.
 When using `--from-json`, you can pass multiple JSON inputs. Native directory scans also support multiple input paths, matching ScanCode's common-prefix behavior.
-When you need to scan an explicit allowlist of files or directories under one root (for example PR-changed files from CI), use `--paths-file <FILE>` with one explicit scan root instead of expanding the list into positional args.
-Use `--incremental` for repeated scans of the same tree. After a completed scan, Provenant keeps
-an incremental manifest and uses it on the next run to skip unchanged files. That is useful for
-local iteration, CI-style reruns, and retrying after a later failed or interrupted scan. The
-shared cache root can be controlled with `PROVENANT_CACHE` or `--cache-dir`, and `--cache-clear`
-resets it before a run. That root stores both incremental manifests and the reusable license-index
-cache. Use `--no-license-index-cache` when you want license scans to rebuild the index in memory
-without reading or writing persistent license-cache files.
+For more workflow details, including cache controls and stdin-driven file lists, see the [CLI Guide](docs/CLI_GUIDE.md).
 
 For the generated package-format support matrix, see [Supported Formats](docs/SUPPORTED_FORMATS.md).
 
