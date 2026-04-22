@@ -34,6 +34,7 @@ enum ErlTerm {
     Float(f64),
     Tuple(Vec<ErlTerm>),
     List(Vec<ErlTerm>),
+    Map(Vec<(ErlTerm, ErlTerm)>),
 }
 
 // ── Erlang term parser ──
@@ -68,6 +69,7 @@ impl ErlParser {
         match self.peek() {
             Some('{') => self.parse_tuple(),
             Some('[') => self.parse_list(),
+            Some('#') if self.peek_n(1) == Some('{') => self.parse_map(),
             Some('"') => self.parse_string().map(ErlTerm::String),
             Some('<') if self.peek_n(1) == Some('<') => self.parse_binary().map(ErlTerm::Binary),
             Some('\'') => self.parse_quoted_atom().map(ErlTerm::Atom),
@@ -91,6 +93,65 @@ impl ErlParser {
         self.expect('[')?;
         let items = self.parse_comma_separated(']')?;
         Ok(ErlTerm::List(items))
+    }
+
+    fn parse_map(&mut self) -> Result<ErlTerm, String> {
+        self.expect('#')?;
+        self.expect('{')?;
+
+        let mut entries = Vec::new();
+        let mut count = 0usize;
+
+        loop {
+            self.skip_whitespace_and_comments();
+            if self.peek() == Some('}') {
+                self.pos += 1;
+                break;
+            }
+
+            if count >= MAX_ITERATION_COUNT {
+                return Err("too many map entries".to_string());
+            }
+
+            let key = self.parse_term()?;
+            self.skip_whitespace_and_comments();
+
+            match (self.peek(), self.peek_n(1)) {
+                (Some('='), Some('>')) | (Some(':'), Some('=')) => {
+                    self.pos += 2;
+                }
+                _ => {
+                    return Err(format!(
+                        "Expected map association operator at position {}",
+                        self.pos
+                    ));
+                }
+            }
+
+            let value = self.parse_term()?;
+            entries.push((key, value));
+            count += 1;
+
+            self.skip_whitespace_and_comments();
+            match self.peek() {
+                Some(',') => {
+                    self.pos += 1;
+                }
+                Some('}') => {
+                    self.pos += 1;
+                    break;
+                }
+                Some(c) => {
+                    return Err(format!(
+                        "Expected ',' or '}}' in map but found '{}' at position {}",
+                        c, self.pos
+                    ));
+                }
+                None => return Err("Unterminated map literal".to_string()),
+            }
+        }
+
+        Ok(ErlTerm::Map(entries))
     }
 
     fn parse_comma_separated(&mut self, closing: char) -> Result<Vec<ErlTerm>, String> {
@@ -340,6 +401,18 @@ fn term_to_proplist(term: &ErlTerm) -> Option<Vec<(String, ErlTerm)>> {
     Some(result)
 }
 
+fn term_to_key_value_pairs(term: &ErlTerm) -> Option<Vec<(String, ErlTerm)>> {
+    match term {
+        ErlTerm::Map(entries) => Some(
+            entries
+                .iter()
+                .filter_map(|(key, value)| term_to_str(key).map(|key| (key, value.clone())))
+                .collect(),
+        ),
+        _ => term_to_proplist(term),
+    }
+}
+
 fn term_to_atom_list(term: &ErlTerm) -> Vec<String> {
     match term {
         ErlTerm::List(items) => items.iter().filter_map(term_to_str).collect(),
@@ -447,7 +520,7 @@ fn parse_app_src(content: &str) -> Result<PackageData, String> {
                 }
             }
             "links" => {
-                if let Some(link_props) = term_to_proplist(value) {
+                if let Some(link_props) = term_to_key_value_pairs(value) {
                     for (link_name, link_val) in &link_props {
                         if let Some(url) = term_to_str(link_val) {
                             let lower = link_name.to_lowercase();
@@ -674,10 +747,10 @@ fn parse_rebar_dep(term: &ErlTerm) -> Option<Dependency> {
     if let Some(key) = term_to_str(&fields[0])
         && key.starts_with("if_")
     {
-        return fields.last().and_then(parse_rebar_dep);
+        return None;
     }
 
-    let name = term_to_str(&fields[0])?;
+    let app_name = term_to_str(&fields[0])?;
 
     match fields.len() {
         // {Name, Version} or {Name, {git, URL, Ref}}
@@ -685,7 +758,7 @@ fn parse_rebar_dep(term: &ErlTerm) -> Option<Dependency> {
             if let Some(version) = term_to_str(&fields[1]) {
                 // {Name, Version}
                 Some(Dependency {
-                    purl: build_hex_purl(&name, Some(&version)).map(truncate_field),
+                    purl: build_hex_purl(&app_name, Some(&version)).map(truncate_field),
                     extracted_requirement: Some(truncate_field(version)),
                     scope: Some("dependencies".to_string()),
                     is_runtime: None,
@@ -696,17 +769,11 @@ fn parse_rebar_dep(term: &ErlTerm) -> Option<Dependency> {
                     extra_data: None,
                 })
             } else {
-                // {Name, {git, URL, Ref}}
+                let package_name = extract_rebar_package_name(&fields[1], &app_name);
                 let vcs_url = extract_git_url(&fields[1]);
                 let version = extract_git_version(&fields[1]);
-                let git_extra = vcs_url.map(|url| {
-                    HashMap::from([(
-                        "vcs_url".to_string(),
-                        JsonValue::String(truncate_field(url)),
-                    )])
-                });
                 Some(Dependency {
-                    purl: build_hex_purl(&name, version.as_deref()).map(truncate_field),
+                    purl: build_hex_purl(&package_name, version.as_deref()).map(truncate_field),
                     extracted_requirement: version.map(truncate_field),
                     scope: Some("dependencies".to_string()),
                     is_runtime: None,
@@ -714,22 +781,21 @@ fn parse_rebar_dep(term: &ErlTerm) -> Option<Dependency> {
                     is_pinned: None,
                     is_direct: None,
                     resolved_package: None,
-                    extra_data: git_extra,
+                    extra_data: build_rebar_dependency_extra_data(
+                        vcs_url,
+                        app_name.as_str(),
+                        package_name.as_str(),
+                    ),
                 })
             }
         }
         // {Name, Version, Source}
         3 => {
             if let Some(version) = term_to_str(&fields[1]) {
-                // {Name, Version, {git, URL, Ref}}
-                let git_extra = extract_git_url(&fields[2]).map(|vcs_url| {
-                    HashMap::from([(
-                        "vcs_url".to_string(),
-                        JsonValue::String(truncate_field(vcs_url)),
-                    )])
-                });
+                let package_name = extract_rebar_package_name(&fields[2], &app_name);
+                let vcs_url = extract_git_url(&fields[2]);
                 Some(Dependency {
-                    purl: build_hex_purl(&name, Some(&version)).map(truncate_field),
+                    purl: build_hex_purl(&package_name, Some(&version)).map(truncate_field),
                     extracted_requirement: Some(truncate_field(version)),
                     scope: Some("dependencies".to_string()),
                     is_runtime: None,
@@ -737,20 +803,18 @@ fn parse_rebar_dep(term: &ErlTerm) -> Option<Dependency> {
                     is_pinned: None,
                     is_direct: None,
                     resolved_package: None,
-                    extra_data: git_extra,
+                    extra_data: build_rebar_dependency_extra_data(
+                        vcs_url,
+                        app_name.as_str(),
+                        package_name.as_str(),
+                    ),
                 })
             } else {
-                // {Name, {git, URL, Ref}}
+                let package_name = extract_rebar_package_name(&fields[1], &app_name);
                 let vcs_url = extract_git_url(&fields[1]);
                 let version = extract_git_version(&fields[1]);
-                let git_extra = vcs_url.map(|url| {
-                    HashMap::from([(
-                        "vcs_url".to_string(),
-                        JsonValue::String(truncate_field(url)),
-                    )])
-                });
                 Some(Dependency {
-                    purl: build_hex_purl(&name, version.as_deref()).map(truncate_field),
+                    purl: build_hex_purl(&package_name, version.as_deref()).map(truncate_field),
                     extracted_requirement: version.map(truncate_field),
                     scope: Some("dependencies".to_string()),
                     is_runtime: None,
@@ -758,7 +822,11 @@ fn parse_rebar_dep(term: &ErlTerm) -> Option<Dependency> {
                     is_pinned: None,
                     is_direct: None,
                     resolved_package: None,
-                    extra_data: git_extra,
+                    extra_data: build_rebar_dependency_extra_data(
+                        vcs_url,
+                        app_name.as_str(),
+                        package_name.as_str(),
+                    ),
                 })
             }
         }
@@ -766,10 +834,53 @@ fn parse_rebar_dep(term: &ErlTerm) -> Option<Dependency> {
     }
 }
 
+fn extract_rebar_package_name(term: &ErlTerm, fallback_name: &str) -> String {
+    if let ErlTerm::Tuple(fields) = term
+        && fields.len() >= 2
+        && term_to_str(&fields[0]).as_deref() == Some("pkg")
+        && let Some(package_name) = term_to_str(&fields[1])
+    {
+        package_name
+    } else {
+        fallback_name.to_string()
+    }
+}
+
+fn build_rebar_dependency_extra_data(
+    vcs_url: Option<String>,
+    app_name: &str,
+    package_name: &str,
+) -> Option<HashMap<String, JsonValue>> {
+    let mut extra_data = HashMap::new();
+
+    if let Some(url) = vcs_url {
+        extra_data.insert(
+            "vcs_url".to_string(),
+            JsonValue::String(truncate_field(url)),
+        );
+    }
+
+    if app_name != package_name {
+        extra_data.insert(
+            "app_name".to_string(),
+            JsonValue::String(truncate_field(app_name.to_string())),
+        );
+    }
+
+    if extra_data.is_empty() {
+        None
+    } else {
+        Some(extra_data)
+    }
+}
+
 fn extract_git_url(term: &ErlTerm) -> Option<String> {
     if let ErlTerm::Tuple(fields) = term
         && fields.len() >= 2
-        && term_to_str(&fields[0]).as_deref() == Some("git")
+        && matches!(
+            term_to_str(&fields[0]).as_deref(),
+            Some("git") | Some("git_subdir")
+        )
     {
         term_to_str(&fields[1])
     } else {
@@ -780,7 +891,10 @@ fn extract_git_url(term: &ErlTerm) -> Option<String> {
 fn extract_git_version(term: &ErlTerm) -> Option<String> {
     if let ErlTerm::Tuple(fields) = term
         && fields.len() >= 3
-        && term_to_str(&fields[0]).as_deref() == Some("git")
+        && matches!(
+            term_to_str(&fields[0]).as_deref(),
+            Some("git") | Some("git_subdir")
+        )
     {
         if let ErlTerm::Tuple(ref_fields) = &fields[2]
             && ref_fields.len() == 2
@@ -910,20 +1024,25 @@ fn parse_lock_dep(term: &ErlTerm, hashes: &HashMap<String, String>) -> Option<De
         _ => return None,
     };
 
-    let name = term_to_str(&fields[0])?;
+    let app_name = term_to_str(&fields[0])?;
     // fields[2] is the level (integer)
 
-    let (version, vcs_url) = match &fields[1] {
+    let (package_name, version, vcs_url) = match &fields[1] {
         // {pkg, <<"name">>, <<"version">>}
         ErlTerm::Tuple(pkg_fields)
             if pkg_fields.len() >= 3 && term_to_str(&pkg_fields[0]).as_deref() == Some("pkg") =>
         {
+            let package_name = term_to_str(&pkg_fields[1]).unwrap_or_else(|| app_name.clone());
             let ver = term_to_str(&pkg_fields[2]);
-            (ver, None)
+            (package_name, ver, None)
         }
         // {git, "url", {ref, "hash"}}
         ErlTerm::Tuple(git_fields)
-            if git_fields.len() >= 2 && term_to_str(&git_fields[0]).as_deref() == Some("git") =>
+            if git_fields.len() >= 2
+                && matches!(
+                    term_to_str(&git_fields[0]).as_deref(),
+                    Some("git") | Some("git_subdir")
+                ) =>
         {
             let url = term_to_str(&git_fields[1]);
             let ver = if git_fields.len() >= 3 {
@@ -931,13 +1050,14 @@ fn parse_lock_dep(term: &ErlTerm, hashes: &HashMap<String, String>) -> Option<De
             } else {
                 None
             };
-            (ver, url)
+            (app_name.clone(), ver, url)
         }
-        _ => (None, None),
+        _ => (app_name.clone(), None, None),
     };
 
     let sha256 = hashes
-        .get(&name)
+        .get(&app_name)
+        .or_else(|| hashes.get(&package_name))
         .and_then(|h| Sha256Digest::from_hex(h).ok());
 
     let resolved_package = ResolvedPackage {
@@ -945,30 +1065,25 @@ fn parse_lock_dep(term: &ErlTerm, hashes: &HashMap<String, String>) -> Option<De
         sha256,
         is_virtual: true,
         datasource_id: Some(DatasourceId::RebarLock),
-        purl: build_hex_purl(&name, version.as_deref()).map(truncate_field),
-        repository_homepage_url: Some(truncate_field(format!("https://hex.pm/packages/{}", name))),
+        purl: build_hex_purl(&package_name, version.as_deref()).map(truncate_field),
+        repository_homepage_url: Some(truncate_field(format!(
+            "https://hex.pm/packages/{}",
+            package_name
+        ))),
         api_data_url: Some(truncate_field(format!(
             "https://hex.pm/api/packages/{}",
-            name
+            package_name
         ))),
         ..ResolvedPackage::new(
             PackageType::Hex,
             String::new(),
-            name.clone(),
+            package_name.clone(),
             version.clone().unwrap_or_default(),
         )
     };
 
-    let mut extra_data = HashMap::new();
-    if let Some(url) = vcs_url {
-        extra_data.insert(
-            "vcs_url".to_string(),
-            JsonValue::String(truncate_field(url)),
-        );
-    }
-
     Some(Dependency {
-        purl: build_hex_purl(&name, version.as_deref()).map(truncate_field),
+        purl: build_hex_purl(&package_name, version.as_deref()).map(truncate_field),
         extracted_requirement: version.map(truncate_field),
         scope: Some("dependencies".to_string()),
         is_runtime: None,
@@ -976,11 +1091,11 @@ fn parse_lock_dep(term: &ErlTerm, hashes: &HashMap<String, String>) -> Option<De
         is_pinned: Some(true),
         is_direct: None,
         resolved_package: Some(Box::new(resolved_package)),
-        extra_data: if extra_data.is_empty() {
-            None
-        } else {
-            Some(extra_data)
-        },
+        extra_data: build_rebar_dependency_extra_data(
+            vcs_url,
+            app_name.as_str(),
+            package_name.as_str(),
+        ),
     })
 }
 
