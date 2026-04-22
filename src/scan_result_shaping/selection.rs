@@ -17,7 +17,13 @@ use super::apply_path_selection_filter;
 #[path = "selection_test.rs"]
 mod selection_test;
 
-pub(crate) fn resolve_native_scan_inputs(inputs: &[String]) -> Result<(String, Vec<String>)> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum SelectedPath {
+    Exact(String),
+    Subtree(String),
+}
+
+pub(crate) fn resolve_native_scan_inputs(inputs: &[String]) -> Result<(String, Vec<SelectedPath>)> {
     if inputs.is_empty() {
         return Err(anyhow!("No directory input path provided"));
     }
@@ -44,7 +50,7 @@ pub(crate) fn resolve_native_scan_inputs(inputs: &[String]) -> Result<(String, V
 
     let synthetic_includes = inputs
         .iter()
-        .map(|path| path.replace('\\', "/").trim_end_matches('/').to_string())
+        .map(|path| build_selected_path(path, Path::new(path).is_dir()))
         .collect();
 
     Ok((common_prefix, synthetic_includes))
@@ -52,7 +58,7 @@ pub(crate) fn resolve_native_scan_inputs(inputs: &[String]) -> Result<(String, V
 
 #[derive(Debug)]
 pub(crate) struct ResolvedPathsFileEntries {
-    pub includes: Vec<String>,
+    pub selections: Vec<SelectedPath>,
     pub missing_entries: Vec<String>,
 }
 
@@ -73,7 +79,7 @@ pub(crate) fn resolve_paths_file_entries(
         ));
     }
 
-    let mut includes = Vec::new();
+    let mut selections = Vec::new();
     let mut missing_entries = Vec::new();
     let mut seen = HashSet::new();
 
@@ -82,9 +88,11 @@ pub(crate) fn resolve_paths_file_entries(
             continue;
         };
 
-        if scan_root.join(&normalized).exists() {
-            if seen.insert(normalized.clone()) {
-                includes.push(normalized);
+        let absolute = scan_root.join(&normalized);
+        if absolute.exists() {
+            let selection = build_selected_path(&normalized, absolute.is_dir());
+            if seen.insert(selection_cache_key(&selection)) {
+                selections.push(selection);
             }
         } else if seen.insert(format!("missing:{normalized}")) {
             missing_entries.push(normalized);
@@ -92,9 +100,25 @@ pub(crate) fn resolve_paths_file_entries(
     }
 
     Ok(ResolvedPathsFileEntries {
-        includes,
+        selections,
         missing_entries,
     })
+}
+
+fn build_selected_path(path: &str, is_directory: bool) -> SelectedPath {
+    let normalized = normalize_match_input(path);
+    if is_directory {
+        SelectedPath::Subtree(normalized)
+    } else {
+        SelectedPath::Exact(normalized)
+    }
+}
+
+fn selection_cache_key(selection: &SelectedPath) -> String {
+    match selection {
+        SelectedPath::Exact(path) => format!("exact:{path}"),
+        SelectedPath::Subtree(path) => format!("subtree:{path}"),
+    }
 }
 
 fn normalize_paths_file_entry(entry: &str) -> Result<Option<String>> {
@@ -177,6 +201,7 @@ pub(crate) fn common_path_prefix(inputs: &[String]) -> Option<PathBuf> {
 pub(crate) fn apply_user_path_filters_to_collected(
     collected: &mut CollectedPaths,
     scan_root: &Path,
+    selected_paths: &[SelectedPath],
     include_patterns: &[String],
     exclude_patterns: &[String],
 ) -> usize {
@@ -184,7 +209,8 @@ pub(crate) fn apply_user_path_filters_to_collected(
     let before_dirs = collected.directories.len();
     collected.files.retain(|(path, _)| {
         let relative_path = normalize_scan_relative_path(path, scan_root);
-        is_included_path(&relative_path, include_patterns, exclude_patterns)
+        matches_selected_path(&relative_path, selected_paths)
+            && is_included_path(&relative_path, include_patterns, exclude_patterns)
     });
 
     let kept_file_paths: HashSet<_> = collected
@@ -194,7 +220,8 @@ pub(crate) fn apply_user_path_filters_to_collected(
         .collect();
     collected.directories.retain(|(path, _)| {
         let relative_path = normalize_scan_relative_path(path, scan_root);
-        is_included_path(&relative_path, include_patterns, exclude_patterns)
+        (matches_selected_path(&relative_path, selected_paths)
+            && is_included_path(&relative_path, include_patterns, exclude_patterns))
             || kept_file_paths
                 .iter()
                 .any(|file_path| file_path.starts_with(path))
@@ -243,8 +270,8 @@ pub(crate) fn is_included_path(
         return false;
     }
 
-    let normalized_path = path.replace('\\', "/").to_ascii_lowercase();
-    let stripped_path = normalized_path.trim_start_matches(['/', '0']).to_string();
+    let normalized_path = normalize_match_input(path);
+    let stripped_path = normalized_path.trim_start_matches('/').to_string();
 
     if !include_patterns.is_empty()
         && !include_patterns
@@ -277,30 +304,33 @@ fn path_matches_scancode_pattern(
             .filter(|segment| !segment.is_empty())
             .any(|segment| compiled.matches(segment))
     } else {
-        matching_path_candidates(normalized_path, stripped_path)
-            .iter()
+        [normalized_path, stripped_path]
+            .into_iter()
+            .filter(|candidate| !candidate.is_empty())
             .any(|candidate| compiled.matches(candidate))
     }
 }
 
-fn matching_path_candidates<'a>(normalized_path: &'a str, stripped_path: &'a str) -> Vec<&'a str> {
-    let mut candidates = Vec::new();
-
-    for path in [normalized_path, stripped_path] {
-        if path.is_empty() {
-            continue;
-        }
-
-        candidates.push(path);
-        let mut current = path;
-        while let Some((parent, _)) = current.rsplit_once('/') {
-            if parent.is_empty() {
-                break;
-            }
-            candidates.push(parent);
-            current = parent;
-        }
+fn matches_selected_path(path: &str, selected_paths: &[SelectedPath]) -> bool {
+    if selected_paths.is_empty() {
+        return true;
     }
 
-    candidates
+    let normalized_path = normalize_match_input(path);
+    selected_paths.iter().any(|selection| match selection {
+        SelectedPath::Exact(exact) => normalized_path == *exact,
+        SelectedPath::Subtree(root) => {
+            normalized_path == *root
+                || normalized_path
+                    .strip_prefix(root)
+                    .is_some_and(|suffix| suffix.starts_with('/'))
+        }
+    })
+}
+
+fn normalize_match_input(path: &str) -> String {
+    path.replace('\\', "/")
+        .trim_start_matches('/')
+        .trim_end_matches('/')
+        .to_ascii_lowercase()
 }

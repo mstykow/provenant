@@ -20,7 +20,7 @@ use crate::post_processing::{
 };
 use crate::progress::{ProgressMode, ScanProgress, format_default_scan_error};
 use crate::scan_result_shaping::{
-    apply_cli_path_selection_filter, apply_ignore_resource_filter, apply_mark_source,
+    SelectedPath, apply_cli_path_selection_filter, apply_ignore_resource_filter, apply_mark_source,
     apply_only_findings_filter, apply_user_path_filters_to_collected, filter_redundant_clues,
     filter_redundant_clues_with_rules, load_and_merge_json_inputs, normalize_paths,
     normalize_top_level_output_paths, populate_info_resource_counts,
@@ -135,14 +135,12 @@ pub fn run() -> Result<()> {
             None,
         )
     } else {
-        let (scan_path, native_input_includes, missing_paths_file_entries) =
+        let (scan_path, selected_paths, missing_paths_file_entries) =
             resolve_native_scan_selection(&cli)?;
         let paths_file_warnings = build_paths_file_warning_messages(&missing_paths_file_entries);
         for warning in &paths_file_warnings {
             progress.output_written(warning);
         }
-        let mut native_include_patterns = cli.include.clone();
-        native_include_patterns.extend(native_input_includes);
 
         let cache_config = prepare_cache_config(Some(Path::new(&scan_path)), &cli)?;
         shared_license_cache_config = Some(build_license_cache_config(&cache_config, &cli));
@@ -154,7 +152,8 @@ pub fn run() -> Result<()> {
         let user_excluded_count = apply_user_path_filters_to_collected(
             &mut collected,
             Path::new(&scan_path),
-            &native_include_patterns,
+            &selected_paths,
+            &cli.include,
             &cli.exclude,
         );
         let total_files = collected.file_count();
@@ -652,10 +651,10 @@ fn touch_license_golden_symbols() {
     let _ = crate::license_detection::LicenseDetectionEngine::detect_matches_with_kind;
 }
 
-fn resolve_native_scan_selection(cli: &Cli) -> Result<(String, Vec<String>, Vec<String>)> {
+fn resolve_native_scan_selection(cli: &Cli) -> Result<(String, Vec<SelectedPath>, Vec<String>)> {
     if cli.paths_file.is_empty() {
-        let (scan_path, includes) = resolve_native_scan_inputs(&cli.dir_path)?;
-        return Ok((scan_path, includes, Vec::new()));
+        let (scan_path, selected_paths) = resolve_native_scan_inputs(&cli.dir_path)?;
+        return Ok((scan_path, selected_paths, Vec::new()));
     }
 
     let scan_path = cli
@@ -665,14 +664,14 @@ fn resolve_native_scan_selection(cli: &Cli) -> Result<(String, Vec<String>, Vec<
         .ok_or_else(|| anyhow!("--paths-file requires one positional scan root"))?;
     let path_file_entries = load_paths_file_entries(&cli.paths_file)?;
     let resolved = resolve_paths_file_entries(Path::new(&scan_path), &path_file_entries)?;
-    if resolved.includes.is_empty() {
+    if resolved.selections.is_empty() {
         return Err(anyhow!(
             "--paths-file did not resolve to any existing files or directories under {:?}",
             Path::new(&scan_path)
         ));
     }
 
-    Ok((scan_path, resolved.includes, resolved.missing_entries))
+    Ok((scan_path, resolved.selections, resolved.missing_entries))
 }
 
 fn load_paths_file_entries(paths_files: &[String]) -> Result<Vec<String>> {
