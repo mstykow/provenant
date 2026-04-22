@@ -299,10 +299,12 @@ fn path_matches_scancode_pattern(
     };
 
     if !normalized_pattern.contains('/') {
-        stripped_path
-            .split('/')
+        let basename = stripped_path
+            .rsplit('/')
+            .next()
             .filter(|segment| !segment.is_empty())
-            .any(|segment| compiled.matches(segment))
+            .unwrap_or(stripped_path);
+        compiled.matches(basename)
     } else {
         [normalized_path, stripped_path]
             .into_iter()
