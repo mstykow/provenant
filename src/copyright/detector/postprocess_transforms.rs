@@ -3764,12 +3764,8 @@ pub fn extract_midline_c_year_holder_with_leading_acronym(
     let mut new_copyrights = Vec::new();
     let mut new_holders = Vec::new();
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let trimmed = prepared.trim();
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let trimmed = prepared_line.prepared;
 
         let lower = trimmed.to_ascii_lowercase();
         if !lower.contains("fix") {
@@ -3797,16 +3793,16 @@ pub fn extract_midline_c_year_holder_with_leading_acronym(
 
         new_copyrights.push(CopyrightDetection {
             copyright: cr,
-            start_line: LineNumber::new(ln).unwrap(),
-            end_line: LineNumber::new(ln).unwrap(),
+            start_line: prepared_line.line_number,
+            end_line: prepared_line.line_number,
         });
 
         let holder_raw = format!("{holder} {prefix}");
         if let Some(h) = refine_holder_in_copyright_context(&holder_raw) {
             new_holders.push(HolderDetection {
                 holder: h,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
+                start_line: prepared_line.line_number,
+                end_line: prepared_line.line_number,
             });
         }
     }
@@ -5354,26 +5350,17 @@ pub fn extract_following_authors_holders(
 
     let mut new_authors = Vec::new();
 
-    let mut i = 0;
-    while i < raw_lines.len() {
-        let Some(header) = prepared_cache.get_by_index(i).map(|p| p.trim().to_string()) else {
-            i += 1;
-            continue;
-        };
-        if header.is_empty() {
-            i += 1;
-            continue;
-        }
-        if !HEADER_RE.is_match(&header) {
-            i += 1;
+    let mut line_number = LineNumber::ONE;
+    while let Some(header_line) = prepared_cache.line(line_number) {
+        if header_line.prepared.is_empty() || !HEADER_RE.is_match(header_line.prepared) {
+            line_number += 1usize;
             continue;
         }
 
         let mut extracted_any = false;
-        let mut j = i + 1;
-        while j < raw_lines.len() {
-            let next_ln = j + 1;
-            let raw = raw_lines[j];
+        let mut next_line_number = header_line.line_number + 1usize;
+        while let Some(next_line) = prepared_cache.line(next_line_number) {
+            let raw = next_line.raw;
             if raw.trim().is_empty() {
                 break;
             }
@@ -5387,15 +5374,19 @@ pub fn extract_following_authors_holders(
             {
                 new_authors.push(AuthorDetection {
                     author,
-                    start_line: LineNumber::new(next_ln).unwrap(),
-                    end_line: LineNumber::new(next_ln).unwrap(),
+                    start_line: next_line.line_number,
+                    end_line: next_line.line_number,
                 });
                 extracted_any = true;
             }
-            j += 1;
+            next_line_number += 1usize;
         }
 
-        i = if extracted_any { j } else { i + 1 };
+        line_number = if extracted_any {
+            next_line_number
+        } else {
+            header_line.line_number + 1usize
+        };
     }
 
     new_authors
@@ -5477,17 +5468,11 @@ pub fn merge_implemented_by_lines(
     static EMAIL_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?P<email>[^\s<>]+@[^\s<>]+)").unwrap());
 
-    let mut merged: Vec<(usize, String, String, HashSet<String>)> = Vec::new();
+    let mut merged: Vec<(LineNumber, String, String, HashSet<String>)> = Vec::new();
 
-    for i in 0..prepared_cache.len().saturating_sub(1) {
-        let ln = i + 1;
-        let Some(line) = prepared_cache
-            .get_by_index(i)
-            .map(|p| p.trim().trim_start_matches('*').trim_start().to_string())
-        else {
-            continue;
-        };
-        let Some(cap) = COPY_RE.captures(&line) else {
+    for (first, second) in prepared_cache.adjacent_pairs() {
+        let line = first.prepared.trim().trim_start_matches('*').trim_start();
+        let Some(cap) = COPY_RE.captures(line) else {
             continue;
         };
         let year = cap.name("year").map(|m| m.as_str()).unwrap_or("").trim();
@@ -5496,13 +5481,8 @@ pub fn merge_implemented_by_lines(
             continue;
         }
 
-        let Some(next) = prepared_cache
-            .get_by_index(i + 1)
-            .map(|p| p.trim().trim_start_matches('*').trim_start().to_string())
-        else {
-            continue;
-        };
-        let Some(cap2) = IMPLEMENTED_RE.captures(&next) else {
+        let next = second.prepared.trim().trim_start_matches('*').trim_start();
+        let Some(cap2) = IMPLEMENTED_RE.captures(next) else {
             continue;
         };
         let tail = cap2.name("tail").map(|m| m.as_str()).unwrap_or("");
@@ -5521,14 +5501,14 @@ pub fn merge_implemented_by_lines(
 
         let cr = format!("Copyright (c) {year}, {holder_raw} Implemented by {first_email}");
         let holder = format!("{holder_raw} Implemented by");
-        merged.push((ln, cr, holder, email_set));
+        merged.push((first.line_number, cr, holder, email_set));
     }
 
     if merged.is_empty() {
         return;
     }
 
-    for (ln, cr_raw, holder_raw, emails) in merged {
+    for (line_number, cr_raw, holder_raw, emails) in merged {
         let Some(cr) = refine_copyright(&cr_raw) else {
             continue;
         };
@@ -5536,7 +5516,7 @@ pub fn merge_implemented_by_lines(
         let cr_first = cr.split_whitespace().next().unwrap_or("");
 
         for det in copyrights.iter_mut() {
-            if det.start_line.get() == ln
+            if det.start_line == line_number
                 && det.copyright.starts_with("Copyright (c)")
                 && det.copyright.contains(",")
                 && det.copyright.contains(cr_first)
@@ -5547,24 +5527,24 @@ pub fn merge_implemented_by_lines(
         if !copyrights.iter().any(|c| c.copyright == cr) {
             copyrights.push(CopyrightDetection {
                 copyright: cr,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+                start_line: line_number,
+                end_line: line_number + 1usize,
             });
         }
 
         holders.retain(|h| {
-            !(h.start_line.get() == ln
+            !(h.start_line == line_number
                 && h.holder == holder_raw.trim_end_matches(" Implemented by"))
         });
         if let Some(h) = refine_holder(&holder_raw)
             && !holders
                 .iter()
-                .any(|x| x.holder == h && x.start_line.get() == ln)
+                .any(|x| x.holder == h && x.start_line == line_number)
         {
             holders.push(HolderDetection {
                 holder: h,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+                start_line: line_number,
+                end_line: line_number + 1usize,
             });
         }
 
@@ -5590,16 +5570,8 @@ pub fn split_written_by_copyrights_into_holder_prefixed_clauses(
     });
 
     let mut added_any = false;
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-        for cap in WRITTEN_BY_COPY_RE.captures_iter(line) {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        for cap in WRITTEN_BY_COPY_RE.captures_iter(prepared_line.prepared) {
             let name = cap.name("name").map(|m| m.as_str()).unwrap_or("").trim();
             let years = cap.name("years").map(|m| m.as_str()).unwrap_or("").trim();
             if name.is_empty() || years.is_empty() {
@@ -5611,14 +5583,14 @@ pub fn split_written_by_copyrights_into_holder_prefixed_clauses(
             };
             copyrights.push(CopyrightDetection {
                 copyright: cr,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
+                start_line: prepared_line.line_number,
+                end_line: prepared_line.line_number,
             });
             if let Some(h) = refine_holder(name) {
                 holders.push(HolderDetection {
                     holder: h,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(ln).unwrap(),
+                    start_line: prepared_line.line_number,
+                    end_line: prepared_line.line_number,
                 });
             }
             added_any = true;
@@ -5655,16 +5627,11 @@ pub fn fix_shm_inline_copyrights(
             .unwrap()
     });
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        if !prepared.contains("/proc/sysvipc/shm") {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        if !prepared_line.prepared.contains("/proc/sysvipc/shm") {
             continue;
         }
-        let line = prepared.trim();
-        let Some(cap) = INLINE_RE.captures(line) else {
+        let Some(cap) = INLINE_RE.captures(prepared_line.prepared) else {
             continue;
         };
         let year = cap.name("year").map(|m| m.as_str()).unwrap_or("").trim();
@@ -5680,15 +5647,15 @@ pub fn fix_shm_inline_copyrights(
         };
         copyrights.push(CopyrightDetection {
             copyright: cr,
-            start_line: LineNumber::new(ln).unwrap(),
-            end_line: LineNumber::new(ln).unwrap(),
+            start_line: prepared_line.line_number,
+            end_line: prepared_line.line_number,
         });
 
         if let Some(holder) = refine_holder(name) {
             holders.push(HolderDetection {
                 holder,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
+                start_line: prepared_line.line_number,
+                end_line: prepared_line.line_number,
             });
         }
         break;
@@ -5747,21 +5714,23 @@ pub fn fix_sundry_contributors_truncation(
         .unwrap()
     });
 
-    let mut matched: Option<(usize, String, String, String)> = None;
-    for ln in 1..=prepared_cache.len() {
-        let Some(prepared) = prepared_cache.get(ln) else {
-            continue;
-        };
-        if let Some(cap) = COPYRIGHT_SUNDRY_CONTRIBUTORS_RE.captures(prepared.trim()) {
+    let mut matched: Option<(LineNumber, String, String, String)> = None;
+    for prepared_line in prepared_cache.iter_non_empty() {
+        if let Some(cap) = COPYRIGHT_SUNDRY_CONTRIBUTORS_RE.captures(prepared_line.prepared) {
             let year = cap.name("year").map(|m| m.as_str()).unwrap_or("").trim();
             let name = cap.name("name").map(|m| m.as_str()).unwrap_or("").trim();
             let tail = cap.name("tail").map(|m| m.as_str()).unwrap_or("").trim();
-            matched = Some((ln, year.to_string(), name.to_string(), tail.to_string()));
+            matched = Some((
+                prepared_line.line_number,
+                year.to_string(),
+                name.to_string(),
+                tail.to_string(),
+            ));
             break;
         }
     }
 
-    let Some((ln, year, name, tail)) = matched else {
+    let Some((line_number, year, name, tail)) = matched else {
         return;
     };
 
@@ -5801,15 +5770,15 @@ pub fn fix_sundry_contributors_truncation(
     if !copyrights.iter().any(|c| c.copyright == full_cr) {
         copyrights.push(CopyrightDetection {
             copyright: full_cr,
-            start_line: LineNumber::new(ln).unwrap(),
-            end_line: LineNumber::new(ln).unwrap(),
+            start_line: line_number,
+            end_line: line_number,
         });
     }
     if !holders.iter().any(|h| h.holder == full_holder) {
         holders.push(HolderDetection {
             holder: full_holder,
-            start_line: LineNumber::new(ln).unwrap(),
-            end_line: LineNumber::new(ln).unwrap(),
+            start_line: line_number,
+            end_line: line_number,
         });
     }
 }
@@ -5960,20 +5929,18 @@ pub fn extend_bare_c_year_detections_to_line_end_for_multi_c_lines(
     static C_YEAR_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\(c\)\s*(?P<year>(?:19\d{2}|20\d{2}))\b").unwrap());
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-        if line.to_ascii_lowercase().matches("(c)").count() < 2 {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        if prepared_line
+            .prepared
+            .to_ascii_lowercase()
+            .matches("(c)")
+            .count()
+            < 2
+        {
             continue;
         }
 
-        for m in C_YEAR_RE.captures_iter(line) {
+        for m in C_YEAR_RE.captures_iter(prepared_line.prepared) {
             let year = m.name("year").map(|m| m.as_str()).unwrap_or("").trim();
             if year.is_empty() {
                 continue;
@@ -5982,7 +5949,7 @@ pub fn extend_bare_c_year_detections_to_line_end_for_multi_c_lines(
             let Some(start) = m.get(0).map(|mm| mm.start()) else {
                 continue;
             };
-            let tail = line.get(start..).unwrap_or("").trim();
+            let tail = prepared_line.prepared.get(start..).unwrap_or("").trim();
             if tail.len() <= short.len() {
                 continue;
             }
@@ -5992,7 +5959,9 @@ pub fn extend_bare_c_year_detections_to_line_end_for_multi_c_lines(
 
             let mut did_replace = false;
             for det in copyrights.iter_mut() {
-                if det.start_line.get() == ln && det.end_line.get() == ln && det.copyright == short
+                if det.start_line == prepared_line.line_number
+                    && det.end_line == prepared_line.line_number
+                    && det.copyright == short
                 {
                     det.copyright = extended.clone();
                     did_replace = true;
@@ -6005,12 +5974,12 @@ pub fn extend_bare_c_year_detections_to_line_end_for_multi_c_lines(
             if let Some(holder) = derive_holder_from_simple_copyright_string(&extended)
                 && !holders
                     .iter()
-                    .any(|h| h.start_line.get() == ln && h.holder == holder)
+                    .any(|h| h.start_line == prepared_line.line_number && h.holder == holder)
             {
                 holders.push(HolderDetection {
                     holder,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(ln).unwrap(),
+                    start_line: prepared_line.line_number,
+                    end_line: prepared_line.line_number,
                 });
             }
         }
