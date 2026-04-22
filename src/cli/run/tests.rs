@@ -833,6 +833,111 @@ fn from_json_recomputes_top_level_outputs_after_package_inheritance_following() 
     );
 }
 
+#[test]
+fn from_json_keeps_multi_datafile_package_license_provenance_on_manifest_package() {
+    let file0 = json_file("project/package-lock.json", crate::models::FileType::File);
+    let file1 = json_file("project/package.json", crate::models::FileType::File);
+    let mut files = vec![file0, file1];
+
+    files[0].package_data = vec![crate::models::PackageData {
+        package_type: Some(crate::models::PackageType::Npm),
+        datasource_id: Some(crate::models::DatasourceId::NpmPackageLockJson),
+        name: Some("phoenix".to_string()),
+        version: Some("1.8.5".to_string()),
+        ..Default::default()
+    }];
+    files[0].license_detections = vec![crate::models::LicenseDetection {
+        license_expression: "apache-2.0".to_string(),
+        license_expression_spdx: "Apache-2.0".to_string(),
+        matches: vec![crate::models::Match {
+            license_expression: "apache-2.0".to_string(),
+            license_expression_spdx: "Apache-2.0".to_string(),
+            from_file: Some("project/package-lock.json".to_string()),
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
+            matcher: Some("2-aho".to_string()),
+            score: MatchScore::MAX,
+            matched_length: Some(10),
+            match_coverage: Some(100.0),
+            rule_relevance: Some(100),
+            rule_identifier: Some("apache-2.0_65.RULE".to_string()),
+            rule_url: None,
+            matched_text: Some("Apache-2.0".to_string()),
+            referenced_filenames: None,
+            matched_text_diagnostics: None,
+        }],
+        detection_log: vec![],
+        identifier: None,
+    }];
+
+    files[1].package_data = vec![crate::models::PackageData {
+        package_type: Some(crate::models::PackageType::Npm),
+        datasource_id: Some(crate::models::DatasourceId::NpmPackageJson),
+        name: Some("phoenix".to_string()),
+        version: Some("1.8.5".to_string()),
+        declared_license_expression: Some("mit".to_string()),
+        declared_license_expression_spdx: Some("MIT".to_string()),
+        license_detections: vec![crate::models::LicenseDetection {
+            license_expression: "mit".to_string(),
+            license_expression_spdx: "MIT".to_string(),
+            matches: vec![crate::models::Match {
+                license_expression: "mit".to_string(),
+                license_expression_spdx: "MIT".to_string(),
+                from_file: Some("project/package.json".to_string()),
+                start_line: LineNumber::ONE,
+                end_line: LineNumber::ONE,
+                matcher: Some("2-aho".to_string()),
+                score: MatchScore::MAX,
+                matched_length: Some(3),
+                match_coverage: Some(100.0),
+                rule_relevance: Some(100),
+                rule_identifier: Some("mit_30.RULE".to_string()),
+                rule_url: None,
+                matched_text: Some("MIT".to_string()),
+                referenced_filenames: None,
+                matched_text_diagnostics: None,
+            }],
+            detection_log: vec![],
+            identifier: None,
+        }],
+        ..Default::default()
+    }];
+
+    let mut package = crate::models::Package::from_package_data(
+        &files[1].package_data[0],
+        "project/package.json".to_string(),
+    );
+    package.datafile_paths = vec![
+        "project/package-lock.json".to_string(),
+        "project/package.json".to_string(),
+    ];
+    let package_uid = package.package_uid.clone();
+    files[0].for_packages = vec![package_uid.clone()];
+    files[1].for_packages = vec![package_uid];
+
+    for file in &mut files {
+        file.backfill_license_provenance();
+    }
+    package.backfill_license_provenance();
+
+    let mut packages = vec![package];
+    apply_package_reference_following(&mut files, &mut packages);
+
+    assert_eq!(
+        packages[0].declared_license_expression.as_deref(),
+        Some("mit")
+    );
+    assert_eq!(
+        packages[0].declared_license_expression_spdx.as_deref(),
+        Some("MIT")
+    );
+    assert_eq!(packages[0].license_detections.len(), 1);
+    assert_eq!(
+        packages[0].license_detections[0].license_expression_spdx,
+        "MIT"
+    );
+}
+
 fn json_file(path: &str, file_type: crate::models::FileType) -> crate::models::FileInfo {
     crate::models::FileInfo::new(
         Path::new(path)
