@@ -28,6 +28,22 @@ impl LineNumber {
         self.0.get()
     }
 
+    pub fn checked_add(self, n: usize) -> Option<Self> {
+        self.0.get().checked_add(n).and_then(Self::new)
+    }
+
+    pub fn checked_sub(self, n: usize) -> Option<Self> {
+        self.0.get().checked_sub(n).and_then(Self::new)
+    }
+
+    pub fn next(self) -> Self {
+        self.checked_add(1).expect("valid line number")
+    }
+
+    pub fn prev(self) -> Option<Self> {
+        self.checked_sub(1)
+    }
+
     pub fn saturating_add(self, n: usize) -> Self {
         Self(NonZeroUsize::new(self.0.get().saturating_add(n)).expect("LineNumber overflow"))
     }

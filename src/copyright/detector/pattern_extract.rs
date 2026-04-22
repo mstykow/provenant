@@ -2673,7 +2673,7 @@ pub fn extract_developed_at_software_copyrights(
             prepared_line.line_number,
             prepared_line.prepared.to_string(),
         )];
-        if let Some(next) = prepared_cache.line(prepared_line.line_number + 1usize)
+        if let Some(next) = prepared_cache.line(prepared_line.line_number.next())
             && !next.prepared.is_empty()
         {
             candidates.push((
@@ -2782,14 +2782,13 @@ pub fn extract_confidential_proprietary_copyrights(
             if year.is_empty() || tag.is_empty() {
                 continue;
             }
-            let Some(next_clean) =
-                prepared_cache
-                    .line(prepared_line.line_number + 1usize)
-                    .map(|p| {
-                        p.prepared
-                            .trim_start_matches(|c: char| !c.is_ascii_alphanumeric())
-                            .to_string()
-                    })
+            let Some(next_clean) = prepared_cache
+                .line(prepared_line.line_number.next())
+                .map(|p| {
+                    p.prepared
+                        .trim_start_matches(|c: char| !c.is_ascii_alphanumeric())
+                        .to_string()
+                })
             else {
                 continue;
             };
@@ -2799,7 +2798,7 @@ pub fn extract_confidential_proprietary_copyrights(
                     copyrights.push(CopyrightDetection {
                         copyright: cr,
                         start_line: prepared_line.line_number,
-                        end_line: prepared_line.line_number + 1usize,
+                        end_line: prepared_line.line_number.next(),
                     });
                 }
                 let holder_raw = format!("{tag} {next_clean}");
@@ -2807,7 +2806,7 @@ pub fn extract_confidential_proprietary_copyrights(
                     holders.push(HolderDetection {
                         holder: h,
                         start_line: prepared_line.line_number,
-                        end_line: prepared_line.line_number + 1usize,
+                        end_line: prepared_line.line_number.next(),
                     });
                 }
             }
@@ -2819,14 +2818,13 @@ pub fn extract_confidential_proprietary_copyrights(
             if year.is_empty() || base_holder.is_empty() {
                 continue;
             }
-            let Some(next_clean) =
-                prepared_cache
-                    .line(prepared_line.line_number + 1usize)
-                    .map(|p| {
-                        p.prepared
-                            .trim_start_matches(|c: char| !c.is_ascii_alphanumeric())
-                            .to_string()
-                    })
+            let Some(next_clean) = prepared_cache
+                .line(prepared_line.line_number.next())
+                .map(|p| {
+                    p.prepared
+                        .trim_start_matches(|c: char| !c.is_ascii_alphanumeric())
+                        .to_string()
+                })
             else {
                 continue;
             };
@@ -2836,7 +2834,7 @@ pub fn extract_confidential_proprietary_copyrights(
                     copyrights.push(CopyrightDetection {
                         copyright: cr,
                         start_line: prepared_line.line_number,
-                        end_line: prepared_line.line_number + 1usize,
+                        end_line: prepared_line.line_number.next(),
                     });
                 }
 
@@ -2850,7 +2848,7 @@ pub fn extract_confidential_proprietary_copyrights(
                     holders.push(HolderDetection {
                         holder: h,
                         start_line: prepared_line.line_number,
-                        end_line: prepared_line.line_number + 1usize,
+                        end_line: prepared_line.line_number.next(),
                     });
                 }
             }

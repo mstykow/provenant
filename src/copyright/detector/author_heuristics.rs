@@ -499,14 +499,14 @@ pub(super) fn extract_multiline_written_by_author_blocks(
                 || lower.contains(" written by "));
 
         if !is_start {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         }
 
         let mut block_lines: Vec<(LineNumber, String)> = Vec::new();
         block_lines.push((prepared_line.line_number, line.to_string()));
 
-        let mut next_line_number = prepared_line.line_number + 1usize;
+        let mut next_line_number = prepared_line.line_number.next();
         while let Some(next_line) = prepared_cache.line(next_line_number) {
             let next_line = next_line.prepared;
             if next_line.is_empty() {
@@ -530,11 +530,11 @@ pub(super) fn extract_multiline_written_by_author_blocks(
             }
 
             block_lines.push((next_line_number, next_line.to_string()));
-            next_line_number += 1usize;
+            next_line_number = next_line_number.next();
         }
 
         if block_lines.len() < 2 {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         }
 
@@ -797,24 +797,24 @@ pub(super) fn extract_was_developed_by_author_blocks(
     let mut line_number = LineNumber::ONE;
     while let Some(line) = prepared_cache.line(line_number) {
         if line.prepared.is_empty() {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         }
 
         let Some(cap) = WAS_DEVELOPED_BY_RE.captures(line.prepared) else {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         };
         let mut parts: Vec<String> = Vec::new();
         let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
         if who.is_empty() {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         }
         parts.push(who.to_string());
 
         let mut end_line = line.line_number;
-        let mut next_line_number = line.line_number + 1usize;
+        let mut next_line_number = line.line_number.next();
         while let Some(next_line) = prepared_cache.line(next_line_number) {
             if next_line.prepared.is_empty() {
                 break;
@@ -841,19 +841,19 @@ pub(super) fn extract_was_developed_by_author_blocks(
                 break;
             }
 
-            next_line_number += 1usize;
+            next_line_number = next_line_number.next();
         }
 
         let joined = parts.join(" ");
         let joined = joined.split_whitespace().collect::<Vec<_>>().join(" ");
         if joined.is_empty() {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         }
 
         let author = refine_author(&joined).unwrap_or(joined);
         if author.is_empty() {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         }
 
@@ -863,7 +863,7 @@ pub(super) fn extract_was_developed_by_author_blocks(
             end_line,
         });
 
-        line_number += 1usize;
+        line_number = line_number.next();
     }
 
     authors
@@ -891,19 +891,19 @@ pub(super) fn extract_author_colon_blocks(
     while let Some(prepared_line) = prepared_cache.line(line_number) {
         let line = trim_author_label_prefix(prepared_line.prepared);
         if line.is_empty() {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         }
 
         let Some(cap) = AUTHOR_COLON_RE.captures(&line) else {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         };
 
         let mut skip = false;
         let mut prev_line_number = prepared_line.line_number;
         while prev_line_number > LineNumber::ONE {
-            prev_line_number = LineNumber::new(prev_line_number.get() - 1).expect("valid");
+            prev_line_number = prev_line_number.prev().expect("valid");
             let Some(prev) = prepared_cache.line(prev_line_number) else {
                 break;
             };
@@ -916,7 +916,7 @@ pub(super) fn extract_author_colon_blocks(
             break;
         }
         if skip {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         }
 
@@ -938,19 +938,19 @@ pub(super) fn extract_author_colon_blocks(
             && label_raw.chars().any(|c| c.is_ascii_uppercase())
             && !label_raw.chars().any(|c| c.is_ascii_lowercase());
         if label_is_all_caps {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         }
 
         let mut segments: Vec<String> = Vec::new();
         if !tail.is_empty() {
             let Some(initial_tail) = sanitize_author_colon_tail(tail) else {
-                line_number += 1usize;
+                line_number = line_number.next();
                 continue;
             };
             segments.push(initial_tail);
         }
-        let mut next_line_number = prepared_line.line_number + 1usize;
+        let mut next_line_number = prepared_line.line_number.next();
         let mut added = 0usize;
         if !single_line_original_or_primary || collect_following_original_authors {
             loop {
@@ -1000,7 +1000,7 @@ pub(super) fn extract_author_colon_blocks(
                 if include {
                     segments.push(next_line.to_string());
                     added += 1;
-                    next_line_number += 1usize;
+                    next_line_number = next_line_number.next();
                     if added >= 4 {
                         break;
                     }
@@ -1015,15 +1015,15 @@ pub(super) fn extract_author_colon_blocks(
         }
 
         if segments.is_empty() {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         }
 
         let start_line = prepared_line.line_number;
-        let end_line = if next_line_number == prepared_line.line_number + 1usize {
+        let end_line = if next_line_number == prepared_line.line_number.next() {
             start_line
         } else {
-            LineNumber::new(next_line_number.get() - 1).expect("valid")
+            next_line_number.prev().expect("valid")
         };
         let bullet_results = extract_author_colon_bullet_roster(&segments, start_line.get());
         if !bullet_results.is_empty() {
@@ -1059,7 +1059,7 @@ pub(super) fn extract_author_colon_blocks(
         }
         let combined_raw = segments.join(" ");
         let Some(combined) = refine_author_with_optional_handle_suffix(&combined_raw) else {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         };
 
@@ -1205,16 +1205,16 @@ pub(super) fn extract_code_written_by_author_blocks(
     while let Some(prepared_line) = prepared_cache.line(line_number) {
         let line = prepared_line.prepared;
         if line.is_empty() {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         }
         if !HEADER_RE.is_match(line) {
-            line_number += 1usize;
+            line_number = line_number.next();
             continue;
         }
 
         let mut combined = line.to_string();
-        let mut next_line_number = prepared_line.line_number + 1usize;
+        let mut next_line_number = prepared_line.line_number.next();
         while let Some(next_prepared) = prepared_cache.line(next_line_number) {
             let next = next_prepared.prepared;
             if next.is_empty() {
@@ -1228,7 +1228,7 @@ pub(super) fn extract_code_written_by_author_blocks(
             if combined.len() > 800 {
                 break;
             }
-            next_line_number += 1usize;
+            next_line_number = next_line_number.next();
         }
 
         let Some(cap) = BODY_RE.captures(&combined) else {
@@ -1256,7 +1256,7 @@ pub(super) fn extract_code_written_by_author_blocks(
         authors.push(AuthorDetection {
             author,
             start_line: prepared_line.line_number,
-            end_line: LineNumber::new(next_line_number.get() - 1).expect("valid"),
+            end_line: next_line_number.prev().expect("valid"),
         });
 
         line_number = next_line_number;
@@ -1307,7 +1307,7 @@ pub(super) fn extract_developed_and_created_by_authors(
                 parts.push(piece);
             }
             end_line = line_number;
-            line_number += 1usize;
+            line_number = line_number.next();
         }
 
         if parts.is_empty() {
@@ -1427,7 +1427,7 @@ pub(super) fn merge_metadata_author_and_email_lines(
             continue;
         }
 
-        let mut next_line_number = prepared_line.line_number + 1usize;
+        let mut next_line_number = prepared_line.line_number.next();
         while let Some(email_line) = prepared_cache.line(next_line_number) {
             let email_line = email_line.prepared;
             if email_line.is_empty() {
@@ -1438,7 +1438,7 @@ pub(super) fn merge_metadata_author_and_email_lines(
             }
 
             if !email_line.to_ascii_lowercase().starts_with("author-email") {
-                next_line_number += 1usize;
+                next_line_number = next_line_number.next();
                 continue;
             }
             let Some((_, email_raw)) = email_line.split_once(':') else {
@@ -1906,7 +1906,7 @@ pub(super) fn extract_developed_by_contributors_authors(
         let mut window = prepared_line.prepared.to_string();
         let mut end_line = prepared_line.line_number;
         if !window.to_ascii_lowercase().contains("contributors")
-            && let Some(next) = prepared_cache.line(prepared_line.line_number + 1usize)
+            && let Some(next) = prepared_cache.line(prepared_line.line_number.next())
             && !next.prepared.is_empty()
         {
             window.push(' ');
@@ -2164,37 +2164,45 @@ pub(super) fn drop_authors_from_copyright_by_lines(
     });
 
     authors.retain(|author| {
-        let start = author.start_line.get();
-        let end = author.end_line.get();
-        (start..=end).all(|line_no| {
-            let Some(raw) = prepared_cache.raw_by_index(line_no - 1) else {
+        let author_lower = author.author.to_ascii_lowercase();
+        let mut line_number = author.start_line;
+
+        loop {
+            let Some(raw) = prepared_cache.line(line_number).map(|line| line.raw) else {
                 return true;
             };
             let lower = raw.to_ascii_lowercase();
             if INLINE_ATTRIBUTION_PARENS_RE.is_match(raw) {
-                return true;
+                if line_number == author.end_line {
+                    return true;
+                }
+                line_number = line_number.next();
+                continue;
             }
             if lower.trim_start().starts_with("copyright")
                 && lower.contains(" by ")
-                && lower.contains(&author.author.to_ascii_lowercase())
+                && lower.contains(&author_lower)
             {
                 return false;
             }
 
-            if line_no > 1
-                && let Some(prev) = prepared_cache.raw_by_index(line_no - 2)
+            if let Some(prev_line_number) = line_number.prev()
+                && let Some(prev) = prepared_cache.line(prev_line_number).map(|line| line.raw)
             {
                 let prev_lower = prev.to_ascii_lowercase();
                 if prev_lower.contains("copyright")
                     && YEAR_PREFIX_BY_RE.is_match(raw)
-                    && lower.contains(&author.author.to_ascii_lowercase())
+                    && lower.contains(&author_lower)
                 {
                     return false;
                 }
             }
 
-            true
-        })
+            if line_number == author.end_line {
+                return true;
+            }
+            line_number = line_number.next();
+        }
     });
 }
 
@@ -2218,13 +2226,14 @@ pub(super) fn drop_author_colon_lines_absorbed_into_year_only_copyrights(
     });
 
     authors.retain(|author| {
-        let start_line = author.start_line.get();
-        let end_line = author.end_line.get();
-        if start_line != end_line || start_line <= 1 {
+        if author.start_line != author.end_line {
             return true;
         }
+        let Some(previous_line_number) = author.start_line.prev() else {
+            return true;
+        };
 
-        let Some(raw_line) = prepared_cache.raw_by_index(start_line - 1) else {
+        let Some(raw_line) = prepared_cache.line(author.start_line).map(|line| line.raw) else {
             return true;
         };
         let normalized_line = raw_line.trim().trim_start_matches('*').trim_start();
@@ -2233,8 +2242,8 @@ pub(super) fn drop_author_colon_lines_absorbed_into_year_only_copyrights(
         }
 
         copyrights.iter().all(|copyright| {
-            if copyright.start_line.get() != start_line - 1
-                || copyright.end_line.get() != start_line
+            if copyright.start_line != previous_line_number
+                || copyright.end_line != author.start_line
             {
                 return true;
             }
