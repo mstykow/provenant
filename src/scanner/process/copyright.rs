@@ -224,9 +224,13 @@ fn extract_patch_header_author_supplements(text_content: &str) -> Vec<AuthorDete
 fn extract_comment_author_supplements(text_content: &str) -> Vec<AuthorDetection> {
     static COMMENT_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
-            r"(?i)\b(?:written|edited|modified)\s+by\s+(?P<author>[^<\n]+<[^>]+>)\s*\.?$|^(?:[#;/*!\-\s]+)?by\s+(?P<author2>[^<\n]+<[^>]+>)\s*\.?$",
+            r"(?i)\b(?:written|edited|modified|updated|originally)\s+by\s+(?P<author>[^<\n]+<[^>]+>)\s*\.?$|^(?:[#;/*!\-\s]+)?(?:[^<\n]*?\bby\s+(?P<author2>[^<\n]+<[^>]+>))\s*\.?$",
         )
         .expect("valid comment author regex")
+    });
+    static DOCKER_MAINTAINER_LABEL_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"(?i)^label\s+maintainer\s*=\s*[\"']?(?P<author>[^\"'\n]+<[^>]+>)[\"']?\s*$"#)
+            .expect("valid docker maintainer label regex")
     });
     static EMAIL_PAREN_NAME_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)(?P<email>[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,63})\s*\((?P<name>[^)]+)\)")
@@ -244,6 +248,16 @@ fn extract_comment_author_supplements(text_content: &str) -> Vec<AuthorDetection
                 .name("author")
                 .or_else(|| captures.name("author2"))
                 .map(|m| m.as_str().trim())
+        {
+            authors.push(AuthorDetection {
+                author: author.to_string(),
+                start_line: line_number,
+                end_line: line_number,
+            });
+        }
+
+        if let Some(captures) = DOCKER_MAINTAINER_LABEL_RE.captures(trimmed)
+            && let Some(author) = captures.name("author").map(|m| m.as_str().trim())
         {
             authors.push(AuthorDetection {
                 author: author.to_string(),
