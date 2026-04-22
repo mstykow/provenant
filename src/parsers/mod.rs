@@ -129,6 +129,8 @@ mod docker_scan_test;
 mod docker_test;
 mod erlang_otp;
 #[cfg(test)]
+mod erlang_otp_scan_test;
+#[cfg(test)]
 mod erlang_otp_test;
 mod freebsd;
 #[cfg(test)]
