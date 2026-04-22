@@ -964,9 +964,15 @@ impl TextProtoParser {
 
     fn expect_scalar(&mut self) -> Result<String, String> {
         match self.next() {
-            Some(TextProtoToken::Identifier(value)) | Some(TextProtoToken::String(value)) => {
+            Some(TextProtoToken::String(mut value)) => {
+                while matches!(self.peek(), Some(TextProtoToken::String(_))) {
+                    if let Some(TextProtoToken::String(next)) = self.next() {
+                        value.push_str(&next);
+                    }
+                }
                 Ok(value)
             }
+            Some(TextProtoToken::Identifier(value)) => Ok(value),
             other => Err(format!("Expected scalar value, found {:?}", other)),
         }
     }
