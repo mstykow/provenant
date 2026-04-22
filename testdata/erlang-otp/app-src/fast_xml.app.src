@@ -1,0 +1,10 @@
+{application, fast_xml,
+ [{description,  "Fast Expat-based Erlang / Elixir XML parsing library"},
+  {vsn,          "1.1.60"},
+  {modules,      []},
+  {registered,   []},
+  {applications, [kernel, stdlib, p1_utils]},
+  {mod,          {fast_xml,[]}},
+  {files, ["include/", "lib/", "src/", "c_src/fxml.c", "rebar.config"]},
+  {licenses, ["Apache 2.0"]},
+  {links, [{"Github", "https://github.com/processone/fast_xml"}]}]}.

@@ -1,0 +1,18 @@
+{"1.2.0",
+[{<<"cowboy">>,{pkg,<<"cowboy">>,<<"2.10.0">>},0},
+ {<<"cowlib">>,{pkg,<<"cowlib">>,<<"2.12.1">>},1},
+ {<<"ranch">>,{pkg,<<"ranch">>,<<"2.1.0">>},1},
+ {<<"jiffy">>,
+  {git,"https://github.com/davisp/jiffy.git",
+       {ref,"abc123def456"}},
+  0}]}.
+[
+{pkg_hash,[
+ {<<"cowboy">>, <<"AA68E5ECABE53F3B27CEEEFFE972E5BDBA31AE5900000000000000000000ABCD">>},
+ {<<"cowlib">>, <<"2B3E9DA0B21C4565751A6D4901C20D1B4CC25CBB00000000000000000000ABCD">>},
+ {<<"ranch">>, <<"8306D225F3A4BE20A9F3F3E5F3C8B234A2AE7AED00000000000000000000ABCD">>}]},
+{pkg_hash_ext,[
+ {<<"cowboy">>, <<"E64658D0B465CA0C576E1AEF51A2BCE78C8B60A200000000000000000000ABCD">>},
+ {<<"cowlib">>, <<"DB768DB88BEE444B62DA81B2160D9F3CD1AADC7000000000000000000000ABCD">>},
+ {<<"ranch">>, <<"244EE3FA2A6175270D8E1E30E41B3313C56A8D8700000000000000000000ABCD">>}]}
+].

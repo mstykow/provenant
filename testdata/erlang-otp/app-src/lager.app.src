@@ -1,0 +1,18 @@
+%% -*- tab-width: 4;erlang-indent-level: 4;indent-tabs-mode: nil -*-
+%% ex: ts=4 sw=4 et
+{application, lager,
+ [
+  {description, "Erlang logging framework"},
+  {vsn, "3.9.2"},
+  {modules, []},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  goldrush
+                 ]},
+  {registered, [lager_sup, lager_event, lager_crash_log, lager_handler_watcher_sup]},
+  {mod, {lager_app, []}},
+  {env, []},
+  {licenses, ["Apache 2"]},
+  {links, [{"Github", "https://github.com/erlang-lager/lager"}]}
+ ]}.
