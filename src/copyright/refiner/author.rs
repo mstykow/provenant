@@ -82,7 +82,15 @@ fn looks_like_prose_fragment_author(s: &str) -> bool {
         return false;
     }
 
+    if contains_html_like_fragment(trimmed) {
+        return true;
+    }
+
     if looks_like_structured_key_with_hex_value(trimmed) {
+        return true;
+    }
+
+    if looks_like_machine_style_colon_token(trimmed) {
         return true;
     }
 
@@ -135,6 +143,29 @@ fn looks_like_prose_fragment_author(s: &str) -> bool {
         .count();
 
     starts_lowercase || capitalized_word_count < 2
+}
+
+fn contains_html_like_fragment(s: &str) -> bool {
+    let trimmed = s.trim();
+    trimmed.contains("</")
+        || trimmed.contains("/>")
+        || (trimmed.contains('<') || trimmed.contains('>'))
+}
+
+fn looks_like_machine_style_colon_token(s: &str) -> bool {
+    let trimmed = s.trim();
+    if trimmed.is_empty() || trimmed.contains(char::is_whitespace) {
+        return false;
+    }
+
+    let segments: Vec<&str> = trimmed.split(':').collect();
+    segments.len() >= 3
+        && segments.iter().all(|segment| {
+            !segment.is_empty()
+                && segment.chars().all(|ch| {
+                    ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '_' | '-')
+                })
+        })
 }
 
 fn strip_leading_maintainers_label(s: &str) -> String {

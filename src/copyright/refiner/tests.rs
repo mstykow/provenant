@@ -907,6 +907,12 @@ fn test_refine_holder_strips_trailing_url_separator() {
 }
 
 #[test]
+fn test_refine_holder_strips_trailing_dash_after_url_removal() {
+    let result = refine_holder("Pouya Saadeghi - https://daisyui.com");
+    assert_eq!(result, Some("Pouya Saadeghi".to_string()));
+}
+
+#[test]
 fn test_refine_holder_empty() {
     assert_eq!(refine_holder(""), None);
 }
@@ -1545,6 +1551,12 @@ fn test_refine_author_drops_the_current_user_phrase() {
 #[test]
 fn test_refine_author_drops_point_to_the_phrase() {
     assert_eq!(refine_author("point to the"), None);
+}
+
+#[test]
+fn test_refine_author_drops_html_and_machine_colon_fragments() {
+    assert_eq!(refine_author("the bad guy</textarea>"), None);
+    assert_eq!(refine_author("references:users:unique"), None);
 }
 
 #[test]
