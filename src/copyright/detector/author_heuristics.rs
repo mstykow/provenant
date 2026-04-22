@@ -1535,21 +1535,12 @@ pub(super) fn extract_debian_maintainer_authors(
         Regex::new(r"(?i)^maintained\s+by\s+(?P<who>.+?)(?:\s+on\b|\s+since\b|\s*$)").unwrap()
     });
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        let who_raw = if let Some(cap) = CO_MAINTAINER_RE.captures(line) {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let who_raw = if let Some(cap) = CO_MAINTAINER_RE.captures(prepared_line.prepared) {
             cap.name("who").map(|m| m.as_str()).unwrap_or("")
-        } else if let Some(cap) = DEBIANIZED_BY_RE.captures(line) {
+        } else if let Some(cap) = DEBIANIZED_BY_RE.captures(prepared_line.prepared) {
             cap.name("who").map(|m| m.as_str()).unwrap_or("")
-        } else if let Some(cap) = MAINTAINED_BY_RE.captures(line) {
+        } else if let Some(cap) = MAINTAINED_BY_RE.captures(prepared_line.prepared) {
             cap.name("who").map(|m| m.as_str()).unwrap_or("")
         } else {
             ""
@@ -1566,8 +1557,8 @@ pub(super) fn extract_debian_maintainer_authors(
 
         authors.push(AuthorDetection {
             author,
-            start_line: LineNumber::new(ln).expect("invalid line number"),
-            end_line: LineNumber::new(ln).expect("invalid line number"),
+            start_line: prepared_line.line_number,
+            end_line: prepared_line.line_number,
         });
     }
 
@@ -1587,12 +1578,8 @@ pub(super) fn extract_maintainers_label_authors(
     static GITREPO_SUFFIX_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\s+GitRepo\s+https?://\S+.*$").unwrap());
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim().trim_start_matches('*').trim_start();
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let line = prepared_line.prepared.trim_start_matches('*').trim_start();
         if line.is_empty() {
             continue;
         }
@@ -1615,8 +1602,8 @@ pub(super) fn extract_maintainers_label_authors(
 
         authors.push(AuthorDetection {
             author,
-            start_line: LineNumber::new(ln).expect("invalid line number"),
-            end_line: LineNumber::new(ln).expect("invalid line number"),
+            start_line: prepared_line.line_number,
+            end_line: prepared_line.line_number,
         });
     }
 
@@ -1634,17 +1621,13 @@ pub(super) fn extract_created_by_project_author(
     static CREATED_BY_PROJECT_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\bcreated\s+by\s+the\s+project\b").unwrap());
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        if CREATED_BY_PROJECT_RE.is_match(prepared.trim()) {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        if CREATED_BY_PROJECT_RE.is_match(prepared_line.prepared) {
             let author = "the Project".to_string();
             authors.push(AuthorDetection {
                 author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
+                start_line: prepared_line.line_number,
+                end_line: prepared_line.line_number,
             });
             break;
         }
@@ -1664,17 +1647,8 @@ pub(super) fn extract_created_by_authors(
     static CREATED_BY_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)^\s*created\s+by\s+(?P<who>.+?)\s*$").unwrap());
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        let Some(cap) = CREATED_BY_RE.captures(line) else {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let Some(cap) = CREATED_BY_RE.captures(prepared_line.prepared) else {
             continue;
         };
         let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
@@ -1694,11 +1668,16 @@ pub(super) fn extract_created_by_authors(
         };
         authors.push(AuthorDetection {
             author: author.clone(),
-            start_line: LineNumber::new(ln).expect("invalid line number"),
-            end_line: LineNumber::new(ln).expect("invalid line number"),
+            start_line: prepared_line.line_number,
+            end_line: prepared_line.line_number,
         });
 
-        authors.retain(|a| !(author.starts_with(&a.author) && a.author.len() < author.len()));
+        authors.retain(|a| {
+            !(a.start_line == prepared_line.line_number
+                && a.end_line == prepared_line.line_number
+                && author.starts_with(&a.author)
+                && a.author.len() < author.len())
+        });
     }
 }
 
@@ -1778,17 +1757,8 @@ pub(super) fn extract_written_by_comma_and_copyright_authors(
         Regex::new(r"(?i)\bwritten\s+by\s+(?P<who>.+?),\s+and\s+copyright\b").unwrap()
     });
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        let Some(cap) = WRITTEN_BY_AND_COPYRIGHT_RE.captures(line) else {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let Some(cap) = WRITTEN_BY_AND_COPYRIGHT_RE.captures(prepared_line.prepared) else {
             continue;
         };
         let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
@@ -1798,11 +1768,13 @@ pub(super) fn extract_written_by_comma_and_copyright_authors(
         let Some(author) = refine_author(who) else {
             continue;
         };
-        authors.retain(|a| !(a.start_line.get() == ln && a.end_line.get() == ln));
+        authors.retain(|a| {
+            !(a.start_line == prepared_line.line_number && a.end_line == prepared_line.line_number)
+        });
         authors.push(AuthorDetection {
             author,
-            start_line: LineNumber::new(ln).expect("invalid line number"),
-            end_line: LineNumber::new(ln).expect("invalid line number"),
+            start_line: prepared_line.line_number,
+            end_line: prepared_line.line_number,
         });
     }
 }
@@ -1825,17 +1797,8 @@ pub(super) fn extract_package_comment_named_authors(
         Regex::new(r"^(?P<name>[A-Z][^<>@]+?)\s*<(?P<email>[^>\s]+@[^>\s]+)>$").unwrap()
     });
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        for cap in COMMENT_AUTHOR_RE.captures_iter(line) {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        for cap in COMMENT_AUTHOR_RE.captures_iter(prepared_line.prepared) {
             let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
             if who.is_empty() || who.to_ascii_lowercase().starts_with("the ") {
                 continue;
@@ -1852,8 +1815,8 @@ pub(super) fn extract_package_comment_named_authors(
             if let Some(author) = author {
                 authors.push(AuthorDetection {
                     author,
-                    start_line: LineNumber::new(ln).expect("invalid line number"),
-                    end_line: LineNumber::new(ln).expect("invalid line number"),
+                    start_line: prepared_line.line_number,
+                    end_line: prepared_line.line_number,
                 });
             }
         }
@@ -1873,17 +1836,8 @@ pub(super) fn extract_developed_by_sentence_authors(
     static DEVELOPED_BY_PREFIX_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)^\s*developed\s+by\s+(?P<rest>.+)$").unwrap());
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        let Some(cap) = DEVELOPED_BY_PREFIX_RE.captures(line) else {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let Some(cap) = DEVELOPED_BY_PREFIX_RE.captures(prepared_line.prepared) else {
             continue;
         };
         let rest = cap.name("rest").map(|m| m.as_str()).unwrap_or("").trim();
@@ -1913,8 +1867,8 @@ pub(super) fn extract_developed_by_sentence_authors(
 
         authors.push(AuthorDetection {
             author,
-            start_line: LineNumber::new(ln).expect("invalid line number"),
-            end_line: LineNumber::new(ln).expect("invalid line number"),
+            start_line: prepared_line.line_number,
+            end_line: prepared_line.line_number,
         });
     }
 
@@ -1933,17 +1887,8 @@ pub(super) fn extract_developed_by_phrase_authors(
         Regex::new(r"(?i)\bdeveloped\s+by\s+(?P<who>.+?)\s+and\s+to\s+credit\b").unwrap()
     });
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        for cap in DEVELOPED_BY_PHRASE_RE.captures_iter(line) {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        for cap in DEVELOPED_BY_PHRASE_RE.captures_iter(prepared_line.prepared) {
             let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
             if who.is_empty() {
                 continue;
@@ -1960,8 +1905,8 @@ pub(super) fn extract_developed_by_phrase_authors(
 
             authors.push(AuthorDetection {
                 author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
+                start_line: prepared_line.line_number,
+                end_line: prepared_line.line_number,
             });
         }
     }
@@ -1984,29 +1929,24 @@ pub(super) fn extract_developed_by_contributors_authors(
         .unwrap()
     });
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(line) = prepared_cache
-            .get_by_index(idx)
-            .map(|p| p.trim().to_string())
-        else {
-            continue;
-        };
-        if !line.to_ascii_lowercase().contains("developed by") {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        if !prepared_line
+            .prepared
+            .to_ascii_lowercase()
+            .contains("developed by")
+        {
             continue;
         }
 
-        let mut window = line.clone();
-        let mut end_line = ln;
+        let mut window = prepared_line.prepared.to_string();
+        let mut end_line = prepared_line.line_number;
         if !window.to_ascii_lowercase().contains("contributors")
-            && let Some(next) = prepared_cache
-                .get_by_index(idx + 1)
-                .map(|p| p.trim().to_string())
-            && !next.is_empty()
+            && let Some(next) = prepared_cache.line(prepared_line.line_number + 1usize)
+            && !next.prepared.is_empty()
         {
             window.push(' ');
-            window.push_str(&next);
-            end_line = idx + 2;
+            window.push_str(next.prepared);
+            end_line = next.line_number;
         }
 
         let Some(cap) = DEVELOPED_BY_CONTRIBUTORS_RE.captures(&window) else {
@@ -2023,8 +1963,8 @@ pub(super) fn extract_developed_by_contributors_authors(
 
         authors.push(AuthorDetection {
             author,
-            start_line: LineNumber::new(ln).expect("invalid line number"),
-            end_line: LineNumber::new(end_line).expect("invalid line number"),
+            start_line: prepared_line.line_number,
+            end_line,
         });
     }
 
@@ -2077,16 +2017,8 @@ pub(super) fn extract_maintained_by_authors(
         Regex::new(r"(?i)\bmaintained\s+by\s+(?P<who>.+?)(?:\s+(?:on|since|for)\b|$)").unwrap()
     });
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-        for cap in MAINTAINED_BY_RE.captures_iter(line) {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        for cap in MAINTAINED_BY_RE.captures_iter(prepared_line.prepared) {
             let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
             if who.is_empty() {
                 continue;
@@ -2099,8 +2031,8 @@ pub(super) fn extract_maintained_by_authors(
             };
             authors.push(AuthorDetection {
                 author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
+                start_line: prepared_line.line_number,
+                end_line: prepared_line.line_number,
             });
         }
     }
@@ -2124,12 +2056,8 @@ pub(super) fn extract_converted_to_by_authors(
     static CONVERTED_TO_VERSION_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\bconverted\s+to\s+\d+\.\d+\b").unwrap());
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim().trim_start_matches('*').trim_start();
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let line = prepared_line.prepared.trim_start_matches('*').trim_start();
         if line.is_empty() {
             continue;
         }
@@ -2161,15 +2089,15 @@ pub(super) fn extract_converted_to_by_authors(
         };
         authors.push(AuthorDetection {
             author: author.clone(),
-            start_line: LineNumber::new(ln).expect("invalid line number"),
-            end_line: LineNumber::new(ln).expect("invalid line number"),
+            start_line: prepared_line.line_number,
+            end_line: prepared_line.line_number,
         });
         if add_converted_variant {
             let converted = format!("{author} Converted");
             authors.push(AuthorDetection {
                 author: converted,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
+                start_line: prepared_line.line_number,
+                end_line: prepared_line.line_number,
             });
         }
     }
@@ -2189,12 +2117,8 @@ pub(super) fn extract_various_bugfixes_and_enhancements_by_authors(
         Regex::new(r"(?i)^\s*various\s+bugfixes\s+and\s+enhancements\s+by\s+(?P<who>.+)$").unwrap()
     });
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let line = prepared.trim().trim_start_matches('*').trim_start();
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let line = prepared_line.prepared.trim_start_matches('*').trim_start();
         if line.is_empty() {
             continue;
         }
@@ -2213,8 +2137,8 @@ pub(super) fn extract_various_bugfixes_and_enhancements_by_authors(
         };
         authors.push(AuthorDetection {
             author,
-            start_line: LineNumber::new(ln).expect("invalid line number"),
-            end_line: LineNumber::new(ln).expect("invalid line number"),
+            start_line: prepared_line.line_number,
+            end_line: prepared_line.line_number,
         });
     }
 
@@ -2768,24 +2692,15 @@ pub(super) fn drop_written_by_authors_preceded_by_copyright(
     }
 
     let mut to_drop: HashSet<String> = HashSet::new();
-    for i in 1..prepared_cache.len() {
-        let Some(line) = prepared_cache.get_by_index(i).map(|p| p.trim().to_string()) else {
-            continue;
-        };
-        let Some(cap) = WRITTEN_BY_RE.captures(&line) else {
+    for (prev, line) in prepared_cache.adjacent_pairs() {
+        let Some(cap) = WRITTEN_BY_RE.captures(line.prepared) else {
             continue;
         };
         let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
         if who.is_empty() {
             continue;
         }
-        let Some(prev) = prepared_cache
-            .get_by_index(i - 1)
-            .map(|p| p.trim().to_string())
-        else {
-            continue;
-        };
-        if !COPYRIGHT_HINT_RE.is_match(&prev) {
+        if !COPYRIGHT_HINT_RE.is_match(prev.prepared) {
             continue;
         }
         if let Some(author) = refine_author(who) {

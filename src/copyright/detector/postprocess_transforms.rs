@@ -4668,42 +4668,26 @@ pub fn merge_freebird_c_inc_urls(
         return;
     }
 
-    for i in 0..prepared_cache.len() {
-        let ln = i + 1;
-        let Some(prepared) = prepared_cache.get_by_index(i) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let line_lower = line.to_ascii_lowercase();
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let line_lower = prepared_line.prepared.to_ascii_lowercase();
         if !line_lower.contains("(c)") || !line_lower.contains("inc") {
             continue;
         }
 
-        let mut url: Option<String> = None;
-        let mut j = i + 1;
-        while j < prepared_cache.len() {
-            let Some(next) = prepared_cache.get_by_index(j).map(|p| p.trim().to_string()) else {
-                break;
-            };
-            if next.is_empty() {
-                j += 1;
-                continue;
-            }
-            if next.to_ascii_lowercase().contains("http") {
-                if next.to_ascii_lowercase().contains("web.archive.org/web") {
-                    url = Some("http://web.archive.org/web".to_string());
-                } else {
-                    let next_lower = next.to_ascii_lowercase();
-                    if next_lower.contains("coventive.com") {
-                        url = Some(next.to_string());
-                    }
+        let url = prepared_cache
+            .next_non_empty_line(prepared_line.line_number)
+            .and_then(|next| {
+                let next_lower = next.prepared.to_ascii_lowercase();
+                if !next_lower.contains("http") {
+                    return None;
                 }
-            }
-            break;
-        }
+                if next_lower.contains("web.archive.org/web") {
+                    return Some("http://web.archive.org/web".to_string());
+                }
+                next_lower
+                    .contains("coventive.com")
+                    .then(|| next.prepared.to_string())
+            });
 
         let Some(url) = url else {
             continue;
@@ -4713,16 +4697,16 @@ pub fn merge_freebird_c_inc_urls(
         if let Some(cr) = refine_copyright(&cr_raw) {
             copyrights.push(CopyrightDetection {
                 copyright: cr,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
+                start_line: prepared_line.line_number,
+                end_line: prepared_line.line_number,
             });
         }
         let holder_raw = "Inc.";
         if let Some(h) = refine_holder(holder_raw) {
             holders.push(HolderDetection {
                 holder: h,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
+                start_line: prepared_line.line_number,
+                end_line: prepared_line.line_number,
             });
         }
     }
@@ -4741,22 +4725,12 @@ pub fn merge_debugging390_best_viewed_suffix(
         Regex::new(r"(?i)^copyright\s*\(c\)\s*2000-2001\s+(?P<who>IBM\b.+)$").unwrap()
     });
 
-    for i in 0..prepared_cache.len().saturating_sub(1) {
-        let ln = i + 1;
-        let Some(p1) = prepared_cache.get_by_index(i).map(|p| p.trim().to_string()) else {
-            continue;
-        };
-        let Some(cap) = IBM_RE.captures(&p1) else {
+    for (first, second) in prepared_cache.adjacent_pairs() {
+        let Some(cap) = IBM_RE.captures(first.prepared) else {
             continue;
         };
         let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
-        if who.is_empty() {
-            continue;
-        }
-        let Some(p2) = prepared_cache.get_by_index(i + 1) else {
-            continue;
-        };
-        if !p2.trim_start().starts_with("Best") {
+        if who.is_empty() || !second.prepared.trim_start().starts_with("Best") {
             continue;
         }
 
@@ -4766,7 +4740,7 @@ pub fn merge_debugging390_best_viewed_suffix(
         };
 
         copyrights.retain(|c| {
-            !(c.start_line.get() == ln
+            !(c.start_line == first.line_number
                 && c.copyright.contains(who)
                 && c.copyright.contains("2000-2001")
                 && !c.copyright.ends_with("Best"))
@@ -4774,18 +4748,18 @@ pub fn merge_debugging390_best_viewed_suffix(
         if !copyrights.iter().any(|c| c.copyright == merged) {
             copyrights.push(CopyrightDetection {
                 copyright: merged,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+                start_line: first.line_number,
+                end_line: second.line_number,
             });
         }
 
         let holder_raw = format!("{who} Best");
-        holders.retain(|h| !(h.start_line.get() == ln && h.holder == who));
+        holders.retain(|h| !(h.start_line == first.line_number && h.holder == who));
         if let Some(h) = refine_holder_in_copyright_context(&holder_raw) {
             holders.push(HolderDetection {
                 holder: h,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+                start_line: first.line_number,
+                end_line: second.line_number,
             });
         }
     }
@@ -4800,31 +4774,24 @@ pub fn merge_fsf_gdb_notice_lines(
         return;
     }
 
-    for i in 0..prepared_cache.len().saturating_sub(1) {
-        let ln = i + 1;
-        let Some(p1) = prepared_cache.get_by_index(i).map(|p| p.trim().to_string()) else {
-            continue;
-        };
-        if !p1.starts_with("Copyright 1998 Free Software Foundation") {
+    for (first, second) in prepared_cache.adjacent_pairs() {
+        if !first
+            .prepared
+            .starts_with("Copyright 1998 Free Software Foundation")
+        {
             continue;
         }
-        let Some(p2) = prepared_cache
-            .get_by_index(i + 1)
-            .map(|p| p.trim().to_string())
-        else {
-            continue;
-        };
-        if !p2.starts_with("GDB is free software") {
+        if !second.prepared.starts_with("GDB is free software") {
             continue;
         }
 
-        let tail = if let Some(idx) = p2.find("GNU General Public License,") {
-            &p2[..(idx + "GNU General Public License,".len())]
+        let tail = if let Some(idx) = second.prepared.find("GNU General Public License,") {
+            &second.prepared[..(idx + "GNU General Public License,".len())]
         } else {
-            &p2
+            second.prepared
         };
 
-        let merged_raw = format!("{p1} {tail}");
+        let merged_raw = format!("{} {tail}", first.prepared);
         let merged = super::token_utils::normalize_whitespace(&merged_raw);
         if !merged.ends_with(',') {
             continue;
@@ -4832,8 +4799,8 @@ pub fn merge_fsf_gdb_notice_lines(
         if !copyrights.iter().any(|c| c.copyright == merged) {
             copyrights.push(CopyrightDetection {
                 copyright: merged,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+                start_line: first.line_number,
+                end_line: second.line_number,
             });
         }
 
@@ -4841,8 +4808,8 @@ pub fn merge_fsf_gdb_notice_lines(
         if !holders.iter().any(|x| x.holder == holder) {
             holders.push(HolderDetection {
                 holder: holder.to_string(),
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+                start_line: first.line_number,
+                end_line: second.line_number,
             });
         }
     }
@@ -4857,21 +4824,11 @@ pub fn merge_axis_ethereal_suffix(
         return;
     }
 
-    for i in 0..prepared_cache.len().saturating_sub(1) {
-        let ln = i + 1;
-        let Some(p1) = prepared_cache.get_by_index(i).map(|p| p.trim().to_string()) else {
-            continue;
-        };
-        if p1 != "Copyright 2000, Axis Communications AB" {
+    for (first, second) in prepared_cache.adjacent_pairs() {
+        if first.prepared != "Copyright 2000, Axis Communications AB" {
             continue;
         }
-        let Some(p2) = prepared_cache
-            .get_by_index(i + 1)
-            .map(|p| p.trim().to_string())
-        else {
-            continue;
-        };
-        if !p2.starts_with("Ethereal") {
+        if !second.prepared.starts_with("Ethereal") {
             continue;
         }
         let merged_raw = "Copyright 2000, Axis Communications AB Ethereal";
@@ -4879,23 +4836,26 @@ pub fn merge_axis_ethereal_suffix(
             continue;
         };
 
-        copyrights.retain(|c| !(c.start_line.get() == ln && c.copyright == p1));
+        copyrights
+            .retain(|c| !(c.start_line == first.line_number && c.copyright == first.prepared));
         if !copyrights.iter().any(|c| c.copyright == merged) {
             copyrights.push(CopyrightDetection {
                 copyright: merged,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+                start_line: first.line_number,
+                end_line: second.line_number,
             });
         }
 
-        holders.retain(|h| !(h.start_line.get() == ln && h.holder == "Axis Communications AB"));
+        holders.retain(|h| {
+            !(h.start_line == first.line_number && h.holder == "Axis Communications AB")
+        });
         if let Some(h) = refine_holder_in_copyright_context("Axis Communications AB Ethereal")
             && !holders.iter().any(|x| x.holder == h)
         {
             holders.push(HolderDetection {
                 holder: h,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+                start_line: first.line_number,
+                end_line: second.line_number,
             });
         }
     }
@@ -4914,12 +4874,8 @@ pub fn merge_kirkwood_converted_to(
         Regex::new(r"(?i)\(c\)\s+(?P<year>19\d{2}|20\d{2})\s+(?P<who>M\.?\s*Kirkwood)\b").unwrap()
     });
 
-    for i in 0..prepared_cache.len().saturating_sub(1) {
-        let ln = i + 1;
-        let Some(p1) = prepared_cache.get_by_index(i).map(|p| p.trim().to_string()) else {
-            continue;
-        };
-        let Some(cap) = EMBEDDED_RE.captures(&p1) else {
+    for (first, second) in prepared_cache.adjacent_pairs() {
+        let Some(cap) = EMBEDDED_RE.captures(first.prepared) else {
             continue;
         };
         let year = cap.name("year").map(|m| m.as_str()).unwrap_or("").trim();
@@ -4927,12 +4883,7 @@ pub fn merge_kirkwood_converted_to(
         if year.is_empty() || who.is_empty() {
             continue;
         }
-        let Some(p2) = prepared_cache
-            .get_by_index(i + 1)
-            .map(|p| p.trim().trim_start_matches('*').trim_start().to_string())
-        else {
-            continue;
-        };
+        let p2 = second.prepared.trim_start_matches('*').trim_start();
         if !p2.to_ascii_lowercase().starts_with("converted to") {
             continue;
         }
@@ -4941,16 +4892,16 @@ pub fn merge_kirkwood_converted_to(
         if let Some(cr) = refine_copyright(&cr_raw) {
             copyrights.push(CopyrightDetection {
                 copyright: cr,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+                start_line: first.line_number,
+                end_line: second.line_number,
             });
         }
         let holder_raw = format!("{who} Converted");
         if let Some(h) = refine_holder_in_copyright_context(&holder_raw) {
             holders.push(HolderDetection {
                 holder: h,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln + 1).expect("invalid line number"),
+                start_line: first.line_number,
+                end_line: second.line_number,
             });
         }
     }
@@ -5495,17 +5446,14 @@ pub fn drop_created_by_camelcase_identifier_authors(
     });
 
     let mut by_line: HashMap<usize, HashSet<String>> = HashMap::new();
-    for idx in 0..prepared_cache.len() {
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        for cap in CREATED_BY_CAMELCASE_RE.captures_iter(prepared) {
+    for line in prepared_cache.iter_non_empty() {
+        for cap in CREATED_BY_CAMELCASE_RE.captures_iter(line.prepared) {
             let name = cap.name("name").map(|m| m.as_str()).unwrap_or("").trim();
             if name.is_empty() {
                 continue;
             }
             by_line
-                .entry(idx + 1)
+                .entry(line.line_number.get())
                 .or_default()
                 .insert(name.to_ascii_lowercase());
         }
