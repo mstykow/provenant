@@ -588,6 +588,14 @@ mod tests {
     }
 
     #[test]
+    fn test_assembly_erlang_otp_basic() {
+        match run_assembly_golden_test("erlang-otp-basic") {
+            Ok(_) => (),
+            Err(e) => panic!("Assembly golden test failed for erlang-otp-basic: {}", e),
+        }
+    }
+
+    #[test]
     fn test_assembly_nuget_basic() {
         match run_assembly_golden_test("nuget-basic") {
             Ok(_) => (),
