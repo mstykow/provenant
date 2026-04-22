@@ -279,6 +279,33 @@ third_party {
     }
 
     #[test]
+    fn test_parse_soong_metadata_string_concatenation() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let metadata_path = temp_dir.path().join("METADATA");
+        fs::write(
+            &metadata_path,
+            r#"
+name: "nlohmann_json"
+description: "SPM builds, making it impossible to use directly "
+             "in those environments."
+third_party {
+  version: "3.11.2"
+}
+"#,
+        )
+        .expect("write METADATA");
+
+        let package = AndroidSoongMetadataParser::extract_first_package(&metadata_path);
+
+        assert_eq!(package.name.as_deref(), Some("nlohmann_json"));
+        assert_eq!(package.version.as_deref(), Some("3.11.2"));
+        assert_eq!(
+            package.description.as_deref(),
+            Some("SPM builds, making it impossible to use directly in those environments.")
+        );
+    }
+
+    #[test]
     fn test_parse_text_android_manifest_fixture() {
         let package = AndroidManifestParser::extract_first_package(&PathBuf::from(
             "testdata/android/manifest/AndroidManifest.xml",
