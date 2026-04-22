@@ -4,6 +4,8 @@
 use anyhow::{Result, anyhow};
 use glob::Pattern;
 use std::collections::HashSet;
+use std::ffi::OsString;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::models::FileInfo;
@@ -46,6 +48,102 @@ pub(crate) fn resolve_native_scan_inputs(inputs: &[String]) -> Result<(String, V
         .collect();
 
     Ok((common_prefix, synthetic_includes))
+}
+
+#[derive(Debug)]
+pub(crate) struct ResolvedPathsFileEntries {
+    pub includes: Vec<String>,
+    pub missing_entries: Vec<String>,
+}
+
+pub(crate) fn resolve_paths_file_entries(
+    scan_root: &Path,
+    entries: &[String],
+) -> Result<ResolvedPathsFileEntries> {
+    let root_metadata = fs::metadata(scan_root).map_err(|err| {
+        anyhow!(
+            "Failed to access scan root {:?} for --paths-file: {err}",
+            scan_root
+        )
+    })?;
+    if !root_metadata.is_dir() {
+        return Err(anyhow!(
+            "--paths-file requires the positional scan root to be a directory: {:?}",
+            scan_root
+        ));
+    }
+
+    let mut includes = Vec::new();
+    let mut missing_entries = Vec::new();
+    let mut seen = HashSet::new();
+
+    for entry in entries {
+        let Some(normalized) = normalize_paths_file_entry(entry)? else {
+            continue;
+        };
+
+        if scan_root.join(&normalized).exists() {
+            if seen.insert(normalized.clone()) {
+                includes.push(normalized);
+            }
+        } else if seen.insert(format!("missing:{normalized}")) {
+            missing_entries.push(normalized);
+        }
+    }
+
+    Ok(ResolvedPathsFileEntries {
+        includes,
+        missing_entries,
+    })
+}
+
+fn normalize_paths_file_entry(entry: &str) -> Result<Option<String>> {
+    let entry = entry.trim_end_matches('\r');
+    if entry.trim().is_empty() {
+        return Ok(None);
+    }
+
+    let path = Path::new(entry);
+    if path.is_absolute() {
+        return Err(anyhow!(
+            "--paths-file entries must be relative to the declared scan root: {entry:?}"
+        ));
+    }
+
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::Normal(segment) => normalized.push(segment),
+            std::path::Component::ParentDir => {
+                if !normalized.pop() {
+                    return Err(anyhow!(
+                        "--paths-file entry escapes the declared scan root: {entry:?}"
+                    ));
+                }
+            }
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                return Err(anyhow!(
+                    "--paths-file entries must be relative to the declared scan root: {entry:?}"
+                ));
+            }
+        }
+    }
+
+    if normalized.as_os_str().is_empty() {
+        return Err(anyhow!(
+            "--paths-file entries must name a file or directory under the declared scan root: {entry:?}"
+        ));
+    }
+
+    let normalized = normalized
+        .components()
+        .map(|component| OsString::from(component.as_os_str()))
+        .collect::<PathBuf>()
+        .to_string_lossy()
+        .replace('\\', "/");
+
+    Ok(Some(normalized))
 }
 
 pub(crate) fn common_path_prefix(inputs: &[String]) -> Option<PathBuf> {

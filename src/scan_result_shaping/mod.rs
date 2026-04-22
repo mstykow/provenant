@@ -23,7 +23,7 @@ use anyhow::Result;
 pub(crate) use json_input::load_and_merge_json_inputs;
 pub(crate) use selection::{
     apply_cli_path_selection_filter, apply_user_path_filters_to_collected,
-    resolve_native_scan_inputs,
+    resolve_native_scan_inputs, resolve_paths_file_entries,
 };
 
 fn retain_matching_files_with_ancestor_dirs<F>(files: &mut Vec<FileInfo>, mut keep_file: F)

@@ -24,7 +24,8 @@ use crate::scan_result_shaping::{
     apply_only_findings_filter, apply_user_path_filters_to_collected, filter_redundant_clues,
     filter_redundant_clues_with_rules, load_and_merge_json_inputs, normalize_paths,
     normalize_top_level_output_paths, populate_info_resource_counts,
-    prepare_filter_clue_rule_lookup, resolve_native_scan_inputs, trim_preloaded_assembly_to_files,
+    prepare_filter_clue_rule_lookup, resolve_native_scan_inputs, resolve_paths_file_entries,
+    trim_preloaded_assembly_to_files,
 };
 use crate::scanner::{
     LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected_with_memory_limit,
@@ -39,6 +40,7 @@ use regex::Regex;
 use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
@@ -94,6 +96,7 @@ pub fn run() -> Result<()> {
         preloaded_license_references,
         preloaded_license_rule_references,
         preloaded_extra_errors,
+        extra_warnings,
         imported_spdx_license_list_version,
         imported_license_index_provenance,
         mut active_license_engine,
@@ -126,12 +129,18 @@ pub fn run() -> Result<()> {
             license_references,
             license_rule_references,
             extra_errors,
+            Vec::new(),
             imported_spdx_license_list_version,
             imported_license_index_provenance,
             None,
         )
     } else {
-        let (scan_path, native_input_includes) = resolve_native_scan_inputs(&cli.dir_path)?;
+        let (scan_path, native_input_includes, missing_paths_file_entries) =
+            resolve_native_scan_selection(&cli)?;
+        let paths_file_warnings = build_paths_file_warning_messages(&missing_paths_file_entries);
+        for warning in &paths_file_warnings {
+            progress.output_written(warning);
+        }
         let mut native_include_patterns = cli.include.clone();
         native_include_patterns.extend(native_input_includes);
 
@@ -309,6 +318,7 @@ pub fn run() -> Result<()> {
             Vec::new(),
             Vec::new(),
             runtime_errors,
+            paths_file_warnings,
             None,
             None,
             license_engine,
@@ -557,7 +567,7 @@ pub fn run() -> Result<()> {
                 spdx_license_list_version,
                 license_index_provenance,
                 extra_errors,
-                extra_warnings: Vec::new(),
+                extra_warnings,
                 header_options: cli.output_header_options(),
                 options: CreateOutputOptions {
                     facet_rules: &facet_rules,
@@ -642,15 +652,67 @@ fn touch_license_golden_symbols() {
     let _ = crate::license_detection::LicenseDetectionEngine::detect_matches_with_kind;
 }
 
+fn resolve_native_scan_selection(cli: &Cli) -> Result<(String, Vec<String>, Vec<String>)> {
+    if cli.paths_file.is_empty() {
+        let (scan_path, includes) = resolve_native_scan_inputs(&cli.dir_path)?;
+        return Ok((scan_path, includes, Vec::new()));
+    }
+
+    let scan_path = cli
+        .dir_path
+        .first()
+        .cloned()
+        .ok_or_else(|| anyhow!("--paths-file requires one positional scan root"))?;
+    let path_file_entries = load_paths_file_entries(&cli.paths_file)?;
+    let resolved = resolve_paths_file_entries(Path::new(&scan_path), &path_file_entries)?;
+    if resolved.includes.is_empty() {
+        return Err(anyhow!(
+            "--paths-file did not resolve to any existing files or directories under {:?}",
+            Path::new(&scan_path)
+        ));
+    }
+
+    Ok((scan_path, resolved.includes, resolved.missing_entries))
+}
+
+fn load_paths_file_entries(paths_files: &[String]) -> Result<Vec<String>> {
+    let mut entries = Vec::new();
+    for paths_file in paths_files {
+        let content = read_paths_file_content(paths_file)?;
+        entries.extend(content.lines().map(ToOwned::to_owned));
+    }
+    Ok(entries)
+}
+
+fn read_paths_file_content(paths_file: &str) -> Result<String> {
+    if paths_file == "-" {
+        let mut content = String::new();
+        std::io::stdin()
+            .read_to_string(&mut content)
+            .map_err(|err| anyhow!("Failed to read --paths-file from stdin: {err}"))?;
+        return Ok(content);
+    }
+
+    fs::read_to_string(paths_file)
+        .map_err(|err| anyhow!("Failed to read --paths-file {:?}: {err}", paths_file))
+}
+
+fn build_paths_file_warning_messages(missing_entries: &[String]) -> Vec<String> {
+    missing_entries
+        .iter()
+        .map(|entry| format!("Skipping missing --paths-file entry: {entry}"))
+        .collect()
+}
+
 fn validate_scan_option_compatibility(cli: &Cli) -> Result<()> {
     if cli.show_attribution {
         return Ok(());
     }
 
     if cli.export_license_dataset.is_some() {
-        if !cli.dir_path.is_empty() {
+        if !cli.dir_path.is_empty() || !cli.paths_file.is_empty() {
             return Err(anyhow!(
-                "--export-license-dataset does not accept scan input paths"
+                "--export-license-dataset does not accept scan input paths or --paths-file"
             ));
         }
 
@@ -693,9 +755,21 @@ fn validate_scan_option_compatibility(cli: &Cli) -> Result<()> {
         ));
     }
 
+    if cli.from_json && !cli.paths_file.is_empty() {
+        return Err(anyhow!(
+            "--paths-file is only supported for native scan mode, not --from-json"
+        ));
+    }
+
     if cli.from_json && cli.incremental {
         return Err(anyhow!(
             "--incremental is only supported for directory scan mode, not --from-json"
+        ));
+    }
+
+    if !cli.paths_file.is_empty() && cli.dir_path.len() != 1 {
+        return Err(anyhow!(
+            "--paths-file requires exactly one positional scan root"
         ));
     }
 

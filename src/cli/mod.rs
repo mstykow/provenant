@@ -249,6 +249,10 @@ pub struct Cli {
     #[arg(long, value_delimiter = ',')]
     pub include: Vec<String>,
 
+    /// Read selected scan paths from FILE (or '-' for stdin), relative to the explicit scan root.
+    #[arg(long = "paths-file", value_name = "FILE", allow_hyphen_values = true)]
+    pub paths_file: Vec<String>,
+
     #[arg(long = "cache-dir", value_name = "PATH")]
     pub cache_dir: Option<String>,
 
@@ -711,6 +715,7 @@ impl Cli {
             self.package_in_compiled,
         );
         push_bool_option(&mut flags, "--package-only", self.package_only);
+        push_array_option(&mut flags, "--paths-file", &self.paths_file);
         push_non_default_process_mode_option(
             &mut flags,
             "--processes",
@@ -921,6 +926,8 @@ mod tests {
             "--license",
             "--package",
             "--strip-root",
+            "--paths-file",
+            "changed-files.txt",
             "--ignore",
             "*.git*",
             "--ignore",
@@ -943,6 +950,12 @@ mod tests {
         );
         assert_eq!(options.get("--license"), Some(&JsonValue::Bool(true)));
         assert_eq!(options.get("--package"), Some(&JsonValue::Bool(true)));
+        assert_eq!(
+            options.get("--paths-file"),
+            Some(&JsonValue::Array(vec![JsonValue::String(
+                "changed-files.txt".to_string()
+            )]))
+        );
         assert_eq!(options.get("--strip-root"), Some(&JsonValue::Bool(true)));
         assert_eq!(
             options.get("--ignore"),
@@ -1166,6 +1179,23 @@ mod tests {
         assert_eq!(parsed.include, vec!["src/**", "Cargo.toml"]);
         assert!(parsed.only_findings);
         assert!(parsed.filter_clues);
+    }
+
+    #[test]
+    fn test_parses_repeated_paths_file_flags_including_stdin_dash() {
+        let parsed = Cli::try_parse_from([
+            "provenant",
+            "--json-pp",
+            "scan.json",
+            "--paths-file",
+            "changed-files.txt",
+            "--paths-file",
+            "-",
+            "samples",
+        ])
+        .expect("cli parse should accept repeated --paths-file flags");
+
+        assert_eq!(parsed.paths_file, vec!["changed-files.txt", "-"]);
     }
 
     #[test]
