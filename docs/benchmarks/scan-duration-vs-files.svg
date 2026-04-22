@@ -134,6 +134,9 @@ ScanCode: 92.08s</title></rect>
     <rect x="415.27" y="418.23" width="8" height="8" fill="#d97706" rx="1.5"><title>SwiftFiddle/swiftfiddle-web @ df09b80
 Files: 109
 ScanCode: 84.73s</title></rect>
+    <rect x="423.04" y="408.29" width="8" height="8" fill="#d97706" rx="1.5"><title>jashkenas/backbone @ da75718
+Files: 122
+ScanCode: 104.56s</title></rect>
     <rect x="426.88" y="421.60" width="8" height="8" fill="#d97706" rx="1.5"><title>getsentry/self-hosted @ 8728919
 Files: 129
 ScanCode: 78.89s</title></rect>
@@ -233,6 +236,9 @@ ScanCode: 203.47s</title></rect>
     <rect x="543.52" y="391.18" width="8" height="8" fill="#d97706" rx="1.5"><title>boostorg/json @ 70efd4b
 Files: 701
 ScanCode: 150.19s</title></rect>
+    <rect x="543.81" y="392.44" width="8" height="8" fill="#d97706" rx="1.5"><title>select2/select2 @ 595494a
+Files: 704
+ScanCode: 146.24s</title></rect>
     <rect x="555.41" y="432.81" width="8" height="8" fill="#d97706" rx="1.5"><title>tokio-rs/tokio @ 5db10f5
 Files: 833
 ScanCode: 62.23s</title></rect>
@@ -254,6 +260,9 @@ ScanCode: 84.36s</title></rect>
     <rect x="570.04" y="418.11" width="8" height="8" fill="#d97706" rx="1.5"><title>composer/composer @ a2bf8cb
 Files: 1030
 ScanCode: 84.94s</title></rect>
+    <rect x="573.49" y="357.97" width="8" height="8" fill="#d97706" rx="1.5"><title>jquery/jquery-ui @ eda7aa3
+Files: 1083
+ScanCode: 303.29s</title></rect>
     <rect x="574.44" y="398.92" width="8" height="8" fill="#d97706" rx="1.5"><title>pointfreeco/swift-composable-architecture @ 7517cc3
 Files: 1098
 ScanCode: 127.50s</title></rect>
@@ -568,6 +577,9 @@ Provenant: 10.77s</title></circle>
     <circle cx="419.27" cy="522.22" r="4.5" fill="#2563eb"><title>SwiftFiddle/swiftfiddle-web @ df09b80
 Files: 109
 Provenant: 10.21s</title></circle>
+    <circle cx="427.04" cy="517.55" r="4.5" fill="#2563eb"><title>jashkenas/backbone @ da75718
+Files: 122
+Provenant: 11.27s</title></circle>
     <circle cx="430.88" cy="514.04" r="4.5" fill="#2563eb"><title>getsentry/self-hosted @ 8728919
 Files: 129
 Provenant: 12.14s</title></circle>
@@ -667,6 +679,9 @@ Provenant: 14.37s</title></circle>
     <circle cx="547.52" cy="467.80" r="4.5" fill="#2563eb"><title>boostorg/json @ 70efd4b
 Files: 701
 Provenant: 32.30s</title></circle>
+    <circle cx="547.81" cy="512.39" r="4.5" fill="#2563eb"><title>select2/select2 @ 595494a
+Files: 704
+Provenant: 12.57s</title></circle>
     <circle cx="559.41" cy="493.35" r="4.5" fill="#2563eb"><title>tokio-rs/tokio @ 5db10f5
 Files: 833
 Provenant: 18.81s</title></circle>
@@ -688,6 +703,9 @@ Provenant: 20.09s</title></circle>
     <circle cx="574.04" cy="487.63" r="4.5" fill="#2563eb"><title>composer/composer @ a2bf8cb
 Files: 1030
 Provenant: 21.23s</title></circle>
+    <circle cx="577.49" cy="502.31" r="4.5" fill="#2563eb"><title>jquery/jquery-ui @ eda7aa3
+Files: 1083
+Provenant: 15.56s</title></circle>
     <circle cx="578.44" cy="521.35" r="4.5" fill="#2563eb"><title>pointfreeco/swift-composable-architecture @ 7517cc3
 Files: 1098
 Provenant: 10.40s</title></circle>
