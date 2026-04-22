@@ -499,7 +499,7 @@ Use this when you already have a selected path list under one known root, especi
 - Provenant must run from a fixed mount location or other non-repo cwd
 - you want Provenant itself, not shell `xargs`, to own the selection semantics
 
-v1 semantics:
+Current behavior:
 
 - pass exactly one native scan root as the positional input
 - entries in the paths file are interpreted relative to that root
@@ -507,7 +507,7 @@ v1 semantics:
 - directory entries select that subtree
 - missing entries are skipped with a warning
 - `--paths-file -` reads the list from stdin
-- `--paths-file` cannot be combined with `--from-json` in v1
+- `--paths-file` cannot currently be combined with `--from-json`
 
 Example with stdin:
 
@@ -529,7 +529,7 @@ These are worth learning early because they change what the output means:
 - `--tallies-key-files` requires `--tallies` and `--classify`
 - `--tallies-by-facet` requires `--facet` and `--tallies`
 - `--debian <FILE>` requires `--license`, `--copyright`, and `--license-text`
-- `--paths-file <FILE>` requires exactly one native scan root and is native-scan only in v1 (no `--from-json`)
+- `--paths-file <FILE>` requires exactly one native scan root and is currently native-scan only (no `--from-json`)
 - `--reindex` only matters when the license engine is initialized (`--license` and some `--from-json` reference-recompute flows)
 - `--no-license-index-cache` only matters when the license engine is initialized
 
