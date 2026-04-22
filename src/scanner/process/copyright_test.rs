@@ -79,3 +79,24 @@ LABEL maintainer=\"Progress Chef <docker@chef.io>\"\n";
         ]
     );
 }
+
+#[test]
+fn test_extract_comment_author_supplements_handles_c_style_translator_headers() {
+    let text = "/* Translated by Jorge Barreiro <yortx.barry@gmail.com>. */\n\
+/* Written by Mathias Bynens <https://mathiasbynens.be/> */\n\
+/* Written by Cloudream (cloudream@gmail.com). */\n\
+/* Written by S A Sureshkumar (saskumar@live.com). */\n";
+
+    let authors = extract_comment_author_supplements(text);
+    let values: Vec<_> = authors.into_iter().map(|author| author.author).collect();
+
+    assert_eq!(
+        values,
+        vec![
+            "Jorge Barreiro <yortx.barry@gmail.com>",
+            "Mathias Bynens https://mathiasbynens.be",
+            "Cloudream (cloudream@gmail.com)",
+            "S A Sureshkumar (saskumar@live.com)",
+        ]
+    );
+}

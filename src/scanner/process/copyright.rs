@@ -228,6 +228,12 @@ fn extract_comment_author_supplements(text_content: &str) -> Vec<AuthorDetection
         )
         .expect("valid comment author regex")
     });
+    static COMMENT_PAREN_CONTACT_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)\b(?:written|edited|modified|updated|originally)\s+by\s+(?P<name>[^()\n]+?)\s*\(\s*(?P<contact>(?:[^)\s]+@[^)\s]+|https?://[^)\s]+))\s*\)\s*\.?$|^(?:[#;/*!\-\s]+)?(?:[^()\n]*?\bby\s+(?P<name2>[^()\n]+?)\s*\(\s*(?P<contact2>(?:[^)\s]+@[^)\s]+|https?://[^)\s]+))\s*\))\s*\.?$",
+        )
+        .expect("valid parenthesized contact author regex")
+    });
     static DOCKER_MAINTAINER_LABEL_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r#"(?i)^label\s+maintainer\s*=\s*[\"']?(?P<author>[^\"'\n]+<[^>]+>)[\"']?\s*$"#)
             .expect("valid docker maintainer label regex")
@@ -241,19 +247,39 @@ fn extract_comment_author_supplements(text_content: &str) -> Vec<AuthorDetection
 
     for (line_index, line) in text_content.lines().enumerate() {
         let trimmed = line.trim();
+        let normalized = normalize_comment_author_line(trimmed);
         let line_number = LineNumber::from_0_indexed(line_index);
 
-        if let Some(captures) = COMMENT_AUTHOR_RE.captures(trimmed)
+        if let Some(captures) = COMMENT_AUTHOR_RE.captures(&normalized)
             && let Some(author) = captures
                 .name("author")
                 .or_else(|| captures.name("author2"))
                 .map(|m| m.as_str().trim())
         {
             authors.push(AuthorDetection {
-                author: author.to_string(),
+                author: normalize_comment_author_candidate(author),
                 start_line: line_number,
                 end_line: line_number,
             });
+        }
+
+        if let Some(captures) = COMMENT_PAREN_CONTACT_AUTHOR_RE.captures(&normalized) {
+            let name = captures
+                .name("name")
+                .or_else(|| captures.name("name2"))
+                .map(|m| m.as_str().trim());
+            let contact = captures
+                .name("contact")
+                .or_else(|| captures.name("contact2"))
+                .map(|m| m.as_str().trim());
+
+            if let (Some(name), Some(contact)) = (name, contact) {
+                authors.push(AuthorDetection {
+                    author: normalize_parenthesized_contact_author(name, contact),
+                    start_line: line_number,
+                    end_line: line_number,
+                });
+            }
         }
 
         if let Some(captures) = DOCKER_MAINTAINER_LABEL_RE.captures(trimmed)
@@ -285,6 +311,46 @@ fn extract_comment_author_supplements(text_content: &str) -> Vec<AuthorDetection
     }
 
     authors
+}
+
+fn normalize_comment_author_line(line: &str) -> String {
+    line.trim()
+        .trim_end_matches("*/")
+        .trim_end_matches("-->")
+        .trim()
+        .to_string()
+}
+
+fn normalize_comment_author_candidate(author: &str) -> String {
+    static ANGLE_URL_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"^(?P<name>[^<>]+?)\s*<\s*(?P<url>https?://[^>\s]+)\s*>\s*$")
+            .expect("valid angle url author regex")
+    });
+
+    let trimmed = author.trim().trim_end_matches('.').trim();
+    if let Some(captures) = ANGLE_URL_AUTHOR_RE.captures(trimmed) {
+        let name = captures
+            .name("name")
+            .map(|m| m.as_str().trim())
+            .unwrap_or(trimmed);
+        let url = captures
+            .name("url")
+            .map(|m| m.as_str().trim_end_matches('/'))
+            .unwrap_or(trimmed);
+        return format!("{name} {url}");
+    }
+
+    trimmed.to_string()
+}
+
+fn normalize_parenthesized_contact_author(name: &str, contact: &str) -> String {
+    let normalized_name = name.trim().trim_end_matches('.').trim();
+    let normalized_contact = if contact.starts_with("http://") || contact.starts_with("https://") {
+        contact.trim_end_matches('/')
+    } else {
+        contact.trim()
+    };
+    format!("{normalized_name} ({normalized_contact})")
 }
 
 fn has_explicit_copyright_marker(text: &str) -> bool {
