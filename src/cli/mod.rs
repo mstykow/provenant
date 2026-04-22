@@ -246,6 +246,7 @@ pub struct Cli {
     #[arg(long = "exclude", visible_alias = "ignore", value_delimiter = ',')]
     pub exclude: Vec<String>,
 
+    /// Include files matching PATTERN. Use `**` when you want recursion across directories.
     #[arg(long, value_delimiter = ',')]
     pub include: Vec<String>,
 
