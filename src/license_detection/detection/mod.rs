@@ -149,7 +149,8 @@ pub(crate) fn populate_detection_from_group_with_spdx(
         }
     }
 
-    if let Some(ref scancode_expr) = detection.license_expression
+    if detection.license_expression_spdx.is_none()
+        && let Some(ref scancode_expr) = detection.license_expression
         && let Ok(spdx_expr) = determine_spdx_expression_from_scancode(scancode_expr, spdx_mapping)
     {
         detection.license_expression_spdx = Some(spdx_expr);
@@ -572,7 +573,7 @@ fn promote_non_clue_no_expression_detections(
 fn promoted_expression_from_matches(
     matches: &[crate::license_detection::models::LicenseMatch],
 ) -> Option<String> {
-    crate::utils::spdx::combine_license_expressions(
+    crate::utils::spdx::combine_license_expressions_preserving_structure(
         matches
             .iter()
             .map(|match_item| match_item.license_expression.clone()),
@@ -1526,6 +1527,36 @@ mod tests {
         };
         populate_detection_from_group_with_spdx(&mut detection, &group, &spdx_mapping, None);
         assert!(detection.license_expression.is_some());
+    }
+
+    #[test]
+    fn test_populate_detection_from_group_with_spdx_preserves_match_derived_expression() {
+        let mut m1 = create_perfect_match(1, 10);
+        m1.license_expression = "mit".to_string();
+        m1.license_expression_spdx = Some("MIT".to_string());
+
+        let mut m2 = create_perfect_match(11, 20);
+        m2.license_expression = "apache-2.0 OR mit".to_string();
+        m2.license_expression_spdx = Some("Apache-2.0 OR MIT".to_string());
+
+        let group = DetectionGroup::new(vec![m1, m2]);
+        let licenses = vec![create_test_license()];
+        let spdx_mapping = build_spdx_mapping(&licenses);
+        let mut detection = LicenseDetection {
+            license_expression: None,
+            license_expression_spdx: None,
+            matches: Vec::new(),
+            detection_log: Vec::new(),
+            identifier: None,
+            file_regions: Vec::new(),
+        };
+
+        populate_detection_from_group_with_spdx(&mut detection, &group, &spdx_mapping, None);
+
+        assert_eq!(
+            detection.license_expression_spdx.as_deref(),
+            Some("MIT AND (Apache-2.0 OR MIT)")
+        );
     }
 
     #[test]
