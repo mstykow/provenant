@@ -418,22 +418,11 @@ pub fn merge_multiline_person_year_copyright_continuations(
         trimmed.to_string()
     }
 
-    for i in 0..prepared_cache.len().saturating_sub(1) {
-        let ln1 = i + 1;
-        let ln2 = i + 2;
-        let Some(l1) = prepared_cache.get(ln1).map(|s| s.to_string()) else {
+    for (first, second) in prepared_cache.adjacent_pairs() {
+        let Some(c1) = FIRST_RE.captures(first.prepared) else {
             continue;
         };
-        let Some(l2) = prepared_cache.get(ln2).map(|s| s.to_string()) else {
-            continue;
-        };
-        let l1t = l1.trim();
-        let l2t = l2.trim();
-
-        let Some(c1) = FIRST_RE.captures(l1t) else {
-            continue;
-        };
-        let Some(c2) = SECOND_RE.captures(l2t) else {
+        let Some(c2) = SECOND_RE.captures(second.prepared) else {
             continue;
         };
         let name1 =
@@ -451,27 +440,30 @@ pub fn merge_multiline_person_year_copyright_continuations(
             continue;
         };
 
-        if !copyrights
-            .iter()
-            .any(|c| c.start_line.get() == ln1 && c.end_line.get() == ln2 && c.copyright == refined)
-        {
+        if !copyrights.iter().any(|c| {
+            c.start_line == first.line_number
+                && c.end_line == second.line_number
+                && c.copyright == refined
+        }) {
             copyrights.push(CopyrightDetection {
                 copyright: refined.clone(),
-                start_line: LineNumber::new(ln1).expect("valid"),
-                end_line: LineNumber::new(ln2).expect("valid"),
+                start_line: first.line_number,
+                end_line: second.line_number,
             });
         }
 
         let raw_holder = format!("{name1}, {name2}");
         if let Some(h) = refine_holder_in_copyright_context(&raw_holder)
-            && !holders
-                .iter()
-                .any(|x| x.start_line.get() == ln1 && x.end_line.get() == ln2 && x.holder == h)
+            && !holders.iter().any(|x| {
+                x.start_line == first.line_number
+                    && x.end_line == second.line_number
+                    && x.holder == h
+            })
         {
             holders.push(HolderDetection {
                 holder: h,
-                start_line: LineNumber::new(ln1).expect("valid"),
-                end_line: LineNumber::new(ln2).expect("valid"),
+                start_line: first.line_number,
+                end_line: second.line_number,
             });
         }
     }
@@ -1956,32 +1948,24 @@ pub fn add_pipe_read_parenthetical_variants(
         LazyLock::new(|| Regex::new(r"(?i)^\(\s*pipe\s+read\s+code\s+from\s+[^)]+\)\s*$").unwrap());
 
     let mut result = Vec::new();
-    for i in 0..prepared_cache.len().saturating_sub(1) {
-        let ln1 = i + 1;
-        let ln2 = i + 2;
-        let Some(l1) = prepared_cache.get(ln1).map(|s| s.trim().to_string()) else {
-            continue;
-        };
-        let Some(l2) = prepared_cache.get(ln2).map(|s| s.trim().to_string()) else {
-            continue;
-        };
-        if l1.is_empty() || l2.is_empty() {
+    for (first, second) in prepared_cache.adjacent_pairs() {
+        if first.prepared.is_empty() || second.prepared.is_empty() {
             continue;
         }
-        if !l1.to_ascii_lowercase().contains("copyright") {
+        if !first.prepared.to_ascii_lowercase().contains("copyright") {
             continue;
         }
-        if !PIPE_RE.is_match(l2.as_str()) {
+        if !PIPE_RE.is_match(second.prepared) {
             continue;
         }
-        let combined = format!("{} {}", l1.trim_end(), l2.trim_start());
+        let combined = format!("{} {}", first.prepared, second.prepared);
         let Some(refined) = refine_copyright(&combined) else {
             continue;
         };
         result.push(CopyrightDetection {
             copyright: refined,
-            start_line: LineNumber::new(ln1).expect("valid"),
-            end_line: LineNumber::new(ln2).expect("valid"),
+            start_line: first.line_number,
+            end_line: second.line_number,
         });
     }
     result
@@ -1998,33 +1982,29 @@ pub fn add_from_url_parenthetical_copyright_variants(
     static FROM_URL_COPY_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\bfrom\s+https?://\S+\s*\(\s*copyright\b").unwrap());
 
-    let mut result = Vec::new();
-    for i in 0..prepared_cache.len() {
-        let ln = i + 1;
-        let Some(line) = prepared_cache.get_by_index(i).map(|s| s.trim().to_string()) else {
-            continue;
-        };
-        if line.is_empty() {
-            continue;
-        }
-        if !FROM_URL_COPY_RE.is_match(line.as_str()) {
-            continue;
-        }
-        let mut s = line;
-        let lower = s.to_ascii_lowercase();
-        if lower.starts_with("adapted from ") {
-            s = format!("from {}", s["adapted from ".len()..].trim_start());
-        }
-        let Some(refined) = refine_copyright(&s) else {
-            continue;
-        };
-        result.push(CopyrightDetection {
-            copyright: refined,
-            start_line: LineNumber::new(ln).unwrap(),
-            end_line: LineNumber::new(ln).unwrap(),
-        });
-    }
-    result
+    prepared_cache
+        .iter_non_empty()
+        .filter_map(|line| {
+            if !FROM_URL_COPY_RE.is_match(line.prepared) {
+                return None;
+            }
+            let lower = line.prepared.to_ascii_lowercase();
+            let candidate = if lower.starts_with("adapted from ") {
+                format!(
+                    "from {}",
+                    line.prepared["adapted from ".len()..].trim_start()
+                )
+            } else {
+                line.prepared.to_string()
+            };
+            let refined = refine_copyright(&candidate)?;
+            Some(CopyrightDetection {
+                copyright: refined,
+                start_line: line.line_number,
+                end_line: line.line_number,
+            })
+        })
+        .collect()
 }
 
 pub fn drop_shadowed_acronym_location_suffix_copyrights_same_span(
@@ -3504,12 +3484,8 @@ pub fn extract_question_mark_year_copyrights(
     let mut new_copyrights = Vec::new();
     let mut new_holders = Vec::new();
 
-    for ln in 1..=prepared_cache.len() {
-        let Some(prepared) = prepared_cache.get(ln) else {
-            continue;
-        };
-        let line = prepared.trim();
-        let Some(cap) = QMARK_COPY_RE.captures(line) else {
+    for line in prepared_cache.iter_non_empty() {
+        let Some(cap) = QMARK_COPY_RE.captures(line.prepared) else {
             continue;
         };
         let year = cap.name("year").map(|m| m.as_str()).unwrap_or("").trim();
@@ -3524,16 +3500,16 @@ pub fn extract_question_mark_year_copyrights(
         };
         new_copyrights.push(CopyrightDetection {
             copyright: cr,
-            start_line: LineNumber::new(ln).unwrap(),
-            end_line: LineNumber::new(ln).unwrap(),
+            start_line: line.line_number,
+            end_line: line.line_number,
         });
 
         let raw_holder = format!("{year} {tail}");
         if let Some(h) = refine_holder_in_copyright_context(&raw_holder) {
             new_holders.push(HolderDetection {
                 holder: h,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
+                start_line: line.line_number,
+                end_line: line.line_number,
             });
         }
     }
@@ -3607,11 +3583,8 @@ pub fn extend_copyrights_with_authors_blocks(
     static STRIP_ANGLE_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"\s*<[^>]*>\s*").unwrap());
 
-    for i in 0..prepared_cache.len().saturating_sub(2) {
-        let Some(base_prepared) = prepared_cache.get_by_index(i).map(|p| p.trim().to_string())
-        else {
-            continue;
-        };
+    for (base, header, author_line) in prepared_cache.adjacent_triples() {
+        let base_prepared = base.prepared;
         if base_prepared.is_empty() {
             continue;
         }
@@ -3619,27 +3592,15 @@ pub fn extend_copyrights_with_authors_blocks(
         if !base_lower.contains("copyright") && !base_lower.contains("(c)") {
             continue;
         }
-        if !YEAR_RE.is_match(&base_prepared) {
+        if !YEAR_RE.is_match(base_prepared) {
             continue;
         }
 
-        let Some(header_prepared) = prepared_cache
-            .get_by_index(i + 1)
-            .map(|p| p.trim().to_string())
-        else {
-            continue;
-        };
-        if !AUTHORS_HEADER_RE.is_match(&header_prepared) {
+        if !AUTHORS_HEADER_RE.is_match(header.prepared) {
             continue;
         }
 
-        let Some(author_prepared) = prepared_cache
-            .get_by_index(i + 2)
-            .map(|p| p.trim().to_string())
-        else {
-            continue;
-        };
-        let mut author = author_prepared;
+        let mut author = author_line.prepared.to_string();
         if author.is_empty() {
             continue;
         }
@@ -3681,16 +3642,13 @@ pub fn extend_copyrights_with_authors_blocks(
             continue;
         };
 
-        let ln = i + 1;
-        let end_ln = i + 3;
-
         for c in copyrights
             .iter_mut()
-            .filter(|c| c.start_line.get() == ln && c.end_line.get() == ln)
+            .filter(|c| c.start_line == base.line_number && c.end_line == base.line_number)
         {
             if c.copyright.starts_with("Copyright") || c.copyright.starts_with("(c)") {
                 c.copyright = extended.clone();
-                c.end_line = LineNumber::new(end_ln).expect("valid");
+                c.end_line = author_line.line_number;
             }
         }
 
@@ -3699,12 +3657,12 @@ pub fn extend_copyrights_with_authors_blocks(
         {
             holders.push(HolderDetection {
                 holder: h.clone(),
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(end_ln).expect("valid"),
+                start_line: base.line_number,
+                end_line: author_line.line_number,
             });
 
             holders.retain(|hh| {
-                if hh.start_line.get() != ln || hh.end_line.get() != ln {
+                if hh.start_line != base.line_number || hh.end_line != base.line_number {
                     return true;
                 }
                 if hh.holder == h {

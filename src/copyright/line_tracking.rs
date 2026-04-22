@@ -14,6 +14,13 @@ pub(super) struct PreparedLines<'a> {
     prepared: Vec<String>,
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct PreparedLine<'a> {
+    pub(super) line_number: LineNumber,
+    pub(super) raw: &'a str,
+    pub(super) prepared: &'a str,
+}
+
 impl<'a> PreparedLineCache<'a> {
     pub(super) fn new(raw_lines: &'a [&'a str]) -> Self {
         Self {
@@ -48,6 +55,108 @@ impl<'a> PreparedLines<'a> {
 
     pub(super) fn len(&self) -> usize {
         self.raw_lines.len()
+    }
+
+    pub(super) fn line(&self, line_number: LineNumber) -> Option<PreparedLine<'_>> {
+        let idx = line_number - 1;
+        Some(PreparedLine {
+            line_number,
+            raw: self.raw_lines.get(idx).copied()?,
+            prepared: self.prepared.get(idx).map(String::as_str)?,
+        })
+    }
+
+    pub(super) fn iter(&self) -> impl Iterator<Item = PreparedLine<'_>> + '_ {
+        self.raw_lines
+            .iter()
+            .copied()
+            .zip(self.prepared.iter().map(String::as_str))
+            .enumerate()
+            .map(|(idx, (raw, prepared))| PreparedLine {
+                line_number: LineNumber::from_0_indexed(idx),
+                raw,
+                prepared,
+            })
+    }
+
+    pub(super) fn iter_non_empty(&self) -> impl Iterator<Item = PreparedLine<'_>> + '_ {
+        self.iter().filter(|line| !line.prepared.is_empty())
+    }
+
+    pub(super) fn adjacent_pairs(
+        &self,
+    ) -> impl Iterator<Item = (PreparedLine<'_>, PreparedLine<'_>)> + '_ {
+        self.raw_lines
+            .iter()
+            .copied()
+            .zip(self.prepared.iter().map(String::as_str))
+            .zip(
+                self.raw_lines
+                    .iter()
+                    .copied()
+                    .skip(1)
+                    .zip(self.prepared.iter().skip(1).map(String::as_str)),
+            )
+            .enumerate()
+            .map(|(idx, ((raw1, prepared1), (raw2, prepared2)))| {
+                (
+                    PreparedLine {
+                        line_number: LineNumber::from_0_indexed(idx),
+                        raw: raw1,
+                        prepared: prepared1,
+                    },
+                    PreparedLine {
+                        line_number: LineNumber::from_0_indexed(idx + 1),
+                        raw: raw2,
+                        prepared: prepared2,
+                    },
+                )
+            })
+    }
+
+    pub(super) fn adjacent_triples(
+        &self,
+    ) -> impl Iterator<Item = (PreparedLine<'_>, PreparedLine<'_>, PreparedLine<'_>)> + '_ {
+        self.raw_lines
+            .iter()
+            .copied()
+            .zip(self.prepared.iter().map(String::as_str))
+            .zip(
+                self.raw_lines
+                    .iter()
+                    .copied()
+                    .skip(1)
+                    .zip(self.prepared.iter().skip(1).map(String::as_str)),
+            )
+            .zip(
+                self.raw_lines
+                    .iter()
+                    .copied()
+                    .skip(2)
+                    .zip(self.prepared.iter().skip(2).map(String::as_str)),
+            )
+            .enumerate()
+            .map(
+                |(idx, (((raw1, prepared1), (raw2, prepared2)), (raw3, prepared3)))| {
+                    (
+                        PreparedLine {
+                            line_number: LineNumber::from_0_indexed(idx),
+                            raw: raw1,
+                            prepared: prepared1,
+                        },
+                        PreparedLine {
+                            line_number: LineNumber::from_0_indexed(idx + 1),
+                            raw: raw2,
+                            prepared: prepared2,
+                        },
+                        PreparedLine {
+                            line_number: LineNumber::from_0_indexed(idx + 2),
+                            raw: raw3,
+                            prepared: prepared3,
+                        },
+                    )
+                },
+            )
     }
 
     pub(super) fn get(&self, line_number: usize) -> Option<&str> {
