@@ -230,19 +230,18 @@ pub(super) fn extract_dash_bullet_attribution_authors(
         return Vec::new();
     }
 
-    (0..prepared_cache.len())
-        .filter_map(|idx| {
-            let ln = idx + 1;
-            let raw_line = prepared_cache.raw_by_index(idx)?;
-            let trimmed = raw_line.trim_start();
+    prepared_cache
+        .iter()
+        .filter_map(|line| {
+            let trimmed = line.raw.trim_start();
             if !trimmed.starts_with("- ") {
                 return None;
             }
             let author = extract_dash_bullet_attribution_author(trimmed)?;
             Some(AuthorDetection {
                 author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
+                start_line: line.line_number,
+                end_line: line.line_number,
             })
         })
         .collect()
@@ -255,11 +254,10 @@ pub(super) fn extract_name_contributed_authors(
         return Vec::new();
     }
 
-    (0..prepared_cache.len())
-        .filter_map(|idx| {
-            let ln = idx + 1;
-            let raw_line = prepared_cache.raw_by_index(idx)?;
-            let trimmed = raw_line.trim();
+    prepared_cache
+        .iter()
+        .filter_map(|line| {
+            let trimmed = line.raw.trim();
             let (who, _) = trimmed.split_once(" contributed")?;
             let words: Vec<&str> = who.split_whitespace().collect();
             if !(2..=4).contains(&words.len()) {
@@ -280,8 +278,8 @@ pub(super) fn extract_name_contributed_authors(
             let author = refine_author(who)?;
             Some(AuthorDetection {
                 author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
+                start_line: line.line_number,
+                end_line: line.line_number,
             })
         })
         .collect()
@@ -337,16 +335,10 @@ pub(super) fn extract_rst_field_authors(
             .unwrap()
     });
 
-    (0..prepared_cache.len())
-        .filter_map(|idx| {
-            let ln = idx + 1;
-            let prepared = prepared_cache.get_by_index(idx)?;
-            let line = prepared.trim();
-            if line.is_empty() {
-                return None;
-            }
-
-            let cap = RST_FIELD_AUTHOR_RE.captures(line)?;
+    prepared_cache
+        .iter_non_empty()
+        .filter_map(|line| {
+            let cap = RST_FIELD_AUTHOR_RE.captures(line.prepared)?;
             let tail = cap.name("tail").map(|m| m.as_str()).unwrap_or("").trim();
             if tail.is_empty() {
                 return None;
@@ -356,8 +348,8 @@ pub(super) fn extract_rst_field_authors(
             let author = refine_author(&trimmed)?;
             Some(AuthorDetection {
                 author,
-                start_line: LineNumber::new(ln).expect("invalid line number"),
-                end_line: LineNumber::new(ln).expect("invalid line number"),
+                start_line: line.line_number,
+                end_line: line.line_number,
             })
         })
         .collect()
@@ -804,87 +796,76 @@ pub(super) fn extract_was_developed_by_author_blocks(
     static WITH_PARTICIPATION_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)\bwith\s+participation\b").unwrap());
 
-    let mut i = 0;
-    while i < prepared_cache.len() {
-        let ln = i + 1;
-        let Some(prepared) = prepared_cache.get_by_index(i) else {
-            i += 1;
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            i += 1;
+    let mut line_number = LineNumber::ONE;
+    while let Some(line) = prepared_cache.line(line_number) {
+        if line.prepared.is_empty() {
+            line_number += 1usize;
             continue;
         }
 
-        let Some(cap) = WAS_DEVELOPED_BY_RE.captures(line) else {
-            i += 1;
+        let Some(cap) = WAS_DEVELOPED_BY_RE.captures(line.prepared) else {
+            line_number += 1usize;
             continue;
         };
         let mut parts: Vec<String> = Vec::new();
         let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
         if who.is_empty() {
-            i += 1;
+            line_number += 1usize;
             continue;
         }
         parts.push(who.to_string());
 
-        let mut end_ln = ln;
-        let mut j = i + 1;
-        while j < prepared_cache.len() {
-            let next_ln = j + 1;
-            let Some(next_prepared) = prepared_cache.get_by_index(j) else {
-                break;
-            };
-            let next_line = next_prepared.trim();
-            if next_line.is_empty() {
+        let mut end_line = line.line_number;
+        let mut next_line_number = line.line_number + 1usize;
+        while let Some(next_line) = prepared_cache.line(next_line_number) {
+            if next_line.prepared.is_empty() {
                 break;
             }
 
-            let next_lower = next_line.to_ascii_lowercase();
+            let next_lower = next_line.prepared.to_ascii_lowercase();
             if next_lower.starts_with("copyright") {
                 break;
             }
 
-            if let Some(m) = WITH_PARTICIPATION_RE.find(next_line) {
-                let prefix = next_line[..m.start()].trim_end();
+            if let Some(m) = WITH_PARTICIPATION_RE.find(next_line.prepared) {
+                let prefix = next_line.prepared[..m.start()].trim_end();
                 if !prefix.is_empty() {
                     parts.push(prefix.to_string());
-                    end_ln = next_ln;
+                    end_line = next_line.line_number;
                 }
                 break;
             }
 
-            parts.push(next_line.to_string());
-            end_ln = next_ln;
+            parts.push(next_line.prepared.to_string());
+            end_line = next_line.line_number;
 
-            if end_ln.saturating_sub(ln) >= 3 {
+            if end_line.get().saturating_sub(line.line_number.get()) >= 3 {
                 break;
             }
 
-            j += 1;
+            next_line_number += 1usize;
         }
 
         let joined = parts.join(" ");
         let joined = joined.split_whitespace().collect::<Vec<_>>().join(" ");
         if joined.is_empty() {
-            i += 1;
+            line_number += 1usize;
             continue;
         }
 
         let author = refine_author(&joined).unwrap_or(joined);
         if author.is_empty() {
-            i += 1;
+            line_number += 1usize;
             continue;
         }
 
         authors.push(AuthorDetection {
             author,
-            start_line: LineNumber::new(ln).expect("invalid line number"),
-            end_line: LineNumber::new(end_ln).expect("invalid line number"),
+            start_line: line.line_number,
+            end_line,
         });
 
-        i += 1;
+        line_number += 1usize;
     }
 
     authors

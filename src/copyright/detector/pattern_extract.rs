@@ -180,12 +180,8 @@ pub fn extract_added_the_copyright_year_for_lines(
         .map(|h| (h.holder.clone(), h.start_line.get()))
         .collect();
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx) else {
-            continue;
-        };
-        let Some(cap) = ADDED_COPYRIGHT_YEAR_RE.captures(prepared) else {
+    for line in prepared_cache.iter_non_empty() {
+        let Some(cap) = ADDED_COPYRIGHT_YEAR_RE.captures(line.prepared) else {
             continue;
         };
         let year = cap.name("year").map(|m| m.as_str()).unwrap_or("");
@@ -198,15 +194,15 @@ pub fn extract_added_the_copyright_year_for_lines(
         let cr = format!("Copyright year ({year}) for {holder}");
         copyrights.push(CopyrightDetection {
             copyright: cr,
-            start_line: LineNumber::new(ln).unwrap(),
-            end_line: LineNumber::new(ln).unwrap(),
+            start_line: line.line_number,
+            end_line: line.line_number,
         });
 
-        if seen_h.insert((holder.clone(), ln)) {
+        if seen_h.insert((holder.clone(), line.line_number.get())) {
             holders.push(HolderDetection {
                 holder,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
+                start_line: line.line_number,
+                end_line: line.line_number,
             });
         }
     }
@@ -1681,18 +1677,11 @@ pub fn extract_are_c_year_holder_lines(
     let mut copyrights = Vec::new();
     let mut holders = Vec::new();
 
-    for ln in 1..=prepared_cache.len() {
-        let Some(prepared) = prepared_cache.get(ln) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
+    for line in prepared_cache.iter_non_empty() {
+        if !line.prepared.to_ascii_lowercase().contains("(c)") {
             continue;
         }
-        if !line.to_ascii_lowercase().contains("(c)") {
-            continue;
-        }
-        for cap in ARE_C_YEAR_HOLDER_RE.captures_iter(line) {
+        for cap in ARE_C_YEAR_HOLDER_RE.captures_iter(line.prepared) {
             let year = cap.name("year").map(|m| m.as_str()).unwrap_or("").trim();
             let mut holder_raw = cap
                 .name("holder")
@@ -1711,21 +1700,21 @@ pub fn extract_are_c_year_holder_lines(
             let Some(refined) = refine_copyright(&raw) else {
                 continue;
             };
-            if seen_cr.insert((ln, refined.clone())) {
+            if seen_cr.insert((line.line_number.get(), refined.clone())) {
                 copyrights.push(CopyrightDetection {
                     copyright: refined,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(ln).unwrap(),
+                    start_line: line.line_number,
+                    end_line: line.line_number,
                 });
             }
 
             if let Some(h) = refine_holder_in_copyright_context(&holder_raw)
-                && seen_h.insert((ln, h.clone()))
+                && seen_h.insert((line.line_number.get(), h.clone()))
             {
                 holders.push(HolderDetection {
                     holder: h,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(ln).unwrap(),
+                    start_line: line.line_number,
+                    end_line: line.line_number,
                 });
             }
         }
@@ -1758,15 +1747,8 @@ pub fn extract_bare_c_by_holder_lines(
     let mut copyrights = Vec::new();
     let mut holders = Vec::new();
 
-    for ln in 1..=prepared_cache.len() {
-        let Some(prepared) = prepared_cache.get(ln) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let Some(cap) = C_BY_RE.captures(line) else {
+    for line in prepared_cache.iter_non_empty() {
+        let Some(cap) = C_BY_RE.captures(line.prepared) else {
             continue;
         };
         let holder_raw = cap.name("holder").map(|m| m.as_str()).unwrap_or("").trim();
@@ -1777,20 +1759,20 @@ pub fn extract_bare_c_by_holder_lines(
         let Some(refined) = refine_copyright(&raw) else {
             continue;
         };
-        if seen_cr.insert((ln, refined.clone())) {
+        if seen_cr.insert((line.line_number.get(), refined.clone())) {
             copyrights.push(CopyrightDetection {
                 copyright: refined,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
+                start_line: line.line_number,
+                end_line: line.line_number,
             });
         }
         if let Some(h) = refine_holder_in_copyright_context(holder_raw)
-            && seen_h.insert((ln, h.clone()))
+            && seen_h.insert((line.line_number.get(), h.clone()))
         {
             holders.push(HolderDetection {
                 holder: h,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
+                start_line: line.line_number,
+                end_line: line.line_number,
             });
         }
     }
@@ -1824,15 +1806,8 @@ pub fn extract_all_rights_reserved_by_holder_lines(
     let mut copyrights = Vec::new();
     let mut holders = Vec::new();
 
-    for ln in 1..=prepared_cache.len() {
-        let Some(prepared) = prepared_cache.get(ln) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let Some(cap) = RESERVED_BY_RE.captures(line) else {
+    for line in prepared_cache.iter_non_empty() {
+        let Some(cap) = RESERVED_BY_RE.captures(line.prepared) else {
             continue;
         };
         let holder_raw = cap.name("holder").map(|m| m.as_str()).unwrap_or("").trim();
@@ -1844,21 +1819,21 @@ pub fn extract_all_rights_reserved_by_holder_lines(
         let Some(refined) = refine_copyright(&raw) else {
             continue;
         };
-        if seen_cr.insert((ln, refined.clone())) {
+        if seen_cr.insert((line.line_number.get(), refined.clone())) {
             copyrights.push(CopyrightDetection {
                 copyright: refined,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
+                start_line: line.line_number,
+                end_line: line.line_number,
             });
         }
 
         if let Some(h) = refine_holder_in_copyright_context(holder_raw)
-            && seen_h.insert((ln, h.clone()))
+            && seen_h.insert((line.line_number.get(), h.clone()))
         {
             holders.push(HolderDetection {
                 holder: h,
-                start_line: LineNumber::new(ln).unwrap(),
-                end_line: LineNumber::new(ln).unwrap(),
+                start_line: line.line_number,
+                end_line: line.line_number,
             });
         }
     }
@@ -1894,15 +1869,8 @@ pub fn extract_holder_is_name_paren_email_lines(
     let mut copyrights = Vec::new();
     let mut holders = Vec::new();
 
-    for ln in 1..=prepared_cache.len() {
-        let Some(prepared) = prepared_cache.get(ln) else {
-            continue;
-        };
-        let line = prepared.trim();
-        if line.is_empty() {
-            continue;
-        }
-        for cap in HOLDER_IS_RE.captures_iter(line) {
+    for line in prepared_cache.iter_non_empty() {
+        for cap in HOLDER_IS_RE.captures_iter(line.prepared) {
             let name = cap.name("name").map(|m| m.as_str()).unwrap_or("").trim();
             let email = cap.name("email").map(|m| m.as_str()).unwrap_or("").trim();
             if name.is_empty() || email.is_empty() {
@@ -1912,21 +1880,21 @@ pub fn extract_holder_is_name_paren_email_lines(
             let Some(cr) = refine_copyright(&raw) else {
                 continue;
             };
-            if seen_c.insert((ln, cr.clone())) {
+            if seen_c.insert((line.line_number.get(), cr.clone())) {
                 copyrights.push(CopyrightDetection {
                     copyright: cr,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(ln).unwrap(),
+                    start_line: line.line_number,
+                    end_line: line.line_number,
                 });
             }
 
             if let Some(h) = refine_holder_in_copyright_context(name)
-                && seen_h.insert((ln, h.clone()))
+                && seen_h.insert((line.line_number.get(), h.clone()))
             {
                 holders.push(HolderDetection {
                     holder: h,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(ln).unwrap(),
+                    start_line: line.line_number,
+                    end_line: line.line_number,
                 });
             }
         }
