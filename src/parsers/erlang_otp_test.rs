@@ -177,6 +177,67 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_app_src_handles_commented_placeholder_blocks() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let path = temp_dir.path().join("diameter.app.src");
+        fs::write(
+            &path,
+            r#"%%
+%% %CopyrightBegin%
+%%
+%% SPDX-License-Identifier: Apache-2.0
+%%
+%% Copyright Ericsson AB 2010-2025. All Rights Reserved.
+%%
+%% %CopyrightEnd%
+%%
+
+{application, diameter,
+ [{description, "Diameter protocol"},
+  {vsn, "%VSN%"},
+  {modules, [
+      %MODULES%
+      %,%COMPILER%
+      %,%INFO%
+      ]},
+  {registered, [%REGISTERED%]},
+  {applications, [
+      stdlib,
+      kernel
+      %, ssl
+      %, syntax-tools
+      %, runtime-tools
+      ]},
+  {env, []},
+  {mod, {diameter_app, []}},
+  {runtime_dependencies, [
+      "erts-10.0",
+      "stdlib-5.0",
+      "kernel-3.2",
+      "ssl-9.0"
+      %, "syntax-tools-1.6.18"
+      %, "runtime-tools-1.8.16"
+      ]}
+  %%
+  %% Note that ssl is only required if configured on TCP transports,
+  %% and syntax-tools and runtime-tools are only required if the
+  %% dictionary compiler and debug modules (respectively) are
+  %% needed/wanted at runtime, which they typically aren't. These
+  %% modules are the two commented lines in the 'modules' tuple.
+  %%
+ ]}.
+"#,
+        )
+        .expect("write");
+
+        let package = ErlangAppSrcParser::extract_first_package(&path);
+        assert_eq!(package.name.as_deref(), Some("diameter"));
+        assert_eq!(package.description.as_deref(), Some("Diameter protocol"));
+        assert!(package.version.is_none());
+        assert!(package.dependencies.is_empty());
+    }
+
+    #[test]
     fn test_parse_app_src_with_non_stdlib_runtime_deps() {
         let temp_dir = TempDir::new().expect("temp dir");
         let path = temp_dir.path().join("myapp.app.src");
