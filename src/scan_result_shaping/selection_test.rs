@@ -157,3 +157,59 @@ fn resolve_native_scan_inputs_uses_component_aware_prefix_for_siblings() {
     assert_eq!(scan_root, "src");
     assert_eq!(includes, vec!["src/bar", "src/baz"]);
 }
+
+#[test]
+fn resolve_paths_file_entries_normalizes_existing_entries_and_tracks_missing() {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let scan_root = temp_dir.path().join("repo");
+    fs::create_dir_all(scan_root.join("src/nested")).expect("create nested source dir");
+    fs::create_dir_all(scan_root.join("docs")).expect("create docs dir");
+    fs::write(scan_root.join("src/nested/main.rs"), "fn main() {}\n").expect("write source");
+
+    let resolved = resolve_paths_file_entries(
+        &scan_root,
+        &[
+            "./src/nested/../nested/main.rs".to_string(),
+            "docs\r".to_string(),
+            "src/nested/main.rs".to_string(),
+            "missing/file.rs".to_string(),
+            "  ".to_string(),
+        ],
+    )
+    .expect("paths file entries should resolve");
+
+    assert_eq!(resolved.includes, vec!["src/nested/main.rs", "docs"]);
+    assert_eq!(resolved.missing_entries, vec!["missing/file.rs"]);
+}
+
+#[test]
+fn resolve_paths_file_entries_rejects_entries_that_escape_root() {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let scan_root = temp_dir.path().join("repo");
+    fs::create_dir_all(&scan_root).expect("create scan root");
+
+    let error = resolve_paths_file_entries(&scan_root, &["../secret.txt".to_string()])
+        .expect_err("escaping entry should be rejected");
+
+    assert!(error.to_string().contains("escapes the declared scan root"));
+}
+
+#[test]
+fn resolve_paths_file_entries_uses_explicit_root_not_current_working_directory() {
+    let scan_root_parent = tempfile::tempdir().expect("scan root parent");
+    let other_cwd = tempfile::tempdir().expect("alternate cwd");
+    let scan_root = scan_root_parent.path().join("repo");
+    fs::create_dir_all(scan_root.join("src")).expect("create src dir");
+    fs::write(scan_root.join("src/lib.rs"), "pub fn demo() {}\n").expect("write lib");
+
+    let old_cwd = std::env::current_dir().expect("current dir");
+    std::env::set_current_dir(other_cwd.path()).expect("set cwd");
+
+    let result = resolve_paths_file_entries(&scan_root, &["src/lib.rs".to_string()]);
+
+    std::env::set_current_dir(old_cwd).expect("restore cwd");
+
+    let resolved = result.expect("absolute scan root should make cwd irrelevant");
+    assert_eq!(resolved.includes, vec!["src/lib.rs"]);
+    assert!(resolved.missing_entries.is_empty());
+}
