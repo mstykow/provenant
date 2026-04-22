@@ -188,6 +188,9 @@ ScanCode: 186.62s</title></rect>
     <rect x="510.80" y="411.66" width="8" height="8" fill="#d97706" rx="1.5"><title>PerlDancer/Dancer2 @ a1faa22
 Files: 436
 ScanCode: 97.37s</title></rect>
+    <rect x="511.58" y="391.47" width="8" height="8" fill="#d97706" rx="1.5"><title>vernemq/vernemq @ 4681e54
+Files: 441
+ScanCode: 149.29s</title></rect>
     <rect x="514.79" y="385.13" width="8" height="8" fill="#d97706" rx="1.5"><title>tidyverse/dplyr @ 2f9f49e
 Files: 462
 ScanCode: 170.71s</title></rect>
@@ -215,6 +218,9 @@ ScanCode: 219.94s</title></rect>
     <rect x="534.61" y="385.27" width="8" height="8" fill="#d97706" rx="1.5"><title>iTowns/itowns @ 08e08f5
 Files: 616
 ScanCode: 170.19s</title></rect>
+    <rect x="535.39" y="374.38" width="8" height="8" fill="#d97706" rx="1.5"><title>processone/ejabberd @ 87475d8
+Files: 623
+ScanCode: 214.30s</title></rect>
     <rect x="538.84" y="376.84" width="8" height="8" fill="#d97706" rx="1.5"><title>rpm-software-management/dnf @ e47634f
 Files: 655
 ScanCode: 203.47s</title></rect>
@@ -425,6 +431,9 @@ ScanCode: 1974.56s</title></rect>
     <rect x="736.95" y="313.57" width="8" height="8" fill="#d97706" rx="1.5"><title>spring-projects/spring-boot @ 53827d4
 Files: 11610
 ScanCode: 776.24s</title></rect>
+    <rect x="737.77" y="246.68" width="8" height="8" fill="#d97706" rx="1.5"><title>erlang/otp @ 264def5
+Files: 11749
+ScanCode: 3197.26s</title></rect>
     <rect x="738.39" y="304.71" width="8" height="8" fill="#d97706" rx="1.5"><title>apache/airflow @ 47ce5f3
 Files: 11854
 ScanCode: 936.34s</title></rect>
@@ -604,6 +613,9 @@ Provenant: 12.89s</title></circle>
     <circle cx="514.80" cy="526.48" r="4.5" fill="#2563eb"><title>PerlDancer/Dancer2 @ a1faa22
 Files: 436
 Provenant: 9.33s</title></circle>
+    <circle cx="515.58" cy="507.64" r="4.5" fill="#2563eb"><title>vernemq/vernemq @ 4681e54
+Files: 441
+Provenant: 13.90s</title></circle>
     <circle cx="518.79" cy="507.78" r="4.5" fill="#2563eb"><title>tidyverse/dplyr @ 2f9f49e
 Files: 462
 Provenant: 13.86s</title></circle>
@@ -631,6 +643,9 @@ Provenant: 14.57s</title></circle>
     <circle cx="538.61" cy="512.54" r="4.5" fill="#2563eb"><title>iTowns/itowns @ 08e08f5
 Files: 616
 Provenant: 12.53s</title></circle>
+    <circle cx="539.39" cy="498.86" r="4.5" fill="#2563eb"><title>processone/ejabberd @ 87475d8
+Files: 623
+Provenant: 16.74s</title></circle>
     <circle cx="542.84" cy="506.07" r="4.5" fill="#2563eb"><title>rpm-software-management/dnf @ e47634f
 Files: 655
 Provenant: 14.37s</title></circle>
@@ -841,6 +856,9 @@ Provenant: 200.80s</title></circle>
     <circle cx="740.95" cy="432.92" r="4.5" fill="#2563eb"><title>spring-projects/spring-boot @ 53827d4
 Files: 11610
 Provenant: 67.58s</title></circle>
+    <circle cx="741.77" cy="399.90" r="4.5" fill="#2563eb"><title>erlang/otp @ 264def5
+Files: 11749
+Provenant: 135.93s</title></circle>
     <circle cx="742.39" cy="434.52" r="4.5" fill="#2563eb"><title>apache/airflow @ 47ce5f3
 Files: 11854
 Provenant: 65.32s</title></circle>
