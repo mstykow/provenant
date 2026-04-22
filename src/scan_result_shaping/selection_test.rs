@@ -62,6 +62,7 @@ fn apply_user_path_filters_to_collected_filters_files_without_pruning_directorie
     let removed = apply_user_path_filters_to_collected(
         &mut collected,
         &scan_root,
+        &[] as &[SelectedPath],
         &["*.doc".to_string()],
         &[],
     );
@@ -105,7 +106,13 @@ fn apply_user_path_filters_to_collected_keeps_single_file_root_input() {
         collection_errors: Vec::new(),
     };
 
-    let removed = apply_user_path_filters_to_collected(&mut collected, &scan_root, &[], &[]);
+    let removed = apply_user_path_filters_to_collected(
+        &mut collected,
+        &scan_root,
+        &[] as &[SelectedPath],
+        &[],
+        &[],
+    );
 
     assert_eq!(removed, 0);
     assert_eq!(collected.files.len(), 1);
@@ -116,8 +123,8 @@ fn apply_user_path_filters_to_collected_keeps_single_file_root_input() {
 }
 
 #[test]
-fn is_included_path_treats_directory_include_patterns_recursively() {
-    assert!(is_included_path(
+fn is_included_path_does_not_recurse_on_bare_directory_patterns() {
+    assert!(!is_included_path(
         "src/foo/bar/baz.txt",
         &["src/foo".to_string()],
         &[]
@@ -130,13 +137,49 @@ fn is_included_path_treats_directory_include_patterns_recursively() {
 }
 
 #[test]
+fn is_included_path_requires_explicit_recursive_wildcard_for_subtrees() {
+    assert!(is_included_path(
+        "src/foo/bar/baz.txt",
+        &["src/foo/**".to_string()],
+        &[]
+    ));
+    assert!(is_included_path(
+        "src/foo/file.txt",
+        &["src/foo/**".to_string()],
+        &[]
+    ));
+    assert!(!is_included_path(
+        "src/other/file.txt",
+        &["src/foo/**".to_string()],
+        &[]
+    ));
+}
+
+#[test]
 fn resolve_native_scan_inputs_builds_common_prefix_and_synthetic_includes() {
-    let (scan_root, includes) =
-        resolve_native_scan_inputs(&["src/foo".to_string(), "src/bar/baz".to_string()])
-            .expect("multiple relative inputs should resolve");
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let parent = temp_dir.path().join("src");
+    fs::create_dir_all(parent.join("foo")).expect("create foo dir");
+    fs::create_dir_all(parent.join("bar")).expect("create bar dir");
+    fs::write(parent.join("bar/baz"), "data\n").expect("write baz file");
+
+    let old_cwd = std::env::current_dir().expect("current dir");
+    std::env::set_current_dir(temp_dir.path()).expect("set cwd");
+
+    let result = resolve_native_scan_inputs(&["src/foo".to_string(), "src/bar/baz".to_string()]);
+
+    std::env::set_current_dir(old_cwd).expect("restore cwd");
+
+    let (scan_root, includes) = result.expect("multiple relative inputs should resolve");
 
     assert_eq!(scan_root, "src");
-    assert_eq!(includes, vec!["src/foo", "src/bar/baz"]);
+    assert_eq!(
+        includes,
+        vec![
+            SelectedPath::Subtree("src/foo".to_string()),
+            SelectedPath::Exact("src/bar/baz".to_string())
+        ]
+    );
 }
 
 #[test]
@@ -155,7 +198,13 @@ fn resolve_native_scan_inputs_uses_component_aware_prefix_for_siblings() {
 
     let (scan_root, includes) = result.expect("sibling inputs should resolve");
     assert_eq!(scan_root, "src");
-    assert_eq!(includes, vec!["src/bar", "src/baz"]);
+    assert_eq!(
+        includes,
+        vec![
+            SelectedPath::Subtree("src/bar".to_string()),
+            SelectedPath::Subtree("src/baz".to_string())
+        ]
+    );
 }
 
 #[test]
@@ -178,7 +227,13 @@ fn resolve_paths_file_entries_normalizes_existing_entries_and_tracks_missing() {
     )
     .expect("paths file entries should resolve");
 
-    assert_eq!(resolved.includes, vec!["src/nested/main.rs", "docs"]);
+    assert_eq!(
+        resolved.selections,
+        vec![
+            SelectedPath::Exact("src/nested/main.rs".to_string()),
+            SelectedPath::Subtree("docs".to_string())
+        ]
+    );
     assert_eq!(resolved.missing_entries, vec!["missing/file.rs"]);
 }
 
@@ -210,6 +265,21 @@ fn resolve_paths_file_entries_uses_explicit_root_not_current_working_directory()
     std::env::set_current_dir(old_cwd).expect("restore cwd");
 
     let resolved = result.expect("absolute scan root should make cwd irrelevant");
-    assert_eq!(resolved.includes, vec!["src/lib.rs"]);
+    assert_eq!(
+        resolved.selections,
+        vec![SelectedPath::Exact("src/lib.rs".to_string())]
+    );
     assert!(resolved.missing_entries.is_empty());
+}
+
+#[test]
+fn matches_selected_path_keeps_exact_file_selection_narrow() {
+    assert!(matches_selected_path(
+        "README.md",
+        &[SelectedPath::Exact("readme.md".to_string())]
+    ));
+    assert!(!matches_selected_path(
+        "docs/README.md",
+        &[SelectedPath::Exact("readme.md".to_string())]
+    ));
 }

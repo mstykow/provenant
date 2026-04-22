@@ -1308,7 +1308,13 @@ fn resolve_native_scan_selection_uses_paths_file_under_explicit_root() {
     let (resolved_root, includes, missing_entries) =
         result.expect("paths file selection should resolve");
     assert_eq!(resolved_root, scan_root.to_str().expect("utf-8 path"));
-    assert_eq!(includes, vec!["src/lib.rs", "docs"]);
+    assert_eq!(
+        includes,
+        vec![
+            crate::scan_result_shaping::SelectedPath::Exact("src/lib.rs".to_string()),
+            crate::scan_result_shaping::SelectedPath::Subtree("docs".to_string())
+        ]
+    );
     assert_eq!(missing_entries, vec!["missing.rs"]);
 }
 
