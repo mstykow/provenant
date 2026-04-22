@@ -838,15 +838,8 @@ pub fn extract_copyright_years_by_name_then_paren_email_next_line(
         .map(|c| c.copyright.to_ascii_lowercase())
         .collect();
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache
-            .get_by_index(idx)
-            .map(|p| p.trim().to_string())
-        else {
-            continue;
-        };
-        let Some(cap) = COPY_YEARS_BY_NAME_RE.captures(&prepared) else {
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let Some(cap) = COPY_YEARS_BY_NAME_RE.captures(prepared_line.prepared) else {
             continue;
         };
 
@@ -862,7 +855,7 @@ pub fn extract_copyright_years_by_name_then_paren_email_next_line(
             .unwrap_or("")
             .trim()
             .to_string();
-        let matched = cap.get(0).map(|m| m.as_str()).unwrap_or("").to_string();
+        let matched = cap.get(0).map(|m| m.as_str()).unwrap_or("");
         if years.is_empty() || name.is_empty() {
             continue;
         }
@@ -873,59 +866,48 @@ pub fn extract_copyright_years_by_name_then_paren_email_next_line(
             continue;
         }
 
-        let mut j = idx + 1;
-        while j < prepared_cache.len() {
-            let next_ln = j + 1;
-            let Some(next_trimmed) = prepared_cache.get_by_index(j).map(|p| p.trim().to_string())
-            else {
-                break;
-            };
-            if next_trimmed.is_empty() {
-                j += 1;
-                continue;
-            }
+        let Some(next_line) = prepared_cache.next_non_empty_line(prepared_line.line_number) else {
+            continue;
+        };
 
-            let Some(email_cap) = LEADING_PAREN_EMAIL_RE.captures(&next_trimmed) else {
-                break;
-            };
-            let email = email_cap
-                .name("email")
-                .map(|m| m.as_str())
-                .unwrap_or("")
-                .trim();
-            if email.is_empty() {
-                break;
-            }
+        let Some(email_cap) = LEADING_PAREN_EMAIL_RE.captures(next_line.prepared) else {
+            continue;
+        };
+        let email = email_cap
+            .name("email")
+            .map(|m| m.as_str())
+            .unwrap_or("")
+            .trim();
+        if email.is_empty() {
+            continue;
+        }
 
-            let full_raw = format!("{} ({email})", matched.trim_end());
-            if let Some(full) = refine_copyright(&full_raw)
-                && seen_copyrights.insert(full.to_ascii_lowercase())
-            {
-                copyrights.push(CopyrightDetection {
-                    copyright: full,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(next_ln).expect("valid"),
-                });
-            }
+        let full_raw = format!("{} ({email})", matched.trim_end());
+        if let Some(full) = refine_copyright(&full_raw)
+            && seen_copyrights.insert(full.to_ascii_lowercase())
+        {
+            copyrights.push(CopyrightDetection {
+                copyright: full,
+                start_line: prepared_line.line_number,
+                end_line: next_line.line_number,
+            });
+        }
 
-            let year_only_raw = format!("copyright {years}");
-            if let Some(year_only) = refine_copyright(&year_only_raw) {
-                copyrights.retain(|c| {
-                    !(c.start_line.get() == ln
-                        && c.end_line.get() == ln
-                        && c.copyright == year_only)
-                });
-            }
+        let year_only_raw = format!("copyright {years}");
+        if let Some(year_only) = refine_copyright(&year_only_raw) {
+            copyrights.retain(|c| {
+                !(c.start_line == prepared_line.line_number
+                    && c.end_line == prepared_line.line_number
+                    && c.copyright == year_only)
+            });
+        }
 
-            if let Some(holder) = refine_holder_in_copyright_context(&name) {
-                holders.push(HolderDetection {
-                    holder,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(ln).unwrap(),
-                });
-            }
-
-            break;
+        if let Some(holder) = refine_holder_in_copyright_context(&name) {
+            holders.push(HolderDetection {
+                holder,
+                start_line: prepared_line.line_number,
+                end_line: prepared_line.line_number,
+            });
         }
     }
 }
@@ -2635,30 +2617,15 @@ pub fn extract_name_before_rewrited_by_copyrights(
     let mut copyrights = Vec::new();
     let mut holders = Vec::new();
 
-    for idx in 0..prepared_cache.len().saturating_sub(1) {
-        let ln1 = idx + 1;
-        let ln2 = idx + 2;
-
-        let Some(l1) = prepared_cache
-            .get_by_index(idx)
-            .map(|p| p.trim().to_string())
-        else {
-            continue;
-        };
-        let Some(l2) = prepared_cache
-            .get_by_index(idx + 1)
-            .map(|p| p.trim().to_string())
-        else {
-            continue;
-        };
-        if l1.is_empty() || l2.is_empty() {
+    for (first, second) in prepared_cache.adjacent_pairs() {
+        if first.prepared.is_empty() || second.prepared.is_empty() {
             continue;
         }
 
-        let Some(cap1) = NAME_EMAIL_YEARS_RE.captures(&l1) else {
+        let Some(cap1) = NAME_EMAIL_YEARS_RE.captures(first.prepared) else {
             continue;
         };
-        let Some(cap2) = REWRITED_BY_RE.captures(&l2) else {
+        let Some(cap2) = REWRITED_BY_RE.captures(second.prepared) else {
             continue;
         };
 
@@ -2686,8 +2653,8 @@ pub fn extract_name_before_rewrited_by_copyrights(
         if let Some(refined) = refine_copyright(&combined_raw) {
             copyrights.push(CopyrightDetection {
                 copyright: refined,
-                start_line: LineNumber::new(ln1).expect("valid"),
-                end_line: LineNumber::new(ln2).expect("valid"),
+                start_line: first.line_number,
+                end_line: second.line_number,
             });
         }
 
@@ -2695,8 +2662,8 @@ pub fn extract_name_before_rewrited_by_copyrights(
         if let Some(holder) = refine_holder(&holder_raw) {
             holders.push(HolderDetection {
                 holder,
-                start_line: LineNumber::new(ln1).expect("valid"),
-                end_line: LineNumber::new(ln2).expect("valid"),
+                start_line: first.line_number,
+                end_line: second.line_number,
             });
         }
     }
@@ -2721,19 +2688,25 @@ pub fn extract_developed_at_software_copyrights(
     let mut copyrights = Vec::new();
     let mut holders = Vec::new();
 
-    for idx in 0..prepared_cache.len() {
-        let ln = idx + 1;
-        let Some(prepared) = prepared_cache.get_by_index(idx).map(|p| p.to_string()) else {
-            continue;
-        };
-        let mut candidates: Vec<(usize, String)> = vec![(ln, prepared.clone())];
-        if let Some(next) = prepared_cache.get_by_index(idx + 1)
-            && !next.trim().is_empty()
+    for prepared_line in prepared_cache.iter() {
+        let mut candidates: Vec<(LineNumber, String)> = vec![(
+            prepared_line.line_number,
+            prepared_line.prepared.to_string(),
+        )];
+        if let Some(next) = prepared_cache.line(prepared_line.line_number + 1usize)
+            && !next.prepared.is_empty()
         {
-            candidates.push((ln, format!("{} {}", prepared.trim_end(), next.trim_start())));
+            candidates.push((
+                prepared_line.line_number,
+                format!(
+                    "{} {}",
+                    prepared_line.prepared.trim_end(),
+                    next.prepared.trim_start()
+                ),
+            ));
         }
 
-        for (_ln, candidate) in candidates {
+        for (line_number, candidate) in candidates {
             for cap in DEVELOPED_AT_RE.captures_iter(&candidate) {
                 let holder = cap.name("holder").map(|m| m.as_str()).unwrap_or("").trim();
                 let year = cap.name("year").map(|m| m.as_str()).unwrap_or("").trim();
@@ -2743,14 +2716,14 @@ pub fn extract_developed_at_software_copyrights(
                 let cr = format!("at {holder} copyright (c) {year}");
                 copyrights.push(CopyrightDetection {
                     copyright: cr,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(ln).unwrap(),
+                    start_line: line_number,
+                    end_line: line_number,
                 });
                 let h = holder.to_string();
                 holders.push(HolderDetection {
                     holder: h,
-                    start_line: LineNumber::new(ln).unwrap(),
-                    end_line: LineNumber::new(ln).unwrap(),
+                    start_line: line_number,
+                    end_line: line_number,
                 });
             }
         }
