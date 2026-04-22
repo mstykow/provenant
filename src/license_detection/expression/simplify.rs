@@ -16,27 +16,63 @@ use super::{LicenseExpression, ParseError};
 /// Simplified expression with duplicate and subsumed licenses removed,
 /// using deterministic canonical ordering for boolean operand chains.
 pub fn simplify_expression(expr: &LicenseExpression) -> LicenseExpression {
+    canonicalize_expression(expr, true)
+}
+
+/// Canonicalize a license expression while preserving non-identical operands.
+///
+/// This still flattens boolean chains, removes exact duplicates, and sorts
+/// operands deterministically, but it deliberately avoids absorption such as
+/// `MIT AND (Apache-2.0 OR MIT) -> MIT`.
+pub fn simplify_expression_preserving_structure(expr: &LicenseExpression) -> LicenseExpression {
+    canonicalize_expression(expr, false)
+}
+
+fn canonicalize_expression(
+    expr: &LicenseExpression,
+    prune_subsumed_operands_enabled: bool,
+) -> LicenseExpression {
     match expr {
         LicenseExpression::License(key) => LicenseExpression::License(key.clone()),
         LicenseExpression::LicenseRef(key) => LicenseExpression::LicenseRef(key.clone()),
         LicenseExpression::With { left, right } => LicenseExpression::With {
-            left: Box::new(simplify_expression(left)),
-            right: Box::new(simplify_expression(right)),
+            left: Box::new(canonicalize_expression(
+                left,
+                prune_subsumed_operands_enabled,
+            )),
+            right: Box::new(canonicalize_expression(
+                right,
+                prune_subsumed_operands_enabled,
+            )),
         },
         LicenseExpression::And { .. } => {
             let mut unique = Vec::new();
             let mut seen = HashSet::new();
-            collect_unique_and(expr, &mut unique, &mut seen);
-            prune_subsumed_operands(&mut unique, true);
-            sort_operands_canonically(&mut unique);
+            collect_unique_and(
+                expr,
+                &mut unique,
+                &mut seen,
+                prune_subsumed_operands_enabled,
+            );
+            if prune_subsumed_operands_enabled {
+                prune_subsumed_operands(&mut unique, true);
+                sort_operands_canonically(&mut unique);
+            }
             build_expression_from_list(&unique, true)
         }
         LicenseExpression::Or { .. } => {
             let mut unique = Vec::new();
             let mut seen = HashSet::new();
-            collect_unique_or(expr, &mut unique, &mut seen);
-            prune_subsumed_operands(&mut unique, false);
-            sort_operands_canonically(&mut unique);
+            collect_unique_or(
+                expr,
+                &mut unique,
+                &mut seen,
+                prune_subsumed_operands_enabled,
+            );
+            if prune_subsumed_operands_enabled {
+                prune_subsumed_operands(&mut unique, false);
+                sort_operands_canonically(&mut unique);
+            }
             build_expression_from_list(&unique, false)
         }
     }
@@ -110,14 +146,15 @@ fn collect_unique_and(
     expr: &LicenseExpression,
     unique: &mut Vec<LicenseExpression>,
     seen: &mut HashSet<String>,
+    prune_subsumed_operands_enabled: bool,
 ) {
     match expr {
         LicenseExpression::And { left, right } => {
-            collect_unique_and(left, unique, seen);
-            collect_unique_and(right, unique, seen);
+            collect_unique_and(left, unique, seen, prune_subsumed_operands_enabled);
+            collect_unique_and(right, unique, seen, prune_subsumed_operands_enabled);
         }
         LicenseExpression::Or { .. } => {
-            let simplified = simplify_expression(expr);
+            let simplified = canonicalize_expression(expr, prune_subsumed_operands_enabled);
             let key = expression_to_string(&simplified);
             if !seen.contains(&key) {
                 seen.insert(key);
@@ -126,8 +163,14 @@ fn collect_unique_and(
         }
         LicenseExpression::With { left, right } => {
             let simplified = LicenseExpression::With {
-                left: Box::new(simplify_expression(left)),
-                right: Box::new(simplify_expression(right)),
+                left: Box::new(canonicalize_expression(
+                    left,
+                    prune_subsumed_operands_enabled,
+                )),
+                right: Box::new(canonicalize_expression(
+                    right,
+                    prune_subsumed_operands_enabled,
+                )),
             };
             let key = expression_to_string(&simplified);
             if !seen.contains(&key) {
@@ -154,14 +197,15 @@ fn collect_unique_or(
     expr: &LicenseExpression,
     unique: &mut Vec<LicenseExpression>,
     seen: &mut HashSet<String>,
+    prune_subsumed_operands_enabled: bool,
 ) {
     match expr {
         LicenseExpression::Or { left, right } => {
-            collect_unique_or(left, unique, seen);
-            collect_unique_or(right, unique, seen);
+            collect_unique_or(left, unique, seen, prune_subsumed_operands_enabled);
+            collect_unique_or(right, unique, seen, prune_subsumed_operands_enabled);
         }
         LicenseExpression::And { .. } => {
-            let simplified = simplify_expression(expr);
+            let simplified = canonicalize_expression(expr, prune_subsumed_operands_enabled);
             let key = expression_to_string(&simplified);
             if !seen.contains(&key) {
                 seen.insert(key);
@@ -170,8 +214,14 @@ fn collect_unique_or(
         }
         LicenseExpression::With { left, right } => {
             let simplified = LicenseExpression::With {
-                left: Box::new(simplify_expression(left)),
-                right: Box::new(simplify_expression(right)),
+                left: Box::new(canonicalize_expression(
+                    left,
+                    prune_subsumed_operands_enabled,
+                )),
+                right: Box::new(canonicalize_expression(
+                    right,
+                    prune_subsumed_operands_enabled,
+                )),
             };
             let key = expression_to_string(&simplified);
             if !seen.contains(&key) {
@@ -462,6 +512,7 @@ fn combine_expressions_with(
     expressions: &[&str],
     unique: bool,
     combiner: fn(Vec<LicenseExpression>) -> Option<LicenseExpression>,
+    simplifier: fn(&LicenseExpression) -> LicenseExpression,
 ) -> Result<String, ParseError> {
     if expressions.is_empty() {
         return Ok(String::new());
@@ -469,7 +520,7 @@ fn combine_expressions_with(
     if expressions.len() == 1 {
         let parsed = super::parse::parse_expression(expressions[0])?;
         return Ok(expression_to_string(&if unique {
-            simplify_expression(&parsed)
+            simplifier(&parsed)
         } else {
             parsed
         }));
@@ -484,11 +535,7 @@ fn combine_expressions_with(
 
     match combined {
         Some(expr) => {
-            let final_expr = if unique {
-                simplify_expression(&expr)
-            } else {
-                expr
-            };
+            let final_expr = if unique { simplifier(&expr) } else { expr };
             Ok(expression_to_string(&final_expr))
         }
         None => Ok(String::new()),
@@ -500,7 +547,26 @@ fn combine_expressions_with(
 /// This function parses each expression string, combines them with `AND`, and
 /// optionally deduplicates license keys.
 pub fn combine_expressions_and(expressions: &[&str], unique: bool) -> Result<String, ParseError> {
-    combine_expressions_with(expressions, unique, LicenseExpression::and)
+    combine_expressions_with(
+        expressions,
+        unique,
+        LicenseExpression::and,
+        simplify_expression,
+    )
+}
+
+/// Combine multiple license expressions with `AND` while preserving the
+/// original boolean structure of distinct operands.
+pub fn combine_expressions_and_preserving_structure(
+    expressions: &[&str],
+    unique: bool,
+) -> Result<String, ParseError> {
+    combine_expressions_with(
+        expressions,
+        unique,
+        LicenseExpression::and,
+        simplify_expression_preserving_structure,
+    )
 }
 
 /// Combine multiple license expressions with `OR`.
@@ -509,7 +575,26 @@ pub fn combine_expressions_and(expressions: &[&str], unique: bool) -> Result<Str
 /// optionally deduplicates license keys.
 #[allow(dead_code)]
 pub fn combine_expressions_or(expressions: &[&str], unique: bool) -> Result<String, ParseError> {
-    combine_expressions_with(expressions, unique, LicenseExpression::or)
+    combine_expressions_with(
+        expressions,
+        unique,
+        LicenseExpression::or,
+        simplify_expression,
+    )
+}
+
+/// Combine multiple license expressions with `OR` while preserving the
+/// original boolean structure of distinct operands.
+pub fn combine_expressions_or_preserving_structure(
+    expressions: &[&str],
+    unique: bool,
+) -> Result<String, ParseError> {
+    combine_expressions_with(
+        expressions,
+        unique,
+        LicenseExpression::or,
+        simplify_expression_preserving_structure,
+    )
 }
 
 #[cfg(test)]
@@ -531,6 +616,16 @@ mod tests {
     }
 
     #[test]
+    fn test_simplify_expression_preserving_structure_keeps_distinct_nested_operands() {
+        let expr = super::super::parse::parse_expression("mit AND (apache-2.0 OR mit)").unwrap();
+        let simplified = simplify_expression_preserving_structure(&expr);
+        assert_eq!(
+            expression_to_string(&simplified),
+            "mit AND (apache-2.0 OR mit)"
+        );
+    }
+
+    #[test]
     fn test_simplify_and_duplicates() {
         let expr = super::super::parse::parse_expression("crapl-0.1 AND crapl-0.1").unwrap();
         let simplified = simplify_expression(&expr);
@@ -542,6 +637,14 @@ mod tests {
         let expr = super::super::parse::parse_expression("mit OR mit").unwrap();
         let simplified = simplify_expression(&expr);
         assert_eq!(expression_to_string(&simplified), "mit");
+    }
+
+    #[test]
+    fn test_combine_expressions_and_preserving_structure_keeps_distinct_nested_operands() {
+        let result =
+            combine_expressions_and_preserving_structure(&["mit", "apache-2.0 OR mit"], true)
+                .unwrap();
+        assert_eq!(result, "mit AND (apache-2.0 OR mit)");
     }
 
     #[test]
