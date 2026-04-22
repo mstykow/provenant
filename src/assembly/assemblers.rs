@@ -346,6 +346,12 @@ pub static ASSEMBLERS: &[AssemblerConfig] = &[
         sibling_file_patterns: &["Project.toml", "Manifest.toml"],
         mode: AssemblyMode::SiblingMerge,
     },
+    // Erlang/OTP Rebar ecosystem
+    AssemblerConfig {
+        datasource_ids: &[DatasourceId::RebarConfig, DatasourceId::RebarLock],
+        sibling_file_patterns: &["rebar.config", "rebar.lock"],
+        mode: AssemblyMode::SiblingMerge,
+    },
     // Carthage ecosystem
     AssemblerConfig {
         datasource_ids: &[
@@ -887,6 +893,7 @@ pub static UNASSEMBLED_DATASOURCE_IDS: &[DatasourceId] = &[
     DatasourceId::GoBinary,
     DatasourceId::WindowsExecutable,
     DatasourceId::Dockerfile,
+    DatasourceId::ErlangOtpAppSrc,
     DatasourceId::HexMixLock,
     DatasourceId::JavaEarApplicationXml,
     DatasourceId::JavaWarWebXml,

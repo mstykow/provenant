@@ -180,6 +180,11 @@ pub enum DatasourceId {
     // ── Docker ──
     Dockerfile,
 
+    // ── Erlang / OTP ──
+    ErlangOtpAppSrc,
+    RebarConfig,
+    RebarLock,
+
     // ── FreeBSD ──
     FreebsdCompactManifest,
 
@@ -479,6 +484,9 @@ impl DatasourceId {
             Self::DenoJson => "deno_json",
             Self::DenoLock => "deno_lock",
             Self::Dockerfile => "dockerfile",
+            Self::ErlangOtpAppSrc => "erlang_otp_app_src",
+            Self::RebarConfig => "rebar_config",
+            Self::RebarLock => "rebar_lock",
             Self::BazelModule => "bazel_module",
 
             // FreeBSD

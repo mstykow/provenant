@@ -1,0 +1,9 @@
+{application, lager,
+ [
+  {description, "Erlang logging framework"},
+  {vsn, "3.9.2"},
+  {modules, []},
+  {applications, [kernel, stdlib, goldrush]},
+  {licenses, ["Apache 2"]},
+  {links, [{"Github", "https://github.com/erlang-lager/lager"}]}
+ ]}.

@@ -57,6 +57,8 @@ mod debian_golden_test;
 mod deno_golden_test;
 #[path = "docker_golden_test.rs"]
 mod docker_golden_test;
+#[path = "erlang_otp_golden_test.rs"]
+mod erlang_otp_golden_test;
 #[path = "freebsd_golden_test.rs"]
 mod freebsd_golden_test;
 #[path = "gitmodules_golden_test.rs"]

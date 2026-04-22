@@ -127,6 +127,9 @@ mod docker;
 mod docker_scan_test;
 #[cfg(test)]
 mod docker_test;
+mod erlang_otp;
+#[cfg(test)]
+mod erlang_otp_test;
 mod freebsd;
 #[cfg(test)]
 mod freebsd_scan_test;
@@ -585,6 +588,7 @@ pub use self::debian::{
 pub use self::deno::DenoParser;
 pub use self::deno_lock::DenoLockParser;
 pub use self::docker::DockerfileParser;
+pub use self::erlang_otp::{ErlangAppSrcParser, RebarConfigParser, RebarLockParser};
 pub use self::freebsd::FreebsdCompactManifestParser;
 pub use self::gitmodules::GitmodulesParser;
 pub use self::go::{GoModParser, GoSumParser, GoWorkParser, GodepsParser};
@@ -859,6 +863,9 @@ register_package_handlers! {
         DenoParser,
         DenoLockParser,
         DockerfileParser,
+        ErlangAppSrcParser,
+        RebarConfigParser,
+        RebarLockParser,
         FreebsdCompactManifestParser,
         GemArchiveParser,
         GemfileLockParser,
