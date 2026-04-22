@@ -91,6 +91,9 @@ fn test_refine_author_drops_generic_role_and_prose_fragments() {
     assert_eq!(refine_author("Philip"), None);
     assert_eq!(refine_author("john"), None);
     assert_eq!(refine_author("chunchu"), Some("chunchu".to_string()));
+    assert_eq!(refine_author("chef-client"), None);
+    assert_eq!(refine_author("compatible"), None);
+    assert_eq!(refine_author("desired"), None);
     assert_eq!(refine_author("Guide"), None);
     assert_eq!(refine_author("maintainers with write access"), None);
     assert_eq!(refine_author("schedule and monitor workflows"), None);

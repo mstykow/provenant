@@ -62,3 +62,20 @@ fn test_extract_comment_author_supplements_collects_written_by_and_email_name_fo
         ]
     );
 }
+
+#[test]
+fn test_extract_comment_author_supplements_collects_comment_by_and_docker_maintainer_lines() {
+    let text = "# a2enmod by Stefan Fritsch <sf@debian.org>\n\
+LABEL maintainer=\"Progress Chef <docker@chef.io>\"\n";
+
+    let authors = extract_comment_author_supplements(text);
+    let values: Vec<_> = authors.into_iter().map(|author| author.author).collect();
+
+    assert_eq!(
+        values,
+        vec![
+            "Stefan Fritsch <sf@debian.org>",
+            "Progress Chef <docker@chef.io>",
+        ]
+    );
+}
