@@ -1,9 +1,10 @@
 # Package Detection Benchmarks
 
-> **Status**: 🟢 Canonical package-detection verification reference for recorded `compare-outputs` runs, timing snapshots, and notable Provenant-vs-ScanCode outcomes.
-> **Canonical workflow**: [xtask/README.md](../xtask/README.md#compare-outputs)
+This document records explicit [`compare-outputs`](../xtask/README.md#compare-outputs) runs with high-level timing metrics and notable end-state Provenant-vs-ScanCode outcomes on recorded targets.
 
-This document records explicit `compare-outputs` runs with high-level timing metrics and notable end-state Provenant-vs-ScanCode outcomes on recorded targets.
+These rows are not ad hoc performance snapshots. They are the public record of an iterative compare-review-fix-rerun loop on one concrete target at a time.
+
+Provenant and ScanCode are run on the same repository or artifact with the maintained shared profile, the resulting deltas are reviewed to find where ScanCode is actually better, Provenant is improved with generic fixes and focused regression coverage, and the comparison is rerun until Provenant reaches parity or a justified better result on that target. Each row is therefore a maintained verification checkpoint and a snapshot of one recorded `compare-outputs` run, not a blanket claim about every scan mode, target, or future revision.
 
 ## Scan duration vs. file count
 
@@ -76,14 +77,14 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Files: 246
 - Run context: 2026-04-22 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `12.01s`; ScanCode `87.31s`
-- Matched Chef package and dependency coverage on committed `metadata.rb` surfaces, with fuller Debian-style script-header author capture, cleaner rejection of weak README maintainer prose as an author, and much faster same-host runtime
+- Matched Chef package and dependency coverage on committed `metadata.rb` surfaces, with fuller Debian-style script-header author capture and cleaner rejection of weak README maintainer prose as an author
 
 ##### [sous-chefs/mysql @ 6b7110b](https://github.com/sous-chefs/mysql/tree/6b7110bee2bc64c9149f24d524cbb740387e527a) — **6.45× faster**
 
 - Files: 92
 - Run context: 2026-04-22 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `11.72s`; ScanCode `75.55s`
-- Matched Chef package and dependency coverage on committed `metadata.rb` surfaces, with cleaner rejection of config-word author noise such as `chef-client`, fuller `Author:: Name (<email>)` identity capture, and much faster same-host runtime
+- Matched Chef package and dependency coverage on committed `metadata.rb` surfaces, with cleaner rejection of config-word author noise such as `chef-client` and fuller `Author:: Name (<email>)` identity capture
 
 #### Python / Conda / Pixi
 
@@ -301,14 +302,14 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Files: 122
 - Run context: 2026-04-22 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `11.27s`; ScanCode `104.56s`
-- Matched Bower package and dependency coverage on the repo-root `bower.json`, with datasource-tagged Bower package identity instead of a bare purl-only row, package-level party metadata from `package.json`, and much faster same-host runtime
+- Matched Bower package and dependency coverage on the repo-root `bower.json`, with datasource-tagged Bower package identity instead of a bare purl-only row and package-level party metadata from `package.json`
 
 ##### [jquery/jquery-ui @ eda7aa3](https://github.com/jquery/jquery-ui/tree/eda7aa34fa59d8f764b2164be3e3b7f14639b0db) — **19.49× faster**
 
 - Files: 1,083
 - Run context: 2026-04-22 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `15.56s`; ScanCode `303.29s`
-- Matched Bower package and dependency coverage on the repo-root `bower.json`, with datasource-tagged Bower package identity instead of a bare purl-only row, cleaner Unicode-preserving author normalization across locale files and vendored docs, and much faster same-host runtime
+- Matched Bower package and dependency coverage on the repo-root `bower.json`, with datasource-tagged Bower package identity instead of a bare purl-only row and cleaner Unicode-preserving author normalization across locale files and vendored docs
 
 ##### [metabase/metabase @ 10997b1](https://github.com/metabase/metabase/tree/10997b10908414ab05773b085a56a37fcdebcd1a) — **25.67× faster**
 
@@ -357,7 +358,7 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Files: 704
 - Run context: 2026-04-22 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `12.57s`; ScanCode `146.24s`
-- Matched Bower package and dependency coverage on the repo-root `bower.json`, with datasource-tagged Bower package identity instead of a bare purl-only row, cleaner package-author normalization in `package.json`, and much faster same-host runtime
+- Matched Bower package and dependency coverage on the repo-root `bower.json`, with datasource-tagged Bower package identity instead of a bare purl-only row and cleaner package-author normalization in `package.json`
 
 ##### [vercel/next.js @ 8e5a36f](https://github.com/vercel/next.js/tree/8e5a36f6347528d8968da97262f372f908897bac) — **20.68× faster**
 
@@ -936,14 +937,14 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Files: 446
 - Run context: 2026-04-22 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `10.70s`; ScanCode `135.43s`
-- Matched Haxe package and dependency coverage on the repo-root `haxelib.json`, with compound `LicenseRef-scancode-public-domain AND OFL-1.1` font licensing on `assets/fonts/monsterrat.ttf` instead of split duplicate detections, cleaner URL normalization across docs and snippets, and much faster same-host runtime
+- Matched Haxe package and dependency coverage on the repo-root `haxelib.json`, with compound `LicenseRef-scancode-public-domain AND OFL-1.1` font licensing on `assets/fonts/monsterrat.ttf` instead of split duplicate detections and cleaner URL normalization across docs and snippets
 
 ##### [HeapsIO/heaps @ d2992b0](https://github.com/HeapsIO/heaps/tree/d2992b061db3f51b47cdb87c39d659a5bb96dd83) — **15.91× faster**
 
 - Files: 666
 - Run context: 2026-04-22 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `10.63s`; ScanCode `169.15s`
-- Matched Haxe package and dependency coverage on the repo-root `haxelib.json`, with cleaner copyright and holder recovery on `hxd/fmt/fbx/Writer.hx` and `samples/text_res/trueTypeFont.ttf`, safer trailing-slash URL normalization, and much faster same-host runtime
+- Matched Haxe package and dependency coverage on the repo-root `haxelib.json`, with cleaner copyright and holder recovery on `hxd/fmt/fbx/Writer.hx` and `samples/text_res/trueTypeFont.ttf` plus safer trailing-slash URL normalization
 
 ##### [jgm/pandoc @ d9838eb](https://github.com/jgm/pandoc/tree/d9838eba11ae18216f52e233dbbca735f0f97ccb) — **14.61× faster**
 
@@ -1020,7 +1021,7 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Files: 1,196
 - Run context: 2026-04-22 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `12.77s`; ScanCode `216.36s`
-- Matched Haxe package and dependency coverage on the repo-root `haxelib.json`, with richer bundled Windows executable identity on `assets/templates/bin/openfl.exe`, extra Docker package visibility on `Dockerfile`, cleaner URL normalization across shipped font metadata, and much faster same-host runtime
+- Matched Haxe package and dependency coverage on the repo-root `haxelib.json`, with richer bundled Windows executable identity on `assets/templates/bin/openfl.exe`, extra Docker package visibility on `Dockerfile`, and cleaner URL normalization across shipped font metadata
 
 ##### [univention/Nubus @ fef2258](https://github.com/univention/Nubus/tree/fef2258483c56cce0e1f14e4c8d8fce24d26b891) — **6.84× faster**
 
@@ -1075,7 +1076,7 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Files: 1
 - Run context: 2026-04-23 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `10.09s`; ScanCode `75.84s`
-- Matched standalone Alpine installed-db package and license coverage on the shipped `lib/apk/db/installed` snapshot, with one extra maintainer email recovered from package metadata and much faster same-host runtime
+- Matched standalone Alpine installed-db package and license coverage on the shipped `lib/apk/db/installed` snapshot, with one extra maintainer email recovered from package metadata
 
 ##### [debian:bookworm-slim dpkg DB snapshot @ sha256:f065376](https://hub.docker.com/layers/library/debian/bookworm-slim/images/sha256-f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a) — **8.45× faster**
 
@@ -1096,14 +1097,14 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Files: 3
 - Run context: 2026-04-23 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `10.46s`; ScanCode `169.36s`
-- Direct installed-RPM package and dependency extraction (`127` vs `0` packages, `1831` vs `0` dependencies) from the real Fedora SQLite primary DB plus WAL/SHM companions, with zero scan errors and much faster same-host runtime
+- Direct installed-RPM package and dependency extraction (`127` vs `0` packages, `1831` vs `0` dependencies) from the real Fedora SQLite primary DB plus WAL/SHM companions, with zero scan errors
 
 ##### [openSUSE Tumbleweed rpmdb NDB snapshot @ sha256:25afd25](https://registry.opensuse.org/) — **16.99× faster**
 
 - Files: 2
 - Run context: 2026-04-23 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `10.13s`; ScanCode `172.04s`
-- Direct installed-RPM package and dependency extraction (`123` vs `0` packages, `1460` vs `0` dependencies) from the real openSUSE `Packages.db`/`Index.db` NDB snapshot, with zero scan errors and much faster same-host runtime
+- Direct installed-RPM package and dependency extraction (`123` vs `0` packages, `1460` vs `0` dependencies) from the real openSUSE `Packages.db`/`Index.db` NDB snapshot, with zero scan errors
 
 #### Package archives
 
@@ -1112,7 +1113,7 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Files: 1
 - Run context: 2026-04-23 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `10.06s`; ScanCode `80.82s`
-- Direct Alpine archive package visibility on the shipped `.apk` (`1` vs `1` file-level package records), with a concrete `pkg:alpine/7zip@25.01-r0?arch=x86_64` identity instead of ScanCode's weaker generic package-data row and much faster same-host runtime
+- Direct Alpine archive package visibility on the shipped `.apk` (`1` vs `1` file-level package records), with a concrete `pkg:alpine/7zip@25.01-r0?arch=x86_64` identity instead of ScanCode's weaker generic package-data row
 
 ##### [bash 5.2.15-2+b10 .deb @ sha256:be3ab2f](https://deb.debian.org/debian/pool/main/b/bash/bash_5.2.15-2%2Bb10_amd64.deb) — **3.02× faster**
 
@@ -1133,7 +1134,7 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Files: 1
 - Run context: 2026-04-23 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `9.81s`; ScanCode `70.01s`
-- Matched FreeBSD package-manifest package coverage (`1` vs `1`) on the `+COMPACT_MANIFEST` extracted from the shipped `.pkg`, with normalized `MIT` declared-license reporting instead of a raw manifest-license structure, plus much faster same-host runtime
+- Matched FreeBSD package-manifest package coverage (`1` vs `1`) on the `+COMPACT_MANIFEST` extracted from the shipped `.pkg`, with normalized `MIT` declared-license reporting instead of a raw manifest-license structure
 
 ##### [Humanizer.Core 3.0.10 .nupkg @ sha256:99f9521](https://api.nuget.org/v3-flatcontainer/humanizer.core/3.0.10/humanizer.core.3.0.10.nupkg) — **4.55× slower**
 
@@ -1147,7 +1148,7 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Files: 1
 - Run context: 2026-04-23 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `9.60s`; ScanCode `74.17s`
-- Matched FreeBSD package-manifest package coverage (`1` vs `1`) on the `+COMPACT_MANIFEST` extracted from the shipped `.pkg`, with normalized `BSD-2-Clause` declared-license reporting where ScanCode leaves the package license unknown, plus much faster same-host runtime
+- Matched FreeBSD package-manifest package coverage (`1` vs `1`) on the `+COMPACT_MANIFEST` extracted from the shipped `.pkg`, with normalized `BSD-2-Clause` declared-license reporting where ScanCode leaves the package license unknown
 
 ##### [python-construct 2.10.70-6 .PKGINFO from Arch package @ sha256:2020ae3](https://archlinux.org/packages/extra/any/python-construct/) — **7.01× faster**
 
@@ -1193,14 +1194,14 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Files: 1
 - Run context: 2026-04-23 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `10.27s`; ScanCode `74.17s`
-- Equivalent Mozilla XPI package visibility on the shipped Firefox language-pack artifact, with much faster same-host runtime
+- Equivalent Mozilla XPI package visibility on the shipped Firefox language-pack artifact
 
 ##### [Firefox Multi-Account Containers 8.3.7 .xpi](https://addons.mozilla.org/en-US/firefox/addon/multi-account-containers/) — **7.22× faster**
 
 - Files: 1
 - Run context: 2026-04-23 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `10.11s`; ScanCode `73.02s`
-- Equivalent Mozilla XPI package visibility on the shipped Firefox add-on artifact, with much faster same-host runtime
+- Equivalent Mozilla XPI package visibility on the shipped Firefox add-on artifact
 
 ##### [glzr-io/glazewm v3.10.1 Windows snapshot](https://github.com/glzr-io/glazewm/releases/tag/v3.10.1) — **2.77× faster**
 
