@@ -10,6 +10,7 @@
   "includePaths": [
     "Cargo.toml",
     "Cargo.lock",
+    "tools/license-headers/Cargo.toml",
     "xtask/Cargo.toml",
     "package.json",
     "package-lock.json",
