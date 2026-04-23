@@ -28,7 +28,8 @@ use crate::scan_result_shaping::{
     trim_preloaded_assembly_to_files,
 };
 use crate::scanner::{
-    LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected_with_memory_limit,
+    CollectionFrontier, LicenseScanOptions, TextDetectionOptions, collect_paths,
+    collect_selected_paths, process_collected_with_memory_limit,
     process_collected_with_memory_limit_sequential, scan_options_fingerprint,
 };
 use crate::time::format_scancode_timestamp;
@@ -135,8 +136,12 @@ pub fn run() -> Result<()> {
             None,
         )
     } else {
-        let (scan_path, selected_paths, missing_paths_file_entries) =
-            resolve_native_scan_selection(&cli)?;
+        let NativeScanSelection {
+            scan_path,
+            selected_paths,
+            collection_frontier,
+            missing_entries: missing_paths_file_entries,
+        } = resolve_native_scan_selection(&cli)?;
         let paths_file_warnings = build_paths_file_warning_messages(&missing_paths_file_entries);
         for warning in &paths_file_warnings {
             progress.output_written(warning);
@@ -148,7 +153,16 @@ pub fn run() -> Result<()> {
         let collection_exclude_patterns =
             build_collection_exclude_patterns(Path::new(&scan_path), cache_config.root_dir());
 
-        let mut collected = collect_paths(&scan_path, cli.max_depth, &collection_exclude_patterns);
+        let mut collected = if cli.paths_file.is_empty() {
+            collect_paths(&scan_path, cli.max_depth, &collection_exclude_patterns)
+        } else {
+            collect_selected_paths(
+                Path::new(&scan_path),
+                &collection_frontier,
+                cli.max_depth,
+                &collection_exclude_patterns,
+            )
+        };
         let user_excluded_count = apply_user_path_filters_to_collected(
             &mut collected,
             Path::new(&scan_path),
@@ -651,10 +665,23 @@ fn touch_license_golden_symbols() {
     let _ = crate::license_detection::LicenseDetectionEngine::detect_matches_with_kind;
 }
 
-fn resolve_native_scan_selection(cli: &Cli) -> Result<(String, Vec<SelectedPath>, Vec<String>)> {
+#[derive(Debug)]
+struct NativeScanSelection {
+    scan_path: String,
+    selected_paths: Vec<SelectedPath>,
+    collection_frontier: Vec<CollectionFrontier>,
+    missing_entries: Vec<String>,
+}
+
+fn resolve_native_scan_selection(cli: &Cli) -> Result<NativeScanSelection> {
     if cli.paths_file.is_empty() {
         let (scan_path, selected_paths) = resolve_native_scan_inputs(&cli.dir_path)?;
-        return Ok((scan_path, selected_paths, Vec::new()));
+        return Ok(NativeScanSelection {
+            scan_path,
+            selected_paths,
+            collection_frontier: Vec::new(),
+            missing_entries: Vec::new(),
+        });
     }
 
     let scan_path = cli
@@ -671,7 +698,12 @@ fn resolve_native_scan_selection(cli: &Cli) -> Result<(String, Vec<SelectedPath>
         ));
     }
 
-    Ok((scan_path, resolved.selections, resolved.missing_entries))
+    Ok(NativeScanSelection {
+        scan_path,
+        selected_paths: resolved.selections,
+        collection_frontier: resolved.frontier,
+        missing_entries: resolved.missing_entries,
+    })
 }
 
 fn load_paths_file_entries(paths_files: &[String]) -> Result<Vec<String>> {

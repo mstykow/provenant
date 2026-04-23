@@ -107,7 +107,9 @@ pub fn scan_options_fingerprint(
     )
 }
 
-pub use self::collect::{CollectedPaths, collect_paths};
+pub use self::collect::{
+    CollectedPaths, CollectionFrontier, collect_paths, collect_selected_paths,
+};
 #[allow(unused_imports)]
 pub use self::process::{
     MemoryMode, process_collected, process_collected_sequential,
@@ -122,13 +124,15 @@ mod tests {
 
     use tempfile::TempDir;
 
+    use crate::cache::build_collection_exclude_patterns;
     use crate::license_detection::LicenseDetectionEngine;
     use crate::models::{DatasourceId, FileType, PackageType as FilePackageType};
     use crate::progress::{ProgressMode, ScanProgress};
 
     use super::{
-        LicenseScanOptions, MemoryMode, TextDetectionOptions, collect_paths, process_collected,
-        process_collected_with_memory_limit, scan_options_fingerprint,
+        CollectionFrontier, LicenseScanOptions, MemoryMode, TextDetectionOptions, collect_paths,
+        collect_selected_paths, process_collected, process_collected_with_memory_limit,
+        scan_options_fingerprint,
     };
 
     fn build_sparse_oversized_rpm_with_filename(
@@ -1837,6 +1841,87 @@ mod tests {
         assert_eq!(collected.files.len(), 1);
         assert!(collected.directories.is_empty());
         assert_eq!(collected.files[0].0, file_path);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn collect_selected_paths_does_not_walk_unselected_siblings() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let root = temp_dir.path();
+        fs::create_dir_all(root.join("selected/docs")).expect("create selected dir");
+        fs::create_dir_all(root.join("blocked/secret")).expect("create blocked dir");
+        fs::write(root.join("selected/docs/guide.md"), "# guide\n").expect("write guide");
+
+        let blocked = root.join("blocked");
+        let mut perms = fs::metadata(&blocked)
+            .expect("blocked metadata")
+            .permissions();
+        perms.set_mode(0o000);
+        fs::set_permissions(&blocked, perms).expect("remove blocked permissions");
+
+        let collected = collect_selected_paths(
+            root,
+            &[CollectionFrontier {
+                path: PathBuf::from("selected"),
+                recurse: true,
+            }],
+            0,
+            &[],
+        );
+
+        let mut restore = fs::metadata(&blocked)
+            .expect("blocked metadata")
+            .permissions();
+        restore.set_mode(0o755);
+        fs::set_permissions(&blocked, restore).expect("restore blocked permissions");
+
+        assert!(
+            collected.collection_errors.is_empty(),
+            "{:#?}",
+            collected.collection_errors
+        );
+        assert!(
+            collected
+                .files
+                .iter()
+                .any(|(path, _)| path == &root.join("selected/docs/guide.md"))
+        );
+        assert!(
+            collected
+                .files
+                .iter()
+                .all(|(path, _): &(PathBuf, fs::Metadata)| !path.starts_with(&blocked))
+        );
+    }
+
+    #[test]
+    fn collect_selected_paths_respects_excluded_ancestor_directories() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let root = temp_dir.path();
+        fs::create_dir_all(root.join(".git")).expect("create git dir");
+        fs::write(
+            root.join(".git/config"),
+            "[core]\nrepositoryformatversion = 0\n",
+        )
+        .expect("write git config");
+
+        let exclude_patterns =
+            build_collection_exclude_patterns(root, &root.join(".provenant-cache"));
+        let collected = collect_selected_paths(
+            root,
+            &[CollectionFrontier {
+                path: PathBuf::from(".git/config"),
+                recurse: false,
+            }],
+            0,
+            &exclude_patterns,
+        );
+
+        assert!(collected.files.is_empty());
+        assert!(collected.directories.iter().all(|(path, _)| path == root));
+        assert_eq!(collected.excluded_count, 1);
     }
 
     #[test]
