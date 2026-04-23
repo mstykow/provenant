@@ -80,6 +80,9 @@ ScanCode: 4.22s</title></rect>
     <rect x="92.00" y="429.37" width="8" height="8" fill="#d97706" rx="1.5"><title>bash 5.2.15-2+b10 .deb @ sha256:be3ab2f
 Files: 1
 ScanCode: 66.94s</title></rect>
+    <rect x="92.00" y="426.80" width="8" height="8" fill="#d97706" rx="1.5"><title>python-construct 1:2.10.68-3 .PKGINFO sample
+Files: 1
+ScanCode: 70.67s</title></rect>
     <rect x="92.00" y="424.87" width="8" height="8" fill="#d97706" rx="1.5"><title>rubocop 1.86.1 .gem @ sha256:44415f3
 Files: 1
 ScanCode: 73.62s</title></rect>
@@ -98,6 +101,12 @@ ScanCode: 68.91s</title></rect>
     <rect x="167.70" y="415.71" width="8" height="8" fill="#d97706" rx="1.5"><title>lichess-org/fishnet v2.13.2 macOS arm64 snapshot @ sha256:8556a4d
 Files: 3
 ScanCode: 89.38s</title></rect>
+    <rect x="215.47" y="425.14" width="8" height="8" fill="#d97706" rx="1.5"><title>archlinux/packaging/packages/grep @ 29d2e10
+Files: 6
+ScanCode: 73.20s</title></rect>
+    <rect x="263.23" y="423.19" width="8" height="8" fill="#d97706" rx="1.5"><title>archlinux/packaging/packages/pacman @ 4ee8983
+Files: 12
+ScanCode: 76.28s</title></rect>
     <rect x="283.05" y="425.90" width="8" height="8" fill="#d97706" rx="1.5"><title>univention/Nubus @ fef2258
 Files: 16
 ScanCode: 72.03s</title></rect>
@@ -541,6 +550,9 @@ Provenant: 19.19s</title></circle>
     <circle cx="96.00" cy="485.54" r="4.5" fill="#2563eb"><title>bash 5.2.15-2+b10 .deb @ sha256:be3ab2f
 Files: 1
 Provenant: 22.19s</title></circle>
+    <circle cx="96.00" cy="523.77" r="4.5" fill="#2563eb"><title>python-construct 1:2.10.68-3 .PKGINFO sample
+Files: 1
+Provenant: 9.88s</title></circle>
     <circle cx="96.00" cy="490.88" r="4.5" fill="#2563eb"><title>rubocop 1.86.1 .gem @ sha256:44415f3
 Files: 1
 Provenant: 19.82s</title></circle>
@@ -559,6 +571,12 @@ Provenant: 24.89s</title></circle>
     <circle cx="171.70" cy="481.40" r="4.5" fill="#2563eb"><title>lichess-org/fishnet v2.13.2 macOS arm64 snapshot @ sha256:8556a4d
 Files: 3
 Provenant: 24.22s</title></circle>
+    <circle cx="219.47" cy="521.94" r="4.5" fill="#2563eb"><title>archlinux/packaging/packages/grep @ 29d2e10
+Files: 6
+Provenant: 10.27s</title></circle>
+    <circle cx="267.23" cy="516.64" r="4.5" fill="#2563eb"><title>archlinux/packaging/packages/pacman @ 4ee8983
+Files: 12
+Provenant: 11.49s</title></circle>
     <circle cx="287.05" cy="520.76" r="4.5" fill="#2563eb"><title>univention/Nubus @ fef2258
 Files: 16
 Provenant: 10.53s</title></circle>
