@@ -74,9 +74,18 @@ ScanCode: 75.84s</title></rect>
     <rect x="92.00" y="427.72" width="8" height="8" fill="#d97706" rx="1.5"><title>Fedora 38 rpmdb NDB snapshot (synthetic from sqlite fixture)
 Files: 1
 ScanCode: 69.31s</title></rect>
+    <rect x="92.00" y="425.26" width="8" height="8" fill="#d97706" rx="1.5"><title>Firefox Multi-Account Containers 8.3.7 .xpi
+Files: 1
+ScanCode: 73.02s</title></rect>
+    <rect x="92.00" y="424.52" width="8" height="8" fill="#d97706" rx="1.5"><title>Firefox langpack en-GB 141.0.2 .xpi
+Files: 1
+ScanCode: 74.17s</title></rect>
     <rect x="92.00" y="559.97" width="8" height="8" fill="#d97706" rx="1.5"><title>Humanizer.Core 3.0.10 .nupkg @ sha256:99f9521
 Files: 1
 ScanCode: 4.22s</title></rect>
+    <rect x="92.00" y="422.38" width="8" height="8" fill="#d97706" rx="1.5"><title>NSIS 3.12 setup.exe
+Files: 1
+ScanCode: 77.60s</title></rect>
     <rect x="92.00" y="429.37" width="8" height="8" fill="#d97706" rx="1.5"><title>bash 5.2.15-2+b10 .deb @ sha256:be3ab2f
 Files: 1
 ScanCode: 66.94s</title></rect>
@@ -248,6 +257,9 @@ ScanCode: 170.19s</title></rect>
     <rect x="535.39" y="374.38" width="8" height="8" fill="#d97706" rx="1.5"><title>processone/ejabberd @ 87475d8
 Files: 623
 ScanCode: 214.30s</title></rect>
+    <rect x="537.57" y="381.59" width="8" height="8" fill="#d97706" rx="1.5"><title>Apache Tomcat 10.1.52 extracted release snapshot
+Files: 643
+ScanCode: 184.01s</title></rect>
     <rect x="538.84" y="376.84" width="8" height="8" fill="#d97706" rx="1.5"><title>rpm-software-management/dnf @ e47634f
 Files: 655
 ScanCode: 203.47s</title></rect>
@@ -544,9 +556,18 @@ Provenant: 10.09s</title></circle>
     <circle cx="96.00" cy="526.58" r="4.5" fill="#2563eb"><title>Fedora 38 rpmdb NDB snapshot (synthetic from sqlite fixture)
 Files: 1
 Provenant: 9.31s</title></circle>
+    <circle cx="96.00" cy="522.68" r="4.5" fill="#2563eb"><title>Firefox Multi-Account Containers 8.3.7 .xpi
+Files: 1
+Provenant: 10.11s</title></circle>
+    <circle cx="96.00" cy="521.94" r="4.5" fill="#2563eb"><title>Firefox langpack en-GB 141.0.2 .xpi
+Files: 1
+Provenant: 10.27s</title></circle>
     <circle cx="96.00" cy="492.40" r="4.5" fill="#2563eb"><title>Humanizer.Core 3.0.10 .nupkg @ sha256:99f9521
 Files: 1
 Provenant: 19.19s</title></circle>
+    <circle cx="96.00" cy="490.35" r="4.5" fill="#2563eb"><title>NSIS 3.12 setup.exe
+Files: 1
+Provenant: 20.04s</title></circle>
     <circle cx="96.00" cy="485.54" r="4.5" fill="#2563eb"><title>bash 5.2.15-2+b10 .deb @ sha256:be3ab2f
 Files: 1
 Provenant: 22.19s</title></circle>
@@ -718,6 +739,9 @@ Provenant: 12.53s</title></circle>
     <circle cx="539.39" cy="498.86" r="4.5" fill="#2563eb"><title>processone/ejabberd @ 87475d8
 Files: 623
 Provenant: 16.74s</title></circle>
+    <circle cx="541.57" cy="497.30" r="4.5" fill="#2563eb"><title>Apache Tomcat 10.1.52 extracted release snapshot
+Files: 643
+Provenant: 17.30s</title></circle>
     <circle cx="542.84" cy="506.07" r="4.5" fill="#2563eb"><title>rpm-software-management/dnf @ e47634f
 Files: 655
 Provenant: 14.37s</title></circle>
