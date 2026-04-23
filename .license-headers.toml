@@ -9,6 +9,7 @@ include = [
   "src/**/*.rs",
   "tests/**/*.rs",
   "xtask/src/**/*.rs",
+  "tools/license-headers/src/**/*.rs",
   "build_support/**/*.rs",
   "scripts/**/*.sh",
   ".github/workflows/**/*.yml",
