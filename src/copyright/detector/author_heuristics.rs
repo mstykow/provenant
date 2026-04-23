@@ -957,10 +957,7 @@ pub(super) fn extract_author_colon_blocks(
         let mut next_line_number = prepared_line.line_number.next();
         let mut added = 0usize;
         if !single_line_original_or_primary || collect_following_original_authors {
-            loop {
-                let Some(next_prepared) = prepared_cache.line(next_line_number) else {
-                    break;
-                };
+            while let Some(next_prepared) = prepared_cache.line(next_line_number) {
                 let next_line_buf = trim_author_label_prefix(next_prepared.prepared);
                 let next_line = next_line_buf.as_str();
                 if next_line.is_empty() {
