@@ -3,9 +3,11 @@
 
 use super::{
     LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES, cap_non_source_json_license_text,
-    maybe_record_processing_timeout, process_file,
+    maybe_record_processing_timeout, merge_parse_results, process_file,
 };
-use crate::models::{DiagnosticSeverity, ScanDiagnostic};
+use crate::models::DatasourceId;
+use crate::models::{DiagnosticSeverity, PackageData, PackageType, ScanDiagnostic};
+use crate::parsers::ParsePackagesResult;
 use crate::progress::{ProgressMode, ScanProgress};
 use crate::scanner::{LicenseScanOptions, TextDetectionOptions};
 use crate::utils::file::FileInfoClassification;
@@ -158,6 +160,45 @@ fn test_cap_non_source_json_license_text_keeps_npm_shrinkwrap_intact() {
     );
 
     assert_eq!(capped.as_ref(), large_json);
+}
+
+#[test]
+fn test_merge_parse_results_keeps_multiple_package_surfaces() {
+    let misc = ParsePackagesResult {
+        packages: vec![PackageData {
+            package_type: Some(PackageType::Nsis),
+            datasource_id: Some(DatasourceId::NsisInstaller),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let winexe = ParsePackagesResult {
+        packages: vec![PackageData {
+            package_type: Some(PackageType::Winexe),
+            datasource_id: Some(DatasourceId::WindowsExecutable),
+            ..Default::default()
+        }],
+        scan_diagnostics: vec![ScanDiagnostic::error("windows metadata warning")],
+        scan_errors: vec!["windows metadata warning".to_string()],
+    };
+
+    let merged = merge_parse_results(vec![misc, winexe]).expect("merged parse result");
+
+    assert_eq!(merged.packages.len(), 2);
+    assert!(
+        merged
+            .packages
+            .iter()
+            .any(|pkg| pkg.datasource_id == Some(DatasourceId::NsisInstaller))
+    );
+    assert!(
+        merged
+            .packages
+            .iter()
+            .any(|pkg| pkg.datasource_id == Some(DatasourceId::WindowsExecutable))
+    );
+    assert_eq!(merged.scan_diagnostics.len(), 1);
+    assert_eq!(merged.scan_errors, vec!["windows metadata warning"]);
 }
 
 #[test]
