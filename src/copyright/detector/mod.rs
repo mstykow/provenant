@@ -28,9 +28,11 @@ use super::line_tracking::{LineNumberIndex, PreparedLineCache};
 use super::parser::{parse, parse_with_deadline};
 #[cfg(test)]
 use super::refiner::{refine_copyright, refine_holder_in_copyright_context};
-use super::types::{AuthorDetection, CopyrightDetection, HolderDetection, PosTag, TreeLabel};
 #[cfg(test)]
-use super::types::{ParseNode, Token};
+use super::types::Token;
+use super::types::{
+    AuthorDetection, CopyrightDetection, HolderDetection, ParseNode, PosTag, TreeLabel,
+};
 
 const NON_COPYRIGHT_LABELS: &[TreeLabel] = &[];
 const NON_HOLDER_LABELS: &[TreeLabel] = &[TreeLabel::YrRange, TreeLabel::YrAnd];
@@ -78,6 +80,55 @@ const NON_COPYRIGHT_POS_TAGS: &[PosTag] = &[];
 
 static NOT_COPYRIGHTED_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)\bnot\s+copyrighted\b").unwrap());
+
+#[derive(Default)]
+struct TreeAnalysis {
+    has_copy_like_token: bool,
+    has_authorish_boundary_token: bool,
+    has_year_token: bool,
+    single_line: Option<usize>,
+    is_single_line_group: bool,
+}
+
+fn analyze_tree(nodes: &[ParseNode]) -> TreeAnalysis {
+    fn visit(node: &ParseNode, analysis: &mut TreeAnalysis) {
+        match node {
+            ParseNode::Leaf(token) => {
+                analysis.has_copy_like_token |=
+                    matches!(token.tag, PosTag::Copy | PosTag::SpdxContrib);
+                analysis.has_authorish_boundary_token |= matches!(
+                    token.tag,
+                    PosTag::Auths | PosTag::AuthDot | PosTag::Contributors | PosTag::Commit
+                );
+                analysis.has_year_token |=
+                    matches!(token.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr);
+
+                let line = token.start_line.get();
+                match analysis.single_line {
+                    Some(existing) if existing != line => analysis.is_single_line_group = false,
+                    None => analysis.single_line = Some(line),
+                    _ => {}
+                }
+            }
+            ParseNode::Tree { children, .. } => {
+                for child in children {
+                    visit(child, analysis);
+                }
+            }
+        }
+    }
+
+    let mut analysis = TreeAnalysis {
+        is_single_line_group: true,
+        ..TreeAnalysis::default()
+    };
+
+    for node in nodes {
+        visit(node, &mut analysis);
+    }
+
+    analysis
+}
 
 /// Returns a tuple of (copyrights, holders, authors).
 pub fn detect_copyrights_from_text(
@@ -153,6 +204,7 @@ pub fn detect_copyrights_from_text_with_deadline(
                 Some(TreeLabel::Copyright) | Some(TreeLabel::Copyright2) | Some(TreeLabel::Author)
             )
         });
+        let analysis = analyze_tree(&tree);
 
         if has_top_level_nodes {
             let (new_c, new_h, new_a) =
@@ -171,38 +223,10 @@ pub fn detect_copyrights_from_text_with_deadline(
                 authors.push(det);
             }
 
-            let has_copy_like_token = tree
-                .iter()
-                .flat_map(collect_all_leaves)
-                .any(|t| matches!(t.tag, PosTag::Copy | PosTag::SpdxContrib));
-
-            let has_authorish_boundary_token = tree.iter().flat_map(collect_all_leaves).any(|t| {
-                matches!(
-                    t.tag,
-                    PosTag::Auths | PosTag::AuthDot | PosTag::Contributors | PosTag::Commit
-                )
-            });
-
-            let is_single_line_group = {
-                let mut line: Option<usize> = None;
-                let mut ok = true;
-                for t in tree.iter().flat_map(collect_all_leaves) {
-                    if let Some(existing) = line {
-                        if existing != t.start_line.get() {
-                            ok = false;
-                            break;
-                        }
-                    } else {
-                        line = Some(t.start_line.get());
-                    }
-                }
-                ok
-            };
-
             if copyrights.len() == copyrights_before
-                && has_copy_like_token
-                && has_authorish_boundary_token
-                && is_single_line_group
+                && analysis.has_copy_like_token
+                && analysis.has_authorish_boundary_token
+                && analysis.is_single_line_group
             {
                 let (new_c, new_h) = extract_bare_copyrights(&tree);
                 seen.register_copyrights(&new_c);
@@ -217,11 +241,10 @@ pub fn detect_copyrights_from_text_with_deadline(
                 holders.extend(new_h);
             }
 
-            let has_year_token = tree
-                .iter()
-                .flat_map(collect_all_leaves)
-                .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
-            if copyrights.len() == copyrights_before && has_copy_like_token && has_year_token {
+            if copyrights.len() == copyrights_before
+                && analysis.has_copy_like_token
+                && analysis.has_year_token
+            {
                 let (new_c, new_h) =
                     extract_copyrights_from_spans(&tree, allow_not_copyrighted_prefix);
                 seen.register_copyrights(&new_c);
@@ -364,9 +387,9 @@ use postprocess_transforms::{
     extend_w3c_registered_org_list_suffixes, refine_final_copyrights,
     restore_linux_foundation_copyrights_from_raw_lines,
 };
+pub(super) use token_utils::collect_all_leaves;
 use token_utils::{
-    apply_written_by_for_markers, collect_all_leaves,
-    drop_path_fragment_holders_from_bare_c_code_lines,
+    apply_written_by_for_markers, drop_path_fragment_holders_from_bare_c_code_lines,
     drop_scan_only_holders_from_copyright_scan_lines,
     extract_original_author_additional_contributors,
 };
