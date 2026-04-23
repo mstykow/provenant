@@ -4760,6 +4760,53 @@ fn test_readme_security_review_prose_not_author() {
 }
 
 #[test]
+fn test_tomcat_html_doc_prose_not_author() {
+    let input = "the order defined by the DTD (see Section 13.3).</p>";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_tomcat_contributing_prose_not_author() {
+    let input = "time as all committers are volunteers on the project. If a significant amount";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_tomcat_footer_trademark_line_not_absorbed_into_copyright() {
+    let input = "Copyright (c) 1999-2026, The Apache Software Foundation\nApache Tomcat, Tomcat, Apache, the Apache Tomcat logo and the Apache logo\nare either registered trademarks or trademarks of the Apache Software Foundation.";
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
+
+    assert!(
+        copyrights
+            .iter()
+            .any(|c| c.copyright == "Copyright (c) 1999-2026, The Apache Software Foundation"),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        !copyrights.iter().any(|c| c
+            .copyright
+            .contains("Apache Tomcat, Tomcat, Apache, the Apache Tomcat")),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        holders
+            .iter()
+            .any(|h| h.holder == "The Apache Software Foundation"),
+        "holders: {holders:?}"
+    );
+    assert!(
+        !holders.iter().any(|h| h
+            .holder
+            .contains("Apache Tomcat, Tomcat, Apache, the Apache Tomcat")),
+        "holders: {holders:?}"
+    );
+}
+
+#[test]
 fn test_update_center_metadata_blob_not_multiple_authors() {
     let input = "author: Box UK, url: http://updates.jenkins-ci.org/download/plugins/jslint/0.7.6/jslint.hpi, version: 0.7.6, wiki: https://wiki.jenkins-ci.org/display/JENKINS/JSLint+plugin, title: JSLint plugin, buildDate: Jan 03, 2013, developerId: gavd";
     let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);

@@ -36,6 +36,127 @@ pub fn refine_final_copyrights(copyrights: &mut Vec<CopyrightDetection>) {
         .collect();
 }
 
+pub fn refine_final_authors(authors: &mut Vec<AuthorDetection>) {
+    if authors.is_empty() {
+        return;
+    }
+
+    *authors = authors
+        .iter()
+        .filter_map(|a| {
+            let author = if let Some(author) = refine_author(&a.author) {
+                author
+            } else if looks_like_collective_institution_author(&a.author) {
+                a.author.trim().to_string()
+            } else {
+                return None;
+            };
+            Some(AuthorDetection {
+                author,
+                start_line: a.start_line,
+                end_line: a.end_line,
+            })
+        })
+        .collect();
+}
+
+fn looks_like_collective_institution_author(author: &str) -> bool {
+    let trimmed = author.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if !lower.starts_with("the ") {
+        return false;
+    }
+
+    let uppercase_word_count = trimmed
+        .split_whitespace()
+        .filter(|word| {
+            word.chars()
+                .find(|ch| ch.is_alphabetic())
+                .is_some_and(|ch| ch.is_uppercase())
+        })
+        .count();
+
+    uppercase_word_count >= 2
+        && (lower.contains(" at the ") || lower.contains(" of the ") || trimmed.contains(". "))
+}
+
+fn is_trademark_boilerplate_line(line: &str) -> bool {
+    let lower = line.to_ascii_lowercase();
+    (lower.contains("trademark") && lower.contains("logo"))
+        || lower.contains(" the apache tomcat logo")
+        || lower.contains(" the apache logo")
+        || lower.contains(" logo and the ")
+        || lower.contains("registered trademarks or trademarks")
+}
+
+pub fn drop_trademark_boilerplate_multiline_extensions(
+    raw_lines: &[&str],
+    copyrights: &mut [CopyrightDetection],
+    holders: &mut [HolderDetection],
+) {
+    if raw_lines.is_empty() {
+        return;
+    }
+
+    for copyright in copyrights.iter_mut() {
+        if copyright.start_line == copyright.end_line {
+            continue;
+        }
+
+        let start = copyright.start_line.get();
+        let end = copyright.end_line.get();
+        if start == 0 || end == 0 || end > raw_lines.len() || start > raw_lines.len() {
+            continue;
+        }
+
+        let continuation_has_trademark_boilerplate = raw_lines[start..end]
+            .iter()
+            .map(|line| line.trim())
+            .any(is_trademark_boilerplate_line);
+        if !continuation_has_trademark_boilerplate {
+            continue;
+        }
+
+        let Some(first_line) = raw_lines.get(start - 1).map(|line| line.trim()) else {
+            continue;
+        };
+        let Some(refined) = refine_copyright(first_line) else {
+            continue;
+        };
+        copyright.copyright = refined;
+        copyright.end_line = copyright.start_line;
+    }
+
+    for holder in holders.iter_mut() {
+        if holder.start_line == holder.end_line {
+            continue;
+        }
+
+        let start = holder.start_line.get();
+        let end = holder.end_line.get();
+        if start == 0 || end == 0 || end > raw_lines.len() || start > raw_lines.len() {
+            continue;
+        }
+
+        let continuation_has_trademark_boilerplate = raw_lines[start..end]
+            .iter()
+            .map(|line| line.trim())
+            .any(is_trademark_boilerplate_line);
+        if !continuation_has_trademark_boilerplate {
+            continue;
+        }
+
+        let Some(first_line) = raw_lines.get(start - 1).map(|line| line.trim()) else {
+            continue;
+        };
+        let Some(refined) = derive_holder_from_simple_copyright_string(first_line) else {
+            continue;
+        };
+        holder.holder = refined;
+        holder.end_line = holder.start_line;
+    }
+}
+
 fn strip_trailing_license_tail(s: &str) -> Option<String> {
     let lower = s.to_ascii_lowercase();
     if !(lower.contains("/license")
@@ -3996,6 +4117,9 @@ pub fn extend_multiline_copyright_c_year_holder_continuations(
         LazyLock::new(|| Regex::new(r"\([A-Z0-9]{2,}\)").expect("valid acronym parens regex"));
 
     fn looks_like_holder_continuation(line: &str) -> bool {
+        if is_trademark_boilerplate_line(line) {
+            return false;
+        }
         let starts_upper = line.chars().next().is_some_and(|c| c.is_ascii_uppercase());
         if !starts_upper {
             return false;
@@ -4050,6 +4174,7 @@ pub fn extend_multiline_copyright_c_year_holder_continuations(
             if lower.contains("copyright")
                 || lower.starts_with("all rights")
                 || lower.starts_with("reserved")
+                || is_trademark_boilerplate_line(cont)
             {
                 break;
             }
