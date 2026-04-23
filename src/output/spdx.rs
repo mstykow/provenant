@@ -76,8 +76,7 @@ pub(crate) fn write_spdx_tag_value(
     writeln!(writer, "PackageCopyrightText: {}", package_copyright_text)?;
     writeln!(writer, "## File Information")?;
 
-    let mut file_index = 1usize;
-    for file in files {
+    for (file_index, file) in (1usize..).zip(files) {
         let sha1 = file.sha1.as_deref().unwrap_or(EMPTY_SHA1_HEX);
         let file_license_info = spdx_file_license_info(file);
         writeln!(writer, "FileName: ./{}", file.path)?;
@@ -105,7 +104,6 @@ pub(crate) fn write_spdx_tag_value(
         }
 
         writeln!(writer)?;
-        file_index += 1;
     }
 
     if !extracted_license_infos.is_empty() {
