@@ -9,17 +9,17 @@
 //!
 //! Pipeline: numbered lines → tokenize → POS tag → tagged tokens
 
-use std::sync::LazyLock;
-
 use regex::Regex;
 
-use super::patterns::COMPILED_PATTERNS;
+use super::patterns::match_token_thread_local;
 use super::types::{PosTag, Token};
 use crate::models::LineNumber;
 
-/// Splitter regex: splits on tabs, spaces, equals signs, and semicolons.
-/// Matches Python's `re.compile(r'[\t =;]+').split`.
-static SPLITTER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[\t =;]+").unwrap());
+// Splitter regex: splits on tabs, spaces, equals signs, and semicolons.
+// Matches Python's `re.compile(r'[\t =;]+').split`.
+thread_local! {
+    static SPLITTER: Regex = Regex::new(r"[\t =;]+").unwrap();
+}
 
 /// Tokenize and POS-tag a group of numbered lines.
 ///
@@ -60,53 +60,55 @@ pub fn get_tokens(numbered_lines: &[(usize, String)]) -> Vec<Token> {
 
         last_line.clone_from(line);
 
-        for tok_str in SPLITTER.split(line) {
-            let quoted_structured_key = is_quoted_structured_key(tok_str);
-            let mut tok = tok_str.to_string();
+        SPLITTER.with(|splitter| {
+            for tok_str in splitter.split(line) {
+                let quoted_structured_key = is_quoted_structured_key(tok_str);
+                let mut tok = tok_str.to_string();
 
-            if tok.ends_with("',") {
-                tok = tok.trim_end_matches(&[',', '\''][..]).to_string();
-            }
+                if tok.ends_with("',") {
+                    tok = tok.trim_end_matches(&[',', '\''][..]).to_string();
+                }
 
-            tok = tok.trim_matches(&['\'', ' '][..]).to_string();
-            tok = tok.trim_end_matches(':').to_string();
-            tok = tok.trim_end_matches('"').trim_end_matches('\'').to_string();
-            tok = tok.trim().to_string();
+                tok = tok.trim_matches(&['\'', ' '][..]).to_string();
+                tok = tok.trim_end_matches(':').to_string();
+                tok = tok.trim_end_matches('"').trim_end_matches('\'').to_string();
+                tok = tok.trim().to_string();
 
-            if tok.is_empty() || tok == ":" || tok == "." {
-                continue;
-            }
-
-            if tok.ends_with(',') {
-                let base = tok.trim_end_matches(',').trim();
-                if !base.is_empty() {
-                    let tag = COMPILED_PATTERNS.match_token(base);
-                    tokens.push(Token {
-                        value: base.to_string(),
-                        tag,
-                        start_line: LineNumber::new(*start_line).expect("invalid line number"),
-                    });
-                    tokens.push(Token {
-                        value: ",".to_string(),
-                        tag: PosTag::Cc,
-                        start_line: LineNumber::new(*start_line).expect("invalid line number"),
-                    });
+                if tok.is_empty() || tok == ":" || tok == "." {
                     continue;
                 }
+
+                if tok.ends_with(',') {
+                    let base = tok.trim_end_matches(',').trim();
+                    if !base.is_empty() {
+                        let tag = match_token_thread_local(base);
+                        tokens.push(Token {
+                            value: base.to_string(),
+                            tag,
+                            start_line: LineNumber::new(*start_line).expect("invalid line number"),
+                        });
+                        tokens.push(Token {
+                            value: ",".to_string(),
+                            tag: PosTag::Cc,
+                            start_line: LineNumber::new(*start_line).expect("invalid line number"),
+                        });
+                        continue;
+                    }
+                }
+
+                let tag = if quoted_structured_key {
+                    PosTag::Junk
+                } else {
+                    match_token_thread_local(&tok)
+                };
+
+                tokens.push(Token {
+                    value: tok,
+                    tag,
+                    start_line: LineNumber::new(*start_line).expect("invalid line number"),
+                });
             }
-
-            let tag = if quoted_structured_key {
-                PosTag::Junk
-            } else {
-                COMPILED_PATTERNS.match_token(&tok)
-            };
-
-            tokens.push(Token {
-                value: tok,
-                tag,
-                start_line: LineNumber::new(*start_line).expect("invalid line number"),
-            });
-        }
+        });
     }
 
     retag_camel_case_junk_before_company_suffix_in_copyright_context(&mut tokens);

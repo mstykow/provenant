@@ -25,6 +25,18 @@ pub(super) struct CompiledPatterns {
 }
 
 impl CompiledPatterns {
+    fn from_raw_patterns(raw_patterns: &[(String, PosTag)]) -> Self {
+        let patterns = raw_patterns
+            .iter()
+            .map(|(regex_str, tag)| PatternEntry {
+                regex: Regex::new(regex_str)
+                    .unwrap_or_else(|e| panic!("Failed to compile regex '{}': {}", regex_str, e)),
+                tag: *tag,
+            })
+            .collect();
+        Self { patterns }
+    }
+
     /// Match a token value against all patterns, returning the first matching tag.
     /// Returns `PosTag::Nn` if no pattern matches (catch-all).
     pub(super) fn match_token(&self, value: &str) -> PosTag {
@@ -37,19 +49,21 @@ impl CompiledPatterns {
     }
 }
 
-/// Global compiled patterns, initialized once.
-pub(super) static COMPILED_PATTERNS: LazyLock<CompiledPatterns> = LazyLock::new(|| {
-    let raw_patterns = build_pattern_list();
-    let patterns = raw_patterns
-        .into_iter()
-        .map(|(regex_str, tag)| PatternEntry {
-            regex: Regex::new(&regex_str)
-                .unwrap_or_else(|e| panic!("Failed to compile regex '{}': {}", regex_str, e)),
-            tag,
-        })
-        .collect();
-    CompiledPatterns { patterns }
-});
+static RAW_PATTERNS: LazyLock<Vec<(String, PosTag)>> = LazyLock::new(build_pattern_list);
+
+/// Global compiled patterns, initialized once for tests.
+#[cfg(test)]
+pub(super) static COMPILED_PATTERNS: LazyLock<CompiledPatterns> =
+    LazyLock::new(|| CompiledPatterns::from_raw_patterns(RAW_PATTERNS.as_slice()));
+
+thread_local! {
+    static THREAD_LOCAL_COMPILED_PATTERNS: CompiledPatterns =
+        CompiledPatterns::from_raw_patterns(RAW_PATTERNS.as_slice());
+}
+
+pub(super) fn match_token_thread_local(value: &str) -> PosTag {
+    THREAD_LOCAL_COMPILED_PATTERNS.with(|patterns| patterns.match_token(value))
+}
 
 /// Build the ordered list of (regex_string, PosTag) pairs.
 /// This is split from compilation to make it easier to test pattern strings.
