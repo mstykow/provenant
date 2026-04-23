@@ -97,14 +97,21 @@ fn main() -> Result<()> {
 }
 
 fn parse_points(markdown: &str) -> Result<Vec<BenchmarkPoint>> {
-    let row_pattern = Regex::new(
-        r"^\|\s*\[(?P<label>[^\]]+)\]\([^)]*\)<br>(?P<files>[0-9][0-9,]*) files?\s*\|\s*[^|]+\|\s*Provenant:\s*(?P<prov>[0-9]+(?:\.[0-9]+)?)s<br>ScanCode:\s*(?P<scan>[0-9]+(?:\.[0-9]+)?)s<br>\*\*[^*]+\*\*\s*\|",
+    let compact_row_pattern = Regex::new(
+        r#"^\|\s*\[(?P<label>[^\]]+)\]\([^)]*\)\s*\|\s*(?P<files>[0-9][0-9,]*)\s*\|\s*(?P<prov>[0-9]+(?:\.[0-9]+)?)s\s*\|\s*(?P<scan>[0-9]+(?:\.[0-9]+)?)s\s*\|\s*\*\*[^*]+\*\*\s*\|"#,
     )
-    .expect("benchmark row regex should compile");
+    .expect("compact benchmark row regex should compile");
+    let legacy_row_pattern = Regex::new(
+        r#"^\|\s*(?:<a id="[^"]+"></a>)?\s*\[(?P<label>[^\]]+)\]\([^)]*\)<br>(?P<files>[0-9][0-9,]*) files?\s*\|\s*[^|]+\|\s*Provenant:\s*(?P<prov>[0-9]+(?:\.[0-9]+)?)s<br>ScanCode:\s*(?P<scan>[0-9]+(?:\.[0-9]+)?)s<br>\*\*[^*]+\*\*\s*\|"#,
+    )
+    .expect("legacy benchmark row regex should compile");
 
     let mut points = Vec::new();
     for line in markdown.lines() {
-        let Some(captures) = row_pattern.captures(line) else {
+        let Some(captures) = compact_row_pattern
+            .captures(line)
+            .or_else(|| legacy_row_pattern.captures(line))
+        else {
             continue;
         };
         let label = captures
@@ -140,7 +147,11 @@ fn parse_points(markdown: &str) -> Result<Vec<BenchmarkPoint>> {
     }
 
     if points.is_empty() {
-        bail!("no benchmark rows matched the expected markdown table format");
+        points = parse_item_entries(markdown)?;
+    }
+
+    if points.is_empty() {
+        bail!("no benchmark rows matched the expected markdown format");
     }
 
     points.sort_by(|a, b| a.files.cmp(&b.files).then_with(|| a.label.cmp(&b.label)));
@@ -162,6 +173,116 @@ fn parse_points(markdown: &str) -> Result<Vec<BenchmarkPoint>> {
         }
     }
 
+    Ok(points)
+}
+
+fn parse_item_entries(markdown: &str) -> Result<Vec<BenchmarkPoint>> {
+    #[derive(Default)]
+    struct PartialItem {
+        label: Option<String>,
+        files: Option<u64>,
+        provenant_seconds: Option<f64>,
+        scancode_seconds: Option<f64>,
+    }
+
+    let heading_pattern =
+        Regex::new(r#"^##### \[(?P<label>[^\]]+)\]\([^)]*\)(?: — \*\*[^*]+\*\*)?$"#)
+            .expect("item heading regex should compile");
+    let files_pattern = Regex::new(r#"^- Files:\s*(?P<files>[0-9][0-9,]*)$"#)
+        .expect("item files regex should compile");
+    let timing_pattern = Regex::new(
+        r#"^- Timing:\s*Provenant `(?P<prov>[0-9]+(?:\.[0-9]+)?)s`; ScanCode `(?P<scan>[0-9]+(?:\.[0-9]+)?)s`(?:; \*\*[^*]+\*\*)?$"#,
+    )
+    .expect("item timing regex should compile");
+
+    fn finalize_item(current: Option<PartialItem>, points: &mut Vec<BenchmarkPoint>) -> Result<()> {
+        let Some(item) = current else {
+            return Ok(());
+        };
+        if item.label.is_none()
+            && item.files.is_none()
+            && item.provenant_seconds.is_none()
+            && item.scancode_seconds.is_none()
+        {
+            return Ok(());
+        }
+        let label = item.label.context("benchmark item missing heading")?;
+        let files = item.files.context("benchmark item missing files line")?;
+        let provenant_seconds = item
+            .provenant_seconds
+            .context("benchmark item missing timing line")?;
+        let scancode_seconds = item
+            .scancode_seconds
+            .context("benchmark item missing timing line")?;
+        points.push(BenchmarkPoint {
+            label,
+            files,
+            provenant_seconds,
+            scancode_seconds,
+        });
+        Ok(())
+    }
+
+    let mut points = Vec::new();
+    let mut current: Option<PartialItem> = None;
+
+    for line in markdown.lines() {
+        if let Some(captures) = heading_pattern.captures(line) {
+            finalize_item(current.take(), &mut points)?;
+            current = Some(PartialItem {
+                label: Some(
+                    captures
+                        .name("label")
+                        .expect("item label capture should exist")
+                        .as_str()
+                        .to_string(),
+                ),
+                ..Default::default()
+            });
+            continue;
+        }
+
+        let Some(item) = current.as_mut() else {
+            continue;
+        };
+
+        if item.files.is_none()
+            && let Some(captures) = files_pattern.captures(line)
+        {
+            item.files = Some(
+                captures
+                    .name("files")
+                    .expect("item files capture should exist")
+                    .as_str()
+                    .replace(',', "")
+                    .parse::<u64>()
+                    .with_context(|| format!("invalid file count in item: {line}"))?,
+            );
+            continue;
+        }
+        if (item.provenant_seconds.is_none() || item.scancode_seconds.is_none())
+            && let Some(captures) = timing_pattern.captures(line)
+        {
+            item.provenant_seconds = Some(
+                captures
+                    .name("prov")
+                    .expect("item Provenant capture should exist")
+                    .as_str()
+                    .parse::<f64>()
+                    .with_context(|| format!("invalid Provenant duration in item: {line}"))?,
+            );
+            item.scancode_seconds = Some(
+                captures
+                    .name("scan")
+                    .expect("item ScanCode capture should exist")
+                    .as_str()
+                    .parse::<f64>()
+                    .with_context(|| format!("invalid ScanCode duration in item: {line}"))?,
+            );
+        }
+    }
+
+    finalize_item(current.take(), &mut points)?;
     Ok(points)
 }
 
@@ -512,7 +633,43 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_points_extracts_benchmark_rows() {
+    fn parse_points_extracts_compact_summary_rows() {
+        let markdown = r#"
+| Target | Files | Provenant | ScanCode | Speedup |
+| ------ | ----: | --------: | -------: | ------- |
+| [demo/repo @ abc1234](https://github.com/demo/repo/tree/abc1234) | 1,234 | 12.34s | 56.78s | **4.60× faster (-78.3%)** |
+| [demo/artifact @ ghi9012](https://example.com/demo/artifact) | 1 | 9.31s | 69.31s | **7.44× faster (-86.6%)** |
+| [demo/slow @ def5678](https://github.com/demo/slow/tree/def5678) | 300 | 18.81s | 17.13s | **1.10× slower (+9.8%)** |
+"#;
+
+        let points = parse_points(markdown).expect("compact benchmark rows should parse");
+        assert_eq!(
+            points,
+            vec![
+                BenchmarkPoint {
+                    label: "demo/artifact @ ghi9012".to_string(),
+                    files: 1,
+                    provenant_seconds: 9.31,
+                    scancode_seconds: 69.31,
+                },
+                BenchmarkPoint {
+                    label: "demo/slow @ def5678".to_string(),
+                    files: 300,
+                    provenant_seconds: 18.81,
+                    scancode_seconds: 17.13,
+                },
+                BenchmarkPoint {
+                    label: "demo/repo @ abc1234".to_string(),
+                    files: 1234,
+                    provenant_seconds: 12.34,
+                    scancode_seconds: 56.78,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_points_extracts_legacy_benchmark_rows() {
         let markdown = r#"
 | Target snapshot | Run context | Timing snapshot | Advantages over ScanCode |
 | --- | --- | --- | --- |
@@ -521,7 +678,55 @@ mod tests {
 | [demo/slow @ def5678](https://github.com/demo/slow/tree/def5678)<br>300 files | 2026-04-19 · slow-456 · macOS | Provenant: 18.81s<br>ScanCode: 17.13s<br>**1.10× slower (+9.8%)** | Slow example |
 "#;
 
-        let points = parse_points(markdown).expect("benchmark rows should parse");
+        let points = parse_points(markdown).expect("legacy benchmark rows should parse");
+        assert_eq!(
+            points,
+            vec![
+                BenchmarkPoint {
+                    label: "demo/artifact @ ghi9012".to_string(),
+                    files: 1,
+                    provenant_seconds: 9.31,
+                    scancode_seconds: 69.31,
+                },
+                BenchmarkPoint {
+                    label: "demo/slow @ def5678".to_string(),
+                    files: 300,
+                    provenant_seconds: 18.81,
+                    scancode_seconds: 17.13,
+                },
+                BenchmarkPoint {
+                    label: "demo/repo @ abc1234".to_string(),
+                    files: 1234,
+                    provenant_seconds: 12.34,
+                    scancode_seconds: 56.78,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_points_extracts_item_entries() {
+        let markdown = r#"
+##### [demo/repo @ abc1234](https://github.com/demo/repo/tree/abc1234) — **4.60× faster**
+- Files: 1,234
+- Run context: 2026-04-19 · macOS
+- Timing: Provenant `12.34s`; ScanCode `56.78s`
+- Demo advantage
+
+##### [demo/artifact @ ghi9012](https://example.com/demo/artifact) — **7.44× faster**
+- Files: 1
+- Run context: 2026-04-19 · macOS
+- Timing: Provenant `9.31s`; ScanCode `69.31s`
+- Artifact advantage
+
+##### [demo/slow @ def5678](https://github.com/demo/slow/tree/def5678) — **1.10× slower**
+- Files: 300
+- Run context: 2026-04-19 · macOS
+- Timing: Provenant `18.81s`; ScanCode `17.13s`
+- Slow example
+"#;
+
+        let points = parse_points(markdown).expect("item benchmark entries should parse");
         assert_eq!(
             points,
             vec![
