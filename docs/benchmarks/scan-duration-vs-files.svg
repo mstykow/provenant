@@ -89,6 +89,15 @@ ScanCode: 77.60s</title></rect>
     <rect x="92.00" y="429.37" width="8" height="8" fill="#d97706" rx="1.5"><title>bash 5.2.15-2+b10 .deb @ sha256:be3ab2f
 Files: 1
 ScanCode: 66.94s</title></rect>
+    <rect x="92.00" y="428.44" width="8" height="8" fill="#d97706" rx="1.5"><title>bash 5.3.9 .pkg +COMPACT_MANIFEST sample @ sha256:37207e8
+Files: 1
+ScanCode: 68.27s</title></rect>
+    <rect x="92.00" y="427.25" width="8" height="8" fill="#d97706" rx="1.5"><title>curl 8.19.0_2 .pkg +COMPACT_MANIFEST sample @ sha256:b78b1ff
+Files: 1
+ScanCode: 70.01s</title></rect>
+    <rect x="92.00" y="424.52" width="8" height="8" fill="#d97706" rx="1.5"><title>pkg 2.7.4 .pkg +COMPACT_MANIFEST sample @ sha256:4128dba
+Files: 1
+ScanCode: 74.17s</title></rect>
     <rect x="92.00" y="426.80" width="8" height="8" fill="#d97706" rx="1.5"><title>python-construct 1:2.10.68-3 .PKGINFO sample
 Files: 1
 ScanCode: 70.67s</title></rect>
@@ -580,6 +589,15 @@ Provenant: 20.04s</title></circle>
     <circle cx="96.00" cy="485.54" r="4.5" fill="#2563eb"><title>bash 5.2.15-2+b10 .deb @ sha256:be3ab2f
 Files: 1
 Provenant: 22.19s</title></circle>
+    <circle cx="96.00" cy="526.17" r="4.5" fill="#2563eb"><title>bash 5.3.9 .pkg +COMPACT_MANIFEST sample @ sha256:37207e8
+Files: 1
+Provenant: 9.39s</title></circle>
+    <circle cx="96.00" cy="524.11" r="4.5" fill="#2563eb"><title>curl 8.19.0_2 .pkg +COMPACT_MANIFEST sample @ sha256:b78b1ff
+Files: 1
+Provenant: 9.81s</title></circle>
+    <circle cx="96.00" cy="525.13" r="4.5" fill="#2563eb"><title>pkg 2.7.4 .pkg +COMPACT_MANIFEST sample @ sha256:4128dba
+Files: 1
+Provenant: 9.60s</title></circle>
     <circle cx="96.00" cy="523.77" r="4.5" fill="#2563eb"><title>python-construct 1:2.10.68-3 .PKGINFO sample
 Files: 1
 Provenant: 9.88s</title></circle>
