@@ -148,11 +148,10 @@ impl PackageParser for NuspecParser {
                             "license" => {
                                 extracted_license_statement = Some(text);
                             }
-                            "licenseUrl" => {
-                                if extracted_license_statement.is_none() {
-                                    extracted_license_statement = Some(text);
-                                }
+                            "licenseUrl" if extracted_license_statement.is_none() => {
+                                extracted_license_statement = Some(text);
                             }
+                            "licenseUrl" => {}
                             "copyright" => copyright = Some(text),
                             _ => {}
                         }
@@ -396,11 +395,10 @@ pub(super) fn parse_nuspec_content(content: &str) -> Result<PackageData, String>
                         "license" => {
                             extracted_license_statement = Some(text);
                         }
-                        "licenseUrl" => {
-                            if extracted_license_statement.is_none() {
-                                extracted_license_statement = Some(text);
-                            }
+                        "licenseUrl" if extracted_license_statement.is_none() => {
+                            extracted_license_statement = Some(text);
                         }
+                        "licenseUrl" => {}
                         "copyright" => copyright = Some(text),
                         _ => {}
                     }

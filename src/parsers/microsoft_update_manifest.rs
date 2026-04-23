@@ -75,76 +75,70 @@ pub(crate) fn parse_mum_xml(content: &str) -> PackageData {
             break;
         }
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Empty(e)) => {
-                if e.name().as_ref() == b"assemblyIdentity" {
-                    for attr in e.attributes().filter_map(|a| a.ok()) {
-                        match attr.key.as_ref() {
-                            b"name" => {
-                                let raw = attr.value.to_vec();
-                                let has_invalid = String::from_utf8(raw.clone()).is_err();
-                                let val = String::from_utf8_lossy(&raw).into_owned();
-                                if has_invalid {
-                                    warn!(
-                                        "Invalid UTF-8 in 'name' attribute, using lossy conversion"
-                                    );
-                                }
-                                name = Some(truncate_field(val));
+            Ok(Event::Empty(e)) if e.name().as_ref() == b"assemblyIdentity" => {
+                for attr in e.attributes().filter_map(|a| a.ok()) {
+                    match attr.key.as_ref() {
+                        b"name" => {
+                            let raw = attr.value.to_vec();
+                            let has_invalid = String::from_utf8(raw.clone()).is_err();
+                            let val = String::from_utf8_lossy(&raw).into_owned();
+                            if has_invalid {
+                                warn!("Invalid UTF-8 in 'name' attribute, using lossy conversion");
                             }
-                            b"version" => {
-                                let raw = attr.value.to_vec();
-                                let has_invalid = String::from_utf8(raw.clone()).is_err();
-                                let val = String::from_utf8_lossy(&raw).into_owned();
-                                if has_invalid {
-                                    warn!(
-                                        "Invalid UTF-8 in 'version' attribute, using lossy conversion"
-                                    );
-                                }
-                                version = Some(truncate_field(val));
-                            }
-                            _ => {}
+                            name = Some(truncate_field(val));
                         }
+                        b"version" => {
+                            let raw = attr.value.to_vec();
+                            let has_invalid = String::from_utf8(raw.clone()).is_err();
+                            let val = String::from_utf8_lossy(&raw).into_owned();
+                            if has_invalid {
+                                warn!(
+                                    "Invalid UTF-8 in 'version' attribute, using lossy conversion"
+                                );
+                            }
+                            version = Some(truncate_field(val));
+                        }
+                        _ => {}
                     }
                 }
             }
-            Ok(Event::Start(e)) => {
-                if e.name().as_ref() == b"assembly" {
-                    for attr in e.attributes().filter_map(|a| a.ok()) {
-                        match attr.key.as_ref() {
-                            b"description" => {
-                                let raw = attr.value.to_vec();
-                                let has_invalid = String::from_utf8(raw.clone()).is_err();
-                                let val = String::from_utf8_lossy(&raw).into_owned();
-                                if has_invalid {
-                                    warn!(
-                                        "Invalid UTF-8 in 'description' attribute, using lossy conversion"
-                                    );
-                                }
-                                description = Some(truncate_field(val));
+            Ok(Event::Start(e)) if e.name().as_ref() == b"assembly" => {
+                for attr in e.attributes().filter_map(|a| a.ok()) {
+                    match attr.key.as_ref() {
+                        b"description" => {
+                            let raw = attr.value.to_vec();
+                            let has_invalid = String::from_utf8(raw.clone()).is_err();
+                            let val = String::from_utf8_lossy(&raw).into_owned();
+                            if has_invalid {
+                                warn!(
+                                    "Invalid UTF-8 in 'description' attribute, using lossy conversion"
+                                );
                             }
-                            b"copyright" => {
-                                let raw = attr.value.to_vec();
-                                let has_invalid = String::from_utf8(raw.clone()).is_err();
-                                let val = String::from_utf8_lossy(&raw).into_owned();
-                                if has_invalid {
-                                    warn!(
-                                        "Invalid UTF-8 in 'copyright' attribute, using lossy conversion"
-                                    );
-                                }
-                                copyright = Some(truncate_field(val));
-                            }
-                            b"supportInformation" => {
-                                let raw = attr.value.to_vec();
-                                let has_invalid = String::from_utf8(raw.clone()).is_err();
-                                let val = String::from_utf8_lossy(&raw).into_owned();
-                                if has_invalid {
-                                    warn!(
-                                        "Invalid UTF-8 in 'supportInformation' attribute, using lossy conversion"
-                                    );
-                                }
-                                homepage_url = Some(truncate_field(val));
-                            }
-                            _ => {}
+                            description = Some(truncate_field(val));
                         }
+                        b"copyright" => {
+                            let raw = attr.value.to_vec();
+                            let has_invalid = String::from_utf8(raw.clone()).is_err();
+                            let val = String::from_utf8_lossy(&raw).into_owned();
+                            if has_invalid {
+                                warn!(
+                                    "Invalid UTF-8 in 'copyright' attribute, using lossy conversion"
+                                );
+                            }
+                            copyright = Some(truncate_field(val));
+                        }
+                        b"supportInformation" => {
+                            let raw = attr.value.to_vec();
+                            let has_invalid = String::from_utf8(raw.clone()).is_err();
+                            let val = String::from_utf8_lossy(&raw).into_owned();
+                            if has_invalid {
+                                warn!(
+                                    "Invalid UTF-8 in 'supportInformation' attribute, using lossy conversion"
+                                );
+                            }
+                            homepage_url = Some(truncate_field(val));
+                        }
+                        _ => {}
                     }
                 }
             }

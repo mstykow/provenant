@@ -472,11 +472,10 @@ fn collect_reference_strings(value: Option<&serde_json::Value>, references: &mut
     };
 
     match value {
-        serde_json::Value::String(value) => {
-            if !value.trim().is_empty() {
-                references.push(value.trim().to_string());
-            }
+        serde_json::Value::String(value) if !value.trim().is_empty() => {
+            references.push(value.trim().to_string());
         }
+        serde_json::Value::String(_) => {}
         serde_json::Value::Array(values) => {
             for value in values.iter().take(MAX_ITERATION_COUNT) {
                 if let Some(value) = value.as_str().filter(|value| !value.trim().is_empty()) {

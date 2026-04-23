@@ -169,9 +169,7 @@ pub fn matched_text_diagnostics_from_text(
 fn tokenize_matched_text(text: &str, query: &Query<'_>) -> Vec<MatchedTextToken> {
     let mut tokens = Vec::new();
     let mut pos = 0usize;
-    let mut line_num = 1usize;
-
-    for line in text.split_inclusive('\n') {
+    for (line_num, line) in (1usize..).zip(text.split_inclusive('\n')) {
         for capture in MATCHED_TEXT_PATTERN.captures_iter(line) {
             if let Some(token_match) = capture.name("token") {
                 let token_text = token_match.as_str();
@@ -235,8 +233,6 @@ fn tokenize_matched_text(text: &str, query: &Query<'_>) -> Vec<MatchedTextToken>
                 });
             }
         }
-
-        line_num += 1;
     }
 
     tokens
@@ -496,11 +492,9 @@ impl<'a> Query<'a> {
 
         let mut known_pos: Option<usize> = None;
         let mut started = false;
-        let mut current_line = 1usize;
-
         let mut tokens_by_line: Vec<Vec<Option<KnownToken>>> = Vec::new();
 
-        for (line_index, line) in text.lines().enumerate() {
+        for (current_line, (line_index, line)) in (1usize..).zip(text.lines().enumerate()) {
             if line_index.is_multiple_of(128) {
                 crate::license_detection::ensure_within_deadline(deadline)?;
             }
@@ -563,9 +557,7 @@ impl<'a> Query<'a> {
                     spdx_lines.push((spdx_text, spdx_start_known_pos, spdx_end));
                 }
             }
-
             tokens_by_line.push(line_tokens);
-            current_line += 1;
         }
 
         crate::license_detection::ensure_within_deadline(deadline)?;

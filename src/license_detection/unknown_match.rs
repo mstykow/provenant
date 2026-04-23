@@ -327,9 +327,7 @@ fn build_unknown_rule_text(
 fn tokenize_matched_unknown_text(text: &str, query: &Query) -> Vec<MatchedTextToken> {
     let mut tokens = Vec::new();
     let mut pos = 0usize;
-    let mut line_num = 1usize;
-
-    for line in text.split_inclusive('\n') {
+    for (line_num, line) in (1usize..).zip(text.split_inclusive('\n')) {
         for capture in MATCHED_TEXT_PATTERN.captures_iter(line) {
             if let Some(token_match) = capture.name("token") {
                 let token_text = token_match.as_str();
@@ -399,8 +397,6 @@ fn tokenize_matched_unknown_text(text: &str, query: &Query) -> Vec<MatchedTextTo
                 });
             }
         }
-
-        line_num += 1;
     }
 
     tokens

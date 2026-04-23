@@ -710,10 +710,8 @@ fn extract_exact_pinned_version(specifiers: &str) -> Option<String> {
 
     let stripped = if let Some(version) = trimmed.strip_prefix("===") {
         version
-    } else if let Some(version) = trimmed.strip_prefix("==") {
-        version
     } else {
-        return None;
+        trimmed.strip_prefix("==")?
     };
 
     let version = stripped.trim();
