@@ -1092,7 +1092,7 @@ fn extract_author_colon_inline_roster(tail: &str, line_number: usize) -> Vec<Aut
     authors
 }
 
-fn refine_author_with_optional_handle_suffix(candidate: &str) -> Option<String> {
+pub(super) fn refine_author_with_optional_handle_suffix(candidate: &str) -> Option<String> {
     static TRAILING_HANDLE_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"\s*\(@[A-Za-z0-9_.-]+\)\s*$").unwrap());
 
@@ -2538,7 +2538,7 @@ fn json_window_is_simple_author_only_fragment(window: &str) -> bool {
     JSON_AUTHOR_ONLY_STRING_RE.is_match(window) || JSON_AUTHOR_ONLY_OBJECT_RE.is_match(window)
 }
 
-fn looks_like_structured_json_author_fallback(value: &str) -> bool {
+pub(super) fn looks_like_structured_json_author_fallback(value: &str) -> bool {
     let trimmed = value.trim();
     if looks_like_name_with_parenthesized_url(trimmed) {
         return true;
