@@ -1560,7 +1560,7 @@ pub(super) fn extract_maintainers_label_authors(
 
         let candidate = GITREPO_SUFFIX_RE.replace(who_raw, "");
         let candidate = candidate.trim().trim_end_matches(',').trim();
-        let author = normalize_whitespace(&format!("Maintainers {candidate}"));
+        let author = normalize_whitespace(candidate);
         if author.is_empty() {
             continue;
         }
