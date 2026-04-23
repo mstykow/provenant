@@ -7,6 +7,9 @@ Rust-based maintainer commands such as `benchmark-target`, `compare-outputs`,
 `validate-urls`, `generate-supported-formats`, and `generate-index-artifact`
 are documented in [`../xtask/README.md`](../xtask/README.md).
 
+The standalone SPDX header checker lives in
+[`../tools/license-headers/README.md`](../tools/license-headers/README.md).
+
 ## `cargo_sort_manifests.sh`
 
 Sort Cargo manifest sections with `cargo-sort`.
@@ -16,12 +19,13 @@ Examples:
 ```bash
 ./scripts/cargo_sort_manifests.sh
 ./scripts/cargo_sort_manifests.sh --check
-./scripts/cargo_sort_manifests.sh Cargo.toml xtask/Cargo.toml
+./scripts/cargo_sort_manifests.sh Cargo.toml tools/license-headers/Cargo.toml xtask/Cargo.toml
 ```
 
 ## `check_unused_deps.sh`
 
-Run `cargo-machete` against the root workspace and `xtask/` manifest.
+Run `cargo-machete` against the root workspace plus the standalone
+`tools/license-headers/` and `xtask/` manifests.
 
 Example:
 
