@@ -59,7 +59,7 @@ publish = true
 
 [workspace]
 resolver = "3"
-members = ["xtask"]
+members = ["tools/license-headers", "xtask"]
 
 [workspace.metadata.release]
 # Consolidated workspace release commits read their subject from workspace config.
@@ -68,6 +68,7 @@ pre-release-commit-message = "chore: release"
 [workspace.dependencies]
 anyhow = "1.0.102"
 clap = { version = "4.6.1", features = ["derive"] }
+glob = "0.3.3"
 inventory = "0.3.24"
 postcard = { version = "1.1.3", default-features = false, features = ["alloc"] }
 rayon = "1.12.0"
@@ -77,6 +78,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.149", features = ["preserve_order"] }
 sha2 = "0.11.0"
 tempfile = "3.27.0"
+toml = "1.1.2"
 url = "2.5.8"
 yaml_serde = "0.10.4"
 zstd = "0.13.3"
@@ -111,7 +113,7 @@ fd-lock = "4.0.4"
 file-format = { version = "0.29.0", features = ["reader", "reader-txt", "reader-xml", "reader-zip"] }
 file-identify = "0.4.0"
 flate2 = "1.1.9"
-glob = "0.3.3"
+ glob = { workspace = true }
 hex = "0.4.3"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "tiff", "webp"] }
 indicatif = "0.18.4"
@@ -151,7 +153,7 @@ strum = { version = "0.28.0", features = ["derive"] }
 tar = "0.4.45"
 tempfile = { workspace = true }
 tera = { version = "1.20.1", default-features = false }
-toml = "1.1.2"
+ toml = { workspace = true }
 ttf-parser = "0.25.1"
 url = { workspace = true }
 uuid = { version = "1.23.1", features = ["v4"] }

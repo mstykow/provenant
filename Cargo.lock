@@ -3039,12 +3039,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "provenant-xtask"
+name = "provenant-license-headers"
 version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
  "glob",
+ "serde",
+ "toml",
+]
+
+[[package]]
+name = "provenant-xtask"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
  "inventory",
  "postcard",
  "provenant-cli",
@@ -3055,7 +3065,6 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
- "toml",
  "url",
  "yaml_serde",
  "zstd",
