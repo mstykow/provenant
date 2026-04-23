@@ -72,7 +72,7 @@ fn path_selection_filter_keeps_matching_directories_without_file_descendants() {
 }
 
 #[test]
-fn only_findings_keeps_file_with_findings_and_parent_dirs() {
+fn only_findings_drops_directories_without_findings() {
     let mut files = vec![dir("project"), file("project/a.txt"), file("project/b.txt")];
     files[2].copyrights = vec![Copyright {
         copyright: "Copyright Example".to_string(),
@@ -83,8 +83,20 @@ fn only_findings_keeps_file_with_findings_and_parent_dirs() {
     apply_only_findings_filter(&mut files);
 
     let paths: HashSet<_> = files.into_iter().map(|f| f.path).collect();
-    assert!(paths.contains("project"));
     assert!(paths.contains("project/b.txt"));
+    assert!(!paths.contains("project/a.txt"));
+    assert!(!paths.contains("project"));
+}
+
+#[test]
+fn only_findings_keeps_directories_with_findings() {
+    let mut files = vec![dir("project"), file("project/a.txt")];
+    files[0].scan_errors = vec!["permission denied".to_string()];
+
+    apply_only_findings_filter(&mut files);
+
+    let paths: HashSet<_> = files.into_iter().map(|f| f.path).collect();
+    assert!(paths.contains("project"));
     assert!(!paths.contains("project/a.txt"));
 }
 
@@ -724,9 +736,9 @@ fn only_findings_keeps_generated_only_files() {
     apply_only_findings_filter(&mut files);
 
     let paths: HashSet<_> = files.into_iter().map(|f| f.path).collect();
-    assert!(paths.contains("project"));
     assert!(paths.contains("project/generated.js"));
     assert!(!paths.contains("project/empty.txt"));
+    assert!(!paths.contains("project"));
 }
 
 #[test]

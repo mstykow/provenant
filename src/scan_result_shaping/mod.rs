@@ -149,7 +149,7 @@ fn has_findings(file: &FileInfo) -> bool {
 }
 
 pub(crate) fn apply_only_findings_filter(files: &mut Vec<FileInfo>) {
-    retain_matching_files_with_ancestor_dirs(files, has_findings);
+    files.retain(has_findings);
 }
 
 fn matches_any_regex<'a, I>(patterns: &[Regex], values: I) -> bool
