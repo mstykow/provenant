@@ -2304,11 +2304,31 @@ fn test_maintainers_label_extracts_author_and_trims_gitrepo_suffix() {
         .map(|author| author.author.as_str())
         .collect();
     assert!(
-        values.contains(&"Maintainers Tianon Gravi <admwiggin@gmail.com> (@tianon)"),
+        values.contains(&"Tianon Gravi <admwiggin@gmail.com> (@tianon)"),
         "authors: {values:?}"
     );
     assert!(
         !values.iter().any(|value| value.contains("GitRepo")),
+        "authors: {values:?}"
+    );
+}
+
+#[test]
+fn test_maintainer_comment_extracts_author_without_label() {
+    let input = "# Maintainer: Sébastien Luttringer <seblu@archlinux.org>\n";
+
+    let (_c, _h, authors) = detect_copyrights_from_text(input);
+    let values: Vec<&str> = authors
+        .iter()
+        .map(|author| author.author.as_str())
+        .collect();
+
+    assert!(
+        values.contains(&"Sébastien Luttringer <seblu@archlinux.org>"),
+        "authors: {values:?}"
+    );
+    assert!(
+        !values.iter().any(|value| value.contains("Maintainer")),
         "authors: {values:?}"
     );
 }
