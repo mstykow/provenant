@@ -312,7 +312,11 @@ fn parse_alpine_package_paragraph(
 fn parse_apkbuild(content: &str) -> PackageData {
     let variables = parse_apkbuild_variables(content);
 
-    let name = variables.get("pkgname").cloned().map(truncate_field);
+    let name = variables
+        .get("pkgname")
+        .cloned()
+        .map(|value| strip_apkbuild_quote_chars(&value))
+        .map(truncate_field);
     let version = match (variables.get("pkgver"), variables.get("pkgrel")) {
         (Some(ver), Some(rel)) => Some(truncate_field(format!("{}-r{}", ver, rel))),
         (Some(ver), None) => Some(truncate_field(ver.clone())),
@@ -384,8 +388,27 @@ fn parse_apkbuild(content: &str) -> PackageData {
     }
 }
 
+const APKBUILD_CAPTURED_FIELDS: &[&str] = &[
+    "pkgname",
+    "pkgver",
+    "pkgrel",
+    "pkgdesc",
+    "url",
+    "license",
+    "source",
+    "depends",
+    "depends_dev",
+    "makedepends",
+    "makedepends_build",
+    "makedepends_host",
+    "checkdepends",
+    "sha512sums",
+    "sha256sums",
+    "md5sums",
+];
+
 fn parse_apkbuild_variables(content: &str) -> HashMap<String, String> {
-    let mut raw = HashMap::new();
+    let mut resolved_variables = HashMap::new();
     let mut lines = content.lines().peekable();
     let mut brace_depth = 0usize;
     let mut line_count = 0usize;
@@ -413,43 +436,40 @@ fn parse_apkbuild_variables(content: &str) -> HashMap<String, String> {
             continue;
         };
         let mut value = value.trim().to_string();
-        if value.starts_with('"') && !value.ends_with('"') {
+        if starts_with_apkbuild_quote(&value) && !has_closed_apkbuild_quote(&value) {
             while let Some(next) = lines.peek() {
                 value.push('\n');
                 value.push_str(next);
-                let current = match lines.next() {
-                    Some(l) => l,
-                    None => break,
-                };
-                if current.trim_end().ends_with('"') {
+                if lines.next().is_none() {
+                    break;
+                }
+                if has_closed_apkbuild_quote(&value) {
                     break;
                 }
             }
         }
-        raw.insert(name.trim().to_string(), value);
+        let name = name.trim().to_string();
+        if name == "pkgname" && resolved_variables.contains_key(name.as_str()) {
+            continue;
+        }
+        let value = strip_apkbuild_inline_comment(&value).trim();
+        let value = resolve_apkbuild_value(value, &resolved_variables);
+        if let Some(existing) = resolved_variables.get(&name)
+            && !existing.contains('$')
+            && value.contains('$')
+        {
+            continue;
+        }
+        resolved_variables.insert(name, value);
     }
 
     let mut resolved = HashMap::new();
-    for key in [
-        "pkgname",
-        "pkgver",
-        "pkgrel",
-        "pkgdesc",
-        "url",
-        "license",
-        "source",
-        "depends",
-        "depends_dev",
-        "makedepends",
-        "makedepends_build",
-        "makedepends_host",
-        "checkdepends",
-        "sha512sums",
-        "sha256sums",
-        "md5sums",
-    ] {
-        if let Some(value) = raw.get(key) {
-            resolved.insert(key.to_string(), resolve_apkbuild_value(value, &raw));
+    for key in APKBUILD_CAPTURED_FIELDS {
+        if let Some(value) = resolved_variables.get(*key) {
+            resolved.insert(
+                (*key).to_string(),
+                resolve_apkbuild_value(value, &resolved_variables),
+            );
         }
     }
     resolved
@@ -457,48 +477,348 @@ fn parse_apkbuild_variables(content: &str) -> HashMap<String, String> {
 
 fn resolve_apkbuild_value(value: &str, variables: &HashMap<String, String>) -> String {
     let mut resolved = strip_wrapping_quotes(value.trim()).to_string();
+    if variables.is_empty() || !resolved.contains('$') {
+        return resolved;
+    }
+
     for _ in 0..8 {
-        let previous = resolved.clone();
+        let mut changed = false;
+        changed |= replace_apkbuild_parameter_expressions(&mut resolved, variables);
         for (name, raw_value) in variables {
-            let raw_value = strip_wrapping_quotes(raw_value.trim());
-            let resolved_raw = resolve_apkbuild_value_no_recursion(raw_value, variables);
-            let value_resolved = strip_wrapping_quotes(&resolved_raw);
-            resolved = resolved.replace(
+            let value_resolved = strip_wrapping_quotes(raw_value.trim());
+            changed |= replace_apkbuild_placeholder(
+                &mut resolved,
                 &format!("${{{name}//./-}}"),
                 &value_resolved.replace('.', "-"),
             );
-            resolved = resolved.replace(
+            changed |= replace_apkbuild_placeholder(
+                &mut resolved,
                 &format!("${{{name}//./_}}"),
                 &value_resolved.replace('.', "_"),
             );
-            resolved = resolved.replace(
+            changed |= replace_apkbuild_placeholder(
+                &mut resolved,
                 &format!("${{{name}::8}}"),
                 &value_resolved.chars().take(8).collect::<String>(),
             );
-            resolved = resolved.replace(&format!("${{{name}}}"), value_resolved);
-            resolved = resolved.replace(&format!("${name}"), value_resolved);
+            changed |= replace_apkbuild_placeholder(
+                &mut resolved,
+                &format!("${{{name}}}"),
+                value_resolved,
+            );
         }
-        if resolved == previous {
+        changed |= replace_all_bare_apkbuild_variables(&mut resolved, variables);
+        if !changed || !resolved.contains('$') {
             break;
         }
     }
     resolved
 }
 
-fn resolve_apkbuild_value_no_recursion(value: &str, variables: &HashMap<String, String>) -> String {
-    let mut resolved = strip_wrapping_quotes(value.trim()).to_string();
-    for (name, raw_value) in variables {
-        let raw_value = strip_wrapping_quotes(raw_value.trim());
-        resolved = resolved.replace(&format!("${{{name}//./-}}"), &raw_value.replace('.', "-"));
-        resolved = resolved.replace(&format!("${{{name}//./_}}"), &raw_value.replace('.', "_"));
-        resolved = resolved.replace(
-            &format!("${{{name}::8}}"),
-            &raw_value.chars().take(8).collect::<String>(),
-        );
-        resolved = resolved.replace(&format!("${{{name}}}"), raw_value);
-        resolved = resolved.replace(&format!("${name}"), raw_value);
+fn replace_apkbuild_placeholder(
+    resolved: &mut String,
+    placeholder: &str,
+    replacement: &str,
+) -> bool {
+    if !resolved.contains(placeholder) {
+        return false;
     }
-    resolved
+
+    *resolved = resolved.replace(placeholder, replacement);
+    true
+}
+
+fn replace_apkbuild_parameter_expressions(
+    resolved: &mut String,
+    variables: &HashMap<String, String>,
+) -> bool {
+    if !resolved.contains('$') {
+        return false;
+    }
+
+    let mut changed = false;
+    let mut output = String::with_capacity(resolved.len());
+    let mut rest = resolved.as_str();
+
+    while let Some(index) = rest.find('$') {
+        output.push_str(&rest[..index]);
+        rest = &rest[index..];
+
+        if let Some(stripped) = rest.strip_prefix("$(")
+            && let Some(expr) = stripped.strip_prefix('(')
+            && let Some(end) = expr.find("))")
+            && let Some(value) = evaluate_apkbuild_arithmetic_expression(&expr[..end], variables)
+        {
+            output.push_str(&value);
+            rest = &expr[end + 2..];
+            changed = true;
+            continue;
+        }
+
+        if let Some(expr) = rest.strip_prefix("${")
+            && let Some(end) = expr.find('}')
+            && let Some(value) = evaluate_apkbuild_parameter_expression(&expr[..end], variables)
+        {
+            output.push_str(&value);
+            rest = &expr[end + 1..];
+            changed = true;
+            continue;
+        }
+
+        output.push('$');
+        rest = &rest['$'.len_utf8()..];
+    }
+
+    if !changed {
+        return false;
+    }
+
+    output.push_str(rest);
+    *resolved = output;
+    true
+}
+
+fn evaluate_apkbuild_parameter_expression(
+    expr: &str,
+    variables: &HashMap<String, String>,
+) -> Option<String> {
+    if let Some((name, default)) = expr.split_once(":-") {
+        return Some(
+            variables
+                .get(name)
+                .filter(|value| !value.is_empty())
+                .cloned()
+                .unwrap_or_else(|| default.to_string()),
+        );
+    }
+
+    if let Some((name, pattern)) = expr.split_once("%%") {
+        let value = variables.get(name)?.as_str();
+        return trim_apkbuild_suffix_pattern(value, pattern, true);
+    }
+
+    if let Some((name, pattern)) = expr.split_once("##") {
+        let value = variables.get(name)?.as_str();
+        return trim_apkbuild_prefix_pattern(value, pattern, true);
+    }
+
+    if let Some((name, pattern)) = expr.split_once('%') {
+        let value = variables.get(name)?.as_str();
+        return trim_apkbuild_suffix_pattern(value, pattern, false);
+    }
+
+    if let Some((name, pattern)) = expr.split_once('#') {
+        let value = variables.get(name)?.as_str();
+        return trim_apkbuild_prefix_pattern(value, pattern, false);
+    }
+
+    if let Some((name, rest)) = expr.split_once("//") {
+        let (from, to) = rest.split_once('/').unwrap_or((rest, ""));
+        let value = variables.get(name)?.as_str();
+        return Some(value.replace(from, to));
+    }
+
+    if let Some((name, rest)) = expr.split_once('/') {
+        let (from, to) = rest.split_once('/')?;
+        let value = variables.get(name)?.as_str();
+        return Some(value.replacen(from, to, 1));
+    }
+
+    if let Some(name) = expr.strip_suffix("::8") {
+        let value = variables.get(name)?.as_str();
+        return Some(value.chars().take(8).collect());
+    }
+
+    Some(variables.get(expr)?.clone())
+}
+
+fn trim_apkbuild_suffix_pattern(value: &str, pattern: &str, longest: bool) -> Option<String> {
+    let matcher = pattern.strip_suffix('*')?;
+    let index = if let Some(class) = matcher.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+        let chars: Vec<_> = class.chars().collect();
+        if longest {
+            value.char_indices().find(|(_, ch)| chars.contains(ch))?.0
+        } else {
+            value.char_indices().rfind(|(_, ch)| chars.contains(ch))?.0
+        }
+    } else if longest {
+        value.find(matcher)?
+    } else {
+        value.rfind(matcher)?
+    };
+
+    Some(value[..index].to_string())
+}
+
+fn trim_apkbuild_prefix_pattern(value: &str, pattern: &str, longest: bool) -> Option<String> {
+    let matcher = pattern.strip_prefix('*')?;
+    let index = if let Some(class) = matcher.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+        let chars: Vec<_> = class.chars().collect();
+        let (idx, ch) = if longest {
+            value.char_indices().rfind(|(_, ch)| chars.contains(ch))?
+        } else {
+            value.char_indices().find(|(_, ch)| chars.contains(ch))?
+        };
+        idx + ch.len_utf8()
+    } else if longest {
+        value.rfind(matcher)? + matcher.len()
+    } else {
+        value.find(matcher)? + matcher.len()
+    };
+
+    Some(value[index..].to_string())
+}
+
+fn evaluate_apkbuild_arithmetic_expression(
+    expr: &str,
+    variables: &HashMap<String, String>,
+) -> Option<String> {
+    let mut total = 0i64;
+    let mut sign = 1i64;
+
+    for token in expr.split_whitespace() {
+        match token {
+            "+" => sign = 1,
+            "-" => sign = -1,
+            _ => {
+                let value = token
+                    .parse::<i64>()
+                    .ok()
+                    .or_else(|| variables.get(token)?.parse::<i64>().ok())?;
+                total += sign * value;
+            }
+        }
+    }
+
+    Some(total.to_string())
+}
+
+fn replace_all_bare_apkbuild_variables(
+    resolved: &mut String,
+    variables: &HashMap<String, String>,
+) -> bool {
+    let mut changed = false;
+    let mut output = String::with_capacity(resolved.len());
+    let mut rest = resolved.as_str();
+
+    while let Some(index) = rest.find('$') {
+        output.push_str(&rest[..index]);
+        rest = &rest[index..];
+
+        if rest.starts_with("${") || rest.starts_with("$(") {
+            output.push('$');
+            rest = &rest['$'.len_utf8()..];
+            continue;
+        }
+
+        let Some(first) = rest[1..].chars().next() else {
+            output.push('$');
+            rest = &rest['$'.len_utf8()..];
+            continue;
+        };
+
+        if first == '_' || first.is_ascii_alphabetic() {
+            let mut name_len = first.len_utf8();
+            for ch in rest[1 + name_len..].chars() {
+                if ch == '_' || ch.is_ascii_alphanumeric() {
+                    name_len += ch.len_utf8();
+                } else {
+                    break;
+                }
+            }
+
+            let name = &rest[1..1 + name_len];
+            if let Some(value) = variables.get(name) {
+                output.push_str(value);
+                rest = &rest[1 + name_len..];
+                changed = true;
+                continue;
+            }
+        }
+
+        output.push('$');
+        rest = &rest['$'.len_utf8()..];
+    }
+
+    if !changed {
+        return false;
+    }
+
+    output.push_str(rest);
+    *resolved = output;
+    true
+}
+
+fn starts_with_apkbuild_quote(value: &str) -> bool {
+    matches!(value.trim_start().chars().next(), Some('"' | '\''))
+}
+
+fn has_closed_apkbuild_quote(value: &str) -> bool {
+    let trimmed = value.trim_start();
+    let Some(quote) = trimmed.chars().next().filter(|c| matches!(c, '"' | '\'')) else {
+        return true;
+    };
+
+    let mut escaped = false;
+    for ch in trimmed.chars().skip(1) {
+        if quote == '"' && escaped {
+            escaped = false;
+            continue;
+        }
+
+        if quote == '"' && ch == '\\' {
+            escaped = true;
+            continue;
+        }
+
+        if ch == quote {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn strip_apkbuild_inline_comment(value: &str) -> &str {
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut escaped = false;
+    let mut parameter_expansion_depth = 0usize;
+
+    let mut iter = value.char_indices().peekable();
+    while let Some((index, ch)) = iter.next() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '$' if !in_single => {
+                if let Some((_, '{')) = iter.peek() {
+                    parameter_expansion_depth += 1;
+                }
+            }
+            '\\' if in_double => escaped = true,
+            '\'' if !in_double => in_single = !in_single,
+            '"' if !in_single => in_double = !in_double,
+            '}' if parameter_expansion_depth > 0 && !in_single => {
+                parameter_expansion_depth -= 1;
+            }
+            '#' if !in_single && !in_double && parameter_expansion_depth == 0 => {
+                return value[..index].trim_end();
+            }
+            _ => {}
+        }
+    }
+
+    value.trim_end()
+}
+
+fn strip_apkbuild_quote_chars(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| !matches!(ch, '"' | '\''))
+        .collect()
 }
 
 fn strip_wrapping_quotes(value: &str) -> &str {
@@ -623,7 +943,7 @@ fn parse_apkbuild_dependencies(variables: &HashMap<String, String>) -> Vec<Depen
                 .next()
                 .unwrap_or(dep_str)
                 .trim();
-            if dep_name.is_empty() {
+            if dep_name.is_empty() || !is_static_apkbuild_dependency_name(dep_name) {
                 continue;
             }
 
@@ -642,6 +962,19 @@ fn parse_apkbuild_dependencies(variables: &HashMap<String, String>) -> Vec<Depen
     }
 
     dependencies
+}
+
+fn is_static_apkbuild_dependency_name(dep_name: &str) -> bool {
+    let mut chars = dep_name.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+
+    if !first.is_ascii_alphanumeric() {
+        return false;
+    }
+
+    chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '+'))
 }
 
 fn extract_file_references(raw_text: &str) -> Vec<FileReference> {
@@ -789,13 +1122,6 @@ impl PackageParser for AlpineApkParser {
 }
 
 fn apk_contains_pkginfo(path: &Path) -> bool {
-    use flate2::read::GzDecoder;
-
-    let file = match std::fs::File::open(path) {
-        Ok(file) => file,
-        Err(_) => return false,
-    };
-
     let archive_size = match std::fs::metadata(path) {
         Ok(m) => m.len(),
         Err(_) => return false,
@@ -809,68 +1135,12 @@ fn apk_contains_pkginfo(path: &Path) -> bool {
         return false;
     }
 
-    let decoder = GzDecoder::new(file);
-    let mut archive = tar::Archive::new(decoder);
-    let entries = match archive.entries() {
-        Ok(entries) => entries,
-        Err(_) => return false,
-    };
-
-    let mut total_extracted: u64 = 0;
-
-    for entry_result in entries {
-        let entry = match entry_result {
-            Ok(entry) => entry,
-            Err(_) => return false,
-        };
-        let entry_path = match entry.path() {
-            Ok(path) => path,
-            Err(_) => return false,
-        };
-
-        let entry_str = entry_path.to_string_lossy();
-        if entry_str.contains("..") {
-            warn!("Skipping tar entry with path traversal: {}", entry_str);
-            continue;
-        }
-
-        let uncompressed_size = entry.size();
-        if uncompressed_size > MAX_FILE_SIZE {
-            warn!(
-                "Entry {:?} in {:?} exceeds MAX_FILE_SIZE ({} bytes)",
-                entry_path, path, uncompressed_size
-            );
-            continue;
-        }
-
-        if archive_size > 0 {
-            let ratio = uncompressed_size as f64 / archive_size as f64;
-            if ratio > MAX_COMPRESSION_RATIO {
-                warn!("Suspicious compression ratio in {:?}: {:.2}:1", path, ratio);
-                continue;
-            }
-        }
-
-        total_extracted += uncompressed_size;
-        if total_extracted > MAX_ARCHIVE_SIZE {
-            warn!("Total extracted size exceeds limit for {:?}", path);
-            return false;
-        }
-
-        if entry_path.ends_with(".PKGINFO") {
-            return true;
-        }
-    }
-
-    false
+    apk_pkginfo_content(path, archive_size)
+        .map(|content| content.is_some())
+        .unwrap_or(false)
 }
 
 fn extract_apk_archive(path: &Path) -> Result<PackageData, String> {
-    use flate2::read::GzDecoder;
-    use std::io::Read;
-
-    let file = std::fs::File::open(path).map_err(|e| format!("Failed to open .apk file: {}", e))?;
-
     let archive_size = std::fs::metadata(path)
         .map_err(|e| format!("Failed to stat .apk file: {}", e))?
         .len();
@@ -882,60 +1152,86 @@ fn extract_apk_archive(path: &Path) -> Result<PackageData, String> {
         ));
     }
 
-    let decoder = GzDecoder::new(file);
-    let mut archive = tar::Archive::new(decoder);
+    let content = apk_pkginfo_content(path, archive_size)?
+        .ok_or_else(|| ".apk archive does not contain .PKGINFO file".to_string())?;
 
-    let mut total_extracted: u64 = 0;
+    Ok(parse_pkginfo(&content))
+}
 
-    for entry_result in archive
-        .entries()
-        .map_err(|e| format!("Failed to read tar entries: {}", e))?
-    {
-        let mut entry = entry_result.map_err(|e| format!("Failed to read tar entry: {}", e))?;
+fn apk_pkginfo_content(path: &Path, archive_size: u64) -> Result<Option<String>, String> {
+    use flate2::read::MultiGzDecoder;
+    use std::io::Read;
 
-        let entry_path = entry
-            .path()
-            .map_err(|e| format!("Failed to get entry path: {}", e))?;
+    let file = std::fs::File::open(path).map_err(|e| format!("Failed to open .apk file: {}", e))?;
+    let mut decoder = MultiGzDecoder::new(file);
+    let mut decompressed = Vec::new();
+    decoder
+        .read_to_end(&mut decompressed)
+        .map_err(|e| format!("Failed to decompress .apk archive: {}", e))?;
 
-        let entry_str = entry_path.to_string_lossy();
-        if entry_str.contains("..") {
-            warn!("Skipping tar entry with path traversal: {}", entry_str);
+    if decompressed.len() as u64 > MAX_ARCHIVE_SIZE {
+        return Err(format!("Total extracted size exceeds limit for {:?}", path));
+    }
+
+    let mut offset = 0usize;
+    while offset + 512 <= decompressed.len() {
+        let header = &decompressed[offset..offset + 512];
+        if header.iter().all(|b| *b == 0) {
+            offset += 512;
             continue;
         }
 
-        let uncompressed_size = entry.size();
-        if uncompressed_size > MAX_FILE_SIZE {
+        let name_end = header[..100].iter().position(|b| *b == 0).unwrap_or(100);
+        let entry_name = String::from_utf8_lossy(&header[..name_end]);
+        if entry_name.contains("..") {
+            warn!("Skipping tar entry with path traversal: {}", entry_name);
+            offset += 512;
+            continue;
+        }
+
+        let size_field = &header[124..136];
+        let size_text = String::from_utf8_lossy(size_field).into_owned();
+        let size_text = size_text.trim_matches(char::from(0)).trim();
+        let size = usize::from_str_radix(size_text, 8)
+            .map_err(|e| format!("Failed to parse tar entry size for {:?}: {}", path, e))?;
+
+        if size as u64 > MAX_FILE_SIZE {
             warn!(
                 "Entry {:?} in {:?} exceeds MAX_FILE_SIZE ({} bytes)",
-                entry_path, path, uncompressed_size
+                entry_name, path, size
             );
+            offset += 512 + size.div_ceil(512) * 512;
             continue;
         }
 
         if archive_size > 0 {
-            let ratio = uncompressed_size as f64 / archive_size as f64;
+            let ratio = size as f64 / archive_size as f64;
             if ratio > MAX_COMPRESSION_RATIO {
                 warn!("Suspicious compression ratio in {:?}: {:.2}:1", path, ratio);
+                offset += 512 + size.div_ceil(512) * 512;
                 continue;
             }
         }
 
-        total_extracted += uncompressed_size;
-        if total_extracted > MAX_ARCHIVE_SIZE {
-            return Err(format!("Total extracted size exceeds limit for {:?}", path));
+        let data_start = offset + 512;
+        let data_end = data_start + size;
+        if data_end > decompressed.len() {
+            return Err(format!(
+                "Tar entry {:?} exceeds decompressed archive size",
+                entry_name
+            ));
         }
 
-        if entry_path.ends_with(".PKGINFO") {
-            let mut content = String::new();
-            entry
-                .read_to_string(&mut content)
-                .map_err(|e| format!("Failed to read .PKGINFO: {}", e))?;
-
-            return Ok(parse_pkginfo(&content));
+        if entry_name.ends_with(".PKGINFO") {
+            let content = String::from_utf8(decompressed[data_start..data_end].to_vec())
+                .map_err(|e| format!("Failed to decode .PKGINFO as UTF-8: {}", e))?;
+            return Ok(Some(content));
         }
+
+        offset = data_start + size.div_ceil(512) * 512;
     }
 
-    Err(".apk archive does not contain .PKGINFO file".to_string())
+    Ok(None)
 }
 
 fn parse_pkginfo(content: &str) -> PackageData {
@@ -1337,6 +1633,52 @@ p:so:libtest.so.1
     }
 
     #[test]
+    fn test_alpine_apk_parser_supports_concatenated_gzip_members() {
+        use flate2::Compression;
+        use flate2::write::GzEncoder;
+        use std::io::Write;
+        use tar::{Builder, Header};
+
+        fn gzip_tar_member(path: &str, contents: &[u8]) -> Vec<u8> {
+            let encoder = GzEncoder::new(Vec::new(), Compression::default());
+            let mut builder = Builder::new(encoder);
+            let mut header = Header::new_gnu();
+            header.set_size(contents.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            builder
+                .append_data(&mut header, path, contents)
+                .expect("append tar entry");
+            let encoder = builder.into_inner().expect("finish tar builder");
+            encoder.finish().expect("finish gzip encoder")
+        }
+
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        let apk_path = temp_dir.path().join("synthetic.apk");
+
+        let signature_member = gzip_tar_member(
+            ".SIGN.RSA.alpine-devel@lists.alpinelinux.org-test.rsa.pub",
+            b"signature",
+        );
+        let pkginfo_member = gzip_tar_member(
+            ".PKGINFO",
+            b"pkgname = synthetic\npkgver = 1.0-r0\npkgdesc = Synthetic APK\nurl = https://example.com\nlicense = MIT\narch = x86_64\n",
+        );
+
+        let mut file = std::fs::File::create(&apk_path).expect("create synthetic apk");
+        file.write_all(&signature_member)
+            .expect("write signature member");
+        file.write_all(&pkginfo_member)
+            .expect("write pkginfo member");
+
+        assert!(AlpineApkParser::is_match(&apk_path));
+        let pkg = AlpineApkParser::extract_first_package(&apk_path);
+        assert_eq!(pkg.name.as_deref(), Some("synthetic"));
+        assert_eq!(pkg.version.as_deref(), Some("1.0-r0"));
+        assert_eq!(pkg.extracted_license_statement.as_deref(), Some("MIT"));
+    }
+
+    #[test]
     fn test_alpine_apkbuild_parser_is_match() {
         assert!(AlpineApkbuildParser::is_match(&PathBuf::from("APKBUILD")));
         assert!(AlpineApkbuildParser::is_match(&PathBuf::from(
@@ -1418,6 +1760,229 @@ p:so:libtest.so.1
         );
         let matched = pkg.license_detections[0].matches[0].matched_text.as_deref();
         assert_eq!(matched, Some("custom:multiple"));
+    }
+
+    #[test]
+    fn test_parse_apkbuild_self_referential_makedepends_uses_previous_values() {
+        let content = r#"
+pkgname=util-linux
+pkgver=2.41.4
+pkgrel=0
+makedepends_build="bash"
+makedepends_host="
+	libcap-ng-dev
+	linux-headers
+	"
+if [ -z "$BOOTSTRAP" ]; then
+	makedepends_build="$makedepends_build asciidoctor"
+	makedepends_host="$makedepends_host python3-dev"
+fi
+makedepends="$makedepends_build $makedepends_host"
+"#;
+
+        let variables = parse_apkbuild_variables(content);
+
+        assert_eq!(
+            variables.get("makedepends_build").map(String::as_str),
+            Some("bash asciidoctor")
+        );
+        let makedepends_host = variables
+            .get("makedepends_host")
+            .expect("makedepends_host should resolve");
+        assert!(makedepends_host.contains("libcap-ng-dev"));
+        assert!(makedepends_host.contains("linux-headers"));
+        assert!(makedepends_host.contains("python3-dev"));
+        assert!(!makedepends_host.contains("$makedepends_host"));
+
+        let makedepends = variables
+            .get("makedepends")
+            .expect("makedepends should resolve");
+        assert!(makedepends.contains("bash asciidoctor"));
+        assert!(makedepends.contains("libcap-ng-dev"));
+        assert!(makedepends.contains("linux-headers"));
+        assert!(makedepends.contains("python3-dev"));
+        assert!(!makedepends.contains("$makedepends_build"));
+        assert!(!makedepends.contains("$makedepends_host"));
+    }
+
+    #[test]
+    fn test_parse_apkbuild_skips_unresolved_shell_fragments_in_dependencies() {
+        let content = r#"
+pkgname=test
+pkgver=1.0
+pkgrel=0
+makedepends="$makedepends_build ${_target/./_} openjdk$_jdkbuild-jdk bash %22 aarch64)"
+"#;
+
+        let pkg = parse_apkbuild(content);
+        let dependency_purls: Vec<_> = pkg
+            .dependencies
+            .iter()
+            .filter_map(|dep| dep.purl.as_deref())
+            .collect();
+
+        assert_eq!(dependency_purls, vec!["pkg:alpine/bash"]);
+    }
+
+    #[test]
+    fn test_parse_apkbuild_ignores_inline_comments_after_dependency_values() {
+        let content = r#"
+pkgname=bat
+pkgver=0.26.1
+pkgrel=0
+depends="less" # Required for RAW-CONTROL-CHARS
+makedepends="e2fsprogs-dev" # is pulled in externally.
+checkdepends="bash"
+"#;
+
+        let pkg = parse_apkbuild(content);
+        let dependency_purls: Vec<_> = pkg
+            .dependencies
+            .iter()
+            .filter_map(|dep| dep.purl.as_deref())
+            .collect();
+
+        assert_eq!(
+            dependency_purls,
+            vec![
+                "pkg:alpine/less",
+                "pkg:alpine/e2fsprogs-dev",
+                "pkg:alpine/bash",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_resolve_apkbuild_value_supports_common_parameter_expansions() {
+        let variables = HashMap::from([
+            ("_pkgver".to_string(), "1.6.0-641".to_string()),
+            ("_iverilog".to_string(), "13_0".to_string()),
+            ("pkgver".to_string(), "18.2.7".to_string()),
+            ("_krel".to_string(), "0".to_string()),
+            ("_rel".to_string(), "2".to_string()),
+            ("FLAVOR".to_string(), "".to_string()),
+        ]);
+
+        assert_eq!(
+            resolve_apkbuild_value("${_pkgver/-/.}", &variables),
+            "1.6.0.641"
+        );
+        assert_eq!(resolve_apkbuild_value("${pkgver%%.*}", &variables), "18");
+        assert_eq!(resolve_apkbuild_value("${pkgver%.*}", &variables), "18.2");
+        assert_eq!(resolve_apkbuild_value("${_iverilog##*_}", &variables), "0");
+        assert_eq!(
+            resolve_apkbuild_value("${_iverilog%%_*}.${_iverilog##*_}", &variables),
+            "13.0"
+        );
+        assert_eq!(
+            resolve_apkbuild_value("$(( _krel + _rel ))", &variables),
+            "2"
+        );
+        assert_eq!(resolve_apkbuild_value("${FLAVOR:-lts}", &variables), "lts");
+    }
+
+    #[test]
+    fn test_parse_apkbuild_keeps_initial_package_identity_assignment() {
+        let content = r#"
+pkgname=go
+pkgver=1.26.2
+pkgrel=0
+if [ "$CBUILD" != "$CHOST" ]; then
+	pkgname="go-bootstrap"
+	pkgrel=1
+fi
+"#;
+
+        let variables = parse_apkbuild_variables(content);
+        assert_eq!(variables.get("pkgname").map(String::as_str), Some("go"));
+    }
+
+    #[test]
+    fn test_parse_apkbuild_strips_concatenated_shell_quotes_from_package_name() {
+        let content = r#"
+_pkgname=cinny
+pkgname="$_pkgname"-web
+pkgver=4.11.1
+pkgrel=0
+"#;
+
+        let pkg = parse_apkbuild(content);
+        assert_eq!(pkg.name.as_deref(), Some("cinny-web"));
+    }
+
+    #[test]
+    fn test_parse_apkbuild_re_resolves_forward_references_in_package_identity() {
+        let content = r#"
+pkgname=ceph${pkgver%%.*}
+pkgver=18.2.7
+pkgrel=7
+"#;
+
+        let pkg = parse_apkbuild(content);
+        assert_eq!(pkg.name.as_deref(), Some("ceph18"));
+        assert_eq!(pkg.version.as_deref(), Some("18.2.7-r7"));
+    }
+
+    #[test]
+    fn test_parse_apkbuild_supports_empty_global_replacement_in_pkgver() {
+        let content = r#"
+pkgname=quickjs
+_pkgver=2025-09-13
+pkgver=0.${_pkgver//-}
+pkgrel=0
+"#;
+
+        let pkg = parse_apkbuild(content);
+        assert_eq!(pkg.version.as_deref(), Some("0.20250913-r0"));
+    }
+
+    #[test]
+    fn test_parse_apkbuild_supports_split_version_parts() {
+        let content = r#"
+pkgname=iverilog
+_pkgver=13_0
+pkgver=${_pkgver%%_*}.${_pkgver##*_}
+pkgrel=0
+"#;
+
+        let variables = parse_apkbuild_variables(content);
+        assert_eq!(variables.get("pkgver").map(String::as_str), Some("13.0"));
+
+        let pkg = parse_apkbuild(content);
+        assert_eq!(pkg.version.as_deref(), Some("13.0-r0"));
+    }
+
+    #[test]
+    fn test_parse_apkbuild_keeps_loop_assignments_from_blowing_up_dependencies() {
+        let content = r#"
+pkgname=alpine-ipxe
+pkgver=1.20.1
+pkgrel=2
+makedepends="xz-dev perl coreutils bash"
+_targets="bin/ipxe.iso bin/ipxe.lkrn"
+for _target in $_targets; do
+	_target=${_target##*/}
+	_target=${_target/./_}
+	subpackages="$subpackages $pkgname-$_target:_split"
+done
+"#;
+
+        let pkg = parse_apkbuild(content);
+        let dependency_purls: Vec<_> = pkg
+            .dependencies
+            .iter()
+            .filter_map(|dep| dep.purl.as_deref())
+            .collect();
+
+        assert_eq!(
+            dependency_purls,
+            vec![
+                "pkg:alpine/xz-dev",
+                "pkg:alpine/perl",
+                "pkg:alpine/coreutils",
+                "pkg:alpine/bash",
+            ]
+        );
     }
 
     #[test]
