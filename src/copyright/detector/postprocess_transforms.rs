@@ -15,6 +15,9 @@ use crate::copyright::refiner::{
 use crate::copyright::types::{AuthorDetection, CopyrightDetection, HolderDetection};
 use crate::models::LineNumber;
 
+use super::author_heuristics::{
+    looks_like_structured_json_author_fallback, refine_author_with_optional_handle_suffix,
+};
 use super::seen_text::SeenTextSets;
 use super::token_utils::group_by;
 
@@ -50,7 +53,10 @@ pub fn refine_final_authors(authors: &mut Vec<AuthorDetection>) {
         .filter_map(|a| {
             let author = if let Some(author) = refine_author(&a.author) {
                 author
-            } else if looks_like_collective_institution_author(&a.author) {
+            } else if refine_author_with_optional_handle_suffix(&a.author).is_some()
+                || looks_like_structured_json_author_fallback(&a.author)
+                || looks_like_collective_institution_author(&a.author)
+            {
                 a.author.trim().to_string()
             } else {
                 return None;
