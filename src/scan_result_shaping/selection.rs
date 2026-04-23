@@ -9,7 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::models::FileInfo;
-use crate::scanner::CollectedPaths;
+use crate::scanner::{CollectedPaths, CollectionFrontier};
 
 use super::apply_path_selection_filter;
 
@@ -59,6 +59,7 @@ pub(crate) fn resolve_native_scan_inputs(inputs: &[String]) -> Result<(String, V
 #[derive(Debug)]
 pub(crate) struct ResolvedPathsFileEntries {
     pub selections: Vec<SelectedPath>,
+    pub frontier: Vec<CollectionFrontier>,
     pub missing_entries: Vec<String>,
 }
 
@@ -80,6 +81,7 @@ pub(crate) fn resolve_paths_file_entries(
     }
 
     let mut selections = Vec::new();
+    let mut frontier = Vec::new();
     let mut missing_entries = Vec::new();
     let mut seen = HashSet::new();
 
@@ -92,6 +94,10 @@ pub(crate) fn resolve_paths_file_entries(
         if absolute.exists() {
             let selection = build_selected_path(&normalized, absolute.is_dir());
             if seen.insert(selection_cache_key(&selection)) {
+                frontier.push(CollectionFrontier {
+                    path: PathBuf::from(&normalized),
+                    recurse: absolute.is_dir(),
+                });
                 selections.push(selection);
             }
         } else if seen.insert(format!("missing:{normalized}")) {
@@ -101,6 +107,7 @@ pub(crate) fn resolve_paths_file_entries(
 
     Ok(ResolvedPathsFileEntries {
         selections,
+        frontier,
         missing_entries,
     })
 }
