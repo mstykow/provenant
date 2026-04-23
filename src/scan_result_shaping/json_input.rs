@@ -672,7 +672,7 @@ fn normalize_loaded_header_paths(loaded: &mut JsonScanInput, original_paths: &[S
         .filter(|(before, after)| before.as_str() != *after)
         .map(|(before, after)| (before.as_str(), after))
         .collect();
-    replacements.sort_by(|left, right| right.0.len().cmp(&left.0.len()));
+    replacements.sort_by_key(|replacement| std::cmp::Reverse(replacement.0.len()));
 
     for header in &mut loaded.headers {
         for error in &mut header.errors {
