@@ -65,6 +65,12 @@
     <text class="legend-label" x="916" y="46">ScanCode</text>
   </g>
   <g aria-label="ScanCode points">
+    <rect x="92.00" y="420.46" width="8" height="8" fill="#d97706" rx="1.5"><title>7zip 25.01-r0 .apk @ sha256:6602ccb
+Files: 1
+ScanCode: 80.82s</title></rect>
+    <rect x="92.00" y="423.47" width="8" height="8" fill="#d97706" rx="1.5"><title>Alpine 3.23.3 installed DB snapshot @ sha256:42d0e6d
+Files: 1
+ScanCode: 75.84s</title></rect>
     <rect x="92.00" y="427.72" width="8" height="8" fill="#d97706" rx="1.5"><title>Fedora 38 rpmdb NDB snapshot (synthetic from sqlite fixture)
 Files: 1
 ScanCode: 69.31s</title></rect>
@@ -488,6 +494,9 @@ ScanCode: 807.63s</title></rect>
     <rect x="767.28" y="288.09" width="8" height="8" fill="#d97706" rx="1.5"><title>metabase/metabase @ 10997b1
 Files: 18030
 ScanCode: 1330.92s</title></rect>
+    <rect x="784.93" y="273.87" width="8" height="8" fill="#d97706" rx="1.5"><title>alpinelinux/aports @ d6ebad7
+Files: 23293
+ScanCode: 1798.33s</title></rect>
     <rect x="797.40" y="271.78" width="8" height="8" fill="#d97706" rx="1.5"><title>gradle/gradle @ 92068b4
 Files: 27912
 ScanCode: 1879.67s</title></rect>
@@ -517,6 +526,12 @@ Files: 491354
 ScanCode: 22892.20s</title></rect>
   </g>
   <g aria-label="Provenant points">
+    <circle cx="96.00" cy="522.92" r="4.5" fill="#2563eb"><title>7zip 25.01-r0 .apk @ sha256:6602ccb
+Files: 1
+Provenant: 10.06s</title></circle>
+    <circle cx="96.00" cy="522.78" r="4.5" fill="#2563eb"><title>Alpine 3.23.3 installed DB snapshot @ sha256:42d0e6d
+Files: 1
+Provenant: 10.09s</title></circle>
     <circle cx="96.00" cy="526.58" r="4.5" fill="#2563eb"><title>Fedora 38 rpmdb NDB snapshot (synthetic from sqlite fixture)
 Files: 1
 Provenant: 9.31s</title></circle>
@@ -940,6 +955,9 @@ Provenant: 33.41s</title></circle>
     <circle cx="771.28" cy="445.44" r="4.5" fill="#2563eb"><title>metabase/metabase @ 10997b1
 Files: 18030
 Provenant: 51.84s</title></circle>
+    <circle cx="788.93" cy="415.88" r="4.5" fill="#2563eb"><title>alpinelinux/aports @ d6ebad7
+Files: 23293
+Provenant: 96.91s</title></circle>
     <circle cx="801.40" cy="396.83" r="4.5" fill="#2563eb"><title>gradle/gradle @ 92068b4
 Files: 27912
 Provenant: 145.05s</title></circle>
