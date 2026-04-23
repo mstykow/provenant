@@ -234,6 +234,19 @@ fn resolve_paths_file_entries_normalizes_existing_entries_and_tracks_missing() {
             SelectedPath::Subtree("docs".to_string())
         ]
     );
+    assert_eq!(
+        resolved.frontier,
+        vec![
+            CollectionFrontier {
+                path: PathBuf::from("src/nested/main.rs"),
+                recurse: false,
+            },
+            CollectionFrontier {
+                path: PathBuf::from("docs"),
+                recurse: true,
+            }
+        ]
+    );
     assert_eq!(resolved.missing_entries, vec!["missing/file.rs"]);
 }
 
