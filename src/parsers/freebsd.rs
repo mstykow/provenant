@@ -264,6 +264,10 @@ fn normalize_freebsd_license_name(license: &str) -> Option<NormalizedDeclaredLic
     match license.trim() {
         "GPLv2" => Some(NormalizedDeclaredLicense::new("gpl-2.0", "GPL-2.0-only")),
         "GPLv3" => Some(NormalizedDeclaredLicense::new("gpl-3.0", "GPL-3.0-only")),
+        "BSD2CLAUSE" => Some(NormalizedDeclaredLicense::new(
+            "bsd-simplified",
+            "BSD-2-Clause",
+        )),
         "BSD3CLAUSE" => Some(NormalizedDeclaredLicense::new("bsd-new", "BSD-3-Clause")),
         "PSFL" => Some(NormalizedDeclaredLicense::new("psf-2.0", "PSF-2.0")),
         "RUBY" => Some(NormalizedDeclaredLicense::new("ruby", "Ruby")),
@@ -418,6 +422,17 @@ mod tests {
         let logic = Some("or".to_string());
         let result = build_license_statement(&licenses, &logic);
         assert_eq!(result, Some("Apache-2.0 OR MIT".to_string()));
+    }
+
+    #[test]
+    fn test_normalize_freebsd_license_name_bsd2clause() {
+        assert_eq!(
+            normalize_freebsd_license_name("BSD2CLAUSE"),
+            Some(NormalizedDeclaredLicense::new(
+                "bsd-simplified",
+                "BSD-2-Clause",
+            ))
+        );
     }
 }
 
