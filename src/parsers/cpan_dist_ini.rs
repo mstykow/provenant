@@ -215,7 +215,7 @@ fn parse_dependencies(sections: &HashMap<String, HashMap<String, String>>) -> Ve
     let mut dependencies = Vec::new();
 
     let mut sorted_sections: Vec<_> = sections.iter().collect();
-    sorted_sections.sort_by(|(left_name, _), (right_name, _)| left_name.cmp(right_name));
+    sorted_sections.sort_by_key(|(left_name, _)| *left_name);
 
     for (section_name, fields) in sorted_sections.iter().take(MAX_ITERATION_COUNT) {
         let Some(scope) = classify_prereq_scope(section_name) else {
@@ -223,7 +223,7 @@ fn parse_dependencies(sections: &HashMap<String, HashMap<String, String>>) -> Ve
         };
 
         let mut sorted_fields: Vec<_> = fields.iter().collect();
-        sorted_fields.sort_by(|(left_name, _), (right_name, _)| left_name.cmp(right_name));
+        sorted_fields.sort_by_key(|(left_name, _)| *left_name);
 
         for (module_name, version_req) in sorted_fields.iter().take(MAX_ITERATION_COUNT) {
             let purl = truncate_field(format!("pkg:cpan/{}", module_name));
