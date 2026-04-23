@@ -100,3 +100,12 @@ fn test_extract_comment_author_supplements_handles_c_style_translator_headers() 
         ]
     );
 }
+
+#[test]
+fn test_extract_comment_author_supplements_ignores_html_tags() {
+    let text = "the order defined by the DTD (see Section 13.3).</p>";
+
+    let authors = extract_comment_author_supplements(text);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}

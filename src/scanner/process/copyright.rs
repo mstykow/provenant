@@ -224,7 +224,7 @@ fn extract_patch_header_author_supplements(text_content: &str) -> Vec<AuthorDete
 fn extract_comment_author_supplements(text_content: &str) -> Vec<AuthorDetection> {
     static COMMENT_AUTHOR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
-            r"(?i)\b(?:written|edited|modified|updated|originally)\s+by\s+(?P<author>[^<\n]+<[^>]+>)\s*\.?$|^(?:[#;/*!\-\s]+)?(?:[^<\n]*?\bby\s+(?P<author2>[^<\n]+<[^>]+>))\s*\.?$",
+            r"(?i)\b(?:written|edited|modified|updated|originally)\s+by\s+(?P<author>[^<\n]+<\s*(?:[^>\s]+@[^>\s]+|https?://[^>\s]+)\s*>)\s*\.?$|^(?:[#;/*!\-\s]+)?(?:[^<\n]*?\bby\s+(?P<author2>[^<\n]+<\s*(?:[^>\s]+@[^>\s]+|https?://[^>\s]+)\s*>))\s*\.?$",
         )
         .expect("valid comment author regex")
     });

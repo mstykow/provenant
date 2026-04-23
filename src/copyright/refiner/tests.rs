@@ -94,6 +94,9 @@ fn test_refine_author_drops_generic_role_and_prose_fragments() {
     assert_eq!(refine_author("chef-client"), None);
     assert_eq!(refine_author("compatible"), None);
     assert_eq!(refine_author("desired"), None);
+    assert_eq!(refine_author("performing"), None);
+    assert_eq!(refine_author("review"), None);
+    assert_eq!(refine_author("volunteers"), None);
     assert_eq!(refine_author("Guide"), None);
     assert_eq!(refine_author("maintainers with write access"), None);
     assert_eq!(refine_author("schedule and monitor workflows"), None);
@@ -120,6 +123,8 @@ fn test_refine_author_drops_generic_role_and_prose_fragments() {
         refine_author("Daniel Vaz Gaspar"),
         Some("Daniel Vaz Gaspar".to_string())
     );
+    assert_eq!(refine_author("the DTD (see Section 13.3).</p>"), None);
+    assert_eq!(refine_author("distribute Contributors"), None);
 }
 
 #[test]
@@ -1567,6 +1572,10 @@ fn test_refine_copyright_drops_css_footer_noise() {
     assert!(is_junk_copyright("Copyright footer"));
     assert!(is_junk_copyright("Copyright, Legal Notice"));
     assert!(is_junk_copyright("copyright color 666666"));
+    assert!(is_junk_copyright("copyright font-size color 666"));
+    assert!(is_junk_copyright(
+        "copyrighted and may only be modified in the following manner. The"
+    ));
 }
 
 #[test]

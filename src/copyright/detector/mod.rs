@@ -343,6 +343,12 @@ pub fn detect_copyrights_from_text_with_deadline(
     );
 
     refine_final_copyrights(&mut copyrights);
+    postprocess_transforms::refine_final_authors(&mut authors);
+    postprocess_transforms::drop_trademark_boilerplate_multiline_extensions(
+        &raw_lines,
+        &mut copyrights,
+        &mut holders,
+    );
     postprocess_transforms::drop_same_span_license_tail_variants(&mut copyrights, &mut holders);
     postprocess_transforms::drop_shadowed_bare_c_from_year_fragments(&mut copyrights, &mut holders);
     drop_path_fragment_holders_from_bare_c_code_lines(&raw_lines, &copyrights, &mut holders);
