@@ -11,6 +11,7 @@ if ! command -v cargo-machete &> /dev/null; then
 fi
 
 cargo machete ./Cargo.toml
+cargo machete ./tools/license-headers/Cargo.toml
 cargo machete ./xtask/Cargo.toml
 
 echo "No unused dependencies in checked Cargo.toml files."
