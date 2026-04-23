@@ -27,7 +27,7 @@ use super::lexer::get_tokens;
 use super::line_tracking::{LineNumberIndex, PreparedLineCache};
 use super::parser::{parse, parse_with_deadline};
 #[cfg(test)]
-use super::refiner::{refine_copyright, refine_holder_in_copyright_context};
+use super::refiner::refine_copyright;
 #[cfg(test)]
 use super::types::Token;
 use super::types::{
@@ -399,8 +399,6 @@ use token_utils::{
     drop_scan_only_holders_from_copyright_scan_lines,
     extract_original_author_additional_contributors,
 };
-#[cfg(test)]
-use tree_walk::{collect_trailing_orphan_tokens, should_start_absorbing};
 use tree_walk::{
     extract_bare_copyrights, extract_copyrights_from_spans, extract_from_spans,
     extract_from_tree_nodes, extract_holder_is_name, extract_orphaned_by_authors,

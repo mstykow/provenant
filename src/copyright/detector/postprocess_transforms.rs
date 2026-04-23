@@ -18,6 +18,10 @@ use crate::models::LineNumber;
 use super::seen_text::SeenTextSets;
 use super::token_utils::group_by;
 
+#[cfg(test)]
+#[path = "postprocess_transforms_test.rs"]
+mod tests;
+
 pub fn refine_final_copyrights(copyrights: &mut Vec<CopyrightDetection>) {
     if copyrights.is_empty() {
         return;

@@ -13,6 +13,10 @@ use crate::copyright::refiner::{looks_like_name_with_parenthesized_url, refine_a
 use crate::copyright::types::{AuthorDetection, CopyrightDetection, HolderDetection};
 use crate::models::LineNumber;
 
+#[cfg(test)]
+#[path = "author_heuristics_test.rs"]
+mod tests;
+
 fn line_number_for_offset(content: &str, offset: usize) -> LineNumber {
     LineNumber::from_0_indexed(content[..offset].bytes().filter(|b| *b == b'\n').count())
 }
