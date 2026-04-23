@@ -56,7 +56,7 @@ Current shaping steps:
 
 - `apply_ignore_resource_filter()` — drops whole file resources whose detected authors or holders match user-supplied regex filters
 - `apply_include_filter()` — keeps matching files and the directory chain needed to retain a valid tree
-- `apply_only_findings_filter()` — drops files without findings while retaining necessary ancestor directories
+- `apply_only_findings_filter()` — drops resources without findings and keeps only resources that themselves carry findings
 - `filter_redundant_clues()` — deduplicates identical copyrights/holders/authors/emails/URLs by value and line span
 - `normalize_paths()` — applies `--strip-root` / `--full-root` to file paths, package file references, and embedded `Match.from_file` paths
 - `apply_mark_source()` — marks source-heavy files/directories and computes `source_count`
@@ -83,7 +83,7 @@ This already differs favorably from Python's plugin-oriented summarycode approac
 - ✅ Root-resource collection and single-file scan support now give path shaping an explicit scan-root model
 - ✅ Native multi-input relative scans now follow the upstream common-prefix + synthetic-include model
 - ✅ Whole-resource `--ignore-author` / `--ignore-copyright-holder` filtering with ancestor-directory preservation
-- ✅ Only-findings filtering with ancestor-directory preservation, including generated-only files
+- ✅ Only-findings filtering by per-resource findings, including generated-only files
 - ✅ Redundant-clue deduplication by exact value/line-span identity
 - ✅ Rule-based ignorable clue suppression for `--filter-clues` using matched rule identifiers and coverage thresholds
 - ✅ Relative and absolute path normalization for resource paths, package file references, and embedded `Match.from_file` references
@@ -132,7 +132,7 @@ This layer should remain a **presentation shaper**, not a data enricher.
 
 - [x] All shaping-specific CLI flags are implemented and wired through the intended pipeline stage
 - [x] Output-shaping flags remain clearly separated from summary/tally computation
-- [x] Filtering preserves required ancestor directories deterministically
+- [x] Filters that reshape tree structure preserve required ancestor directories deterministically where that ancestry is part of the contract
 - [x] Path normalization behavior is explicit and tested
 - [x] `mark_source` remains count-based and does not introduce rescans
 - [x] Large scans do not incur Python-style repeated persistence/copy overhead in this layer
