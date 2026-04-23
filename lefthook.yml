@@ -11,11 +11,12 @@ commit-msg:
 pre-commit:
   commands:
     license-headers:
-      run: cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin check-license-headers -- --check {staged_files}
+      run: cargo run --quiet --locked --manifest-path tools/license-headers/Cargo.toml -- --check {staged_files}
 
     cargo-sort:
       glob:
         - Cargo.toml
+        - tools/license-headers/Cargo.toml
         - xtask/Cargo.toml
       run: ./scripts/cargo_sort_manifests.sh {staged_files}
       stage_fixed: true
@@ -24,6 +25,7 @@ pre-commit:
       glob:
         - "src/**/*.rs"
         - "tests/**/*.rs"
+        - "tools/license-headers/**/*.rs"
         - "xtask/**/*.rs"
       run: rustfmt --edition 2024 {staged_files}
       stage_fixed: true
@@ -39,6 +41,11 @@ pre-commit:
         - "xtask/**/*.rs"
       run: cargo clippy --manifest-path xtask/Cargo.toml --all-targets -- -D warnings
 
+    license-headers-clippy:
+      glob:
+        - "tools/license-headers/**/*.rs"
+      run: cargo clippy --manifest-path tools/license-headers/Cargo.toml --all-targets -- -D warnings
+
     check-release-version-sync:
       glob:
         - Cargo.toml
@@ -52,6 +59,7 @@ pre-commit:
         - Cargo.toml
         - Cargo.lock
         - deny.toml
+        - tools/license-headers/Cargo.toml
       run: ./scripts/check_dependency_policy.sh
 
     generate-supported-formats:
