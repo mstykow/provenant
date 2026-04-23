@@ -1305,14 +1305,31 @@ fn resolve_native_scan_selection_uses_paths_file_under_explicit_root() {
 
     std::env::set_current_dir(old_cwd).expect("restore cwd");
 
-    let (resolved_root, includes, missing_entries) =
-        result.expect("paths file selection should resolve");
+    let NativeScanSelection {
+        scan_path: resolved_root,
+        selected_paths: includes,
+        collection_frontier: frontier,
+        missing_entries,
+    } = result.expect("paths file selection should resolve");
     assert_eq!(resolved_root, scan_root.to_str().expect("utf-8 path"));
     assert_eq!(
         includes,
         vec![
             crate::scan_result_shaping::SelectedPath::Exact("src/lib.rs".to_string()),
             crate::scan_result_shaping::SelectedPath::Subtree("docs".to_string())
+        ]
+    );
+    assert_eq!(
+        frontier,
+        vec![
+            crate::scanner::CollectionFrontier {
+                path: std::path::PathBuf::from("src/lib.rs"),
+                recurse: false,
+            },
+            crate::scanner::CollectionFrontier {
+                path: std::path::PathBuf::from("docs"),
+                recurse: true,
+            }
         ]
     );
     assert_eq!(missing_entries, vec!["missing.rs"]);
