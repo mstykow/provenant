@@ -78,7 +78,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Check SPDX-style license headers
-        run: cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin check-license-headers -- --check
+        run: cargo run --quiet --locked --manifest-path tools/license-headers/Cargo.toml -- --check
 
       - name: Check release version sync
         run: ./scripts/check_release_version_sync.sh
