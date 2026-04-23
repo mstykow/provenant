@@ -457,6 +457,41 @@ fn test_engine_surfaces_bare_gpl_as_clue_not_detection() {
 }
 
 #[test]
+fn test_engine_surfaces_bare_gpl1_as_clue_not_detection() {
+    let engine = get_engine();
+
+    let detections = engine
+        .detect_with_kind("GPL1", false, false)
+        .expect("Detection should succeed");
+
+    assert!(
+        detections.iter().any(|detection| {
+            detection
+                .detection_log
+                .iter()
+                .any(|log| log == "license-clues")
+                && detection.license_expression.is_none()
+                && detection
+                    .matches
+                    .iter()
+                    .any(|m| m.rule_identifier == "gpl1_bare_word_only.RULE")
+        }),
+        "bare GPL1 should remain visible as clue-only evidence: {:?}",
+        detections
+            .iter()
+            .map(|d| (
+                d.license_expression.as_deref().unwrap_or("none"),
+                d.detection_log.clone(),
+                d.matches
+                    .iter()
+                    .map(|m| m.rule_identifier.as_str())
+                    .collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn test_engine_does_not_detect_graphics_pipeline_library_as_gpl() {
     let engine = get_engine();
 
