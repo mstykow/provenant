@@ -8,7 +8,7 @@
 //! share the same extension (e.g., Alpine .apk vs Android .apk).
 
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufReader, Read};
 use std::path::Path;
 
 /// Check if file starts with ZIP magic bytes (PK\x03\x04).
@@ -39,15 +39,17 @@ pub fn is_squashfs(path: &Path) -> bool {
         || check_magic_bytes(path, &[0x73, 0x71, 0x73, 0x68])
 }
 
-/// Check if file contains NSIS installer signature.
+/// Check if file contains the NSIS installer signature.
 ///
-/// NSIS installers are Windows executables that contain a specific signature string.
-/// This function searches the first 8KB of the file for "Nullsoft.NSIS.exehead".
+/// NSIS installers are Windows executables that contain the
+/// `Nullsoft.NSIS.exehead` marker. Real-world installers can place this marker
+/// well beyond the first few kilobytes, so search the file in streaming chunks
+/// instead of assuming it appears near the beginning.
 ///
 /// # Returns
-/// `true` if the NSIS signature is found within the first 8KB, `false` otherwise or on IO error.
+/// `true` if the NSIS signature is found anywhere in the file, `false` otherwise or on IO error.
 pub fn is_nsis_installer(path: &Path) -> bool {
-    const SEARCH_SIZE: usize = 8192; // 8KB
+    const CHUNK_SIZE: usize = 64 * 1024;
     const NSIS_SIGNATURE: &[u8] = b"Nullsoft.NSIS.exehead";
 
     let mut file = match File::open(path) {
@@ -55,18 +57,37 @@ pub fn is_nsis_installer(path: &Path) -> bool {
         Err(_) => return false,
     };
 
-    let mut buffer = vec![0u8; SEARCH_SIZE];
-    let bytes_read = match file.read(&mut buffer) {
-        Ok(n) => n,
-        Err(_) => return false,
-    };
+    let mut reader = BufReader::new(&mut file);
+    let overlap = NSIS_SIGNATURE.len().saturating_sub(1);
+    let mut buffer = vec![0u8; CHUNK_SIZE + overlap];
+    let mut carry_len = 0;
 
-    buffer.truncate(bytes_read);
+    loop {
+        let bytes_read = match reader.read(&mut buffer[carry_len..carry_len + CHUNK_SIZE]) {
+            Ok(n) => n,
+            Err(_) => return false,
+        };
 
-    // Search for NSIS signature in the buffer
-    buffer
-        .windows(NSIS_SIGNATURE.len())
-        .any(|window| window == NSIS_SIGNATURE)
+        if bytes_read == 0 {
+            return false;
+        }
+
+        let search_len = carry_len + bytes_read;
+        if buffer[..search_len]
+            .windows(NSIS_SIGNATURE.len())
+            .any(|window| window == NSIS_SIGNATURE)
+        {
+            return true;
+        }
+
+        if overlap == 0 || search_len <= overlap {
+            return false;
+        }
+
+        let carry_start = search_len - overlap;
+        buffer.copy_within(carry_start..search_len, 0);
+        carry_len = overlap;
+    }
 }
 
 /// Helper function to check if a file starts with specific magic bytes.
@@ -173,12 +194,12 @@ mod tests {
     }
 
     #[test]
-    fn test_is_nsis_installer_beyond_8kb() {
-        // Create a file with NSIS signature beyond 8KB - should NOT match
+    fn test_is_nsis_installer_beyond_initial_chunk() {
+        // Real NSIS installers can place the signature well past the opening bytes.
         let mut file = NamedTempFile::new().unwrap();
-        file.write_all(&vec![0u8; 8500]).unwrap();
+        file.write_all(&vec![0u8; 70_000]).unwrap();
         file.write_all(b"Nullsoft.NSIS.exehead").unwrap();
-        assert!(!is_nsis_installer(file.path()));
+        assert!(is_nsis_installer(file.path()));
     }
 
     #[test]

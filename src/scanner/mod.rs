@@ -1550,6 +1550,69 @@ mod tests {
     }
 
     #[test]
+    fn scanner_keeps_nsis_and_windows_executable_package_data_together() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let file_path = temp_dir.path().join("nsis-with-version.exe");
+        let mut fixture = fs::read("testdata/compiled-binary-golden/win_pe/libiconv2.dll")
+            .expect("read PE fixture");
+        if fixture.len() < 70_000 {
+            fixture.resize(70_000, 0);
+        }
+        fixture.extend_from_slice(b"Nullsoft.NSIS.exehead");
+        fs::write(&file_path, fixture).expect("write synthetic NSIS PE fixture");
+
+        let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
+        let collected = collect_paths(temp_dir.path(), 0, &[]);
+        let result = process_collected(
+            &collected,
+            progress,
+            None,
+            LicenseScanOptions::default(),
+            &TextDetectionOptions {
+                collect_info: false,
+                detect_packages: true,
+                detect_application_packages: true,
+                detect_system_packages: false,
+                detect_packages_in_compiled: false,
+                detect_copyrights: false,
+                detect_generated: false,
+                detect_emails: false,
+                detect_urls: false,
+                max_emails: 50,
+                max_urls: 50,
+                timeout_seconds: 120.0,
+            },
+        );
+
+        let scanned = result
+            .files
+            .into_iter()
+            .find(|entry| {
+                entry.file_type == FileType::File && entry.path.ends_with("/nsis-with-version.exe")
+            })
+            .expect("compiled artifact present");
+
+        assert_eq!(
+            scanned.package_data.len(),
+            2,
+            "package_data: {:#?}",
+            scanned.package_data
+        );
+        assert!(
+            scanned
+                .package_data
+                .iter()
+                .any(|pkg| pkg.datasource_id == Some(DatasourceId::NsisInstaller))
+        );
+        assert!(
+            scanned
+                .package_data
+                .iter()
+                .any(|pkg| pkg.datasource_id == Some(DatasourceId::WindowsExecutable))
+        );
+    }
+
+    #[test]
     fn scanner_detects_license_from_font_metadata() {
         let temp_dir = TempDir::new().expect("create temp dir");
         let file_path = temp_dir.path().join("Lato-Bold.ttf");

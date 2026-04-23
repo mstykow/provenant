@@ -214,29 +214,37 @@ fn extract_information_from_content(
 
     if text_options.detect_packages {
         let started = Instant::now();
-        let parse_result = rpm_fast_path_parse_result.take().or_else(|| {
+        let parse_result = if let Some(rpm_result) = rpm_fast_path_parse_result.take() {
+            Some(rpm_result)
+        } else {
+            let mut parse_results = Vec::new();
+
             if let Some(engine) = license_engine.clone() {
-                try_parse_file_with_license_engine(&filesystem_path, Some(engine))
-            } else {
-                try_parse_file(&filesystem_path)
+                if let Some(result) =
+                    try_parse_file_with_license_engine(&filesystem_path, Some(engine))
+                {
+                    parse_results.push(result);
+                }
+            } else if let Some(result) = try_parse_file(&filesystem_path) {
+                parse_results.push(result);
             }
-            .or_else(|| {
-                text_options
-                    .detect_application_packages
-                    .then(|| try_parse_windows_executable_bytes(&filesystem_path, &buffer))
-                    .flatten()
-            })
-            .or_else(|| {
-                text_options
-                    .detect_packages_in_compiled
-                    .then(|| {
-                        (classification.is_binary && is_supported_compiled_binary_format(&buffer))
-                            .then(|| try_parse_compiled_bytes(&buffer))
-                            .flatten()
-                    })
-                    .flatten()
-            })
-        });
+
+            if text_options.detect_application_packages
+                && let Some(result) = try_parse_windows_executable_bytes(&filesystem_path, &buffer)
+            {
+                parse_results.push(result);
+            }
+
+            if text_options.detect_packages_in_compiled
+                && classification.is_binary
+                && is_supported_compiled_binary_format(&buffer)
+                && let Some(result) = try_parse_compiled_bytes(&buffer)
+            {
+                parse_results.push(result);
+            }
+
+            merge_parse_results(parse_results)
+        };
 
         if let Some(parse_result) = parse_result {
             apply_parse_result(
@@ -455,6 +463,25 @@ fn apply_parse_result(
 ) {
     file_info_builder.package_data(filter_packages(parse_result.packages, text_options));
     scan_diagnostics.extend(parse_result.scan_diagnostics);
+}
+
+fn merge_parse_results(results: Vec<ParsePackagesResult>) -> Option<ParsePackagesResult> {
+    let mut merged = ParsePackagesResult::default();
+    let mut has_content = false;
+
+    for result in results {
+        if !result.packages.is_empty()
+            || !result.scan_diagnostics.is_empty()
+            || !result.scan_errors.is_empty()
+        {
+            has_content = true;
+        }
+        merged.packages.extend(result.packages);
+        merged.scan_diagnostics.extend(result.scan_diagnostics);
+        merged.scan_errors.extend(result.scan_errors);
+    }
+
+    has_content.then_some(merged)
 }
 
 fn filter_packages(
