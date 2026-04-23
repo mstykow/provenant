@@ -106,7 +106,7 @@ Canonical hook and CI definitions live in [`lefthook.yml`](lefthook.yml), [`pack
 - Inbound contributions use the Developer Certificate of Origin (DCO) 1.1. Agent-authored commits should include a matching sign-off via `git commit -s`, and rewritten commits must preserve that trailer. See [`DCO`](DCO) and [`CONTRIBUTING.md`](CONTRIBUTING.md) for the canonical policy text.
 - First-party code and automation files in the repo's allowlisted rollout carry SPDX-style headers using `SPDX-FileCopyrightText: Provenant contributors` and `SPDX-License-Identifier: Apache-2.0`.
 - Header scope is configured centrally in [`.license-headers.toml`](.license-headers.toml). Do not add headers to excluded paths such as `reference/**`, `testdata/**`, `resources/license_detection/**`, or generated docs unless the policy is intentionally expanded.
-- Use the xtask command documented in [`xtask/README.md`](xtask/README.md) to check or repair headers. Lefthook checks staged in-scope files without mutating them; CI verifies the full configured scope.
+- Use the standalone license-header tool documented in [`tools/license-headers/README.md`](tools/license-headers/README.md) to check or repair headers. Lefthook checks staged in-scope files without mutating them; CI verifies the full configured scope.
 
 ## Performance and Architecture
 

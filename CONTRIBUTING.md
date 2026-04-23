@@ -104,21 +104,39 @@ The scope lives in `.license-headers.toml` using explicit `include` and
 To backfill or repair headers manually, run:
 
 ```sh
-cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin check-license-headers -- --fix
+cargo run --quiet --locked --manifest-path tools/license-headers/Cargo.toml -- --fix
 ```
 
 Lefthook checks staged in-scope files without rewriting them, and CI verifies
 the full allowlist with:
 
 ```sh
-cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin check-license-headers -- --check
+cargo run --quiet --locked --manifest-path tools/license-headers/Cargo.toml -- --check
 ```
 
 If the hook reports a missing header, repair it explicitly with:
 
 ```sh
-cargo run --quiet --locked --manifest-path xtask/Cargo.toml --bin check-license-headers -- --fix
+cargo run --quiet --locked --manifest-path tools/license-headers/Cargo.toml -- --fix
 ```
+
+### Tooling boundaries
+
+`xtask/` remains the default home for Rust-based maintainer workflows that are
+intentionally coupled to Provenant internals or to the repo-built `provenant`
+binary.
+
+Small, self-contained tools may live as separate workspace crates under
+`tools/` when package-boundary isolation materially improves a hot path such as
+pre-commit hooks or fast CI checks. The current example is
+`tools/license-headers/`, which stays independent from the heavier
+`xtask -> provenant-cli` dependency graph so routine header checks do not pay
+for unrelated release-version rebuilds.
+
+Do not split tools out of `xtask/` just for symmetry. Treat a standalone tool
+crate as the exception for fast-path, self-contained workflows; keep maintainer
+workflows tied to scanner internals, parser metadata, golden maintenance, or
+the built CLI in `xtask/`.
 
 ## Testing and validation
 
