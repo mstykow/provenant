@@ -5,8 +5,8 @@ use super::postprocess_transforms::{
     drop_shadowed_c_sign_variants, drop_shadowed_year_only_copyright_prefixes_same_start_line,
 };
 use super::token_utils::{
-    collect_filtered_leaves, collect_holder_filtered_leaves, normalize_whitespace,
-    signal_lines_before_copy_line, strip_all_rights_reserved, tokens_to_string,
+    collect_filtered_leaves, collect_holder_filtered_leaves, normalized_tokens_to_string,
+    signal_lines_before_copy_line, strip_all_rights_reserved,
 };
 use super::*;
 use crate::models::LineNumber;
@@ -1006,7 +1006,7 @@ fn test_extract_from_tree_nodes_builds_hall_holder_tokens() {
     holder_tokens.extend(node_holder_leaves);
     holder_tokens.extend(&trailing_tokens);
 
-    let holder_string = normalize_whitespace(&tokens_to_string(&holder_tokens));
+    let holder_string = normalized_tokens_to_string(&holder_tokens);
     let refined = refine_holder_in_copyright_context(&holder_string);
 
     assert_eq!(

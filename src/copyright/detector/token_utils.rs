@@ -408,7 +408,7 @@ pub fn build_copyright_from_tokens(tokens: &[&Token]) -> Option<CopyrightDetecti
     if tokens.is_empty() {
         return None;
     }
-    let node_string = normalize_whitespace(&tokens_to_string(tokens));
+    let node_string = normalized_tokens_to_string(tokens);
     let refined = refine_copyright(&node_string)?;
     if is_junk_copyright(&refined) {
         return None;
@@ -433,7 +433,7 @@ pub fn build_holder_from_tokens(
     if tokens.is_empty() {
         return None;
     }
-    let node_string = normalize_whitespace(&tokens_to_string(tokens));
+    let node_string = normalized_tokens_to_string(tokens);
     let refined = if allow_single_word_contributors {
         refine_holder_in_copyright_context(&node_string)?
     } else {
@@ -459,7 +459,7 @@ pub fn build_author_from_tokens(tokens: &[&Token]) -> Option<AuthorDetection> {
     if tokens.is_empty() {
         return None;
     }
-    let node_string = normalize_whitespace(&tokens_to_string(tokens));
+    let node_string = normalized_tokens_to_string(tokens);
     let refined = refine_author(&node_string)?;
     if is_junk_copyright(&refined) {
         return None;
@@ -964,12 +964,21 @@ pub fn is_copyright_of_header(span: &[&Token]) -> bool {
     !has_year && !has_c
 }
 
-pub fn tokens_to_string(tokens: &[&Token]) -> String {
-    tokens
-        .iter()
-        .map(|t| t.value.as_str())
-        .collect::<Vec<_>>()
-        .join(" ")
+pub fn normalized_tokens_to_string(tokens: &[&Token]) -> String {
+    let mut out = String::new();
+    let mut first = true;
+
+    for token in tokens {
+        for piece in token.value.split_whitespace() {
+            if !first {
+                out.push(' ');
+            }
+            out.push_str(piece);
+            first = false;
+        }
+    }
+
+    out
 }
 
 pub fn normalize_whitespace(s: &str) -> String {

@@ -2586,9 +2586,8 @@ pub fn fix_truncated_contributors_authors(tree: &[ParseNode], authors: &mut Vec<
                         .filter(|t| !super::NON_AUTHOR_POS_TAGS.contains(&t.tag))
                         .collect();
                     if !name_tokens.is_empty() {
-                        let name_str = super::token_utils::normalize_whitespace(
-                            &super::token_utils::tokens_to_string(&name_tokens),
-                        );
+                        let name_str =
+                            super::token_utils::normalized_tokens_to_string(&name_tokens);
                         let refined = refine_author(&name_str);
                         if let Some(mut author_text) = refined {
                             if !author_text.ends_with("contributors") {
