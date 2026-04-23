@@ -376,9 +376,9 @@ pub fn run() -> Result<()> {
     }
 
     if cli.only_findings {
-        progress.post_scan_step("Filtering to files with findings...");
+        progress.post_scan_step("Filtering to resources with findings...");
         record_detail_timing(&progress, "output-filter:only-findings", || {
-            apply_only_findings_for_mode(&mut scan_result.files, cli.from_json);
+            apply_only_findings_filter(&mut scan_result.files);
         });
     }
 
@@ -632,14 +632,6 @@ pub fn run() -> Result<()> {
     );
 
     Ok(())
-}
-
-fn apply_only_findings_for_mode(files: &mut Vec<FileInfo>, from_json: bool) {
-    if from_json {
-        files.clear();
-    } else {
-        apply_only_findings_filter(files);
-    }
 }
 
 fn collect_top_level_license_detections_for_mode(

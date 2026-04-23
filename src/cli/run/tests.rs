@@ -552,14 +552,14 @@ fn from_json_recomputes_top_level_uniques_even_without_shaping_flags() {
 }
 
 #[test]
-fn from_json_only_findings_clears_files_for_replay_output() {
+fn from_json_only_findings_keeps_files_with_findings() {
     let mut file = json_file("project/package.json", crate::models::FileType::File);
     file.license_expression = Some("mit".to_string());
     let mut files = vec![file];
 
-    apply_only_findings_for_mode(&mut files, true);
+    apply_only_findings_filter(&mut files);
 
-    assert!(files.is_empty());
+    assert_eq!(files.len(), 1);
 }
 
 #[test]
@@ -568,7 +568,7 @@ fn native_only_findings_still_keeps_files_with_findings() {
     file.license_expression = Some("mit".to_string());
     let mut files = vec![file];
 
-    apply_only_findings_for_mode(&mut files, false);
+    apply_only_findings_filter(&mut files);
 
     assert_eq!(files.len(), 1);
 }
