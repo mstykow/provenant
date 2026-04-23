@@ -1006,11 +1006,8 @@ fn extract_dist_hashes(dist: &Value) -> (Option<String>, Option<String>, Option<
         && let Some((algo, hex_digest)) = parse_sri(integrity)
     {
         match algo.as_str() {
-            "sha1" => {
-                if sha1.is_none() {
-                    sha1 = Some(hex_digest);
-                }
-            }
+            "sha1" if sha1.is_none() => sha1 = Some(hex_digest),
+            "sha1" => {}
             "sha256" => sha256 = Some(hex_digest),
             "sha512" => sha512 = Some(hex_digest),
             _ => {}
