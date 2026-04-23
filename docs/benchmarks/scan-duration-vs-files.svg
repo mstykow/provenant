@@ -71,9 +71,6 @@ ScanCode: 80.82s</title></rect>
     <rect x="92.00" y="423.47" width="8" height="8" fill="#d97706" rx="1.5"><title>Alpine 3.23.3 installed DB snapshot @ sha256:42d0e6d
 Files: 1
 ScanCode: 75.84s</title></rect>
-    <rect x="92.00" y="427.72" width="8" height="8" fill="#d97706" rx="1.5"><title>Fedora 38 rpmdb NDB snapshot (synthetic from sqlite fixture)
-Files: 1
-ScanCode: 69.31s</title></rect>
     <rect x="92.00" y="425.26" width="8" height="8" fill="#d97706" rx="1.5"><title>Firefox Multi-Account Containers 8.3.7 .xpi
 Files: 1
 ScanCode: 73.02s</title></rect>
@@ -98,21 +95,27 @@ ScanCode: 70.01s</title></rect>
     <rect x="92.00" y="424.52" width="8" height="8" fill="#d97706" rx="1.5"><title>pkg 2.7.4 .pkg +COMPACT_MANIFEST sample @ sha256:4128dba
 Files: 1
 ScanCode: 74.17s</title></rect>
-    <rect x="92.00" y="426.80" width="8" height="8" fill="#d97706" rx="1.5"><title>python-construct 1:2.10.68-3 .PKGINFO sample
+    <rect x="92.00" y="427.69" width="8" height="8" fill="#d97706" rx="1.5"><title>python-construct 2.10.70-6 .PKGINFO from Arch package @ sha256:2020ae3
 Files: 1
-ScanCode: 70.67s</title></rect>
+ScanCode: 69.35s</title></rect>
     <rect x="92.00" y="424.87" width="8" height="8" fill="#d97706" rx="1.5"><title>rubocop 1.86.1 .gem @ sha256:44415f3
 Files: 1
 ScanCode: 73.62s</title></rect>
-    <rect x="92.00" y="427.37" width="8" height="8" fill="#d97706" rx="1.5"><title>setup 2.5.49-b1 src.rpm
+    <rect x="92.00" y="428.71" width="8" height="8" fill="#d97706" rx="1.5"><title>sudo 1.9.15-7.p5.fc42 src.rpm @ sha256:96920ba
 Files: 1
-ScanCode: 69.83s</title></rect>
+ScanCode: 67.87s</title></rect>
     <rect x="139.76" y="510.78" width="8" height="8" fill="#d97706" rx="1.5"><title>itchyny/gojq v0.12.19 darwin arm64 release snapshot @ sha256:40208d4
 Files: 2
 ScanCode: 11.95s</title></rect>
-    <rect x="167.70" y="427.06" width="8" height="8" fill="#d97706" rx="1.5"><title>Fedora 38 rpmdb SQLite snapshot
+    <rect x="139.76" y="384.76" width="8" height="8" fill="#d97706" rx="1.5"><title>openSUSE Tumbleweed rpmdb NDB snapshot @ sha256:25afd25
+Files: 2
+ScanCode: 172.04s</title></rect>
+    <rect x="167.70" y="427.04" width="8" height="8" fill="#d97706" rx="1.5"><title>Bitwarden Android v2024.12.0 APK+AAB+manifest
 Files: 3
-ScanCode: 70.29s</title></rect>
+ScanCode: 70.31s</title></rect>
+    <rect x="167.70" y="385.51" width="8" height="8" fill="#d97706" rx="1.5"><title>Fedora Minimal 42 rpmdb SQLite snapshot @ sha256:c30f069
+Files: 3
+ScanCode: 169.36s</title></rect>
     <rect x="167.70" y="427.99" width="8" height="8" fill="#d97706" rx="1.5"><title>glzr-io/glazewm v3.10.1 Windows snapshot
 Files: 3
 ScanCode: 68.91s</title></rect>
@@ -332,12 +335,6 @@ ScanCode: 110.49s</title></rect>
     <rect x="596.63" y="368.99" width="8" height="8" fill="#d97706" rx="1.5"><title>aosp-mirror/platform_build @ 045a3d6
 Files: 1515
 ScanCode: 240.24s</title></rect>
-    <rect x="599.48" y="398.28" width="8" height="8" fill="#d97706" rx="1.5"><title>Fedora 26 rootfs fixture @ sha256:140ce3f
-Files: 1579
-ScanCode: 129.25s</title></rect>
-    <rect x="599.48" y="375.91" width="8" height="8" fill="#d97706" rx="1.5"><title>Fedora 26 rootfs fixture @ sha256:140ce3f
-Files: 1579
-ScanCode: 207.48s</title></rect>
     <rect x="607.19" y="328.71" width="8" height="8" fill="#d97706" rx="1.5"><title>guillemj/dpkg @ 0061122
 Files: 1766
 ScanCode: 563.43s</title></rect>
@@ -353,6 +350,9 @@ ScanCode: 549.75s</title></rect>
     <rect x="614.72" y="331.19" width="8" height="8" fill="#d97706" rx="1.5"><title>astropy/astropy @ 40280e3
 Files: 1970
 ScanCode: 534.66s</title></rect>
+    <rect x="615.38" y="337.97" width="8" height="8" fill="#d97706" rx="1.5"><title>Fedora Minimal 42 container rootfs @ sha256:c30f069
+Files: 1989
+ScanCode: 463.11s</title></rect>
     <rect x="618.50" y="382.03" width="8" height="8" fill="#d97706" rx="1.5"><title>rubocop/rubocop @ 4e0d642
 Files: 2081
 ScanCode: 182.30s</title></rect>
@@ -392,9 +392,6 @@ ScanCode: 332.23s</title></rect>
     <rect x="645.65" y="387.44" width="8" height="8" fill="#d97706" rx="1.5"><title>laravel/framework @ a3960e8
 Files: 3086
 ScanCode: 162.58s</title></rect>
-    <rect x="649.58" y="389.31" width="8" height="8" fill="#d97706" rx="1.5"><title>debian:bookworm-slim @ sha256:f065376
-Files: 3267
-ScanCode: 156.25s</title></rect>
     <rect x="649.58" y="327.73" width="8" height="8" fill="#d97706" rx="1.5"><title>debian:bookworm-slim @ sha256:f065376
 Files: 3267
 ScanCode: 575.28s</title></rect>
@@ -571,9 +568,6 @@ Provenant: 10.06s</title></circle>
     <circle cx="96.00" cy="522.78" r="4.5" fill="#2563eb"><title>Alpine 3.23.3 installed DB snapshot @ sha256:42d0e6d
 Files: 1
 Provenant: 10.09s</title></circle>
-    <circle cx="96.00" cy="526.58" r="4.5" fill="#2563eb"><title>Fedora 38 rpmdb NDB snapshot (synthetic from sqlite fixture)
-Files: 1
-Provenant: 9.31s</title></circle>
     <circle cx="96.00" cy="522.68" r="4.5" fill="#2563eb"><title>Firefox Multi-Account Containers 8.3.7 .xpi
 Files: 1
 Provenant: 10.11s</title></circle>
@@ -598,21 +592,27 @@ Provenant: 9.81s</title></circle>
     <circle cx="96.00" cy="525.13" r="4.5" fill="#2563eb"><title>pkg 2.7.4 .pkg +COMPACT_MANIFEST sample @ sha256:4128dba
 Files: 1
 Provenant: 9.60s</title></circle>
-    <circle cx="96.00" cy="523.77" r="4.5" fill="#2563eb"><title>python-construct 1:2.10.68-3 .PKGINFO sample
+    <circle cx="96.00" cy="523.72" r="4.5" fill="#2563eb"><title>python-construct 2.10.70-6 .PKGINFO from Arch package @ sha256:2020ae3
 Files: 1
-Provenant: 9.88s</title></circle>
+Provenant: 9.89s</title></circle>
     <circle cx="96.00" cy="490.88" r="4.5" fill="#2563eb"><title>rubocop 1.86.1 .gem @ sha256:44415f3
 Files: 1
 Provenant: 19.82s</title></circle>
-    <circle cx="96.00" cy="525.23" r="4.5" fill="#2563eb"><title>setup 2.5.49-b1 src.rpm
+    <circle cx="96.00" cy="525.97" r="4.5" fill="#2563eb"><title>sudo 1.9.15-7.p5.fc42 src.rpm @ sha256:96920ba
 Files: 1
-Provenant: 9.58s</title></circle>
+Provenant: 9.43s</title></circle>
     <circle cx="143.76" cy="521.12" r="4.5" fill="#2563eb"><title>itchyny/gojq v0.12.19 darwin arm64 release snapshot @ sha256:40208d4
 Files: 2
 Provenant: 10.45s</title></circle>
-    <circle cx="171.70" cy="523.39" r="4.5" fill="#2563eb"><title>Fedora 38 rpmdb SQLite snapshot
+    <circle cx="143.76" cy="522.59" r="4.5" fill="#2563eb"><title>openSUSE Tumbleweed rpmdb NDB snapshot @ sha256:25afd25
+Files: 2
+Provenant: 10.13s</title></circle>
+    <circle cx="171.70" cy="522.87" r="4.5" fill="#2563eb"><title>Bitwarden Android v2024.12.0 APK+AAB+manifest
 Files: 3
-Provenant: 9.96s</title></circle>
+Provenant: 10.07s</title></circle>
+    <circle cx="171.70" cy="521.07" r="4.5" fill="#2563eb"><title>Fedora Minimal 42 rpmdb SQLite snapshot @ sha256:c30f069
+Files: 3
+Provenant: 10.46s</title></circle>
     <circle cx="171.70" cy="480.11" r="4.5" fill="#2563eb"><title>glzr-io/glazewm v3.10.1 Windows snapshot
 Files: 3
 Provenant: 24.89s</title></circle>
@@ -832,12 +832,6 @@ Provenant: 12.05s</title></circle>
     <circle cx="600.63" cy="479.47" r="4.5" fill="#2563eb"><title>aosp-mirror/platform_build @ 045a3d6
 Files: 1515
 Provenant: 25.23s</title></circle>
-    <circle cx="603.48" cy="486.27" r="4.5" fill="#2563eb"><title>Fedora 26 rootfs fixture @ sha256:140ce3f
-Files: 1579
-Provenant: 21.85s</title></circle>
-    <circle cx="603.48" cy="519.65" r="4.5" fill="#2563eb"><title>Fedora 26 rootfs fixture @ sha256:140ce3f
-Files: 1579
-Provenant: 10.78s</title></circle>
     <circle cx="611.19" cy="474.77" r="4.5" fill="#2563eb"><title>guillemj/dpkg @ 0061122
 Files: 1766
 Provenant: 27.87s</title></circle>
@@ -853,6 +847,9 @@ Provenant: 25.28s</title></circle>
     <circle cx="618.72" cy="481.32" r="4.5" fill="#2563eb"><title>astropy/astropy @ 40280e3
 Files: 1970
 Provenant: 24.26s</title></circle>
+    <circle cx="619.38" cy="464.43" r="4.5" fill="#2563eb"><title>Fedora Minimal 42 container rootfs @ sha256:c30f069
+Files: 1989
+Provenant: 34.69s</title></circle>
     <circle cx="622.50" cy="481.54" r="4.5" fill="#2563eb"><title>rubocop/rubocop @ 4e0d642
 Files: 2081
 Provenant: 24.15s</title></circle>
@@ -892,9 +889,6 @@ Provenant: 23.57s</title></circle>
     <circle cx="649.65" cy="485.60" r="4.5" fill="#2563eb"><title>laravel/framework @ a3960e8
 Files: 3086
 Provenant: 22.16s</title></circle>
-    <circle cx="653.58" cy="488.03" r="4.5" fill="#2563eb"><title>debian:bookworm-slim @ sha256:f065376
-Files: 3267
-Provenant: 21.05s</title></circle>
     <circle cx="653.58" cy="426.73" r="4.5" fill="#2563eb"><title>debian:bookworm-slim @ sha256:f065376
 Files: 3267
 Provenant: 77.04s</title></circle>
