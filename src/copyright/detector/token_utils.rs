@@ -15,6 +15,10 @@ use crate::copyright::types::{
 };
 use crate::models::LineNumber;
 
+#[cfg(test)]
+#[path = "token_utils_test.rs"]
+mod tests;
+
 pub fn is_copyright_span_token(token: &Token) -> bool {
     !matches!(token.tag, PosTag::EmptyLine | PosTag::Junk)
 }

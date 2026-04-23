@@ -11,6 +11,10 @@ use crate::copyright::types::{
 };
 use crate::models::LineNumber;
 
+#[cfg(test)]
+#[path = "tree_walk_test.rs"]
+mod tests;
+
 fn mpl_portions_created_prefix_tokens<'a>(
     tree: &'a [ParseNode],
     idx: usize,
