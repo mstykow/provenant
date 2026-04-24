@@ -415,5 +415,9 @@ mod tests_author_pipeline;
 mod tests_multiline_repairs;
 
 #[cfg(test)]
+#[path = "tests_parser_internals.rs"]
+mod tests_parser_internals;
+
+#[cfg(test)]
 #[path = "tests_copyright_holder_pipeline.rs"]
 mod tests_copyright_holder_pipeline;
