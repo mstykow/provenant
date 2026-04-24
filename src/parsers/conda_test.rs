@@ -63,6 +63,12 @@ mod tests {
     }
 
     #[test]
+    fn test_conda_environment_yml_is_match_conda_ancestor_yaml() {
+        let valid_path = PathBuf::from("/some/path/conda/scenicplus.yaml");
+        assert!(CondaEnvironmentYmlParser::is_match(&valid_path));
+    }
+
+    #[test]
     fn test_conda_environment_yml_is_match_env_yaml() {
         let valid_path = PathBuf::from("/some/path/env.yaml");
         assert!(CondaEnvironmentYmlParser::is_match(&valid_path));

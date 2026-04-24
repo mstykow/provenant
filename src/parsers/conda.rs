@@ -573,7 +573,17 @@ impl PackageParser for CondaEnvironmentYmlParser {
         // Python reference: path_patterns = ('*conda*.yaml', '*env*.yaml', '*environment*.yaml')
         if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
             let lower = name.to_lowercase();
-            (lower.contains("conda") || lower.contains("env") || lower.contains("environment"))
+            if matches!(lower.as_str(), "meta.yaml" | "meta.yml" | "recipe.yaml") {
+                return false;
+            }
+            let has_condaish_name =
+                lower.contains("conda") || lower.contains("env") || lower.contains("environment");
+            let has_condaish_ancestor = path
+                .ancestors()
+                .skip(1)
+                .filter_map(|ancestor| ancestor.file_name().and_then(|name| name.to_str()))
+                .any(|ancestor| ancestor.to_ascii_lowercase().contains("conda"));
+            (has_condaish_name || has_condaish_ancestor)
                 && (lower.ends_with(".yaml") || lower.ends_with(".yml"))
         } else {
             false
