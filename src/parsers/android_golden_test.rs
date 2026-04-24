@@ -172,6 +172,21 @@ mod golden_tests {
     }
 
     #[test]
+    fn test_golden_android_soong_metadata_colon_brace() {
+        let package = AndroidSoongMetadataParser::extract_first_package(&PathBuf::from(
+            "testdata/android/metadata/google_appengine_django_1_2/METADATA",
+        ));
+
+        compare_package_data_parser_only(
+            &package,
+            &PathBuf::from(
+                "testdata/android/golden/soong-metadata-google-appengine-django-1-2-expected.json",
+            ),
+        )
+        .unwrap_or_else(|error| panic!("Golden test failed: {}", error));
+    }
+
+    #[test]
     fn test_golden_android_manifest_text() {
         let package = AndroidManifestParser::extract_first_package(&PathBuf::from(
             "testdata/android/manifest/AndroidManifest.xml",

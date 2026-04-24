@@ -1,0 +1,54 @@
+[
+  {
+    "type": "android",
+    "namespace": null,
+    "name": "django",
+    "version": "1.2.5",
+    "qualifiers": null,
+    "subpath": null,
+    "primary_language": null,
+    "description": "Django is a python-based web framework. As of 02/09/2011 this was listed as the latest official version.",
+    "release_date": null,
+    "parties": [],
+    "keywords": [],
+    "homepage_url": null,
+    "download_url": "http://www.djangoproject.com/download/1.2.5/tarball/",
+    "size": null,
+    "sha1": null,
+    "md5": null,
+    "sha256": null,
+    "sha512": null,
+    "bug_tracking_url": null,
+    "code_view_url": null,
+    "vcs_url": null,
+    "copyright": null,
+    "holder": null,
+    "declared_license_expression": null,
+    "declared_license_expression_spdx": null,
+    "license_detections": [],
+    "other_license_expression": null,
+    "other_license_expression_spdx": null,
+    "other_license_detections": [],
+    "extracted_license_statement": null,
+    "notice_text": null,
+    "source_packages": [],
+    "file_references": [],
+    "is_private": false,
+    "is_virtual": false,
+    "extra_data": {
+      "last_upgrade_date": "2011-02-09",
+      "urls": [
+        {
+          "type": "ARCHIVE",
+          "value": "http://www.djangoproject.com/download/1.2.5/tarball/"
+        }
+      ]
+    },
+    "dependencies": [],
+    "repository_homepage_url": null,
+    "repository_download_url": null,
+    "api_data_url": null,
+    "datasource_id": "android_soong_metadata",
+    "purl": null
+  }
+]
