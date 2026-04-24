@@ -81,6 +81,46 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_windows_update_assembly_prefers_update_mum_as_primary_identity() {
+        let mut hidden_pkg = create_test_file_info(
+            "windows/package_41_for_kb5050109~31bf3856ad364e35~amd64~~14393.7692.1.1.mum",
+            DatasourceId::MicrosoftUpdateManifestMum,
+            None,
+            Some("Package_41_for_KB5050109"),
+            Some("14393.7692.1.1"),
+            vec![],
+        );
+        hidden_pkg.package_data[0].package_type = Some(PackageType::WindowsUpdate);
+
+        let mut update_root = create_test_file_info(
+            "windows/update.mum",
+            DatasourceId::MicrosoftUpdateManifestMum,
+            None,
+            Some("Package_for_KB5050109"),
+            Some("14393.7692.1.1"),
+            vec![],
+        );
+        update_root.package_data[0].package_type = Some(PackageType::WindowsUpdate);
+
+        let mut files = vec![hidden_pkg, update_root];
+
+        let result = assemble(&mut files);
+
+        assert_eq!(result.packages.len(), 1, "packages: {:#?}", result.packages);
+        let package = &result.packages[0];
+        assert_eq!(package.name.as_deref(), Some("Package_for_KB5050109"));
+        assert_eq!(package.version.as_deref(), Some("14393.7692.1.1"));
+        assert!(
+            package
+                .datafile_paths
+                .iter()
+                .any(|path| path == "windows/update.mum"),
+            "datafile_paths: {:?}",
+            package.datafile_paths
+        );
+    }
+
     fn create_test_dependency(
         purl: &str,
         extracted_requirement: Option<&str>,
