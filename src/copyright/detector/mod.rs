@@ -405,3 +405,15 @@ use tree_walk::{
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests_author_pipeline.rs"]
+mod tests_author_pipeline;
+
+#[cfg(test)]
+#[path = "tests_multiline_repairs.rs"]
+mod tests_multiline_repairs;
+
+#[cfg(test)]
+#[path = "tests_copyright_holder_pipeline.rs"]
+mod tests_copyright_holder_pipeline;
