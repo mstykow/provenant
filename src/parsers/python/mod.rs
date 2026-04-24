@@ -73,8 +73,8 @@ enum PythonFileKind {
 fn classify_python_file(path: &Path) -> Option<PythonFileKind> {
     let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     Some(match filename {
-        "pyproject.toml" => PythonFileKind::PyprojectToml,
-        "setup.cfg" => PythonFileKind::SetupCfg,
+        _ if is_pyproject_toml_like_path(path) => PythonFileKind::PyprojectToml,
+        _ if is_setup_cfg_like_path(path) => PythonFileKind::SetupCfg,
         _ if is_setup_py_like_path(path) => PythonFileKind::SetupPy,
         "PKG-INFO" => PythonFileKind::PkgInfo,
         "METADATA" if is_installed_wheel_metadata_path(path) => PythonFileKind::WheelMetadata,
@@ -144,11 +144,33 @@ impl PackageParser for PythonParser {
     }
 }
 
+fn is_pyproject_toml_like_path(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            name == "pyproject.toml"
+                || name.ends_with("-pyproject.toml")
+                || name.ends_with("_pyproject.toml")
+                || name.ends_with(".pyproject.toml")
+        })
+}
+
 fn is_setup_py_like_path(path: &Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| {
             name == "setup.py" || name.ends_with("_setup.py") || name.ends_with("-setup.py")
+        })
+}
+
+fn is_setup_cfg_like_path(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            name == "setup.cfg"
+                || name.ends_with("_setup.cfg")
+                || name.ends_with("-setup.cfg")
+                || name.ends_with(".setup.cfg")
         })
 }
 
