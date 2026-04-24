@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
+use crate::test_support::CurrentDirGuard;
 use std::fs;
 use std::path::PathBuf;
 
@@ -163,12 +164,9 @@ fn resolve_native_scan_inputs_builds_common_prefix_and_synthetic_includes() {
     fs::create_dir_all(parent.join("bar")).expect("create bar dir");
     fs::write(parent.join("bar/baz"), "data\n").expect("write baz file");
 
-    let old_cwd = std::env::current_dir().expect("current dir");
-    std::env::set_current_dir(temp_dir.path()).expect("set cwd");
+    let _cwd_guard = CurrentDirGuard::change_to(temp_dir.path());
 
     let result = resolve_native_scan_inputs(&["src/foo".to_string(), "src/bar/baz".to_string()]);
-
-    std::env::set_current_dir(old_cwd).expect("restore cwd");
 
     let (scan_root, includes) = result.expect("multiple relative inputs should resolve");
 
@@ -189,12 +187,9 @@ fn resolve_native_scan_inputs_uses_component_aware_prefix_for_siblings() {
     fs::create_dir_all(parent.join("bar")).expect("create bar dir");
     fs::create_dir_all(parent.join("baz")).expect("create baz dir");
 
-    let old_cwd = std::env::current_dir().expect("current dir");
-    std::env::set_current_dir(temp_dir.path()).expect("set cwd");
+    let _cwd_guard = CurrentDirGuard::change_to(temp_dir.path());
 
     let result = resolve_native_scan_inputs(&["src/bar".to_string(), "src/baz".to_string()]);
-
-    std::env::set_current_dir(old_cwd).expect("restore cwd");
 
     let (scan_root, includes) = result.expect("sibling inputs should resolve");
     assert_eq!(scan_root, "src");
@@ -270,12 +265,9 @@ fn resolve_paths_file_entries_uses_explicit_root_not_current_working_directory()
     fs::create_dir_all(scan_root.join("src")).expect("create src dir");
     fs::write(scan_root.join("src/lib.rs"), "pub fn demo() {}\n").expect("write lib");
 
-    let old_cwd = std::env::current_dir().expect("current dir");
-    std::env::set_current_dir(other_cwd.path()).expect("set cwd");
+    let _cwd_guard = CurrentDirGuard::change_to(other_cwd.path());
 
     let result = resolve_paths_file_entries(&scan_root, &["src/lib.rs".to_string()]);
-
-    std::env::set_current_dir(old_cwd).expect("restore cwd");
 
     let resolved = result.expect("absolute scan root should make cwd irrelevant");
     assert_eq!(

@@ -18,6 +18,7 @@ use crate::scan_result_shaping::json_input::{
     JsonScanInput, load_scan_from_json, normalize_loaded_json_scan,
 };
 use crate::scanner::collect_paths;
+use crate::test_support::CurrentDirGuard;
 
 #[test]
 fn process_mode_to_i32_supports_reference_compat_values() {
@@ -1286,8 +1287,7 @@ fn resolve_native_scan_selection_uses_paths_file_under_explicit_root() {
     fs::write(&paths_file_b, "docs\nsrc/lib.rs\n").expect("write second paths file");
 
     let other_cwd = tempfile::TempDir::new().expect("create alternate cwd");
-    let old_cwd = std::env::current_dir().expect("current dir");
-    std::env::set_current_dir(other_cwd.path()).expect("set cwd");
+    let _cwd_guard = CurrentDirGuard::change_to(other_cwd.path());
 
     let cli = crate::cli::Cli::try_parse_from([
         "provenant",
@@ -1302,8 +1302,6 @@ fn resolve_native_scan_selection_uses_paths_file_under_explicit_root() {
     .expect("cli parse should succeed");
 
     let result = resolve_native_scan_selection(&cli);
-
-    std::env::set_current_dir(old_cwd).expect("restore cwd");
 
     let NativeScanSelection {
         scan_path: resolved_root,
