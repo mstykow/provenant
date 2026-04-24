@@ -4,9 +4,16 @@
     "name": "Package-Component",
     "version": "10.0.19041.1",
     "description": "Windows Update Package",
-    "parties": [],
+    "parties": [
+      {
+        "type": "organization",
+        "role": "owner",
+        "name": "Microsoft Corporation"
+      }
+    ],
     "homepage_url": "https://support.microsoft.com",
     "copyright": "Copyright (c) Microsoft Corporation",
+    "holder": "Microsoft Corporation",
     "datasource_id": "microsoft_update_manifest_mum"
   }
 ]
