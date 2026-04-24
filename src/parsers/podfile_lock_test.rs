@@ -16,6 +16,12 @@ mod tests {
         assert!(PodfileLockParser::is_match(&PathBuf::from(
             "/some/path/Podfile.lock"
         )));
+        assert!(PodfileLockParser::is_match(&PathBuf::from(
+            "artsy_eigen_Podfile.lock"
+        )));
+        assert!(PodfileLockParser::is_match(&PathBuf::from(
+            "braintree_ios_Podfile.lock"
+        )));
         assert!(!PodfileLockParser::is_match(&PathBuf::from("Podfile")));
         assert!(!PodfileLockParser::is_match(&PathBuf::from("package.json")));
         assert!(!PodfileLockParser::is_match(&PathBuf::from("Gemfile.lock")));

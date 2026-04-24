@@ -59,7 +59,12 @@ impl PackageParser for PodfileLockParser {
     fn is_match(path: &Path) -> bool {
         path.file_name()
             .and_then(|name| name.to_str())
-            .is_some_and(|name| name == "Podfile.lock")
+            .is_some_and(|name| {
+                name == "Podfile.lock"
+                    || name.ends_with("_Podfile.lock")
+                    || name.ends_with("-Podfile.lock")
+                    || name.ends_with(".Podfile.lock")
+            })
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
