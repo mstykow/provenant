@@ -28,8 +28,6 @@ use super::line_tracking::{LineNumberIndex, PreparedLineCache};
 use super::parser::{parse, parse_with_deadline};
 #[cfg(test)]
 use super::refiner::refine_copyright;
-#[cfg(test)]
-use super::types::Token;
 use super::types::{
     AuthorDetection, CopyrightDetection, HolderDetection, ParseNode, PosTag, TreeLabel,
 };
