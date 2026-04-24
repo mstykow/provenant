@@ -1414,7 +1414,7 @@ mod tests {
         assert_eq!(
             result.as_deref(),
             Ok(
-                "apache-2.0 AND apsl-1.0 AND apsl-2.0 AND bsd-3-clause AND gpl-2.0-only AND licenseref-scancode-oracle-openjdk-exception-2.0"
+                "apache-2.0 AND bsd-3-clause AND gpl-2.0-only AND licenseref-scancode-oracle-openjdk-exception-2.0 AND apsl-1.0 AND apsl-2.0"
             )
         );
     }
