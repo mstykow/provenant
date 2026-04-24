@@ -8,6 +8,7 @@ use regex::Regex;
 
 use crate::copyright::candidates::versioned_banner_holder_from_prepared;
 use crate::copyright::line_tracking::{LineNumberIndex, PreparedLines};
+use crate::copyright::prepare::prepare_text_line;
 use crate::copyright::refiner::{
     refine_copyright, refine_holder, refine_holder_in_copyright_context,
 };
@@ -155,6 +156,168 @@ pub fn extract_html_meta_name_copyright_content(
                     end_line: LineNumber::new(ln).unwrap(),
                 });
             }
+        }
+    }
+
+    (copyrights, holders)
+}
+
+fn line_number_for_offset(content: &str, offset: usize) -> LineNumber {
+    LineNumber::from_0_indexed(content[..offset].bytes().filter(|b| *b == b'\n').count())
+}
+
+fn decode_markup_entities(value: &str) -> String {
+    static DECIMAL_ENTITY_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"&#(?P<code>\d+);?").unwrap());
+    static HEX_ENTITY_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"&#x(?P<code>[0-9a-fA-F]+);?").unwrap());
+
+    let mut out = value
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&#38;", "&")
+        .replace("&#34;", "\"")
+        .replace("&#39;", "'")
+        .replace("&#60;", "<")
+        .replace("&#62;", ">");
+
+    out = HEX_ENTITY_RE
+        .replace_all(&out, |caps: &regex::Captures| {
+            caps.name("code")
+                .and_then(|m| u32::from_str_radix(m.as_str(), 16).ok())
+                .and_then(char::from_u32)
+                .map(|ch| ch.to_string())
+                .unwrap_or_else(|| caps.get(0).map(|m| m.as_str()).unwrap_or("").to_string())
+        })
+        .into_owned();
+
+    out = DECIMAL_ENTITY_RE
+        .replace_all(&out, |caps: &regex::Captures| {
+            caps.name("code")
+                .and_then(|m| m.as_str().parse::<u32>().ok())
+                .and_then(char::from_u32)
+                .map(|ch| ch.to_string())
+                .unwrap_or_else(|| caps.get(0).map(|m| m.as_str()).unwrap_or("").to_string())
+        })
+        .into_owned();
+
+    out
+}
+
+fn normalize_markup_attribute_value(value: &str) -> String {
+    let decoded = decode_markup_entities(value);
+    let prepared = prepare_text_line(&decoded);
+    normalize_whitespace(&prepared)
+}
+
+pub fn extract_markup_copyright_attributes(
+    content: &str,
+    existing_holders: &[HolderDetection],
+) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
+    static LEGAL_ATTR_TAG_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"(?is)<[^>]*\bcopyright\s*=\s*(?:\"[^\"]*\"|'[^']*')[^>]*>"#).unwrap()
+    });
+    static LEGAL_ATTR_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r#"(?is)\b(?P<name>copyright|company|holder|owner)\s*=\s*(?:\"(?P<dq>[^\"]*)\"|'(?P<sq>[^']*)')"#,
+        )
+        .unwrap()
+    });
+
+    let mut copyrights = Vec::new();
+    let mut holders = Vec::new();
+
+    let mut seen_h: HashSet<(String, usize)> = existing_holders
+        .iter()
+        .map(|h| (h.holder.clone(), h.start_line.get()))
+        .collect();
+
+    for tag_match in LEGAL_ATTR_TAG_RE.find_iter(content) {
+        let line = line_number_for_offset(content, tag_match.start());
+        let mut copyright_attr = None;
+        let mut holder_candidates = Vec::new();
+
+        for attr in LEGAL_ATTR_RE.captures_iter(tag_match.as_str()) {
+            let Some(name) = attr.name("name").map(|m| m.as_str().to_ascii_lowercase()) else {
+                continue;
+            };
+            let value = attr
+                .name("dq")
+                .or_else(|| attr.name("sq"))
+                .map(|m| m.as_str())
+                .unwrap_or("")
+                .trim();
+            if value.is_empty() {
+                continue;
+            }
+            let normalized = normalize_markup_attribute_value(value);
+            if normalized.is_empty() {
+                continue;
+            }
+
+            match name.as_str() {
+                "copyright" if copyright_attr.is_none() => {
+                    copyright_attr = Some(normalized);
+                }
+                "copyright" => {}
+                "company" | "holder" | "owner" => holder_candidates.push(normalized),
+                _ => {}
+            }
+        }
+
+        let Some(copyright_attr) = copyright_attr else {
+            continue;
+        };
+
+        let copyright_raw = if copyright_attr.contains("copyright")
+            || copyright_attr.contains("(c)")
+            || copyright_attr.contains('©')
+        {
+            copyright_attr.clone()
+        } else {
+            format!("copyright {copyright_attr}")
+        };
+
+        let Some(refined) = refine_copyright(&copyright_raw) else {
+            continue;
+        };
+
+        copyrights.push(CopyrightDetection {
+            copyright: refined.clone(),
+            start_line: line,
+            end_line: line,
+        });
+
+        let mut emitted_holder = false;
+        for holder_raw in holder_candidates {
+            let Some(holder) = refine_holder_in_copyright_context(&holder_raw)
+                .or_else(|| refine_holder(&holder_raw))
+            else {
+                continue;
+            };
+            if seen_h.insert((holder.clone(), line.get())) {
+                holders.push(HolderDetection {
+                    holder,
+                    start_line: line,
+                    end_line: line,
+                });
+            }
+            emitted_holder = true;
+        }
+
+        if !emitted_holder
+            && let Some(holder) =
+                super::postprocess_transforms::derive_holder_from_simple_copyright_string(&refined)
+            && seen_h.insert((holder.clone(), line.get()))
+        {
+            holders.push(HolderDetection {
+                holder,
+                start_line: line,
+                end_line: line,
+            });
         }
     }
 
