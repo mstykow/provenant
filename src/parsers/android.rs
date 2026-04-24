@@ -83,11 +83,13 @@ impl PackageParser for AndroidManifestParser {
             }
         };
 
-        vec![parse_manifest_bytes(
+        parse_manifest_bytes(
             &bytes,
             DatasourceId::AndroidManifestXml,
             "AndroidManifest.xml",
-        )]
+        )
+        .into_iter()
+        .collect()
     }
 }
 
@@ -342,21 +344,30 @@ fn parse_soong_metadata(content: &str) -> PackageData {
     package
 }
 
-fn parse_manifest_bytes(bytes: &[u8], datasource_id: DatasourceId, context: &str) -> PackageData {
+fn parse_manifest_bytes(
+    bytes: &[u8],
+    datasource_id: DatasourceId,
+    context: &str,
+) -> Option<PackageData> {
     if looks_like_text_xml(bytes) {
         match parse_text_manifest_bytes(bytes, datasource_id) {
-            Ok(package) => return package,
-            Err(error) => warn!("Failed to parse {} as text XML: {}", context, error),
+            Ok(package) => return Some(package),
+            Err(error) => {
+                warn!("Failed to parse {} as text XML: {}", context, error);
+                return None;
+            }
         }
     }
 
-    parse_binary_manifest_bytes(bytes, datasource_id).unwrap_or_else(|error| {
-        warn!(
-            "Failed to parse {} as binary Android XML: {}",
-            context, error
-        );
-        default_package_data(datasource_id)
-    })
+    parse_binary_manifest_bytes(bytes, datasource_id)
+        .map(Some)
+        .unwrap_or_else(|error| {
+            warn!(
+                "Failed to parse {} as binary Android XML: {}",
+                context, error
+            );
+            None
+        })
 }
 
 fn looks_like_text_xml(bytes: &[u8]) -> bool {
@@ -928,11 +939,23 @@ impl TextProtoParser {
                     match self.peek() {
                         Some(TextProtoToken::Colon) => {
                             self.position += 1;
-                            let value = self.expect_scalar()?;
-                            map.fields
-                                .entry(key)
-                                .or_default()
-                                .push(ProtoValue::Scalar(truncate_field(value)));
+                            match self.peek() {
+                                Some(TextProtoToken::LBrace) => {
+                                    self.position += 1;
+                                    let value = self.parse_map(true)?;
+                                    map.fields
+                                        .entry(key)
+                                        .or_default()
+                                        .push(ProtoValue::Map(value));
+                                }
+                                _ => {
+                                    let value = self.expect_scalar()?;
+                                    map.fields
+                                        .entry(key)
+                                        .or_default()
+                                        .push(ProtoValue::Scalar(truncate_field(value)));
+                                }
+                            }
                         }
                         Some(TextProtoToken::LBrace) => {
                             self.position += 1;
