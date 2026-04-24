@@ -20,6 +20,7 @@ pub(super) enum SpecialDirectoryMergerKind {
     Bazel,
     DebianSource,
     Hackage,
+    WindowsUpdate,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumIter)]
@@ -47,6 +48,7 @@ pub(super) fn special_directory_merger_for(
         DatasourceId::BazelBuild => Some(SpecialDirectoryMergerKind::Bazel),
         DatasourceId::DebianControlInSource => Some(SpecialDirectoryMergerKind::DebianSource),
         DatasourceId::HackageCabal => Some(SpecialDirectoryMergerKind::Hackage),
+        DatasourceId::MicrosoftUpdateManifestMum => Some(SpecialDirectoryMergerKind::WindowsUpdate),
         DatasourceId::SwiftPackageManifestJson => Some(SpecialDirectoryMergerKind::Skip),
         _ => None,
     }
@@ -197,6 +199,11 @@ impl SpecialDirectoryMergerKind {
                 debian_source_merge::assemble_debian_source_packages(config, files, file_indices)
             }
             Self::Hackage => hackage_merge::assemble_hackage_packages(files, file_indices),
+            Self::WindowsUpdate => super::windows_update_merge::assemble_windows_update_packages(
+                config,
+                files,
+                file_indices,
+            ),
         }
     }
 }

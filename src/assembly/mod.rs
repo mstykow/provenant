@@ -25,6 +25,7 @@ mod ruby_resource_assign;
 mod sibling_merge;
 mod swift_merge;
 mod topology;
+mod windows_update_merge;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
