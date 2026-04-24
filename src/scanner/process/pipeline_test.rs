@@ -196,6 +196,40 @@ fn test_cap_non_source_json_license_text_keeps_line_rich_large_json_intact() {
 }
 
 #[test]
+fn test_cap_non_source_json_license_text_truncates_generated_scan_result_json() {
+    let classification = FileInfoClassification {
+        mime_type: "application/json".to_string(),
+        file_type: "JSON text data".to_string(),
+        programming_language: None,
+        is_binary: false,
+        is_text: true,
+        is_archive: false,
+        is_media: false,
+        is_source: false,
+        is_script: false,
+    };
+    let entries = (0..4_000)
+        .map(|index| {
+            format!("      {{\"path\":\"file-{index}\",\"license\":\"GPL-2.0 AND Apache-2.0\"}}")
+        })
+        .collect::<Vec<_>>()
+        .join(",\n");
+    let large_json = format!(
+        "{{\n  \"headers\": [\n    {{\n      \"tool_name\": \"scanpipe\",\n      \"notice\": \"Generated with ScanCode.io and provided on an AS IS BASIS\"\n    }}\n  ],\n  \"files\": [\n{entries}\n  ]\n}}"
+    );
+
+    let capped = cap_non_source_json_license_text(
+        Path::new("scan-result.json"),
+        &classification,
+        &large_json,
+    );
+
+    assert!(large_json.len() > LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES);
+    assert!(capped.len() <= LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES);
+    assert!(capped.len() < large_json.len());
+}
+
+#[test]
 fn test_has_line_rich_json_prefix_detects_multiline_json() {
     let entries = (0..512)
         .map(|index| format!("  {{\"id\":{index}}}"))

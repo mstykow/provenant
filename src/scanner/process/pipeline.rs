@@ -559,7 +559,7 @@ fn cap_non_source_json_license_text<'a>(
         || crate::utils::sourcemap::is_sourcemap(path)
         || is_npm_lockfile(path)
         || !is_json_like_text(classification, path)
-        || has_line_rich_json_prefix(text)
+        || (has_line_rich_json_prefix(text) && !looks_like_generated_scan_result_json(text))
         || text.len() <= LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES
     {
         return Cow::Borrowed(text);
@@ -577,6 +577,14 @@ fn has_line_rich_json_prefix(text: &str) -> bool {
         .take(LARGE_NON_SOURCE_JSON_MIN_PREFIX_LINES_TO_KEEP)
         .count()
         >= LARGE_NON_SOURCE_JSON_MIN_PREFIX_LINES_TO_KEEP
+}
+
+fn looks_like_generated_scan_result_json(text: &str) -> bool {
+    let prefix = truncate_at_char_boundary(text, LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES);
+    prefix.contains("\"headers\"")
+        && prefix.contains("\"tool_name\"")
+        && (prefix.contains("Generated with ScanCode")
+            || prefix.contains("Generated with ScanCode.io"))
 }
 
 fn is_json_like_text(classification: &FileInfoClassification, path: &Path) -> bool {
