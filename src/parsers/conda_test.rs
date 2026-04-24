@@ -135,7 +135,7 @@ source:
 
         let result = apply_jinja2_substitutions(content, &variables);
 
-        assert!(result.contains("version: 0.45.0"));
+        assert!(result.contains("version: \"0.45.0\""));
         assert!(result.contains("sha256: abc123"));
         // Jinja2 set lines should be skipped
         assert!(!result.contains("{% set version"));
