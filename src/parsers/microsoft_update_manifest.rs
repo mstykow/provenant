@@ -12,7 +12,7 @@
 //! - Format: XML with assembly and package metadata
 //! - Spec: Windows Update manifests
 
-use crate::models::{DatasourceId, PackageType};
+use crate::models::{DatasourceId, PackageType, Party};
 use std::path::Path;
 
 use crate::parser_warn as warn;
@@ -56,6 +56,7 @@ pub(crate) fn parse_mum_xml(content: &str) -> PackageData {
     let mut reader = Reader::from_str(content);
     reader.config_mut().trim_text(true);
 
+    let mut company = None;
     let mut name = None;
     let mut version = None;
     let mut description = None;
@@ -85,7 +86,9 @@ pub(crate) fn parse_mum_xml(content: &str) -> PackageData {
                             if has_invalid {
                                 warn!("Invalid UTF-8 in 'name' attribute, using lossy conversion");
                             }
-                            name = Some(truncate_field(val));
+                            if name.is_none() {
+                                name = Some(truncate_field(val));
+                            }
                         }
                         b"version" => {
                             let raw = attr.value.to_vec();
@@ -96,7 +99,9 @@ pub(crate) fn parse_mum_xml(content: &str) -> PackageData {
                                     "Invalid UTF-8 in 'version' attribute, using lossy conversion"
                                 );
                             }
-                            version = Some(truncate_field(val));
+                            if version.is_none() {
+                                version = Some(truncate_field(val));
+                            }
                         }
                         _ => {}
                     }
@@ -115,6 +120,17 @@ pub(crate) fn parse_mum_xml(content: &str) -> PackageData {
                                 );
                             }
                             description = Some(truncate_field(val));
+                        }
+                        b"company" => {
+                            let raw = attr.value.to_vec();
+                            let has_invalid = String::from_utf8(raw.clone()).is_err();
+                            let val = String::from_utf8_lossy(&raw).into_owned();
+                            if has_invalid {
+                                warn!(
+                                    "Invalid UTF-8 in 'company' attribute, using lossy conversion"
+                                );
+                            }
+                            company = Some(truncate_field(val));
                         }
                         b"copyright" => {
                             let raw = attr.value.to_vec();
@@ -156,13 +172,28 @@ pub(crate) fn parse_mum_xml(content: &str) -> PackageData {
         buf.clear();
     }
 
+    let parties = company.clone().map_or_else(Vec::new, |company_name| {
+        vec![Party {
+            r#type: Some("organization".to_string()),
+            role: Some("owner".to_string()),
+            name: Some(company_name),
+            email: None,
+            url: None,
+            organization: None,
+            organization_url: None,
+            timezone: None,
+        }]
+    });
+
     PackageData {
         package_type: Some(PACKAGE_TYPE),
         name,
         version,
         description,
+        parties,
         homepage_url,
         copyright,
+        holder: company,
         datasource_id: Some(DatasourceId::MicrosoftUpdateManifestMum),
         ..Default::default()
     }
