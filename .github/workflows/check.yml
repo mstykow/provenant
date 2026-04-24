@@ -122,7 +122,7 @@ jobs:
         run: ./scripts/check_unused_deps.sh
 
   rust-library-tests:
-    name: Rust Unit Tests
+    name: Rust Library Tests
     runs-on: ubuntu-latest
     if: |
       !(github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/'))
@@ -143,11 +143,8 @@ jobs:
         with:
           shared-key: rust-library-tests-release
 
-      - name: Run CLI/bin unit tests except scanner/assembly contract layer
-        run: "cargo test --bin provenant --release --verbose -- --skip _scan_test::"
-
-      - name: Run copyright detector library unit tests
-        run: "cargo test -p provenant-cli --lib --release --verbose copyright::detector::"
+      - name: Run library tests except scanner/assembly contract layer
+        run: "cargo test -p provenant-cli --lib --release --verbose -- --skip _scan_test::"
 
   windows-build-smoke:
     name: Windows Build Smoke Test
