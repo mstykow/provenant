@@ -2103,32 +2103,32 @@ fn top_level_license_deltas(scancode: &Value, provenant: &Value) -> Vec<Value> {
 }
 
 fn dependency_differences(scancode: &Value, provenant: &Value) -> Vec<ValueDifferenceEntry> {
-    let sc_by_path = dependency_counter_by_path(scancode);
-    let pr_by_path = dependency_counter_by_path(provenant);
+    let sc_by_path = dependency_identities_by_path(scancode);
+    let pr_by_path = dependency_identities_by_path(provenant);
     let mut paths = BTreeSet::new();
     paths.extend(sc_by_path.keys().cloned());
     paths.extend(pr_by_path.keys().cloned());
     let mut differences = Vec::new();
     for path in paths {
-        let sc_counter = sc_by_path.get(&path).cloned().unwrap_or_default();
-        let pr_counter = pr_by_path.get(&path).cloned().unwrap_or_default();
-        let missing = subtract_counters(&sc_counter, &pr_counter);
-        let extra = subtract_counters(&pr_counter, &sc_counter);
+        let sc_identities = sc_by_path.get(&path).cloned().unwrap_or_default();
+        let pr_identities = pr_by_path.get(&path).cloned().unwrap_or_default();
+        let missing = difference_entries(&sc_identities, &pr_identities);
+        let extra = difference_entries(&pr_identities, &sc_identities);
         if !missing.is_empty() || !extra.is_empty() {
             differences.push(ValueDifferenceEntry {
                 path,
-                scancode: sc_counter.values().sum(),
-                provenant: pr_counter.values().sum(),
-                missing_in_provenant: counter_entries(&missing),
-                extra_in_provenant: counter_entries(&extra),
+                scancode: sc_identities.len(),
+                provenant: pr_identities.len(),
+                missing_in_provenant: missing,
+                extra_in_provenant: extra,
             });
         }
     }
     differences
 }
 
-fn dependency_counter_by_path(value: &Value) -> BTreeMap<String, BTreeMap<String, usize>> {
-    let mut output: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
+fn dependency_identities_by_path(value: &Value) -> BTreeMap<String, BTreeSet<String>> {
+    let mut output: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for item in value
         .get("dependencies")
         .and_then(Value::as_array)
@@ -2142,9 +2142,18 @@ fn dependency_counter_by_path(value: &Value) -> BTreeMap<String, BTreeMap<String
             .map(normalize_compare_path)
             .unwrap_or_else(|| "<unknown>".to_string());
         let identity = dependency_identity(item).unwrap_or_else(|| "<unknown>".to_string());
-        *output.entry(path).or_default().entry(identity).or_insert(0) += 1;
+        output.entry(path).or_default().insert(identity);
     }
     output
+}
+
+fn difference_entries(left: &BTreeSet<String>, right: &BTreeSet<String>) -> Vec<ValueCountEntry> {
+    left.difference(right)
+        .map(|value| ValueCountEntry {
+            value: value.clone(),
+            count: 1,
+        })
+        .collect()
 }
 
 fn dependency_identity(item: &Value) -> Option<String> {
@@ -3197,6 +3206,38 @@ mod tests {
 
         assert!(args.iter().any(|arg| arg == "--no-license-index-cache"));
         assert!(args.windows(2).any(|pair| pair == ["--processes", "4"]));
+    }
+
+    #[test]
+    fn dependency_differences_ignore_duplicate_linkage_rows() {
+        let scancode = json!({
+            "dependencies": [
+                {
+                    "purl": "pkg:pypi/aboutcode-toolkit@11.1.1",
+                    "datafile_path": "requirements-dev.txt",
+                    "for_package_uid": null,
+                    "dependency_uid": "dep-a"
+                },
+                {
+                    "purl": "pkg:pypi/aboutcode-toolkit@11.1.1",
+                    "datafile_path": "requirements-dev.txt",
+                    "for_package_uid": "pkg:pypi/scancode-toolkit@32.5.0?uuid=scancode-root",
+                    "dependency_uid": "dep-b"
+                }
+            ]
+        });
+        let provenant = json!({
+            "dependencies": [
+                {
+                    "purl": "pkg:pypi/aboutcode-toolkit@11.1.1",
+                    "datafile_path": "requirements-dev.txt",
+                    "for_package_uid": "pkg:pypi/scancode-toolkit@32.5.0?uuid=provenant-root",
+                    "dependency_uid": "dep-c"
+                }
+            ]
+        });
+
+        assert!(dependency_differences(&scancode, &provenant).is_empty());
     }
 
     #[test]
