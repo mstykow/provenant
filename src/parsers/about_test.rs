@@ -316,6 +316,36 @@ download_url: https://raw.githubusercontent.com/docker/docker/ff2de8dace1ba1c1f5
     }
 
     #[test]
+    fn test_duplicate_scalar_keys_fallback_recovers_last_download_url() {
+        use std::io::Write;
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_path = temp_dir.path().join("duplicate.ABOUT");
+        let mut file = std::fs::File::create(&file_path).unwrap();
+        file.write_all(
+            br#"date: 2022-04-01
+download_url: https://raw.githubusercontent.com/byrneg7/MWL_api/master/Gemfile
+date: 2022-04-01
+download_url: https://raw.githubusercontent.com/byrneg7/MWL_api/master/Gemfile.lock
+"#,
+        )
+        .unwrap();
+
+        let result = AboutFileParser::extract_first_package(&file_path);
+
+        assert_eq!(result.datasource_id, Some(DatasourceId::AboutFile));
+        assert_eq!(result.package_type, Some(PackageType::Github));
+        assert_eq!(result.namespace, Some("byrneg7".to_string()));
+        assert_eq!(result.name, Some("MWL_api".to_string()));
+        assert_eq!(
+            result.download_url,
+            Some(
+                "https://raw.githubusercontent.com/byrneg7/MWL_api/master/Gemfile.lock".to_string()
+            )
+        );
+        assert_eq!(result.purl, Some("pkg:github/byrneg7/mwl_api".to_string()));
+    }
+
+    #[test]
     fn test_extra_data_preserves_notice_and_notes() {
         let path =
             PathBuf::from("testdata/copyright-golden/copyrights/misco2/regexhq/regexhq.ABOUT");
