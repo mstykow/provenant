@@ -815,12 +815,10 @@ fn apply_resolved_reference_targets(
         return false;
     }
 
-    let strip_source_matches_for_expression = detection_log
-        == DETECTION_LOG_UNKNOWN_REFERENCE_TO_LOCAL_FILE
-        || matches!(
-            detection.license_expression.as_str(),
-            "unknown-license-reference" | "free-unknown"
-        );
+    let strip_source_matches_for_expression = matches!(
+        detection.license_expression.as_str(),
+        "unknown-license-reference" | "free-unknown"
+    );
     let mut internal_detection = public_detection_to_internal(detection, current_path);
     let mut source_matches = Vec::new();
     if strip_source_matches_for_expression {
