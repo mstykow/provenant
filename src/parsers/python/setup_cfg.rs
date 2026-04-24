@@ -4,8 +4,8 @@
 use super::PythonParser;
 use super::utils::{
     ProjectUrls, apply_project_url_mappings, build_python_dependency_purl, default_package_data,
-    extract_setup_cfg_dependency_name, has_private_classifier, parse_setup_cfg_keywords,
-    parse_setup_cfg_project_urls,
+    extract_setup_cfg_dependency_name, has_private_classifier, normalize_rfc822_requirement,
+    parse_setup_cfg_keywords, parse_setup_cfg_project_urls,
 };
 use crate::models::{DatasourceId, Dependency, PackageData, Party};
 use crate::parser_warn as warn;
@@ -238,7 +238,23 @@ fn build_setup_cfg_dependency(req: &str, scope: &str, is_optional: bool) -> Opti
     }
 
     let name = extract_setup_cfg_dependency_name(trimmed)?;
-    let purl = build_python_dependency_purl(&name, None)?;
+    let requirement_part = trimmed
+        .split_once(';')
+        .map(|(requirement, _marker)| requirement.trim())
+        .unwrap_or(trimmed);
+    let normalized_requirement = normalize_rfc822_requirement(requirement_part);
+    let is_pinned = normalized_requirement
+        .as_deref()
+        .is_some_and(|requirement| requirement.starts_with("==") || requirement.starts_with("==="));
+    let purl = if is_pinned {
+        normalized_requirement
+            .as_deref()
+            .map(|requirement| requirement.trim_start_matches('='))
+            .and_then(|version| build_python_dependency_purl(&name, Some(version)))
+            .or_else(|| build_python_dependency_purl(&name, None))?
+    } else {
+        build_python_dependency_purl(&name, None)?
+    };
 
     Some(Dependency {
         purl: Some(purl),
@@ -246,7 +262,7 @@ fn build_setup_cfg_dependency(req: &str, scope: &str, is_optional: bool) -> Opti
         scope: Some(scope.to_string()),
         is_runtime: Some(true),
         is_optional: Some(is_optional),
-        is_pinned: Some(false),
+        is_pinned: Some(is_pinned),
         is_direct: Some(true),
         resolved_package: None,
         extra_data: None,

@@ -264,7 +264,7 @@ fn encode_python_dependency_purl_version(version: &str) -> String {
     version.replace('*', "%2A")
 }
 
-fn normalize_rfc822_requirement(requirement_part: &str) -> Option<String> {
+pub(super) fn normalize_rfc822_requirement(requirement_part: &str) -> Option<String> {
     let name = extract_setup_cfg_dependency_name(requirement_part)?;
     let trimmed = requirement_part.trim();
     let mut remainder = trimmed[name.len()..].trim();

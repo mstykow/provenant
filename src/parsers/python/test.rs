@@ -122,7 +122,9 @@ mod tests {
     #[test]
     fn test_is_match() {
         let pyproject_path = PathBuf::from("/some/path/pyproject.toml");
+        let suffixed_pyproject_path = PathBuf::from("/some/path/pipeline-pyproject.toml");
         let setup_cfg_path = PathBuf::from("/some/path/setup.cfg");
+        let suffixed_setup_cfg_path = PathBuf::from("/some/path/with_extras_setup.cfg");
         let setup_path = PathBuf::from("/some/path/setup.py");
         let pkg_info_path = PathBuf::from("/some/path/PKG-INFO");
         let metadata_path = PathBuf::from("/some/path/demo-1.0.0.dist-info/METADATA");
@@ -132,7 +134,9 @@ mod tests {
         let invalid_path = PathBuf::from("/some/path/not_python.txt");
 
         assert!(PythonParser::is_match(&pyproject_path));
+        assert!(PythonParser::is_match(&suffixed_pyproject_path));
         assert!(PythonParser::is_match(&setup_cfg_path));
+        assert!(PythonParser::is_match(&suffixed_setup_cfg_path));
         assert!(PythonParser::is_match(&setup_path));
         assert!(PythonParser::is_match(&pkg_info_path));
         assert!(PythonParser::is_match(&metadata_path));
@@ -2841,6 +2845,39 @@ install_requires =
                 .is_some_and(|purl| purl.starts_with("pkg:pypi/qemu-qmp"))
                 && dependency.extracted_requirement.as_deref() == Some("qemu.qmp==0.0.5")
         }));
+    }
+
+    #[test]
+    fn test_setup_cfg_dependency_preserves_pinned_version_in_purl() {
+        let content = r#"
+[metadata]
+name = test-package
+version = 1.0.0
+
+[options]
+install_requires =
+    spdx_tools == 0.8.2
+"#;
+
+        let (_temp_dir, file_path) = create_temp_file(content, "setup.cfg");
+        let package_data = PythonParser::extract_first_package(&file_path);
+
+        let dependency = package_data
+            .dependencies
+            .iter()
+            .find(|dependency| {
+                dependency
+                    .purl
+                    .as_deref()
+                    .is_some_and(|purl| purl == "pkg:pypi/spdx-tools@0.8.2")
+            })
+            .expect("setup.cfg dependency should preserve pinned version in purl");
+
+        assert_eq!(
+            dependency.extracted_requirement.as_deref(),
+            Some("spdx_tools==0.8.2")
+        );
+        assert_eq!(dependency.is_pinned, Some(true));
     }
 
     #[test]
