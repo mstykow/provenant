@@ -39,6 +39,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 const LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES: usize = 128 * 1024;
+const LARGE_NON_SOURCE_JSON_MIN_PREFIX_LINES_TO_KEEP: usize = 256;
 
 pub(super) fn process_file(
     path: &Path,
@@ -558,6 +559,7 @@ fn cap_non_source_json_license_text<'a>(
         || crate::utils::sourcemap::is_sourcemap(path)
         || is_npm_lockfile(path)
         || !is_json_like_text(classification, path)
+        || has_line_rich_json_prefix(text)
         || text.len() <= LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES
     {
         return Cow::Borrowed(text);
@@ -566,6 +568,15 @@ fn cap_non_source_json_license_text<'a>(
     Cow::Owned(
         truncate_at_char_boundary(text, LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES).to_string(),
     )
+}
+
+fn has_line_rich_json_prefix(text: &str) -> bool {
+    truncate_at_char_boundary(text, LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES)
+        .bytes()
+        .filter(|byte| *byte == b'\n')
+        .take(LARGE_NON_SOURCE_JSON_MIN_PREFIX_LINES_TO_KEEP)
+        .count()
+        >= LARGE_NON_SOURCE_JSON_MIN_PREFIX_LINES_TO_KEEP
 }
 
 fn is_json_like_text(classification: &FileInfoClassification, path: &Path) -> bool {

@@ -3,7 +3,7 @@
 
 use super::{
     LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES, cap_non_source_json_license_text,
-    maybe_record_processing_timeout, merge_parse_results, process_file,
+    has_line_rich_json_prefix, maybe_record_processing_timeout, merge_parse_results, process_file,
 };
 use crate::models::DatasourceId;
 use crate::models::{DiagnosticSeverity, PackageData, PackageType, ScanDiagnostic};
@@ -160,6 +160,57 @@ fn test_cap_non_source_json_license_text_keeps_npm_shrinkwrap_intact() {
     );
 
     assert_eq!(capped.as_ref(), large_json);
+}
+
+#[test]
+fn test_cap_non_source_json_license_text_keeps_line_rich_large_json_intact() {
+    let classification = FileInfoClassification {
+        mime_type: "application/json".to_string(),
+        file_type: "JSON text data".to_string(),
+        programming_language: None,
+        is_binary: false,
+        is_text: true,
+        is_archive: false,
+        is_media: false,
+        is_source: false,
+        is_script: false,
+    };
+    let entries = (0..2_000)
+        .map(|index| {
+            format!(
+                "  {{\"id\":{index},\"description\":\"This project is free software under GPL2 and Apache-2.0 terms\"}}"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",\n");
+    let large_json = format!("[\n{entries}\n]");
+
+    let capped = cap_non_source_json_license_text(
+        Path::new("benchmark-data.json"),
+        &classification,
+        &large_json,
+    );
+
+    assert!(large_json.len() > LARGE_NON_SOURCE_JSON_LICENSE_TEXT_BYTES);
+    assert_eq!(capped.as_ref(), large_json);
+}
+
+#[test]
+fn test_has_line_rich_json_prefix_detects_multiline_json() {
+    let entries = (0..512)
+        .map(|index| format!("  {{\"id\":{index}}}"))
+        .collect::<Vec<_>>()
+        .join(",\n");
+    let large_json = format!("[\n{entries}\n]");
+
+    assert!(has_line_rich_json_prefix(&large_json));
+}
+
+#[test]
+fn test_has_line_rich_json_prefix_rejects_compact_json() {
+    let compact_json = format!("{{\"items\":[\"{}\"]}}", "x".repeat(200_000));
+
+    assert!(!has_line_rich_json_prefix(&compact_json));
 }
 
 #[test]
