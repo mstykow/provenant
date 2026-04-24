@@ -7,14 +7,11 @@ use crate::copyright::types::{AuthorDetection, CopyrightDetection, HolderDetecti
 use super::seen_text::SeenTextSets;
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn run_phase_postprocess(
+fn run_initial_detection_repairs(
     content: &str,
-    raw_lines: &[&str],
     prepared_cache: &PreparedLines<'_>,
-    did_expand_href: bool,
     copyrights: &mut Vec<CopyrightDetection>,
     holders: &mut Vec<HolderDetection>,
-    authors: &mut Vec<AuthorDetection>,
     seen: &mut SeenTextSets,
 ) {
     let (mut new_c, mut new_h) =
@@ -73,7 +70,18 @@ pub(super) fn run_phase_postprocess(
     );
     seen.dedup_new_copyrights(copyrights, c_before);
     seen.dedup_new_holders(holders, h_before);
+}
 
+#[allow(clippy::too_many_arguments)]
+fn run_author_extraction_and_repairs(
+    content: &str,
+    raw_lines: &[&str],
+    prepared_cache: &PreparedLines<'_>,
+    copyrights: &mut Vec<CopyrightDetection>,
+    holders: &mut Vec<HolderDetection>,
+    authors: &mut Vec<AuthorDetection>,
+    seen: &mut SeenTextSets,
+) {
     let a_before_markup = authors.len();
     super::author_heuristics::extract_markup_authors(content, authors);
     seen.authors
@@ -270,7 +278,19 @@ pub(super) fn run_phase_postprocess(
     let mut new_a = super::author_heuristics::extract_name_contributed_authors(prepared_cache);
     seen.dedup_new_authors(&mut new_a, 0);
     authors.extend(new_a);
+}
 
+#[allow(clippy::too_many_arguments)]
+fn run_mid_pipeline_repairs(
+    content: &str,
+    raw_lines: &[&str],
+    prepared_cache: &PreparedLines<'_>,
+    did_expand_href: bool,
+    copyrights: &mut Vec<CopyrightDetection>,
+    holders: &mut Vec<HolderDetection>,
+    authors: &mut Vec<AuthorDetection>,
+    seen: &mut SeenTextSets,
+) {
     super::postprocess_transforms::merge_multiline_copyrighted_by_with_trailing_copyright_clause(
         did_expand_href,
         content,
@@ -341,7 +361,16 @@ pub(super) fn run_phase_postprocess(
     super::pattern_extract::drop_bare_c_shadowed_by_non_copyright_prefixes(copyrights);
     seen.rebuild_copyrights_from(copyrights);
     seen.rebuild_holders_from(holders);
+}
 
+#[allow(clippy::too_many_arguments)]
+fn run_late_pattern_extractions(
+    content: &str,
+    prepared_cache: &PreparedLines<'_>,
+    copyrights: &mut Vec<CopyrightDetection>,
+    holders: &mut Vec<HolderDetection>,
+    seen: &mut SeenTextSets,
+) {
     let (mut new_c, mut new_h) =
         super::pattern_extract::extract_name_before_rewrited_by_copyrights(prepared_cache);
     seen.dedup_new_copyrights(&mut new_c, 0);
@@ -390,16 +419,22 @@ pub(super) fn run_phase_postprocess(
     super::postprocess_transforms::apply_openoffice_org_report_builder_bin_normalizations(
         content, copyrights, holders,
     );
+}
 
+#[allow(clippy::too_many_arguments)]
+fn run_final_variant_and_cleanup_repairs(
+    raw_lines: &[&str],
+    prepared_cache: &PreparedLines<'_>,
+    copyrights: &mut Vec<CopyrightDetection>,
+    holders: &mut Vec<HolderDetection>,
+    seen: &mut SeenTextSets,
+) {
     super::pattern_extract::drop_shadowed_bare_c_copyrights_same_span(copyrights);
-
     super::pattern_extract::drop_copyright_shadowed_by_bare_c_copyrights_same_span(copyrights);
     super::pattern_extract::drop_shadowed_copyright_c_years_only_prefixes(copyrights);
-
     super::pattern_extract::drop_non_copyright_like_copyrights(copyrights);
 
     super::postprocess_transforms::drop_wider_duplicate_holder_spans(holders);
-
     super::postprocess_transforms::drop_shadowed_multiline_prefix_copyrights(copyrights);
     super::postprocess_transforms::drop_shadowed_multiline_prefix_holders(holders);
 
@@ -555,4 +590,39 @@ pub(super) fn run_phase_postprocess(
         raw_lines, copyrights, holders,
     );
     super::postprocess_transforms::drop_copyright_like_holders(holders);
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn run_phase_postprocess(
+    content: &str,
+    raw_lines: &[&str],
+    prepared_cache: &PreparedLines<'_>,
+    did_expand_href: bool,
+    copyrights: &mut Vec<CopyrightDetection>,
+    holders: &mut Vec<HolderDetection>,
+    authors: &mut Vec<AuthorDetection>,
+    seen: &mut SeenTextSets,
+) {
+    run_initial_detection_repairs(content, prepared_cache, copyrights, holders, seen);
+    run_author_extraction_and_repairs(
+        content,
+        raw_lines,
+        prepared_cache,
+        copyrights,
+        holders,
+        authors,
+        seen,
+    );
+    run_mid_pipeline_repairs(
+        content,
+        raw_lines,
+        prepared_cache,
+        did_expand_href,
+        copyrights,
+        holders,
+        authors,
+        seen,
+    );
+    run_late_pattern_extractions(content, prepared_cache, copyrights, holders, seen);
+    run_final_variant_and_cleanup_repairs(raw_lines, prepared_cache, copyrights, holders, seen);
 }
