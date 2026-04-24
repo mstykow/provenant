@@ -87,7 +87,11 @@ impl PackageParser for AlpineApkbuildParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn is_match(path: &Path) -> bool {
-        path.file_name().and_then(|n| n.to_str()) == Some("APKBUILD")
+        path.file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|name| {
+                name == "APKBUILD" || name.ends_with("-APKBUILD") || name.ends_with("_APKBUILD")
+            })
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
@@ -1683,6 +1687,9 @@ p:so:libtest.so.1
         assert!(AlpineApkbuildParser::is_match(&PathBuf::from("APKBUILD")));
         assert!(AlpineApkbuildParser::is_match(&PathBuf::from(
             "/path/to/APKBUILD"
+        )));
+        assert!(AlpineApkbuildParser::is_match(&PathBuf::from(
+            "linux-firmware-APKBUILD"
         )));
         assert!(!AlpineApkbuildParser::is_match(&PathBuf::from("apkbuild")));
         assert!(!AlpineApkbuildParser::is_match(&PathBuf::from(
