@@ -359,6 +359,33 @@ mod tests {
     }
 
     #[test]
+    fn test_project_clj_accepts_var_quote_in_ignored_fields() {
+        let content = r#"
+(defproject org.example/var-quote "1.0.0"
+  :dependencies [[org.clojure/clojure "1.12.0"]]
+  :middleware [#'project/warn]
+  :hooks [#'leiningen.test.helper/with-system-out-str])
+        "#;
+
+        let (_temp_dir, path) = create_temp_file("project.clj", content);
+        let result = capture_parser_diagnostics(
+            || ClojureProjectCljParser::extract_packages(&path),
+            "ClojureProjectCljParser",
+            &path,
+            None,
+        );
+
+        assert!(result.scan_errors.is_empty());
+        assert_eq!(result.packages.len(), 1);
+
+        let package_data = &result.packages[0];
+        assert_eq!(package_data.namespace.as_deref(), Some("org.example"));
+        assert_eq!(package_data.name.as_deref(), Some("var-quote"));
+        assert_eq!(package_data.version.as_deref(), Some("1.0.0"));
+        assert_eq!(package_data.dependencies.len(), 1);
+    }
+
+    #[test]
     fn test_deps_edn_allows_commas_as_whitespace() {
         let content = r#"
 {:paths ["src", "resources"],
