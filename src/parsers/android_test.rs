@@ -331,6 +331,25 @@ third_party {
     }
 
     #[test]
+    fn test_parse_soong_metadata_from_google_appengine_fixture() {
+        let package = AndroidSoongMetadataParser::extract_first_package(&PathBuf::from(
+            "testdata/android/metadata/google_appengine_django_1_2/METADATA",
+        ));
+
+        assert_eq!(package.package_type, Some(PackageType::Android));
+        assert_eq!(
+            package.datasource_id,
+            Some(DatasourceId::AndroidSoongMetadata)
+        );
+        assert_eq!(package.name.as_deref(), Some("django"));
+        assert_eq!(package.version.as_deref(), Some("1.2.5"));
+        assert_eq!(
+            package.download_url.as_deref(),
+            Some("http://www.djangoproject.com/download/1.2.5/tarball/")
+        );
+    }
+
+    #[test]
     fn test_parse_soong_metadata_string_concatenation() {
         let temp_dir = TempDir::new().expect("temp dir");
         let metadata_path = temp_dir.path().join("METADATA");

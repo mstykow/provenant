@@ -35,4 +35,12 @@ mod golden_tests {
             "testdata/about/appdirs.ABOUT.expected.json",
         );
     }
+
+    #[test]
+    fn test_golden_duplicate_origin_about() {
+        run_golden(
+            "testdata/about/duplicate_origin.ABOUT",
+            "testdata/about/duplicate_origin.ABOUT.expected.json",
+        );
+    }
 }
