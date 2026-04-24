@@ -2041,6 +2041,7 @@ impl PackageParser for MavenParser {
             filename == "pom.xml"
                 || filename.ends_with(".pom.xml")
                 || filename.ends_with("-pom.xml")
+                || filename.ends_with("_pom.xml")
                 || filename == "pom.properties"
                 || filename == "MANIFEST.MF"
                 || filename.ends_with(".pom")
@@ -2580,7 +2581,33 @@ fn default_package_data(datasource_id: DatasourceId) -> PackageData {
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::PathBuf;
     use tempfile::TempDir;
+
+    #[test]
+    fn test_maven_parser_matches_underscore_pom_suffix() {
+        assert!(MavenParser::is_match(&PathBuf::from("dbwebx_pom.xml")));
+    }
+
+    #[test]
+    fn test_maven_parser_extracts_parent_derived_identity_from_underscore_pom_fixture() {
+        let fixture = PathBuf::from(
+            "reference/scancode-toolkit/tests/packagedcode/data/maven2/dbwebx_pom/dbwebx_pom.xml",
+        );
+        if !fixture.exists() {
+            return;
+        }
+
+        let package_data = MavenParser::extract_first_package(&fixture);
+
+        assert_eq!(package_data.namespace.as_deref(), Some("org.dbwebx"));
+        assert_eq!(package_data.name.as_deref(), Some("tools"));
+        assert_eq!(package_data.version.as_deref(), Some("0.0.1.SNAPSHOT"));
+        assert_eq!(
+            package_data.purl.as_deref(),
+            Some("pkg:maven/org.dbwebx/tools@0.0.1.SNAPSHOT")
+        );
+    }
 
     #[test]
     fn test_organization_extraction() {
