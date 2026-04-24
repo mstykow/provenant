@@ -65,8 +65,8 @@ fn load_scan_from_json_reads_files_and_metadata_sections() {
     let parsed = load_scan_from_json(temp_path.to_str().expect("utf-8 path"))
         .expect("from-json loading should succeed");
 
-    assert_eq!(parsed.files.len(), 1);
-    assert_eq!(parsed.files[0].path, "src/main.rs");
+    let paths: Vec<_> = parsed.files.iter().map(|file| file.path.as_str()).collect();
+    assert_eq!(paths, vec!["src/main.rs", "src"]);
     assert_eq!(parsed.headers.len(), 1);
     assert_eq!(parsed.headers[0].errors, vec!["Path: src/main.rs"]);
     assert_eq!(parsed.headers[0].warnings, vec!["Imported warning"]);
@@ -168,7 +168,7 @@ fn normalize_loaded_json_scan_applies_strip_root_per_loaded_input() {
     normalize_loaded_json_scan(&mut loaded, true, false);
 
     let paths: Vec<_> = loaded.files.iter().map(|file| file.path.as_str()).collect();
-    assert_eq!(paths, vec!["root", "src/main.rs"]);
+    assert_eq!(paths, vec!["root", "src/main.rs", "src"]);
     assert_eq!(
         loaded.headers[0].errors,
         vec!["Failed to read or parse package.json: src/main.rs"]
