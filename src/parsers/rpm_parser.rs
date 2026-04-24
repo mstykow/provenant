@@ -29,7 +29,10 @@ use std::sync::LazyLock;
 
 use crate::parser_warn as warn;
 use regex::Regex;
-use rpm::{IndexTag, PackageMetadata, RPM_MAGIC};
+use rpm::{
+    HEADER_MAGIC, INDEX_ENTRY_SIZE, INDEX_HEADER_SIZE, IndexTag, LEAD_SIZE, PackageMetadata,
+    RPM_MAGIC,
+};
 
 use crate::models::{DatasourceId, Dependency, PackageData, PackageType, Party};
 use crate::parsers::utils::{MAX_ITERATION_COUNT, MAX_MANIFEST_SIZE, truncate_field};
@@ -204,6 +207,296 @@ fn parse_rpm_metadata_only(path: &Path) -> Result<PackageMetadata, String> {
         .map_err(|e| format!("Failed to parse RPM file {:?}: {}", path, e))
 }
 
+#[derive(Debug, Clone, Copy)]
+struct RpmHeaderEntryView {
+    tag: u32,
+    data_type: u32,
+    offset: usize,
+    num_items: usize,
+}
+
+struct ParsedRpmHeader<'a> {
+    entries: Vec<RpmHeaderEntryView>,
+    store: &'a [u8],
+}
+
+#[derive(Default)]
+struct SalvagedRpmFields {
+    name: Option<String>,
+    version: Option<String>,
+    release: Option<String>,
+    summary: Option<String>,
+    description: Option<String>,
+    distribution: Option<String>,
+    vendor: Option<String>,
+    license: Option<String>,
+    packager: Option<String>,
+    group: Option<String>,
+    url: Option<String>,
+    arch: Option<String>,
+    source_rpm: Option<String>,
+    dist_url: Option<String>,
+}
+
+fn read_rpm_header_bytes(path: &Path) -> Result<Vec<u8>, String> {
+    let file =
+        File::open(path).map_err(|e| format!("Failed to open RPM file {:?}: {}", path, e))?;
+    let mut limited_file = file.take(RPM_HEADER_PARSE_LIMIT_BYTES);
+    let mut bytes = Vec::new();
+    limited_file
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("Failed to read RPM file {:?}: {}", path, e))?;
+    Ok(bytes)
+}
+
+fn parse_index_header(bytes: &[u8], offset: usize) -> Option<(usize, usize)> {
+    let header = bytes.get(offset..offset + INDEX_HEADER_SIZE as usize)?;
+    if header.get(..3)? != HEADER_MAGIC {
+        return None;
+    }
+    if header.get(3).copied()? != 1 {
+        return None;
+    }
+
+    let num_entries = u32::from_be_bytes(header.get(8..12)?.try_into().ok()?) as usize;
+    let data_section_size = u32::from_be_bytes(header.get(12..16)?.try_into().ok()?) as usize;
+    Some((num_entries, data_section_size))
+}
+
+fn parse_header_entries<'a>(
+    bytes: &'a [u8],
+    offset: usize,
+    allow_truncated_store: bool,
+) -> Option<(ParsedRpmHeader<'a>, usize)> {
+    let (num_entries, data_section_size) = parse_index_header(bytes, offset)?;
+    let entries_offset = offset.checked_add(INDEX_HEADER_SIZE as usize)?;
+    let entries_size = num_entries.checked_mul(INDEX_ENTRY_SIZE as usize)?;
+    let store_offset = entries_offset.checked_add(entries_size)?;
+    bytes.get(entries_offset..store_offset)?;
+    let store_end = store_offset.checked_add(data_section_size)?;
+    let store = if allow_truncated_store {
+        bytes.get(store_offset..).unwrap_or(&[])
+    } else {
+        bytes.get(store_offset..store_end)?
+    };
+
+    let mut entries = Vec::with_capacity(num_entries);
+    for index in 0..num_entries {
+        let entry_offset =
+            entries_offset.checked_add(index.checked_mul(INDEX_ENTRY_SIZE as usize)?)?;
+        let entry = bytes.get(entry_offset..entry_offset + INDEX_ENTRY_SIZE as usize)?;
+        entries.push(RpmHeaderEntryView {
+            tag: u32::from_be_bytes(entry.get(0..4)?.try_into().ok()?),
+            data_type: u32::from_be_bytes(entry.get(4..8)?.try_into().ok()?),
+            offset: u32::from_be_bytes(entry.get(8..12)?.try_into().ok()?) as usize,
+            num_items: u32::from_be_bytes(entry.get(12..16)?.try_into().ok()?) as usize,
+        });
+    }
+
+    Some((ParsedRpmHeader { entries, store }, store_end))
+}
+
+fn parse_main_rpm_header(bytes: &[u8]) -> Option<ParsedRpmHeader<'_>> {
+    if bytes.get(..RPM_MAGIC.len())? != RPM_MAGIC {
+        return None;
+    }
+
+    let (_, signature_end) = parse_header_entries(bytes, LEAD_SIZE as usize, false)?;
+    let signature_padding = (8 - (signature_end - (LEAD_SIZE as usize)) % 8) % 8;
+    let main_header_offset = signature_end.checked_add(signature_padding)?;
+    let (header, _) = parse_header_entries(bytes, main_header_offset, true)?;
+    Some(header)
+}
+
+fn read_header_string(store: &[u8], offset: usize) -> Option<(String, usize)> {
+    let remaining = store.get(offset..)?;
+    let nul = remaining.iter().position(|byte| *byte == 0)?;
+    let text = String::from_utf8_lossy(&remaining[..nul])
+        .trim()
+        .to_string();
+    let next_offset = offset.checked_add(nul)?.checked_add(1)?;
+    if text.is_empty() || text == "(none)" {
+        None
+    } else {
+        Some((text, next_offset))
+    }
+}
+
+fn read_entry_first_string(header: &ParsedRpmHeader<'_>, tag: u32) -> Option<String> {
+    let entry = header.entries.iter().find(|entry| entry.tag == tag)?;
+    match entry.data_type {
+        6 => read_header_string(header.store, entry.offset).map(|(value, _)| value),
+        8 | 9 => {
+            let mut offset = entry.offset;
+            let mut first_value = None;
+            for _ in 0..entry.num_items {
+                let (value, next_offset) = read_header_string(header.store, offset)?;
+                first_value.get_or_insert(value);
+                offset = next_offset;
+            }
+            first_value
+        }
+        _ => None,
+    }
+}
+
+fn salvage_rpm_header_fields(path: &Path) -> Option<SalvagedRpmFields> {
+    let bytes = read_rpm_header_bytes(path).ok()?;
+    let header = parse_main_rpm_header(&bytes)?;
+
+    Some(SalvagedRpmFields {
+        name: read_entry_first_string(&header, IndexTag::RPMTAG_NAME as u32).map(truncate_field),
+        version: read_entry_first_string(&header, IndexTag::RPMTAG_VERSION as u32)
+            .map(truncate_field),
+        release: read_entry_first_string(&header, IndexTag::RPMTAG_RELEASE as u32)
+            .map(truncate_field),
+        summary: read_entry_first_string(&header, IndexTag::RPMTAG_SUMMARY as u32)
+            .map(truncate_field),
+        description: read_entry_first_string(&header, IndexTag::RPMTAG_DESCRIPTION as u32)
+            .map(truncate_field),
+        distribution: read_entry_first_string(&header, IndexTag::RPMTAG_DISTRIBUTION as u32)
+            .map(truncate_field),
+        vendor: read_entry_first_string(&header, IndexTag::RPMTAG_VENDOR as u32)
+            .map(truncate_field),
+        license: read_entry_first_string(&header, IndexTag::RPMTAG_LICENSE as u32)
+            .map(truncate_field),
+        packager: read_entry_first_string(&header, IndexTag::RPMTAG_PACKAGER as u32)
+            .map(truncate_field),
+        group: read_entry_first_string(&header, IndexTag::RPMTAG_GROUP as u32).map(truncate_field),
+        url: read_entry_first_string(&header, IndexTag::RPMTAG_URL as u32).map(truncate_field),
+        arch: read_entry_first_string(&header, IndexTag::RPMTAG_ARCH as u32).map(truncate_field),
+        source_rpm: read_entry_first_string(&header, IndexTag::RPMTAG_SOURCERPM as u32)
+            .map(truncate_field),
+        dist_url: read_entry_first_string(&header, IndexTag::RPMTAG_DISTURL as u32)
+            .map(truncate_field),
+    })
+}
+
+fn build_salvaged_rpm_package(path: &Path, fields: SalvagedRpmFields) -> Option<PackageData> {
+    let name = fields.name?;
+    let mut version = fields.version;
+    if let Some(release) = fields.release.as_deref() {
+        let mut evr = version.take().unwrap_or_default();
+        if !evr.is_empty() {
+            evr.push('-');
+        }
+        evr.push_str(release);
+        version = Some(truncate_field(evr));
+    }
+
+    let namespace = infer_rpm_namespace(
+        fields.distribution.as_deref(),
+        fields.vendor.as_deref(),
+        fields.release.as_deref(),
+        fields.dist_url.as_deref(),
+    )
+    .or_else(|| infer_rpm_namespace_from_filename(path))
+    .map(truncate_field);
+    let is_source =
+        path.to_string_lossy().ends_with(".src.rpm") || path.to_string_lossy().ends_with(".srpm");
+    let qualifiers = build_rpm_qualifiers(fields.arch.as_deref(), is_source);
+
+    let mut parties = Vec::new();
+    if let Some(vendor) = fields.vendor.clone() {
+        parties.push(Party {
+            r#type: Some("organization".to_string()),
+            role: Some("vendor".to_string()),
+            name: Some(vendor),
+            email: None,
+            url: None,
+            organization: None,
+            organization_url: None,
+            timezone: None,
+        });
+    }
+    if let Some(distribution) = fields.distribution.clone() {
+        parties.push(Party {
+            r#type: Some("organization".to_string()),
+            role: Some("distributor".to_string()),
+            name: Some(distribution),
+            email: None,
+            url: None,
+            organization: None,
+            organization_url: None,
+            timezone: None,
+        });
+    }
+    if let Some(packager) = fields.packager.as_deref() {
+        let (name_opt, email_opt) = parse_packager(packager);
+        parties.push(Party {
+            r#type: Some("person".to_string()),
+            role: Some("packager".to_string()),
+            name: name_opt.map(truncate_field),
+            email: email_opt.map(truncate_field),
+            url: None,
+            organization: None,
+            organization_url: None,
+            timezone: None,
+        });
+    }
+
+    let extracted_license_statement = fields.license.map(truncate_field);
+    let (declared_license_expression, declared_license_expression_spdx, license_detections) =
+        extracted_license_statement
+            .as_deref()
+            .and_then(normalize_rpm_declared_license)
+            .map(|normalized| {
+                build_declared_license_data(
+                    normalized,
+                    DeclaredLicenseMatchMetadata::single_line(
+                        extracted_license_statement.as_deref().unwrap_or_default(),
+                    ),
+                )
+            })
+            .map(|(expr, spdx, detections)| {
+                (
+                    expr.map(truncate_field),
+                    spdx.map(truncate_field),
+                    detections,
+                )
+            })
+            .unwrap_or_else(empty_declared_license_data);
+
+    let mut extra_data = std::collections::HashMap::new();
+    if let Some(distribution) = fields.distribution.clone() {
+        extra_data.insert(
+            "distribution".to_string(),
+            serde_json::Value::String(distribution),
+        );
+    }
+    if let Some(dist_url) = fields.dist_url.clone() {
+        extra_data.insert("dist_url".to_string(), serde_json::Value::String(dist_url));
+    }
+
+    Some(PackageData {
+        datasource_id: Some(DatasourceId::RpmArchive),
+        package_type: Some(PACKAGE_TYPE),
+        namespace: namespace.clone(),
+        name: Some(name.clone()),
+        version: version.clone(),
+        qualifiers,
+        description: fields.description.or(fields.summary),
+        homepage_url: fields.url,
+        parties,
+        keywords: fields.group.into_iter().collect(),
+        declared_license_expression,
+        declared_license_expression_spdx,
+        license_detections,
+        extracted_license_statement,
+        source_packages: fields.source_rpm.into_iter().collect(),
+        extra_data: (!extra_data.is_empty()).then_some(extra_data),
+        purl: build_rpm_purl(
+            &name,
+            version.as_deref(),
+            namespace.as_deref(),
+            fields.arch.as_deref(),
+            is_source,
+        )
+        .map(truncate_field),
+        ..Default::default()
+    })
+}
+
 pub(crate) fn extract_rpm_packages(path: &Path) -> Vec<PackageData> {
     if let Err(e) = fs::metadata(path) {
         warn!("Cannot stat RPM file {:?}: {}", path, e);
@@ -213,6 +506,11 @@ pub(crate) fn extract_rpm_packages(path: &Path) -> Vec<PackageData> {
     let metadata = match parse_rpm_metadata_only(path) {
         Ok(metadata) => metadata,
         Err(message) => {
+            if let Some(package) = salvage_rpm_header_fields(path)
+                .and_then(|fields| build_salvaged_rpm_package(path, fields))
+            {
+                return vec![package];
+            }
             warn!("{}", message);
             return vec![default_package_data()];
         }
@@ -835,11 +1133,8 @@ mod tests {
         let pkg = RpmParser::extract_first_package(&test_file);
 
         assert_eq!(pkg.package_type, Some(PackageType::Rpm));
-
-        if pkg.name.is_some() {
-            assert_eq!(pkg.name, Some("Eterm".to_string()));
-            assert!(pkg.version.is_some());
-        }
+        assert_eq!(pkg.name, Some("Eterm".to_string()));
+        assert_eq!(pkg.version, Some("0.9.3-5mdv2007.0".to_string()));
     }
 
     #[test]
@@ -912,10 +1207,8 @@ mod tests {
         }
 
         let pkg = RpmParser::extract_first_package(&test_file);
-        if pkg.name.is_some() {
-            assert_eq!(pkg.name, Some("fping".to_string()));
-            assert!(pkg.version.is_some());
-        }
+        assert_eq!(pkg.name, Some("fping".to_string()));
+        assert_eq!(pkg.version, Some("2.4b2-10.fc12".to_string()));
     }
 
     #[test]
