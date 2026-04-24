@@ -186,10 +186,9 @@ fn convert_detection_to_model(
         (
             Some(PublicLicenseDetection {
                 license_expression,
-                license_expression_spdx: detection
-                    .license_expression_spdx
-                    .clone()
-                    .unwrap_or_default(),
+                license_expression_spdx: normalize_optional_spdx_expression(
+                    detection.license_expression_spdx.as_deref(),
+                ),
                 matches,
                 detection_log: if license_options.include_diagnostics {
                     detection.detection_log.clone()
@@ -320,7 +319,9 @@ fn convert_match_to_model(
     };
     Match {
         license_expression: m.license_expression.clone(),
-        license_expression_spdx: m.license_expression_spdx.clone().unwrap_or_default(),
+        license_expression_spdx: normalize_optional_spdx_expression(
+            m.license_expression_spdx.as_deref(),
+        ),
         from_file: m.from_file.clone(),
         start_line: m.start_line,
         end_line: m.end_line,
@@ -335,6 +336,20 @@ fn convert_match_to_model(
         referenced_filenames: m.referenced_filenames.clone(),
         matched_text_diagnostics,
     }
+}
+
+fn normalize_optional_spdx_expression(expression: Option<&str>) -> String {
+    let Some(expression) = expression
+        .map(str::trim)
+        .filter(|expression| !expression.is_empty())
+    else {
+        return String::new();
+    };
+
+    crate::utils::spdx::combine_license_expressions_preserving_structure(std::iter::once(
+        expression.to_string(),
+    ))
+    .unwrap_or_else(|| expression.to_string())
 }
 
 fn compute_percentage_of_license_text(

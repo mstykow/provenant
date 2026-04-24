@@ -127,6 +127,26 @@ fn test_convert_detection_to_model_rounds_match_coverage() {
 }
 
 #[test]
+fn test_convert_detection_to_model_normalizes_redundant_outer_spdx_parentheses() {
+    let mut detection = make_detection("");
+    detection.license_expression = Some("mit OR cc0-1.0".to_string());
+    detection.license_expression_spdx = Some("(MIT OR CC0-1.0)".to_string());
+    detection.matches[0].license_expression = "mit OR cc0-1.0".to_string();
+    detection.matches[0].license_expression_spdx = Some("(MIT OR CC0-1.0)".to_string());
+
+    let (converted, clues) =
+        convert_detection_to_model(&detection, LicenseScanOptions::default(), "", None, None);
+    let converted = converted.expect("detection should convert");
+
+    assert_eq!(converted.license_expression_spdx, "MIT OR CC0-1.0");
+    assert_eq!(
+        converted.matches[0].license_expression_spdx,
+        "MIT OR CC0-1.0"
+    );
+    assert!(clues.is_empty());
+}
+
+#[test]
 fn test_convert_detection_to_model_routes_expressionless_detection_to_license_clues() {
     let mut detection = make_detection(
         "https://github.com/aboutcode-org/scancode-toolkit/tree/develop/src/licensedcode/data/rules/license-clue_1.RULE",
