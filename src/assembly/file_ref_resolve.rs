@@ -123,11 +123,8 @@ const FILE_REFERENCE_RESOLVER_CONFIGS: &[FileReferenceResolverConfig] = &[
         kind: FileReferenceResolverKind::PythonMetadata,
     },
     FileReferenceResolverConfig {
-        datasource_ids: &[DatasourceId::GradleModule],
-        kind: FileReferenceResolverKind::RelativeToDatafileParent,
-    },
-    FileReferenceResolverConfig {
         datasource_ids: &[
+            DatasourceId::GradleModule,
             DatasourceId::BitbakeRecipe,
             DatasourceId::BitbakeRecipeAppend,
         ],
