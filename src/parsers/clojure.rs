@@ -212,6 +212,11 @@ impl Reader {
                 self.parse_form()
             }
             Some('=') => Err("unsupported reader eval dispatch".to_string()),
+            Some('\'') => {
+                self.index += 1;
+                let form = self.parse_form()?;
+                Ok(Form::Prefixed(Box::new(form)))
+            }
             Some('"') => {
                 // Tolerate regex literals in ignored fields without implementing reader semantics.
                 self.parse_string().map(Form::String)
