@@ -89,7 +89,13 @@ impl PackageParser for PubspecYamlParser {
     }
 
     fn is_match(path: &Path) -> bool {
-        path.file_name().is_some_and(|name| name == "pubspec.yaml")
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| {
+                name == "pubspec.yaml"
+                    || name.ends_with("-pubspec.yaml")
+                    || name.ends_with(".pubspec.yaml")
+            })
     }
 }
 
@@ -115,7 +121,13 @@ impl PackageParser for PubspecLockParser {
     }
 
     fn is_match(path: &Path) -> bool {
-        path.file_name().is_some_and(|name| name == "pubspec.lock")
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| {
+                name == "pubspec.lock"
+                    || name.ends_with("-pubspec.lock")
+                    || name.ends_with(".pubspec.lock")
+            })
     }
 }
 
@@ -862,3 +874,36 @@ crate::register_parser!(
     "Dart",
     Some("https://dart.dev/tools/pub/pubspec"),
 );
+
+#[cfg(test)]
+mod is_match_tests {
+    use super::{PubspecLockParser, PubspecYamlParser};
+    use crate::parsers::PackageParser;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_pubspec_yaml_parser_matches_suffixed_filenames() {
+        assert!(PubspecYamlParser::is_match(&PathBuf::from("pubspec.yaml")));
+        assert!(PubspecYamlParser::is_match(&PathBuf::from(
+            "simple-pubspec.yaml"
+        )));
+        assert!(PubspecYamlParser::is_match(&PathBuf::from(
+            "simple.pubspec.yaml"
+        )));
+        assert!(!PubspecYamlParser::is_match(&PathBuf::from("pubspec.yml")));
+    }
+
+    #[test]
+    fn test_pubspec_lock_parser_matches_suffixed_filenames() {
+        assert!(PubspecLockParser::is_match(&PathBuf::from("pubspec.lock")));
+        assert!(PubspecLockParser::is_match(&PathBuf::from(
+            "dart-pubspec.lock"
+        )));
+        assert!(PubspecLockParser::is_match(&PathBuf::from(
+            "dart.pubspec.lock"
+        )));
+        assert!(!PubspecLockParser::is_match(&PathBuf::from(
+            "pubspec.lock.bak"
+        )));
+    }
+}
