@@ -1,7 +1,39 @@
 [
   {
     "type": "rpm",
+    "namespace": "fedora",
+    "name": "fping",
+    "version": "2.4b2-10.fc12",
+    "qualifiers": {
+      "arch": "x86_64"
+    },
     "datasource_id": "rpm_archive",
-    "parties": []
+    "description": "fping is a ping-like program which can determine the accessibility of\nmultiple hosts using ICMP echo requests. fping is designed for parallelized\nmonitoring of large numbers of systems, and is developed with ease of\nuse in scripting in mind.",
+    "parties": [
+      {
+        "type": "organization",
+        "role": "vendor",
+        "name": "Fedora Project"
+      },
+      {
+        "type": "organization",
+        "role": "distributor",
+        "name": "Koji"
+      },
+      {
+        "type": "person",
+        "role": "packager",
+        "name": "Fedora Project"
+      }
+    ],
+    "keywords": ["Applications/Internet"],
+    "homepage_url": "http://www.fping.com/",
+    "extracted_license_statement": "BSD with advertising",
+    "source_packages": ["fping-2.4b2-10.fc12.src.rpm"],
+    "extra_data": {
+      "distribution": "Koji"
+    },
+    "dependencies": [],
+    "purl": "pkg:rpm/fedora/fping@2.4b2-10.fc12?arch=x86_64"
   }
 ]
