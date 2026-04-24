@@ -27,7 +27,7 @@ fn is_included_path_applies_exclude_after_include() {
         &["/src/*.so".to_string()]
     ));
     assert!(is_included_path(
-        "some/src/this/that",
+        "some/src",
         &["src".to_string()],
         &["src/*.so".to_string()]
     ));
