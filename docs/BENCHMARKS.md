@@ -12,7 +12,7 @@ The chart below uses a log-log scatter plot: file count on the x-axis, wall-cloc
 
 ![Scan duration vs. file count for Provenant and ScanCode](benchmarks/scan-duration-vs-files.svg)
 
-> Provenant is faster on 165 of 165 recorded runs, with a **11.5× median speedup** and **10.7× geometric-mean speedup** overall; the median gap grows from **7.0×** on sub-100-file targets to **19.7×** on 10k+ file targets.
+> Provenant is faster on 168 of 168 recorded runs, with a **11.5× median speedup** and **10.6× geometric-mean speedup** overall; the median gap grows from **7.0×** on sub-100-file targets to **19.7×** on 10k+ file targets.
 > Generated from the benchmark timing rows in this document via `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart`.
 
 ## Current benchmark examples
@@ -1237,6 +1237,27 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Run context: 2026-04-23 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
 - Timing: Provenant `20.04s`; ScanCode `77.60s`
 - Matched NSIS installer plus Windows PE package visibility (`2` vs `2` file-level package records), with a concrete `pkg:winexe/nsis-3.12-setup@3.12` identity on the executable metadata record and cleaner rejection of ScanCode's spurious `LicenseRef-scancode-unknown` license inferred only from the `LegalCopyright` URL
+
+##### [Windows 10 KB5049993 cumulative update extracted snapshot](https://support.microsoft.com/help/5049993) — **4.32× faster**
+
+- Files: 11
+- Run context: 2026-04-24 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `133.69s`; ScanCode `577.11s`
+- Broader Windows Update package visibility through assembled `update.mum` metadata (`1` top-level package vs `0`), with correct `Package_for_RollupFix@14393.7699.1.9` wrapper identity, preserved Microsoft owner/support metadata on the CBS manifest, zero scan errors where ScanCode reports one failed CAB scan, and cleaner rejection of random CAB-byte email noise
+
+##### [Windows 10 KB5050109 servicing stack update extracted snapshot](https://support.microsoft.com/help/5050109) — **9.42× faster**
+
+- Files: 597
+- Run context: 2026-04-24 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `12.21s`; ScanCode `115.03s`
+- Broader Windows Update package visibility through assembled servicing-stack metadata (`1` top-level package vs `0`), plus matching file-level `.mum` coverage across `133` manifests, correct `Package_for_KB5050109@14393.7692.1.1` wrapper identity, richer certificate URL visibility from `update.cat`, and cleaner rejection of a bogus CAB-byte email false positive
+
+##### [WSUS wsusscn2 extracted snapshot](https://support.microsoft.com/en-us/topic/a-new-version-of-the-windows-update-offline-scan-file-wsusscn2-cab-is-available-for-advanced-users-fe433f4d-44f4-28e3-88c5-5b22329c0a08) — **10.04× faster**
+
+- Files: 75
+- Run context: 2026-04-24 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `62.51s`; ScanCode `627.66s`
+- Equivalent package visibility on the outer offline-scan snapshot (`0` vs `0` packages), with far cleaner rejection of random CAB-byte email noise (`0` vs `9`) while scanning the signed index-plus-CAB bundle
 
 ## Benchmark conventions
 
