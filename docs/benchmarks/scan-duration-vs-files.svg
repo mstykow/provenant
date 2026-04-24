@@ -125,6 +125,9 @@ ScanCode: 89.38s</title></rect>
     <rect x="215.47" y="425.14" width="8" height="8" fill="#d97706" rx="1.5"><title>archlinux/packaging/packages/grep @ 29d2e10
 Files: 6
 ScanCode: 73.20s</title></rect>
+    <rect x="257.23" y="327.58" width="8" height="8" fill="#d97706" rx="1.5"><title>Windows 10 KB5049993 cumulative update extracted snapshot
+Files: 11
+ScanCode: 577.11s</title></rect>
     <rect x="263.23" y="423.19" width="8" height="8" fill="#d97706" rx="1.5"><title>archlinux/packaging/packages/pacman @ 4ee8983
 Files: 12
 ScanCode: 76.28s</title></rect>
@@ -146,6 +149,9 @@ ScanCode: 65.66s</title></rect>
     <rect x="365.59" y="422.87" width="8" height="8" fill="#d97706" rx="1.5"><title>docker-library/python @ ced4ac7
 Files: 53
 ScanCode: 76.81s</title></rect>
+    <rect x="389.51" y="323.61" width="8" height="8" fill="#d97706" rx="1.5"><title>WSUS wsusscn2 extracted snapshot
+Files: 75
+ScanCode: 627.66s</title></rect>
     <rect x="393.09" y="400.80" width="8" height="8" fill="#d97706" rx="1.5"><title>Mantle/Mantle @ 2a8e212
 Files: 79
 ScanCode: 122.53s</title></rect>
@@ -263,6 +269,9 @@ ScanCode: 155.71s</title></rect>
     <rect x="529.99" y="373.16" width="8" height="8" fill="#d97706" rx="1.5"><title>catchorg/Catch2 @ 10f6248
 Files: 576
 ScanCode: 219.94s</title></rect>
+    <rect x="532.45" y="403.78" width="8" height="8" fill="#d97706" rx="1.5"><title>Windows 10 KB5050109 servicing stack update extracted snapshot
+Files: 597
+ScanCode: 115.03s</title></rect>
     <rect x="534.61" y="385.27" width="8" height="8" fill="#d97706" rx="1.5"><title>iTowns/itowns @ 08e08f5
 Files: 616
 ScanCode: 170.19s</title></rect>
@@ -622,6 +631,9 @@ Provenant: 24.22s</title></circle>
     <circle cx="219.47" cy="521.94" r="4.5" fill="#2563eb"><title>archlinux/packaging/packages/grep @ 29d2e10
 Files: 6
 Provenant: 10.27s</title></circle>
+    <circle cx="261.23" cy="400.68" r="4.5" fill="#2563eb"><title>Windows 10 KB5049993 cumulative update extracted snapshot
+Files: 11
+Provenant: 133.69s</title></circle>
     <circle cx="267.23" cy="516.64" r="4.5" fill="#2563eb"><title>archlinux/packaging/packages/pacman @ 4ee8983
 Files: 12
 Provenant: 11.49s</title></circle>
@@ -643,6 +655,9 @@ Provenant: 8.66s</title></circle>
     <circle cx="369.59" cy="514.74" r="4.5" fill="#2563eb"><title>docker-library/python @ ced4ac7
 Files: 53
 Provenant: 11.96s</title></circle>
+    <circle cx="393.51" cy="436.60" r="4.5" fill="#2563eb"><title>WSUS wsusscn2 extracted snapshot
+Files: 75
+Provenant: 62.51s</title></circle>
     <circle cx="397.09" cy="518.23" r="4.5" fill="#2563eb"><title>Mantle/Mantle @ 2a8e212
 Files: 79
 Provenant: 11.11s</title></circle>
@@ -760,6 +775,9 @@ Provenant: 13.32s</title></circle>
     <circle cx="533.99" cy="505.42" r="4.5" fill="#2563eb"><title>catchorg/Catch2 @ 10f6248
 Files: 576
 Provenant: 14.57s</title></circle>
+    <circle cx="536.45" cy="513.77" r="4.5" fill="#2563eb"><title>Windows 10 KB5050109 servicing stack update extracted snapshot
+Files: 597
+Provenant: 12.21s</title></circle>
     <circle cx="538.61" cy="512.54" r="4.5" fill="#2563eb"><title>iTowns/itowns @ 08e08f5
 Files: 616
 Provenant: 12.53s</title></circle>
