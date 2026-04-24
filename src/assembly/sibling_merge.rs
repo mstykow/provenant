@@ -43,11 +43,18 @@ pub fn assemble_siblings(
         .collect()
 }
 
+#[derive(Clone, Copy)]
+struct PrimaryCandidate {
+    file_idx: usize,
+    package_data_idx: usize,
+}
+
 fn assemble_single_sibling_package(
     config: &AssemblerConfig,
     files: &[FileInfo],
     file_indices: &[usize],
 ) -> Option<DirectoryMergeOutput> {
+    let preferred_primary = choose_windows_update_primary_candidate(config, files, file_indices);
     let mut package: Option<Package> = None;
     let mut pending_dependencies = Vec::new();
     let mut affected_indices = Vec::new();
@@ -92,6 +99,11 @@ fn assemble_single_sibling_package(
                 };
                 file_used = true;
 
+                let is_preferred_primary = preferred_primary.is_some_and(|candidate| {
+                    candidate.file_idx == idx
+                        && candidate.package_data_idx == package_data_idx(file, pkg_data)
+                });
+
                 match &mut package {
                     None => {
                         if (pkg_data.purl.is_some() || has_assemblable_identity(pkg_data))
@@ -99,6 +111,7 @@ fn assemble_single_sibling_package(
                                 pkg_data,
                                 saw_unpackageable_npm_manifest,
                             )
+                            && (preferred_primary.is_none() || is_preferred_primary)
                         {
                             package =
                                 Some(Package::from_package_data(pkg_data, datafile_path.clone()));
@@ -144,6 +157,46 @@ fn assemble_single_sibling_package(
     } else {
         None
     }
+}
+
+fn package_data_idx(file: &FileInfo, target: &PackageData) -> usize {
+    file.package_data
+        .iter()
+        .position(|pkg_data| std::ptr::eq(pkg_data, target))
+        .expect("package data must belong to file")
+}
+
+fn choose_windows_update_primary_candidate(
+    config: &AssemblerConfig,
+    files: &[FileInfo],
+    file_indices: &[usize],
+) -> Option<PrimaryCandidate> {
+    if !config
+        .datasource_ids
+        .contains(&DatasourceId::MicrosoftUpdateManifestMum)
+    {
+        return None;
+    }
+
+    file_indices.iter().find_map(|&idx| {
+        let file = &files[idx];
+        let file_name = Path::new(&file.path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+        if !file_name.eq_ignore_ascii_case("update.mum") {
+            return None;
+        }
+
+        file.package_data
+            .iter()
+            .enumerate()
+            .find(|(_, pkg_data)| is_handled_by(pkg_data, config))
+            .map(|(package_data_idx, _)| PrimaryCandidate {
+                file_idx: idx,
+                package_data_idx,
+            })
+    })
 }
 
 fn assemble_cocoapods_multiple_podspecs(
