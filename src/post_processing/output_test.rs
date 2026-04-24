@@ -805,7 +805,7 @@ fn apply_local_file_reference_following_accepts_absolute_match_sources_for_curre
 }
 
 #[test]
-fn apply_local_file_reference_following_uses_resolved_license_over_reference_notice_expression() {
+fn apply_local_file_reference_following_preserves_notice_expression_alongside_resolved_license() {
     let mut license = file("LICENSE");
     license.license_expression = Some("mit".to_string());
     license.license_detections = vec![crate::models::LicenseDetection {
@@ -866,11 +866,23 @@ fn apply_local_file_reference_following_uses_resolved_license_over_reference_not
         .iter()
         .find(|file| file.path == "patches/example.patch")
         .expect("patch file should exist");
-    assert_eq!(patch.license_expression.as_deref(), Some("mit"));
-    assert_eq!(patch.license_detections[0].license_expression_spdx, "MIT");
+    assert_eq!(patch.license_expression.as_deref(), Some("bsd-new AND mit"));
+    assert_eq!(
+        patch.license_detections[0].license_expression_spdx,
+        "BSD-3-Clause AND MIT"
+    );
     assert_eq!(
         patch.license_detections[0].detection_log,
         vec!["unknown-reference-to-local-file"]
+    );
+    assert!(
+        patch.license_detections[0]
+            .matches
+            .iter()
+            .any(|detection_match| {
+                detection_match.from_file.as_deref() == Some("patches/example.patch")
+                    && detection_match.license_expression_spdx == "BSD-3-Clause"
+            })
     );
     assert!(
         patch.license_detections[0]
