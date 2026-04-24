@@ -181,6 +181,8 @@ fn normalize_multi_parser_header(output: &mut Value) {
     header["end_timestamp"] = Value::String("<end_timestamp>".to_string());
     header["duration"] = Value::String("<duration>".to_string());
     header["options"]["--json-pp"] = Value::String("<output_file>".to_string());
+    header["extra_data"]["spdx_license_list_version"] =
+        Value::String("<spdx_license_list_version>".to_string());
     header["extra_data"]["system_environment"]["operating_system"] =
         Value::String("<operating_system>".to_string());
     header["extra_data"]["system_environment"]["cpu_architecture"] =
