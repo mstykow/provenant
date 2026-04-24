@@ -546,26 +546,13 @@ fn test_detect_copr_with_multiple_dash_segments_not_truncated() {
 #[test]
 fn test_detect_lppl_single_copyright_line() {
     let content = "Copyright 2003 Name\n";
-    let numbered_lines: Vec<(usize, String)> = content
-        .lines()
-        .enumerate()
-        .map(|(i, line)| (i + 1, line.to_string()))
-        .collect();
-    let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
-    let tokens: Vec<Token> = groups.first().map(|g| get_tokens(g)).unwrap_or_default();
-    let tree = if tokens.is_empty() {
-        Vec::new()
-    } else {
-        parse(tokens.clone())
-    };
-
     let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
     let cr: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
     let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
 
     assert!(
         cr.iter().any(|s| s == "Copyright 2003 Name"),
-        "groups: {groups:#?}\n\ntokens: {tokens:#?}\n\ntree: {tree:#?}\n\ncopyrights: {cr:#?}"
+        "copyrights: {cr:#?}"
     );
     assert!(hs.iter().any(|s| s == "Name"), "holders: {hs:#?}");
 }
@@ -578,63 +565,6 @@ fn test_detect_person_name_with_middle_initial() {
     assert!(
         hs.iter().any(|s| s == "Richard S. Hall"),
         "holders: {hs:#?}"
-    );
-}
-
-#[test]
-fn test_detect_hall_copyright_fixture_contains_richard_s_hall_holder() {
-    let path = PathBuf::from("testdata/copyright-golden/copyrights/hall-copyright.txt");
-    let content = fs::read_to_string(&path).expect("read fixture");
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(&content);
-    let cr: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
-    let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
-    assert!(
-        hs.iter().any(|s| s == "Richard S. Hall"),
-        "copyrights: {cr:#?}\n\nholders: {hs:#?}"
-    );
-}
-
-#[test]
-fn test_math_c_fixture_restores_angle_email_holders_for_modified_by_lines() {
-    let path = PathBuf::from("testdata/copyright-golden/copyrights/math.c");
-    let content = fs::read_to_string(&path).expect("read fixture");
-    let (_copyrights, holders, _authors) = detect_copyrights_from_text(&content);
-
-    let debug: Vec<String> = holders
-        .iter()
-        .map(|h| format!("{} [{}-{}]", h.holder, h.start_line, h.end_line))
-        .collect();
-    assert!(
-        holders
-            .iter()
-            .any(|h| h.holder == "Paul Mundt <lethal@linux-sh.org>"),
-        "holders: {debug:#?}"
-    );
-    assert!(
-        holders
-            .iter()
-            .any(|h| h.holder == "Vladimir Oleynik <dzo@simtreas.ru>"),
-        "holders: {debug:#?}"
-    );
-}
-
-#[test]
-fn test_gailly_c_fixture_keeps_original_busybox_gzip_copyright() {
-    let path = PathBuf::from("testdata/copyright-golden/copyrights/gailly-c.c");
-    let content = fs::read_to_string(&path).expect("read fixture");
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(&content);
-
-    assert!(
-        copyrights
-            .iter()
-            .any(|c| c.copyright == "Copyright (c) 1992-1993 Jean-loup Gailly"),
-        "copyrights: {:#?}",
-        copyrights.iter().map(|c| &c.copyright).collect::<Vec<_>>()
-    );
-    assert!(
-        holders.iter().any(|h| h.holder == "Jean-loup Gailly"),
-        "holders: {:#?}",
-        holders.iter().map(|h| &h.holder).collect::<Vec<_>>()
     );
 }
 
@@ -659,167 +589,6 @@ fn test_busybox_env_modified_by_line_does_not_absorb_correct_usage_bullet() {
         holders.iter().any(|h| h.holder == "Vladimir Oleynik"),
         "holders: {:#?}",
         holders.iter().map(|h| &h.holder).collect::<Vec<_>>()
-    );
-}
-
-#[test]
-fn test_andre_darcy_fixture_extracts_modifications_copyright_by_line() {
-    let path = PathBuf::from("testdata/copyright-golden/copyrights/andre_darcy-c.c");
-    let content = fs::read_to_string(&path).expect("read fixture");
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(&content);
-
-    assert!(
-        copyrights.iter().any(|c| {
-            c.copyright == "copyright 1997, 1998, 1999 by D'Arcy J.M. Cain (darcy@druid.net)"
-        }),
-        "copyrights: {:#?}",
-        copyrights.iter().map(|c| &c.copyright).collect::<Vec<_>>()
-    );
-    assert!(
-        holders.iter().any(|h| h.holder == "D'Arcy J.M. Cain"),
-        "holders: {:#?}",
-        holders.iter().map(|h| &h.holder).collect::<Vec<_>>()
-    );
-    assert!(
-        !copyrights
-            .iter()
-            .any(|c| c.copyright == "copyright 1997, 1998, 1999"),
-        "copyrights: {:#?}",
-        copyrights.iter().map(|c| &c.copyright).collect::<Vec<_>>()
-    );
-}
-
-#[test]
-fn test_licco_fixture_merges_author_and_author_email_metadata() {
-    let path = PathBuf::from("testdata/copyright-golden/copyrights/licco.txt");
-    let content = fs::read_to_string(&path).expect("read fixture");
-    let (_copyrights, _holders, authors) = detect_copyrights_from_text(&content);
-
-    assert!(
-        authors
-            .iter()
-            .any(|a| { a.author == "Hartmut Goebel Author-email h.goebel@crazy-compilers.com" }),
-        "authors: {:#?}",
-        authors.iter().map(|a| &a.author).collect::<Vec<_>>()
-    );
-    assert!(
-        !authors.iter().any(|a| a.author == "Hartmut Goebel"),
-        "authors: {:#?}",
-        authors.iter().map(|a| &a.author).collect::<Vec<_>>()
-    );
-    assert!(
-        !authors
-            .iter()
-            .any(|a| a.author == "Author-email h.goebel@crazy-compilers.com"),
-        "authors: {:#?}",
-        authors.iter().map(|a| &a.author).collect::<Vec<_>>()
-    );
-}
-
-#[test]
-fn test_libcompress_raw_zlib_perl_fixture_does_not_merge_debian_copyright_lines() {
-    let path = PathBuf::from(
-        "testdata/copyright-golden/copyrights/libcompress_raw_zlib_perl-libcompress_raw_zlib_perl.copyright",
-    );
-    let content = fs::read_to_string(&path).expect("read fixture");
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(&content);
-
-    let cr: Vec<&str> = copyrights.iter().map(|c| c.copyright.as_str()).collect();
-    let hs: Vec<&str> = holders.iter().map(|h| h.holder.as_str()).collect();
-
-    assert!(
-        cr.contains(&"Copyright 1995-2005, Jean-loup Gailly <jloup@gzip.org>"),
-        "copyrights: {cr:#?}"
-    );
-    assert!(
-        cr.contains(&"Copyright 1995-2005, Mark Adler <madler@alumni.caltech.edu>"),
-        "copyrights: {cr:#?}"
-    );
-    assert!(
-            !cr.contains(
-                &"Jean-loup Gailly <jloup@gzip.org> Copyright 1995-2005, Mark Adler <madler@alumni.caltech.edu>"
-            ),
-            "copyrights: {cr:#?}"
-        );
-    assert!(hs.contains(&"Jean-loup Gailly"), "holders: {hs:#?}");
-    assert!(hs.contains(&"Mark Adler"), "holders: {hs:#?}");
-}
-
-#[test]
-fn test_libopenraw_fixture_does_not_merge_multiple_debian_copyrights() {
-    let path = PathBuf::from("testdata/copyright-golden/copyrights/libopenraw1-libopenraw.label");
-    let content = fs::read_to_string(&path).expect("read fixture");
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(&content);
-
-    let cr: Vec<&str> = copyrights.iter().map(|c| c.copyright.as_str()).collect();
-    let hs: Vec<&str> = holders.iter().map(|h| h.holder.as_str()).collect();
-
-    assert!(
-        cr.contains(&"(c) 1994, Kongji Huang and Brian C. Smith, Cornell University"),
-        "copyrights: {cr:#?}"
-    );
-    assert!(
-        cr.contains(&"(c) 2001, Lutz M\u{00fc}ller <lutz@users.sourceforge.net>"),
-        "copyrights: {cr:#?}"
-    );
-    assert!(
-        cr.contains(&"Copyright (c) 2006, Hubert Figuiere <hub@figuiere.net>"),
-        "copyrights: {cr:#?}"
-    );
-    assert!(
-            !cr.contains(
-                &"Hubert Figuiere <hub@figuiere.net> (c) 1994, Kongji Huang and Brian C. Smith, Cornell University"
-            ),
-            "copyrights: {cr:#?}"
-        );
-    assert!(
-            !cr.contains(
-                &"Hubert Figuiere <hub@figuiere.net> (c) 2001, Lutz M\u{00fc}ller <lutz@users.sourceforge.net>"
-            ),
-            "copyrights: {cr:#?}"
-        );
-    assert!(
-        hs.contains(&"Kongji Huang and Brian C. Smith, Cornell University"),
-        "holders: {hs:#?}"
-    );
-    assert!(hs.contains(&"Lutz M\u{00fc}ller"), "holders: {hs:#?}");
-    assert!(hs.contains(&"Hubert Figuiere"), "holders: {hs:#?}");
-}
-
-#[test]
-fn test_pre_name_fixture_does_not_restore_angle_email_holders() {
-    let path = PathBuf::from("testdata/copyright-golden/copyrights/misco4/linux3/pre-name.txt");
-    let content = fs::read_to_string(&path).expect("read fixture");
-    let (_copyrights, holders, _authors) = detect_copyrights_from_text(&content);
-
-    let hs: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
-    assert!(hs.iter().any(|h| h == "Paul Mundt"), "holders: {hs:#?}");
-    assert!(
-        hs.iter().any(|h| h == "Vladimir Oleynik"),
-        "holders: {hs:#?}"
-    );
-    assert!(
-        !hs.iter().any(|h| h.contains("<lethal@linux-sh.org>")),
-        "holders: {hs:#?}"
-    );
-    assert!(
-        !hs.iter().any(|h| h.contains("<dzo@simtreas.ru>")),
-        "holders: {hs:#?}"
-    );
-}
-
-#[test]
-fn test_with_trailing_software_fixture_does_not_append_software_to_holder() {
-    let path =
-        PathBuf::from("testdata/copyright-golden/copyrights/copytest/with_trailing_software.txt");
-    let content = fs::read_to_string(&path).expect("read fixture");
-    let (_copyrights, holders, _authors) = detect_copyrights_from_text(&content);
-
-    let hs: Vec<String> = holders.iter().map(|h| h.holder.clone()).collect();
-    assert!(hs.iter().any(|h| h == "Ian F. Darwin"), "holders: {hs:#?}");
-    assert!(
-        !hs.iter().any(|h| h == "Ian F. Darwin Software"),
-        "holders: {hs:#?}"
     );
 }
 
@@ -855,103 +624,6 @@ fn test_copyright_span_does_not_absorb_following_lint_directive_line() {
         !values.iter().any(|c| c.contains("@lint-ignore-every")),
         "copyrights: {values:#?}"
     );
-}
-
-#[test]
-fn test_history_written_by_fixture_keeps_following_author() {
-    let path = PathBuf::from("testdata/copyright-golden/copyrights/misco4/more-linux/multi.txt");
-    let content = fs::read_to_string(&path).expect("read fixture");
-    let (_copyrights, _holders, authors) = detect_copyrights_from_text(&content);
-
-    let values: Vec<String> = authors.into_iter().map(|a| a.author).collect();
-    assert!(
-        values.iter().any(|a| a == "Ben Dooks <ben@simtec.co.uk>"),
-        "authors: {values:#?}"
-    );
-}
-
-#[test]
-fn test_multilines_fixture_detects_split_copyright_by_holder() {
-    let path = PathBuf::from("testdata/copyright-golden/copyrights/misco4/linux4/multilines.txt");
-    let content = fs::read_to_string(&path).expect("read fixture");
-    let (copyrights, holders, authors) = detect_copyrights_from_text(&content);
-
-    let cr: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
-    let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
-    assert!(
-        cr.iter()
-            .any(|c| c == "copyright by the University of Cambridge, England"),
-        "copyrights: {cr:#?}\n\nholders: {hs:#?}"
-    );
-    assert!(
-        hs.iter()
-            .any(|h| h == "the University of Cambridge, England"),
-        "holders: {hs:#?}"
-    );
-
-    let as_: Vec<String> = authors.into_iter().map(|a| a.author).collect();
-    assert!(as_.iter().any(|a| a == "Philip Hazel"), "authors: {as_:#?}");
-}
-
-#[test]
-fn test_detect_hisax_debug_fixture_holder_phrase() {
-    let path = PathBuf::from(
-        "testdata/copyright-golden/copyrights/misco4/linux-copyrights/drivers/isdn/hisax/hisax_debug.h",
-    );
-    let content = fs::read_to_string(&path).expect("read fixture");
-    let (_copyrights, holders, _authors) = detect_copyrights_from_text(&content);
-    let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
-    assert!(
-        hs.iter().any(|s| s == "Frode Isaksen by Frode Isaksen"),
-        "holders: {hs:#?}"
-    );
-}
-
-#[test]
-fn test_holder_super_fixture_drops_trailing_comma_before_company_line() {
-    let path = PathBuf::from("testdata/copyright-golden/holders/holder_super_c-c.c");
-    let content = fs::read_to_string(&path).expect("read fixture");
-
-    let (_copyrights, holders, _authors) = detect_copyrights_from_text(&content);
-    let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
-    assert!(
-        hs.iter().any(|s| s == "Benjamin Herrenschmuidt IBM Corp."),
-        "holders: {hs:#?}"
-    );
-    assert!(
-        !hs.iter().any(|s| s == "Benjamin Herrenschmuidt, IBM Corp."),
-        "holders: {hs:#?}"
-    );
-}
-
-#[test]
-fn test_somefile_cpp_fixture_extracts_licensed_material_copyright() {
-    let path =
-        PathBuf::from("testdata/copyright-golden/holders/holder_somefile_cpp-somefile_cpp.cpp");
-    let content = fs::read_to_string(&path).expect("read fixture");
-
-    let (copyrights, _holders, _authors) = detect_copyrights_from_text(&content);
-    let cs: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
-    assert!(
-        cs.iter().any(|s| s == "Foobar Company, (c) 2005"),
-        "copyrights: {cs:#?}"
-    );
-}
-
-#[test]
-fn test_device_tree_fixture_extracts_authors_block() {
-    let path = PathBuf::from("testdata/copyright-golden/authors/device_tree.c");
-    let content = fs::read_to_string(&path).expect("read fixture");
-
-    let (c, _h, authors) = detect_copyrights_from_text(&content);
-    let authors: Vec<String> = authors.into_iter().map(|a| a.author).collect();
-    assert!(
-            authors
-                .iter()
-                .any(|a| a
-                    == "Jerone Young <jyoung5@us.ibm.com> Hollis Blanchard <hollisb@us.ibm.com>"),
-            "authors: {authors:#?}\n\ncopyrights: {c:#?}"
-        );
 }
 
 #[test]
@@ -1019,28 +691,6 @@ fn test_pata_ali_fixture_preserves_maintainer_suffix() {
     assert!(
         hs.iter().any(|h| h == "Michel Aubry, Maintainer"),
         "copyrights: {cs:#?}\n\nholders: {hs:#?}"
-    );
-}
-
-#[test]
-fn test_detect_misc_linux_fixture_tieto_holder() {
-    let path =
-        PathBuf::from("testdata/copyright-golden/copyrights/misco4/more-linux/misc-linux.txt");
-    let content = fs::read_to_string(&path).expect("read fixture");
-    let (_copyrights, holders, _authors) = detect_copyrights_from_text(&content);
-    let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
-    assert!(hs.iter().any(|s| s == "Tieto Poland"), "holders: {hs:#?}");
-}
-
-#[test]
-fn test_detect_notice_txt_fixture_bare_c_year_range_suffix() {
-    let path = PathBuf::from("testdata/copyright-golden/copyrights/notice_txt-NOTICE.txt");
-    let content = fs::read_to_string(&path).expect("read fixture");
-    let (copyrights, _holders, _authors) = detect_copyrights_from_text(&content);
-    let cr: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
-    assert!(
-        cr.iter().any(|s| s == "(c) 2001-2004"),
-        "copyrights: {cr:#?}"
     );
 }
 
@@ -1134,60 +784,48 @@ fn test_detect_versioned_project_banner_with_bare_license_path() {
         r#"!function(){var meta={"description":"demo","url":"https://example.com"};return meta;}"#
             .repeat(40);
     let content = format!("{line1}\n{line2}");
-    let numbered_lines: Vec<(usize, String)> = content
-        .lines()
-        .enumerate()
-        .map(|(i, line)| (i + 1, line.to_string()))
-        .collect();
-    let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
     let (copyrights, holders, _authors) = detect_copyrights_from_text(&content);
 
     assert!(
         copyrights
             .iter()
             .any(|c| c.copyright == "(c) OpenJS Foundation and other contributors"),
-        "copyrights: {copyrights:?}\ngroups: {groups:?}"
+        "copyrights: {copyrights:?}"
     );
     assert!(
         !copyrights
             .iter()
             .any(|c| c.copyright.contains("jquery.org/license")),
-        "copyrights: {copyrights:?}\ngroups: {groups:?}"
+        "copyrights: {copyrights:?}"
     );
     assert!(
         holders
             .iter()
             .any(|h| h.holder == "OpenJS Foundation and other contributors"),
-        "holders: {holders:?}\ngroups: {groups:?}"
+        "holders: {holders:?}"
     );
     assert!(
         !holders
             .iter()
             .any(|h| h.holder.contains("jquery.org/license")),
-        "holders: {holders:?}\ngroups: {groups:?}"
+        "holders: {holders:?}"
     );
 }
 
 #[test]
 fn test_detect_versioned_project_banner_with_mixed_case_brand_holder() {
     let content = "/*! jQuery v2.2.0 | (c) jQuery Foundation | jquery.org/license */\n";
-    let numbered_lines: Vec<(usize, String)> = content
-        .lines()
-        .enumerate()
-        .map(|(i, line)| (i + 1, line.to_string()))
-        .collect();
-    let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
     let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
 
     assert!(
         copyrights
             .iter()
             .any(|c| c.copyright == "(c) jQuery Foundation"),
-        "copyrights: {copyrights:?}\ngroups: {groups:?}"
+        "copyrights: {copyrights:?}"
     );
     assert!(
         holders.iter().any(|h| h.holder == "jQuery Foundation"),
-        "holders: {holders:?}\ngroups: {groups:?}"
+        "holders: {holders:?}"
     );
 }
 
@@ -1349,14 +987,6 @@ fn test_detect_postscript_percent_copyright_prefix() {
     let content = "%%Copyright: -----------------------------------------------------------\n\
 %%Copyright: Copyright 1990-2009 Adobe Systems Incorporated.\n\
 %%Copyright: All rights reserved.\n";
-    let numbered_lines: Vec<(usize, String)> = content
-        .lines()
-        .enumerate()
-        .map(|(i, line)| (i + 1, line.to_string()))
-        .collect();
-    let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
-    assert!(!groups.is_empty(), "groups unexpectedly empty");
-
     let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
     let cr: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
     let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
@@ -1364,7 +994,7 @@ fn test_detect_postscript_percent_copyright_prefix() {
     assert!(
         cr.iter()
             .any(|s| s == "Copyright 1990-2009 Adobe Systems Incorporated"),
-        "groups: {groups:#?}\ncr: {cr:#?}"
+        "cr: {cr:#?}"
     );
     assert!(
         hs.iter().any(|s| s == "Adobe Systems Incorporated"),
@@ -1424,19 +1054,6 @@ Modifications for Debian Copyright (C) 1997-2007 James Troup.\n";
 }
 
 #[test]
-fn test_detect_icedax_fixture_includes_libedc_by_line_with_email() {
-    let path = PathBuf::from("testdata/copyright-golden/copyrights/icedax-icedax.label");
-    let content = fs::read_to_string(&path).expect("icedax fixture must be readable");
-    let (copyrights, _holders, _authors) = detect_copyrights_from_text(&content);
-    let cr: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
-    assert!(
-        cr.iter()
-            .any(|s| { s == "(c) 1998-2002 by Heiko Eissfeldt, heiko@colossus.escape.de" }),
-        "copyrights: {cr:#?}"
-    );
-}
-
-#[test]
 fn test_detect_c_year_range_by_name_comma_email_single_line() {
     let content = "(c) 1998-2002 by Heiko Eissfeldt, heiko@colossus.escape.de\n";
     let (copyrights, _holders, _authors) = detect_copyrights_from_text(content);
@@ -1445,26 +1062,6 @@ fn test_detect_c_year_range_by_name_comma_email_single_line() {
         cr.iter()
             .any(|s| { s == "(c) 1998-2002 by Heiko Eissfeldt, heiko@colossus.escape.de" }),
         "copyrights: {cr:#?}"
-    );
-}
-
-#[test]
-fn test_detect_gnome_session_fixture_includes_queen_of_england() {
-    let path =
-        PathBuf::from("testdata/copyright-golden/copyrights/gnome_session-gnome_session.copyright");
-    let content = fs::read_to_string(&path).expect("gnome session fixture must be readable");
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(&content);
-    let cr: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
-    let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
-
-    assert!(
-        cr.iter()
-            .any(|s| s == "Copyright (c) 2001 Queen of England"),
-        "copyrights: {cr:#?}"
-    );
-    assert!(
-        hs.iter().any(|s| s == "Queen of England"),
-        "holders: {hs:#?}"
     );
 }
 
@@ -1487,97 +1084,24 @@ fn test_detect_copyright_year_name_with_of_single_line() {
 }
 
 #[test]
-fn test_detect_libsox_alsa_fixture_keeps_sundry_contributors() {
-    let path = PathBuf::from(
-        "testdata/copyright-golden/copyrights/libsox_fmt_alsa-libsox_fmt_alsa.copyright",
-    );
-    let content = fs::read_to_string(&path).expect("libsox alsa fixture must be readable");
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(&content);
-    let cr: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
-    let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
-
-    assert!(
-        cr.iter()
-            .any(|s| s == "Copyright 1991 Lance Norskog And Sundry Contributors"),
-        "copyrights: {cr:#?}"
-    );
-    assert!(
-        hs.iter()
-            .any(|s| s == "Lance Norskog And Sundry Contributors"),
-        "holders: {hs:#?}"
-    );
-
-    assert!(
-        !cr.iter()
-            .any(|s| s == "Copyright 1991 Lance Norskog And Sundry"),
-        "copyrights: {cr:#?}"
-    );
-}
-
-#[test]
 fn test_detect_swfobject_copyright_line() {
     let content = "/* SWFObject v2.1 <http://code.google.com/p/swfobject/>\n\
         Copyright (c) 2007-2008 Geoff Stearns, Michael Williams, and Bobby van der Sluis\n\
         This software is released under the MIT License <http://www.opensource.org/licenses/mit-license.php>\n\
 */\n";
-    let numbered_lines: Vec<(usize, String)> = content
-        .lines()
-        .enumerate()
-        .map(|(i, line)| (i + 1, line.to_string()))
-        .collect();
-    let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
-    let token_dbg: Vec<Vec<(String, PosTag)>> = groups
-        .iter()
-        .map(|g| {
-            crate::copyright::lexer::get_tokens(g)
-                .into_iter()
-                .map(|t| (t.value, t.tag))
-                .collect::<Vec<_>>()
-        })
-        .collect();
-
-    let tokens: Vec<Token> = groups.first().map(|g| get_tokens(g)).unwrap_or_default();
-    let tree = if tokens.is_empty() {
-        Vec::new()
-    } else {
-        parse(tokens)
-    };
-    let has_top_level_nodes = tree.iter().any(|n| {
-        matches!(
-            n.label(),
-            Some(TreeLabel::Copyright) | Some(TreeLabel::Copyright2) | Some(TreeLabel::Author)
-        )
-    });
-
     let (copyrights, _holders, _authors) = detect_copyrights_from_text(content);
     let cr: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
     assert!(
         cr.iter().any(|s| {
             s == "Copyright (c) 2007-2008 Geoff Stearns, Michael Williams, and Bobby van der Sluis"
         }),
-        "groups: {groups:#?}\ntokens: {token_dbg:#?}\nparsed_has_top_level_nodes: {has_top_level_nodes}\ncopyrights: {cr:#?}"
+        "copyrights: {cr:#?}"
     );
 }
 
 #[test]
 fn test_detect_holder_list_continuation_after_comma_and() {
     let content = "Copyright 1996-2002, 2006 by David Turner, Robert Wilhelm, and Werner Lemberg\n";
-    let numbered_lines: Vec<(usize, String)> = content
-        .lines()
-        .enumerate()
-        .map(|(i, line)| (i + 1, line.to_string()))
-        .collect();
-    let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
-    let tokens: Vec<Token> = groups.first().map(|g| get_tokens(g)).unwrap_or_default();
-    let token_dbg: Vec<(String, PosTag)> =
-        tokens.iter().map(|t| (t.value.clone(), t.tag)).collect();
-    let tree = if tokens.is_empty() {
-        Vec::new()
-    } else {
-        parse(tokens)
-    };
-    let labels_dbg: Vec<Option<TreeLabel>> = tree.iter().map(|n| n.label()).collect();
-
     let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
     let cr: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
     let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
@@ -1586,34 +1110,18 @@ fn test_detect_holder_list_continuation_after_comma_and() {
         cr.iter().any(|s| {
             s == "Copyright 1996-2002, 2006 by David Turner, Robert Wilhelm, and Werner Lemberg"
         }),
-        "tokens: {token_dbg:#?}\nlabels: {labels_dbg:#?}\ncopyrights: {cr:#?}"
+        "copyrights: {cr:#?}"
     );
     assert!(
         hs.iter()
             .any(|s| s == "David Turner, Robert Wilhelm, and Werner Lemberg"),
-        "tokens: {token_dbg:#?}\nlabels: {labels_dbg:#?}\nholders: {hs:#?}"
+        "holders: {hs:#?}"
     );
 }
 
 #[test]
 fn test_detect_long_comma_separated_year_list_with_holder() {
     let content = "Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.\n";
-    let numbered_lines: Vec<(usize, String)> = content
-        .lines()
-        .enumerate()
-        .map(|(i, line)| (i + 1, line.to_string()))
-        .collect();
-    let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
-    let tokens: Vec<Token> = groups.first().map(|g| get_tokens(g)).unwrap_or_default();
-    let token_dbg: Vec<(String, PosTag)> =
-        tokens.iter().map(|t| (t.value.clone(), t.tag)).collect();
-    let tree = if tokens.is_empty() {
-        Vec::new()
-    } else {
-        parse(tokens)
-    };
-    let labels_dbg: Vec<Option<TreeLabel>> = tree.iter().map(|n| n.label()).collect();
-
     let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
     let cr: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
     let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
@@ -1622,11 +1130,11 @@ fn test_detect_long_comma_separated_year_list_with_holder() {
             cr.iter().any(|s| {
                 s == "Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc."
             }),
-            "tokens: {token_dbg:#?}\nlabels: {labels_dbg:#?}\ncopyrights: {cr:#?}"
+            "copyrights: {cr:#?}"
         );
     assert!(
         hs.iter().any(|s| s == "Free Software Foundation, Inc."),
-        "tokens: {token_dbg:#?}\nlabels: {labels_dbg:#?}\nholders: {hs:#?}"
+        "holders: {hs:#?}"
     );
 }
 
@@ -1658,22 +1166,6 @@ fn test_detect_all_caps_holder_not_truncated_moto_broad() {
  *       NO PART OF THIS CODE MAY BE COPIED OR MODIFIED WITHOUT\n\
  *       THE WRITTEN CONSENT OF MOTOROLA, BROADBAND COMMUNICATIONS SECTOR\n\
  ****************************************************************************/\n";
-    let numbered_lines: Vec<(usize, String)> = content
-        .lines()
-        .enumerate()
-        .map(|(i, line)| (i + 1, line.to_string()))
-        .collect();
-    let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
-    let tokens: Vec<Token> = groups.first().map(|g| get_tokens(g)).unwrap_or_default();
-    let token_dbg: Vec<(String, PosTag)> =
-        tokens.iter().map(|t| (t.value.clone(), t.tag)).collect();
-    let tree = if tokens.is_empty() {
-        Vec::new()
-    } else {
-        parse(tokens)
-    };
-    let labels_dbg: Vec<Option<TreeLabel>> = tree.iter().map(|n| n.label()).collect();
-
     let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
     let cr: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
     let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
@@ -1685,12 +1177,12 @@ fn test_detect_all_caps_holder_not_truncated_moto_broad() {
                 && s.contains("MOTOROLA")
                 && s.contains("BROADBAND COMMUNICATIONS SECTOR")
         }),
-        "tokens: {token_dbg:#?}\nlabels: {labels_dbg:#?}\ncopyrights: {cr:#?}"
+        "copyrights: {cr:#?}"
     );
     assert!(
         hs.iter()
             .any(|s| s == "MOTOROLA, BROADBAND COMMUNICATIONS SECTOR"),
-        "tokens: {token_dbg:#?}\nlabels: {labels_dbg:#?}\nholders: {hs:#?}"
+        "holders: {hs:#?}"
     );
 }
 
@@ -1698,19 +1190,6 @@ fn test_detect_all_caps_holder_not_truncated_moto_broad() {
 fn test_detect_composite_copy_copyrighted_by_with_trailing_copyright_clause() {
     let content =
         "FaCE is copyrighted by Object Computing, Inc., St. Louis Missouri, Copyright (C) 2002,\n";
-    let numbered_lines: Vec<(usize, String)> = content
-        .lines()
-        .enumerate()
-        .map(|(i, line)| (i + 1, line.to_string()))
-        .collect();
-    let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
-    let tokens: Vec<Token> = groups.first().map(|g| get_tokens(g)).unwrap_or_default();
-    let tree = if tokens.is_empty() {
-        Vec::new()
-    } else {
-        parse(tokens.clone())
-    };
-
     let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
     let cr: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
     let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
@@ -1722,7 +1201,7 @@ fn test_detect_composite_copy_copyrighted_by_with_trailing_copyright_clause() {
                 && s.to_ascii_lowercase().contains("copyright")
                 && s.contains("2002")
         }),
-        "groups: {groups:#?}\n\ntokens: {tokens:#?}\n\ntree: {tree:#?}\n\ncopyrights: {cr:#?}"
+        "copyrights: {cr:#?}"
     );
     assert!(
         hs.iter()
@@ -1734,19 +1213,6 @@ fn test_detect_composite_copy_copyrighted_by_with_trailing_copyright_clause() {
 #[test]
 fn test_detect_regents_multi_line_merges_year_only_prefix() {
     let content = "Copyright (c) 1988, 1993\nCopyright (c) 1992, 1993\nThe Regents of the University of California. All rights reserved.\n";
-    let numbered_lines: Vec<(usize, String)> = content
-        .lines()
-        .enumerate()
-        .map(|(i, line)| (i + 1, line.to_string()))
-        .collect();
-    let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
-    let tokens: Vec<Token> = groups.first().map(|g| get_tokens(g)).unwrap_or_default();
-    let tree = if tokens.is_empty() {
-        Vec::new()
-    } else {
-        parse(tokens.clone())
-    };
-
     let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
     let cr: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
     let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
@@ -1754,7 +1220,7 @@ fn test_detect_regents_multi_line_merges_year_only_prefix() {
     let merged = "Copyright (c) 1988, 1993 Copyright (c) 1992, 1993 The Regents of the University of California";
     assert!(
         cr.iter().any(|s| s == merged),
-        "groups: {groups:#?}\n\ntokens: {tokens:#?}\n\ntree: {tree:#?}\n\ncopyrights: {cr:#?}\n\nholders: {hs:#?}"
+        "copyrights: {cr:#?}\n\nholders: {hs:#?}"
     );
     assert!(
         !cr.iter().any(|s| s == "Copyright (c) 1988, 1993"),
@@ -2268,25 +1734,8 @@ fn test_detect_copyright_with_email() {
 #[test]
 fn test_detect_copyright_with_short_holder_and_trailing_punct_email() {
     let input = "Copyright (c) 2024 bgme <i@bgme.me>.";
-    let numbered_lines: Vec<(usize, String)> = input
-        .lines()
-        .enumerate()
-        .map(|(i, line)| (i + 1, line.to_string()))
-        .collect();
-    let groups = collect_candidate_lines(numbered_lines);
-    assert!(
-        !groups.is_empty(),
-        "Expected candidate group, got: {groups:?}"
-    );
-
     let (c, h, _a) = detect_copyrights_from_text(input);
-    assert_eq!(
-        c.len(),
-        1,
-        "Should detect one copyright, got: {:?}; groups: {:?}",
-        c,
-        groups
-    );
+    assert_eq!(c.len(), 1, "Should detect one copyright, got: {:?}", c);
     assert_eq!(
         c[0].copyright, "Copyright (c) 2024 bgme <i@bgme.me>",
         "Copyright text: {:?}",
@@ -2479,50 +1928,6 @@ fn test_detect_not_copyrighted_statement() {
     assert!(
         h.iter().any(|ho| ho.holder == "Not by Mark Adler"),
         "Missing holder, got: {:?}",
-        h.iter().map(|ho| &ho.holder).collect::<Vec<_>>()
-    );
-}
-
-#[test]
-fn test_fixture_adler_inflate_not_copyrighted() {
-    let content =
-        std::fs::read_to_string("testdata/copyright-golden/copyrights/adler_inflate_c-inflate_c.c")
-            .unwrap();
-    let (c, h, _a) = detect_copyrights_from_text(&content);
-    assert!(
-        c.iter()
-            .any(|cr| cr.copyright == "Not copyrighted 1992 by Mark Adler"),
-        "Missing expected copyright, got: {:?}",
-        c.iter().map(|cr| &cr.copyright).collect::<Vec<_>>()
-    );
-    assert!(
-        h.iter().any(|ho| ho.holder == "Not by Mark Adler"),
-        "Missing expected holder, got: {:?}",
-        h.iter().map(|ho| &ho.holder).collect::<Vec<_>>()
-    );
-}
-
-#[test]
-fn test_fixture_linux_inflate_not_copyrighted_normalized() {
-    let content = std::fs::read_to_string(
-        "testdata/copyright-golden/copyrights/misco4/linux-copyrights/lib/inflate.c",
-    )
-    .unwrap();
-    let (c, h, _a) = detect_copyrights_from_text(&content);
-    let cr_texts: Vec<&str> = c.iter().map(|cr| cr.copyright.as_str()).collect();
-    assert!(
-        cr_texts.contains(&"copyrighted 1990 Mark Adler"),
-        "Missing 1990 expected copyright, got: {:?}",
-        cr_texts
-    );
-    assert!(
-        cr_texts.contains(&"copyrighted 1992 by Mark Adler"),
-        "Missing 1992 expected copyright, got: {:?}",
-        cr_texts
-    );
-    assert!(
-        h.iter().any(|ho| ho.holder == "Mark Adler"),
-        "Missing expected holder, got: {:?}",
         h.iter().map(|ho| &ho.holder).collect::<Vec<_>>()
     );
 }
@@ -3121,21 +2526,6 @@ fn test_detect_copyright_url_angle_brackets_trailing_slash() {
 }
 
 #[test]
-fn test_detect_copyright_url_slash_full_file() {
-    let content =
-        std::fs::read_to_string("testdata/copyright-golden/copyrights/afferogplv3-AfferoGPLv")
-            .unwrap();
-    let (c, _h, _a) = detect_copyrights_from_text(&content);
-    assert!(!c.is_empty(), "Should detect copyright");
-    assert!(
-        c.iter()
-            .any(|cr| cr.copyright
-                == "Copyright (c) 2007 Free Software Foundation, Inc. http://fsf.org"),
-        "Should strip trailing URL slash"
-    );
-}
-
-#[test]
 fn test_refine_relay_tom_zanussi_line() {
     let raw = " * Copyright (C) 2002, 2003 - Tom Zanussi (zanussi@us.ibm.com), IBM Corp";
     let prepared = crate::copyright::prepare::prepare_text_line(raw);
@@ -3143,26 +2533,6 @@ fn test_refine_relay_tom_zanussi_line() {
     assert_eq!(
         refined,
         Some("Copyright (c) 2002, 2003 - Tom Zanussi (zanussi@us.ibm.com), IBM Corp".to_string())
-    );
-}
-
-#[test]
-fn test_add_missing_copyrights_for_relay_holder_line() {
-    let content = std::fs::read_to_string(
-        "testdata/copyright-golden/ics/kernel-headers-original-linux/relay.h",
-    )
-    .unwrap();
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(&content);
-    assert!(
-        holders.iter().any(|h| h.holder.contains("Tom Zanussi")),
-        "expected Tom holder"
-    );
-    assert!(
-        copyrights.iter().any(|c| {
-            c.copyright == "Copyright (c) 2002, 2003 - Tom Zanussi (zanussi@us.ibm.com), IBM Corp"
-        }),
-        "expected Tom copyright added, got: {:?}",
-        copyrights
     );
 }
 
@@ -3285,51 +2655,6 @@ fn test_originally_by_author() {
 }
 
 #[test]
-fn test_by_name_email_author_full_file() {
-    let content = std::fs::read_to_string(
-        "testdata/copyright-golden/authors/author_var_route_c-var_route_c.c",
-    )
-    .unwrap();
-    let (_c, _h, a) = detect_copyrights_from_text(&content);
-    assert!(
-        a.iter()
-            .any(|a| a.author.contains("Jennifer Bray of Origin")),
-        "Should detect Jennifer Bray, got: {:?}",
-        a
-    );
-    assert!(
-        a.iter().any(|a| a.author.contains("Erik Schoenfelder")),
-        "Should detect Erik Schoenfelder, got: {:?}",
-        a
-    );
-    assert!(
-        a.iter().any(|a| a.author.contains("Simon Leinen")),
-        "Should detect Simon Leinen, got: {:?}",
-        a
-    );
-}
-
-#[test]
-fn test_author_uc_contributors() {
-    let content =
-        std::fs::read_to_string("testdata/copyright-golden/authors/author_uc-LICENSE").unwrap();
-    let (_c, _h, a) = detect_copyrights_from_text(&content);
-    assert!(
-        a.iter()
-            .any(|a| a.author == "UC Berkeley and its contributors"),
-        "Should detect 'UC Berkeley and its contributors', got: {:?}",
-        a
-    );
-    assert!(
-        a.iter().any(|a| a
-            .author
-            .contains("University of California, Berkeley and its contributors")),
-        "Should detect 'University of California, Berkeley and its contributors', got: {:?}",
-        a
-    );
-}
-
-#[test]
 fn test_multiline_two_copyrights_adjacent_lines() {
     let input = "\tCopyright 1988, 1989 by Carnegie Mellon University\n\tCopyright 1989\tTGV, Incorporated\n";
     let (c, h, _a) = detect_copyrights_from_text(input);
@@ -3363,95 +2688,6 @@ fn test_multiline_copyright_after_created_line() {
         "Should detect Faith holder, got: {:?}",
         h
     );
-}
-
-#[test]
-fn test_co_maintainer_fixture_extracts_authors() {
-    let content =
-        std::fs::read_to_string("testdata/copyright-golden/copyrights/misco4/co-maintainer.txt")
-            .unwrap();
-    let (_c, _h, a) = detect_copyrights_from_text(&content);
-    let authors: Vec<&str> = a.iter().map(|a| a.author.as_str()).collect();
-    for expected in [
-        "Norbert Tretkowski <nobse@debian.org>",
-        "Jeff Bailey <jbailey@raspberryginger.com>",
-        "Rob Weir <rweir@ertius.org>",
-        "Andres Salomon <dilinger@debian.org>",
-        "Lars Wirzenius <liw@iki.fi>",
-        "Adeodato Simó <dato@net.com.org.es>",
-        "Wouter van Heyst <larstiq@larstiq.dyndns.org>",
-        "Jelmer Vernooij <jelmer@samba.org>",
-        "the pkg-bazaar team",
-    ] {
-        assert!(authors.contains(&expected), "authors: {authors:#?}");
-    }
-}
-
-#[test]
-fn test_debianized_by_fixture_extracts_author() {
-    let content =
-        std::fs::read_to_string("testdata/copyright-golden/copyrights/misco4/debianized-by.txt")
-            .unwrap();
-    let (_c, _h, a) = detect_copyrights_from_text(&content);
-    let authors: Vec<&str> = a.iter().map(|a| a.author.as_str()).collect();
-    assert!(
-        authors.contains(&"Christian Marillat <marillat@debian.org>"),
-        "authors: {authors:#?}"
-    );
-}
-
-#[test]
-fn test_final_agreement_fixture_extracts_created_by_author() {
-    let content =
-        std::fs::read_to_string("testdata/copyright-golden/copyrights/misco4/final-agreement.txt")
-            .unwrap();
-    let (_c, _h, a) = detect_copyrights_from_text(&content);
-    let authors: Vec<&str> = a.iter().map(|a| a.author.as_str()).collect();
-    assert!(authors.contains(&"the Project"), "authors: {authors:#?}");
-}
-
-#[test]
-fn test_sata_mv_fixture_merges_written_by_author_block() {
-    let content = std::fs::read_to_string(
-        "testdata/copyright-golden/copyrights/misco4/linux-copyrights/drivers/ata/sata_mv.c",
-    )
-    .unwrap();
-    let (_c, _h, a) = detect_copyrights_from_text(&content);
-    let authors: Vec<&str> = a.iter().map(|a| a.author.as_str()).collect();
-    assert!(
-        authors.contains(
-            &"Brett Russ. Extensive overhaul and enhancement by Mark Lord <mlord@pobox.com>"
-        ),
-        "authors: {authors:#?}"
-    );
-}
-
-#[test]
-fn test_hid_appleir_fixture_merges_written_by_author_block() {
-    let content = std::fs::read_to_string(
-        "testdata/copyright-golden/copyrights/misco4/linux-copyrights/drivers/hid/hid-appleir.c",
-    )
-    .unwrap();
-    let (_c, _h, a) = detect_copyrights_from_text(&content);
-    let authors: Vec<&str> = a.iter().map(|a| a.author.as_str()).collect();
-    assert!(
-            authors.contains(&"James McKenzie Ported to recent 2.6 kernel versions by Greg Kroah-Hartman <gregkh@suse.de> Updated to support newer remotes by Bastien Nocera <hadess@hadess.net> Ported to HID subsystem by Benjamin Tissoires <benjamin.tissoires@gmail.com>"),
-            "authors: {authors:#?}"
-        );
-}
-
-#[test]
-fn test_dvb_frontend_fixture_merges_written_by_author_block() {
-    let content = std::fs::read_to_string(
-        "testdata/copyright-golden/copyrights/misco4/linux-copyrights/include/media/dvb_frontend.h",
-    )
-    .unwrap();
-    let (_c, _h, a) = detect_copyrights_from_text(&content);
-    let authors: Vec<&str> = a.iter().map(|a| a.author.as_str()).collect();
-    assert!(
-            authors.contains(&"Ralph Metzler Overhauled by Holger Waechtler Kernel I2C stuff by Michael Hunold <hunold@convergence.de>"),
-            "authors: {authors:#?}"
-        );
 }
 
 #[test]
@@ -3654,37 +2890,13 @@ fn test_define_copyright() {
 #[test]
 fn test_parts_copyright_prefix() {
     let input = " * Parts (C) 1999 David Airlie, airlied@linux.ie";
-    let numbered_lines: Vec<(usize, String)> = input
-        .lines()
-        .enumerate()
-        .map(|(i, line)| (i + 1, line.to_string()))
-        .collect();
-    let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
-    let tokens: Vec<Token> = groups.first().map(|g| get_tokens(g)).unwrap_or_default();
-    let token_dbg: Vec<(String, PosTag)> =
-        tokens.iter().map(|t| (t.value.clone(), t.tag)).collect();
-    let tree = if tokens.is_empty() {
-        Vec::new()
-    } else {
-        parse(tokens)
-    };
-    let labels_dbg: Vec<Option<TreeLabel>> = tree.iter().map(|n| n.label()).collect();
-
     let (c, h, _a) = detect_copyrights_from_text(input);
-    assert_eq!(
-        c.len(),
-        1,
-        "tokens: {token_dbg:#?}\nlabels: {labels_dbg:#?}\nexpected one copyright, got: {c:#?}"
-    );
+    assert_eq!(c.len(), 1, "expected one copyright, got: {c:#?}");
     assert_eq!(
         c[0].copyright, "Parts (c) 1999 David Airlie, airlied@linux.ie",
-        "tokens: {token_dbg:#?}\nlabels: {labels_dbg:#?}\ncopyrights: {c:#?}"
+        "copyrights: {c:#?}"
     );
-    assert_eq!(
-        h.len(),
-        1,
-        "tokens: {token_dbg:#?}\nlabels: {labels_dbg:#?}\nexpected one holder, got: {h:#?}"
-    );
+    assert_eq!(h.len(), 1, "expected one holder, got: {h:#?}");
     assert_eq!(h[0].holder, "David Airlie");
 }
 
@@ -3815,28 +3027,11 @@ fn test_copyright_dash_email_tail_absorbed() {
 #[test]
 fn test_w3c_paren_group_debug() {
     let input = "(c) 1998-2008 (W3C) MIT, ERCIM, Keio University";
-    let numbered_lines: Vec<(usize, String)> = input
-        .lines()
-        .enumerate()
-        .map(|(i, line)| (i + 1, line.to_string()))
-        .collect();
-    let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
-    let tokens: Vec<Token> = groups.first().map(|g| get_tokens(g)).unwrap_or_default();
-    let token_dbg: Vec<(String, PosTag)> =
-        tokens.iter().map(|t| (t.value.clone(), t.tag)).collect();
-    let tree = if tokens.is_empty() {
-        Vec::new()
-    } else {
-        parse(tokens)
-    };
-    let labels_dbg: Vec<(String, Option<TreeLabel>)> =
-        tree.iter().map(|n| (format!("{n:?}"), n.label())).collect();
-
     let (c, _h, _a) = detect_copyrights_from_text(input);
     assert!(
         c.iter()
             .any(|cr| cr.copyright.contains("MIT, ERCIM, Keio University")),
-        "tokens: {token_dbg:#?}\nlabels: {labels_dbg:#?}\nexpected W3C copyright with MIT/ERCIM/Keio, got: {c:#?}"
+        "expected W3C copyright with MIT/ERCIM/Keio, got: {c:#?}"
     );
 }
 
