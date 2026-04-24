@@ -610,6 +610,8 @@ fn sync_packages_from_followed_package_data(
     let mut modified = false;
 
     for package in packages {
+        let preserve_existing_package_license_fields = package.datafile_paths.len() > 1;
+
         for datafile_path in &package.datafile_paths {
             let matched_package_data =
                 package_data_by_path
@@ -631,14 +633,18 @@ fn sync_packages_from_followed_package_data(
                 .file_ix_by_path(datafile_path)
                 .and_then(|index| files.get(index.0));
 
-            let mut next_license_detections = if package.license_detections.is_empty() {
+            let mut next_license_detections = if !preserve_existing_package_license_fields
+                || package.license_detections.is_empty()
+            {
                 matched_package_data
                     .map(|package_data| package_data.license_detections.clone())
                     .unwrap_or_default()
             } else {
                 package.license_detections.clone()
             };
-            let next_other_license_detections = if package.other_license_detections.is_empty() {
+            let next_other_license_detections = if !preserve_existing_package_license_fields
+                || package.other_license_detections.is_empty()
+            {
                 matched_package_data
                     .map(|package_data| package_data.other_license_detections.clone())
                     .unwrap_or_default()
@@ -646,28 +652,44 @@ fn sync_packages_from_followed_package_data(
                 package.other_license_detections.clone()
             };
             let mut next_declared_license_expression =
-                package.declared_license_expression.clone().or_else(|| {
+                if preserve_existing_package_license_fields {
+                    package.declared_license_expression.clone()
+                } else {
+                    None
+                }
+                .or_else(|| {
                     matched_package_data
                         .and_then(|package_data| package_data.declared_license_expression.clone())
                 });
-            let mut next_declared_license_expression_spdx = package
-                .declared_license_expression_spdx
-                .clone()
+            let mut next_declared_license_expression_spdx =
+                if preserve_existing_package_license_fields {
+                    package.declared_license_expression_spdx.clone()
+                } else {
+                    None
+                }
                 .or_else(|| {
                     matched_package_data.and_then(|package_data| {
                         package_data.declared_license_expression_spdx.clone()
                     })
                 });
-            let next_other_license_expression =
-                package.other_license_expression.clone().or_else(|| {
-                    matched_package_data
-                        .and_then(|package_data| package_data.other_license_expression.clone())
-                });
-            let next_other_license_expression_spdx =
-                package.other_license_expression_spdx.clone().or_else(|| {
-                    matched_package_data
-                        .and_then(|package_data| package_data.other_license_expression_spdx.clone())
-                });
+            let next_other_license_expression = if preserve_existing_package_license_fields {
+                package.other_license_expression.clone()
+            } else {
+                None
+            }
+            .or_else(|| {
+                matched_package_data
+                    .and_then(|package_data| package_data.other_license_expression.clone())
+            });
+            let next_other_license_expression_spdx = if preserve_existing_package_license_fields {
+                package.other_license_expression_spdx.clone()
+            } else {
+                None
+            }
+            .or_else(|| {
+                matched_package_data
+                    .and_then(|package_data| package_data.other_license_expression_spdx.clone())
+            });
 
             if package.datafile_paths.len() == 1
                 && next_license_detections.is_empty()
