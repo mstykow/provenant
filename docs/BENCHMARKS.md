@@ -12,7 +12,7 @@ The chart below uses a log-log scatter plot: file count on the x-axis, wall-cloc
 
 ![Scan duration vs. file count for Provenant and ScanCode](benchmarks/scan-duration-vs-files.svg)
 
-> Provenant is faster on 168 of 168 recorded runs, with a **11.5× median speedup** and **10.6× geometric-mean speedup** overall; the median gap grows from **7.0×** on sub-100-file targets to **19.7×** on 10k+ file targets.
+> Provenant is faster on 171 of 171 recorded runs, with a **11.4× median speedup** and **10.6× geometric-mean speedup** overall; the median gap grows from **7.0×** on sub-100-file targets to **19.1×** on 10k+ file targets.
 > Generated from the benchmark timing rows in this document via `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart`.
 
 ## Current benchmark examples
@@ -87,6 +87,27 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Matched Chef package and dependency coverage on committed `metadata.rb` surfaces, with cleaner rejection of config-word author noise such as `chef-client` and fuller `Author:: Name (<email>)` identity capture
 
 #### Python / Conda / Pixi
+
+##### [aboutcode-org/dejacode @ 4938cd4](https://github.com/aboutcode-org/dejacode/tree/4938cd4f28aec23afe6b88c4443e573c2db930ea) — **11.14× faster**
+
+- Files: 1,278
+- Run context: 2026-04-24 · dejacode-80604 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `24.48s`; ScanCode `272.67s`
+- Broader ABOUT, Python, wheel, and Docker package visibility (`126` vs `1` packages, `117` vs `104` dependencies) across committed `.ABOUT` sidecars, bundled `thirdparty/dist/*.whl` artifacts, and product manifests, with real ecosystem PURLs derived from `download_url` metadata instead of fallback `pkg:about/...` identities
+
+##### [aboutcode-org/scancode.io @ 904373a](https://github.com/aboutcode-org/scancode.io/tree/904373abf472e0567a99a3b1b5213e084040b5c1) — **9.16× faster**
+
+- Files: 764
+- Run context: 2026-04-24 · scancode.io-63382 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `42.96s`; ScanCode `393.40s`
+- Broader ABOUT and Python package visibility (`25` vs `1` packages, `284` vs `56` dependencies) across committed `.ABOUT` files, root and suffixed `pyproject.toml` manifests, and `uv.lock`, plus zero scan-file errors where ScanCode times out on large generated scan-result JSON fixtures
+
+##### [aboutcode-org/scancode-toolkit @ 6570c13](https://github.com/aboutcode-org/scancode-toolkit/tree/6570c131e2821388286f661368a70e0120aaf2c6) — **12.38× faster**
+
+- Files: 64,369
+- Run context: 2026-04-24 · scancode-toolkit-35446 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `582.86s`; ScanCode `7214.43s`
+- Far broader ABOUT-adjacent package and dependency visibility (`1281` vs `6` packages, `10943` vs `377` dependencies) across committed `.ABOUT` sidecars, Python/Swift/Dart/CocoaPods fixture manifests, and bounded RPM header metadata recovery, with real ecosystem PURLs derived from ABOUT `download_url` metadata instead of `pkg:about/...` fallbacks and zero scan-file errors where ScanCode times out on heavy fixture snapshots
 
 ##### [apache/airflow @ 47ce5f3](https://github.com/apache/airflow/tree/47ce5f32b4fae95f5865ba256d409c778d53a3d5) — **14.33× faster**
 
