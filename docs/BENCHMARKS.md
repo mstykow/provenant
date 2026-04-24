@@ -12,7 +12,7 @@ The chart below uses a log-log scatter plot: file count on the x-axis, wall-cloc
 
 ![Scan duration vs. file count for Provenant and ScanCode](benchmarks/scan-duration-vs-files.svg)
 
-> Provenant is faster on 163 of 165 recorded runs, with a **11.5× median speedup** and **10.1× geometric-mean speedup** overall; the median gap grows from **6.9×** on sub-100-file targets to **19.7×** on 10k+ file targets.
+> Provenant is faster on 165 of 165 recorded runs, with a **11.5× median speedup** and **10.7× geometric-mean speedup** overall; the median gap grows from **7.0×** on sub-100-file targets to **19.7×** on 10k+ file targets.
 > Generated from the benchmark timing rows in this document via `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart`.
 
 ## Current benchmark examples
@@ -95,12 +95,12 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Timing: Provenant `65.32s`; ScanCode `936.34s`
 - Far broader Python/provider package coverage (`142` vs `1`) and dependency extraction (`7579` vs `450`) from `uv.lock`, provider `pyproject.toml`, and committed `pnpm-lock.yaml` inputs, plus extra Docker and Helm package visibility, safer URL credential stripping, and cleaner copyright/author normalization across large documentation and kernel-style metadata blocks
 
-##### [astral-sh/uv @ 9581f2b](https://github.com/astral-sh/uv/tree/9581f2b0ea65550a3efe28bd7aabde19d98b39ba) — **2.45× faster**
+##### [astral-sh/uv @ 9581f2b](https://github.com/astral-sh/uv/tree/9581f2b0ea65550a3efe28bd7aabde19d98b39ba) — **17.90× faster**
 
-- Files: 1,225
-- Run context: 2026-04-09 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc
-- Timing: Provenant `106.58s`; ScanCode `261.33s`
-- Far broader Python-family package and dependency extraction (`112` vs `1` packages, `4488` vs `759` dependencies) from the large `test/requirements/**` tree, many fixture/workspace `pyproject.toml` files, and multiple `uv.lock` inputs that ScanCode leaves at zero, with safer URL credential stripping, Unicode-preserving party normalization, and METADATA-backed wheel identity instead of double-counting a misleading filename
+- Files: 1,259
+- Run context: 2026-04-23 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `20.79s`; ScanCode `372.18s`
+- Far broader Python-family package and dependency extraction (`112` vs `1` packages, `5277` vs `759` dependencies) from the large `test/requirements/**` tree, many fixture/workspace `pyproject.toml` files, and multiple `uv.lock` inputs that ScanCode leaves at zero, with safer URL credential stripping, Unicode-preserving party normalization, and METADATA-backed wheel identity instead of double-counting a misleading filename
 
 ##### [astropy/astropy @ 40280e3](https://github.com/astropy/astropy/tree/40280e3bd715a4968eda816c73bf88f05aa6cdc0) — **22.04× faster**
 
@@ -439,11 +439,11 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Timing: Provenant `67.58s`; ScanCode `776.24s`
 - Broader JVM monorepo package and dependency extraction (`173` vs `165` packages, `4434` vs `4233` dependencies) from nested Maven example POMs, the committed Antora `package-lock.json`, and Docker/WAR metadata, plus more specific SBOM license expressions where ScanCode flattens `EPL-2.0 AND Classpath-exception-2.0` or `BSD-2-Clause-Views AND BSD-3-Clause`
 
-##### [technomancy/leiningen @ 4022732](https://github.com/technomancy/leiningen/tree/40227328d4a9c8945362d6d626d19c2449175df6) — **1.10× slower**
+##### [technomancy/leiningen @ 4022732](https://github.com/technomancy/leiningen/tree/40227328d4a9c8945362d6d626d19c2449175df6) — **8.90× faster**
 
-- Files: 300
-- Run context: 2026-04-12 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc
-- Timing: Provenant `18.81s`; ScanCode `17.13s`
+- Files: 302
+- Run context: 2026-04-23 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `10.34s`; ScanCode `91.99s`
 - Broader Clojure manifest and dependency extraction (`82` vs `10` dependencies) from the root, nested checkout, and test-project `project.clj` surfaces that ScanCode leaves at manifest-only visibility, plus OFL font-license recovery and cleaner URL normalization where ScanCode preserves regex suffixes, trailing-slash drift, or percent-encoded placeholder text
 
 #### Rust / Go / native / infrastructure
@@ -483,11 +483,11 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Timing: Provenant `14.29s`; ScanCode `71.17s`
 - Cleaner XML author extraction without ScanCode's prose-tainted suffixes such as `A.Meredith Compiler`, while still recovering real names like `Jeremy Siek` and `David Goodger` that ScanCode misses
 
-##### [boostorg/json @ 70efd4b](https://github.com/boostorg/json/tree/70efd4b032b7f3e718bb4ca4ae144c3171b21568) — **4.65× faster**
+##### [boostorg/json @ 70efd4b](https://github.com/boostorg/json/tree/70efd4b032b7f3e718bb4ca4ae144c3171b21568) — **8.46× faster**
 
-- Files: 701
-- Run context: 2026-04-10 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc
-- Timing: Provenant `32.30s`; ScanCode `150.19s`
+- Files: 705
+- Run context: 2026-04-23 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `28.27s`; ScanCode `239.21s`
 - Cleaner GSoC participant-name extraction in `bench/data/gsoc-2018.json`, preserving real names like `Adrián Bazaga` instead of ScanCode's `type' Person name' ...` noise, plus more complete placeholder URL closure on templated GitHub API routes
 
 ##### [catchorg/Catch2 @ 10f6248](https://github.com/catchorg/Catch2/tree/10f62484bff73e3a58a411e2e10b4e1c13cfba9f) — **15.10× faster**
@@ -1092,12 +1092,12 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Timing: Provenant `10.31s`; ScanCode `69.61s`
 - Matched distroless Debian package coverage (`9` vs `9`) with broader dependency extraction (`84` vs `0`) from `status.d` relation fields, maintainer parties preserved in package metadata, and zero scan errors where ScanCode crashes on all nine `*.md5sums` companions
 
-##### [Fedora Minimal 42 rpmdb SQLite snapshot @ sha256:c30f069](https://quay.io/repository/fedora/fedora-minimal) — **16.19× faster**
+##### [Fedora Minimal 42 rpmdb SQLite snapshot @ sha256:c30f069](https://quay.io/repository/fedora/fedora-minimal) — **17.88× faster**
 
 - Files: 3
 - Run context: 2026-04-23 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
-- Timing: Provenant `10.46s`; ScanCode `169.36s`
-- Direct installed-RPM package and dependency extraction (`127` vs `0` packages, `1831` vs `0` dependencies) from the real Fedora SQLite primary DB plus WAL/SHM companions, with zero scan errors
+- Timing: Provenant `9.09s`; ScanCode `162.53s`
+- No installed-RPM package extraction on the narrow SQLite primary-DB snapshot (`0` vs `0` packages, `0` vs `0` dependencies); this lane is mostly a raw database byte scan, and the remaining ScanCode-only detections on `rpmdb.sqlite` are low-value noise/false positives rather than useful package or license coverage
 
 ##### [openSUSE Tumbleweed rpmdb NDB snapshot @ sha256:25afd25](https://registry.opensuse.org/) — **16.99× faster**
 
@@ -1136,11 +1136,11 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Timing: Provenant `9.81s`; ScanCode `70.01s`
 - Matched FreeBSD package-manifest package coverage (`1` vs `1`) on the `+COMPACT_MANIFEST` extracted from the shipped `.pkg`, with normalized `MIT` declared-license reporting instead of a raw manifest-license structure
 
-##### [Humanizer.Core 3.0.10 .nupkg @ sha256:99f9521](https://api.nuget.org/v3-flatcontainer/humanizer.core/3.0.10/humanizer.core.3.0.10.nupkg) — **4.55× slower**
+##### [Humanizer.Core 3.0.10 .nupkg @ sha256:99f9521](https://api.nuget.org/v3-flatcontainer/humanizer.core/3.0.10/humanizer.core.3.0.10.nupkg) — **7.24× faster**
 
 - Files: 1
-- Run context: 2026-04-13 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc
-- Timing: Provenant `19.19s`; ScanCode `4.22s`
+- Run context: 2026-04-23 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `9.66s`; ScanCode `69.97s`
 - Real NuGet package-archive extraction on the shipped `.nupkg` (`1` vs `0` packages, `6` vs `0` dependencies), with a named `pkg:nuget/Humanizer.Core@3.0.10` identity instead of ScanCode's generic unnamed archive row, plus an `MIT` license detection from modern package metadata
 
 ##### [pkg 2.7.4 .pkg +COMPACT_MANIFEST sample @ sha256:4128dba](https://pkg.freebsd.org/FreeBSD:14:amd64/latest/Latest/pkg.pkg) — **7.72× faster**
