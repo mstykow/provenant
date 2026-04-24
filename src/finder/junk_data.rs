@@ -44,8 +44,9 @@ const JUNK_DOMAIN_SUFFIXES: &[&str] =
     &[".png", ".jpg", ".gif", ".jpeg", ".local", ".blank", ".fill"];
 
 const JUNK_EMAIL_AND_HOST_SUFFIXES: &[&str] = &[
-    ".html", ".htm", ".txt", ".conf", ".cfg", ".default", ".patch", ".diff", ".tar.gz", ".tar.bz2",
-    ".tar.xz", ".gz", ".bz2", ".xz", ".hint", ".sftp",
+    ".png", ".jpg", ".gif", ".jpeg", ".local", ".blank", ".fill", ".html", ".htm", ".txt", ".conf",
+    ".cfg", ".default", ".patch", ".diff", ".tar.gz", ".tar.bz2", ".tar.xz", ".gz", ".bz2", ".xz",
+    ".hint", ".sftp",
 ];
 
 const JUNK_URLS: &[&str] = &[
