@@ -293,6 +293,9 @@ ScanCode: 146.24s</title></rect>
     <rect x="543.91" y="369.19" width="8" height="8" fill="#d97706" rx="1.5"><title>boostorg/json @ 70efd4b
 Files: 705
 ScanCode: 239.21s</title></rect>
+    <rect x="549.45" y="345.68" width="8" height="8" fill="#d97706" rx="1.5"><title>aboutcode-org/scancode.io @ 904373a
+Files: 764
+ScanCode: 393.40s</title></rect>
     <rect x="555.41" y="432.81" width="8" height="8" fill="#d97706" rx="1.5"><title>tokio-rs/tokio @ 5db10f5
 Files: 833
 ScanCode: 62.23s</title></rect>
@@ -341,6 +344,9 @@ ScanCode: 372.18s</title></rect>
     <rect x="584.14" y="405.69" width="8" height="8" fill="#d97706" rx="1.5"><title>distroless base-debian12 @ sha256:9dce90e
 Files: 1264
 ScanCode: 110.49s</title></rect>
+    <rect x="584.90" y="363.00" width="8" height="8" fill="#d97706" rx="1.5"><title>aboutcode-org/dejacode @ 4938cd4
+Files: 1278
+ScanCode: 272.67s</title></rect>
     <rect x="596.63" y="368.99" width="8" height="8" fill="#d97706" rx="1.5"><title>aosp-mirror/platform_build @ 045a3d6
 Files: 1515
 ScanCode: 240.24s</title></rect>
@@ -563,6 +569,9 @@ ScanCode: 4363.53s</title></rect>
     <rect x="848.76" y="271.78" width="8" height="8" fill="#d97706" rx="1.5"><title>rust-lang/rust @ dab8d9d
 Files: 58818
 ScanCode: 1879.48s</title></rect>
+    <rect x="854.98" y="208.23" width="8" height="8" fill="#d97706" rx="1.5"><title>aboutcode-org/scancode-toolkit @ 6570c13
+Files: 64369
+ScanCode: 7214.43s</title></rect>
     <rect x="879.98" y="188.22" width="8" height="8" fill="#d97706" rx="1.5"><title>torvalds/linux @ b42ed3b
 Files: 92523
 ScanCode: 11017.99s</title></rect>
@@ -799,6 +808,9 @@ Provenant: 12.57s</title></circle>
     <circle cx="547.91" cy="474.10" r="4.5" fill="#2563eb"><title>boostorg/json @ 70efd4b
 Files: 705
 Provenant: 28.27s</title></circle>
+    <circle cx="553.45" cy="454.32" r="4.5" fill="#2563eb"><title>aboutcode-org/scancode.io @ 904373a
+Files: 764
+Provenant: 42.96s</title></circle>
     <circle cx="559.41" cy="493.35" r="4.5" fill="#2563eb"><title>tokio-rs/tokio @ 5db10f5
 Files: 833
 Provenant: 18.81s</title></circle>
@@ -847,6 +859,9 @@ Provenant: 20.79s</title></circle>
     <circle cx="588.14" cy="514.39" r="4.5" fill="#2563eb"><title>distroless base-debian12 @ sha256:9dce90e
 Files: 1264
 Provenant: 12.05s</title></circle>
+    <circle cx="588.90" cy="480.90" r="4.5" fill="#2563eb"><title>aboutcode-org/dejacode @ 4938cd4
+Files: 1278
+Provenant: 24.48s</title></circle>
     <circle cx="600.63" cy="479.47" r="4.5" fill="#2563eb"><title>aosp-mirror/platform_build @ 045a3d6
 Files: 1515
 Provenant: 25.23s</title></circle>
@@ -1069,6 +1084,9 @@ Provenant: 313.61s</title></circle>
     <circle cx="852.76" cy="437.38" r="4.5" fill="#2563eb"><title>rust-lang/rust @ dab8d9d
 Files: 58818
 Provenant: 61.49s</title></circle>
+    <circle cx="858.98" cy="331.11" r="4.5" fill="#2563eb"><title>aboutcode-org/scancode-toolkit @ 6570c13
+Files: 64369
+Provenant: 582.86s</title></circle>
     <circle cx="883.98" cy="348.76" r="4.5" fill="#2563eb"><title>torvalds/linux @ b42ed3b
 Files: 92523
 Provenant: 401.15s</title></circle>
