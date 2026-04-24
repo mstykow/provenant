@@ -279,6 +279,58 @@ third_party {
     }
 
     #[test]
+    fn test_parse_soong_metadata_supports_colon_brace_maps() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let metadata_path = temp_dir.path().join("METADATA");
+        fs::write(
+            &metadata_path,
+            r#"
+name: "django"
+description:
+    "Django is a python-based web framework. As of 02/09/2011 this was listed "
+    "as the latest official version."
+
+third_party {
+  url {
+    type: ARCHIVE
+    value: "http://www.djangoproject.com/download/1.2.5/tarball/"
+  }
+  version: "1.2.5"
+  last_upgrade_date: {
+    year: 2011
+    month: 2
+    day: 9
+  }
+  local_modifications: "http://google3/third_party/apphosting/python/django/v1_2_5_vendor/README.google?cl=19403388"
+}
+"#,
+        )
+        .expect("write METADATA");
+
+        let package = AndroidSoongMetadataParser::extract_first_package(&metadata_path);
+
+        assert_eq!(package.package_type, Some(PackageType::Android));
+        assert_eq!(
+            package.datasource_id,
+            Some(DatasourceId::AndroidSoongMetadata)
+        );
+        assert_eq!(package.name.as_deref(), Some("django"));
+        assert_eq!(package.version.as_deref(), Some("1.2.5"));
+        assert_eq!(
+            package.download_url.as_deref(),
+            Some("http://www.djangoproject.com/download/1.2.5/tarball/")
+        );
+        assert_eq!(
+            package
+                .extra_data
+                .as_ref()
+                .and_then(|extra| extra.get("last_upgrade_date"))
+                .and_then(|value| value.as_str()),
+            Some("2011-02-09")
+        );
+    }
+
+    #[test]
     fn test_parse_soong_metadata_string_concatenation() {
         let temp_dir = TempDir::new().expect("temp dir");
         let metadata_path = temp_dir.path().join("METADATA");
@@ -417,12 +469,21 @@ third_party {
         let manifest_path = temp_dir.path().join("AndroidManifest.xml");
         fs::write(&manifest_path, b"not xml and not binary axml").expect("write broken manifest");
 
-        let package = AndroidManifestParser::extract_first_package(&manifest_path);
-        assert_eq!(package.package_type, Some(PackageType::Android));
-        assert_eq!(
-            package.datasource_id,
-            Some(DatasourceId::AndroidManifestXml)
-        );
-        assert!(package.name.is_none());
+        let packages = AndroidManifestParser::extract_packages(&manifest_path);
+        assert!(packages.is_empty());
+    }
+
+    #[test]
+    fn test_invalid_text_manifest_reports_single_scan_error_without_package() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let manifest_path = temp_dir.path().join("AndroidManifest.xml");
+        fs::write(&manifest_path, b"<manifest><!-- broken text manifest")
+            .expect("write broken text manifest");
+
+        let result = try_parse_file(&manifest_path).expect("android manifest should be claimed");
+
+        assert!(result.packages.is_empty());
+        assert_eq!(result.scan_errors.len(), 1);
+        assert!(result.scan_errors[0].contains("Failed to parse AndroidManifest.xml as text XML"));
     }
 }
