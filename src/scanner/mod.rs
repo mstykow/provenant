@@ -735,7 +735,7 @@ mod tests {
         assert_eq!(scanned.mime_type.as_deref(), Some("text/plain"));
         assert_eq!(
             scanned.file_type_label.as_deref(),
-            Some("UTF-8 Unicode text")
+            Some("TypeScript source, UTF-8 Unicode text")
         );
         assert_eq!(scanned.is_text, Some(true));
         assert_eq!(scanned.is_media, Some(false));
@@ -764,7 +764,7 @@ mod tests {
         assert_eq!(scanned.mime_type.as_deref(), Some("text/plain"));
         assert_eq!(
             scanned.file_type_label.as_deref(),
-            Some("UTF-8 Unicode text")
+            Some("TypeScript source, UTF-8 Unicode text")
         );
         assert_eq!(scanned.is_text, Some(true));
         assert_eq!(scanned.is_media, Some(false));
@@ -942,7 +942,7 @@ mod tests {
         assert_eq!(scanned.programming_language.as_deref(), Some("Dockerfile"));
         assert_eq!(
             scanned.file_type_label.as_deref(),
-            Some("UTF-8 Unicode text")
+            Some("Dockerfile source, UTF-8 Unicode text")
         );
         assert_eq!(scanned.is_source, Some(true));
         assert_eq!(scanned.is_script, Some(false));
