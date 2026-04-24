@@ -31,7 +31,7 @@ mod tests {
         let valid_suffix_path = PathBuf::from("/some/path/canonical-pom.xml");
         let valid_dot_suffix_path = PathBuf::from("/some/path/plugin-level-dep.pom.xml");
         let repo_pom_path = PathBuf::from("/some/path/aopalliance-1.0.pom");
-        let invalid_path = PathBuf::from("/some/path/not_pom.xml");
+        let invalid_path = PathBuf::from("/some/path/not-pom.txt");
 
         assert!(MavenParser::is_match(&valid_path));
         assert!(MavenParser::is_match(&valid_suffix_path));
