@@ -1610,7 +1610,7 @@ fn apply_package_reference_following_resolves_absolute_rootfs_license_reference(
     );
     assert_eq!(
         service.license_detections[0].license_expression_spdx,
-        "GPL-2.0-only AND GPL-2.0-or-later"
+        "GPL-2.0-or-later AND GPL-2.0-only"
     );
     assert_eq!(service.license_detections[0].matches.len(), 2);
     assert_eq!(
