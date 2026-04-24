@@ -388,6 +388,13 @@ pub(super) fn run_phase_primary_extractions(
     copyrights.extend(new_c);
     holders.extend(new_h);
 
+    let (mut new_c, new_h) =
+        super::pattern_extract::extract_markup_copyright_attributes(content, holders);
+    seen.dedup_new_copyrights(&mut new_c, 0);
+    seen.register_holders(&new_h);
+    copyrights.extend(new_c);
+    holders.extend(new_h);
+
     let (mut new_c, mut new_h) =
         super::pattern_extract::extract_html_anchor_copyright_url(content, line_number_index);
     seen.dedup_new_copyrights(&mut new_c, 0);

@@ -1235,6 +1235,32 @@ fn test_extract_html_meta_name_copyright_content() {
 }
 
 #[test]
+fn test_extract_xml_copyright_and_company_attributes() {
+    let content = r#"<assembly company="Microsoft Corporation" copyright="Microsoft Corporation" supportInformation="https://support.microsoft.com/help/5049993">"#;
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
+
+    assert!(
+        copyrights
+            .iter()
+            .any(|c| c.copyright == "copyright Microsoft Corporation"),
+        "copyrights: {copyrights:?}"
+    );
+    assert!(
+        holders.iter().any(|h| h.holder == "Microsoft Corporation"),
+        "holders: {holders:?}"
+    );
+}
+
+#[test]
+fn test_company_attribute_without_copyright_attribute_does_not_emit_copyright() {
+    let content = r#"<assembly company="Microsoft Corporation">"#;
+    let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
+
+    assert!(copyrights.is_empty(), "copyrights: {copyrights:?}");
+    assert!(holders.is_empty(), "holders: {holders:?}");
+}
+
+#[test]
 fn test_extract_pudn_footer_canonicalizes_to_domain_only() {
     let content = "&#169; 2004-2009 <a href=\"http://www.pudn.com/\"><font color=\"red\">pudn.com</font></a> ÏæICP±¸07000446";
     let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
