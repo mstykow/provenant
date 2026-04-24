@@ -12,7 +12,7 @@ mod tests {
     fn test_about_scan_promotes_packages_and_assigns_referenced_files() {
         let (_, result) = scan_and_assemble(Path::new("testdata/about"));
 
-        assert_eq!(result.packages.len(), 2);
+        assert_eq!(result.packages.len(), 3);
         let apipkg = result
             .packages
             .iter()
@@ -23,11 +23,21 @@ mod tests {
             .iter()
             .find(|pkg| pkg.name.as_deref() == Some("appdirs"))
             .expect("appdirs package exists");
+        let duplicate_origin = result
+            .packages
+            .iter()
+            .find(|pkg| pkg.name.as_deref() == Some("MWL_api"))
+            .expect("duplicate origin package exists");
 
         assert_eq!(apipkg.package_type, Some(PackageType::Pypi));
         assert_eq!(appdirs.package_type, Some(PackageType::Pypi));
+        assert_eq!(duplicate_origin.package_type, Some(PackageType::Github));
         assert_eq!(apipkg.purl.as_deref(), Some("pkg:pypi/apipkg@1.4"));
         assert_eq!(appdirs.purl.as_deref(), Some("pkg:pypi/appdirs@1.4.3"));
+        assert_eq!(
+            duplicate_origin.purl.as_deref(),
+            Some("pkg:github/byrneg7/mwl_api")
+        );
     }
 
     #[test]
