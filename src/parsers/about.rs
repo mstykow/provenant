@@ -299,13 +299,71 @@ fn read_and_parse_yaml(path: &Path) -> Result<yaml_serde::Mapping, String> {
     let content =
         read_file_to_string(path, None).map_err(|e| format!("Failed to read file: {}", e))?;
 
+    parse_yaml_mapping(&content)
+        .or_else(|yaml_error| parse_shallow_scalar_mapping(&content).ok_or(yaml_error))
+}
+
+fn parse_yaml_mapping(content: &str) -> Result<yaml_serde::Mapping, String> {
     let value: Value =
-        yaml_serde::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
+        yaml_serde::from_str(content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
 
     match value {
         Value::Mapping(map) => Ok(map),
         _ => Err("Expected YAML mapping at root".to_string()),
     }
+}
+
+fn parse_shallow_scalar_mapping(content: &str) -> Option<yaml_serde::Mapping> {
+    let mut map = yaml_serde::Mapping::new();
+    let mut saw_mapping_entry = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if line.starts_with(char::is_whitespace) {
+            return None;
+        }
+
+        let (raw_key, raw_value) = trimmed.split_once(':')?;
+        let key = raw_key.trim();
+        if key.is_empty()
+            || !key.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '_' | '-')
+            })
+        {
+            return None;
+        }
+
+        let value = raw_value.trim();
+        if value.is_empty() {
+            return None;
+        }
+
+        saw_mapping_entry = true;
+        map.insert(
+            Value::String(key.to_string()),
+            Value::String(unquote_yaml_scalar(value)),
+        );
+    }
+
+    saw_mapping_entry.then_some(map)
+}
+
+fn unquote_yaml_scalar(value: &str) -> String {
+    if value.len() >= 2 {
+        let mut characters = value.chars();
+        let first = characters.next();
+        let last = value.chars().last();
+        if matches!(
+            (first, last),
+            (Some('"'), Some('"')) | (Some('\''), Some('\''))
+        ) {
+            return value[1..value.len() - 1].to_string();
+        }
+    }
+    value.to_string()
 }
 
 /// Converts a YAML value to a string, handling strings, numbers, and booleans.
