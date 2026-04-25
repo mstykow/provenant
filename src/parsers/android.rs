@@ -1096,7 +1096,7 @@ fn tokenize_textproto(content: &str) -> Result<Vec<TextProtoToken>, String> {
 }
 
 #[derive(Clone, PartialEq, Message)]
-pub(crate) struct ProtoSourcePosition {
+pub struct ProtoSourcePosition {
     #[prost(uint32, tag = "1")]
     pub line_number: u32,
     #[prost(uint32, tag = "2")]
@@ -1104,7 +1104,7 @@ pub(crate) struct ProtoSourcePosition {
 }
 
 #[derive(Clone, PartialEq, Message)]
-pub(crate) struct ProtoXmlNode {
+pub struct ProtoXmlNode {
     #[prost(oneof = "proto_xml_node::Node", tags = "1, 2")]
     pub node: Option<proto_xml_node::Node>,
     #[prost(message, optional, tag = "3")]
@@ -1120,7 +1120,7 @@ impl ProtoXmlNode {
     }
 }
 
-pub(crate) mod proto_xml_node {
+pub mod proto_xml_node {
     use super::ProtoXmlElement;
     use prost::Oneof;
 
@@ -1134,7 +1134,7 @@ pub(crate) mod proto_xml_node {
 }
 
 #[derive(Clone, PartialEq, Message)]
-pub(crate) struct ProtoXmlElement {
+pub struct ProtoXmlElement {
     #[prost(message, repeated, tag = "1")]
     pub namespace_declaration: Vec<ProtoXmlNamespace>,
     #[prost(string, tag = "2")]
@@ -1170,7 +1170,7 @@ impl ProtoXmlElement {
 }
 
 #[derive(Clone, PartialEq, Message)]
-pub(crate) struct ProtoXmlNamespace {
+pub struct ProtoXmlNamespace {
     #[prost(string, tag = "1")]
     pub prefix: String,
     #[prost(string, tag = "2")]
@@ -1180,7 +1180,7 @@ pub(crate) struct ProtoXmlNamespace {
 }
 
 #[derive(Clone, PartialEq, Message)]
-pub(crate) struct ProtoXmlAttribute {
+pub struct ProtoXmlAttribute {
     #[prost(string, tag = "1")]
     pub namespace_uri: String,
     #[prost(string, tag = "2")]
@@ -1196,7 +1196,7 @@ pub(crate) struct ProtoXmlAttribute {
 }
 
 #[derive(Clone, PartialEq, Message)]
-pub(crate) struct ProtoItem {
+pub struct ProtoItem {
     #[prost(oneof = "proto_item::Value", tags = "2, 3, 7")]
     pub value: Option<proto_item::Value>,
     #[prost(uint32, tag = "8")]
@@ -1207,7 +1207,7 @@ pub(crate) struct ProtoItem {
     pub flag_name: String,
 }
 
-pub(crate) mod proto_item {
+pub mod proto_item {
     use super::{ProtoPrimitive, ProtoRawStringValue, ProtoStringValue};
     use prost::Oneof;
 
@@ -1223,24 +1223,24 @@ pub(crate) mod proto_item {
 }
 
 #[derive(Clone, PartialEq, Message)]
-pub(crate) struct ProtoStringValue {
+pub struct ProtoStringValue {
     #[prost(string, tag = "1")]
     pub value: String,
 }
 
 #[derive(Clone, PartialEq, Message)]
-pub(crate) struct ProtoRawStringValue {
+pub struct ProtoRawStringValue {
     #[prost(string, tag = "1")]
     pub value: String,
 }
 
 #[derive(Clone, PartialEq, Message)]
-pub(crate) struct ProtoPrimitive {
+pub struct ProtoPrimitive {
     #[prost(oneof = "proto_primitive::Value", tags = "3, 6, 7, 8, 13, 14")]
     pub value: Option<proto_primitive::Value>,
 }
 
-pub(crate) mod proto_primitive {
+pub mod proto_primitive {
     use prost::Oneof;
 
     #[derive(Clone, PartialEq, Oneof)]

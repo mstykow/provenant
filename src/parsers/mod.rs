@@ -148,8 +148,8 @@ mod go_scan_test;
 mod go_test;
 #[cfg(test)]
 mod go_work_test;
-#[cfg(all(test, feature = "golden-tests"))]
-pub(crate) mod golden_test_utils;
+#[cfg(feature = "golden-tests")]
+pub mod golden_test_utils;
 mod gradle;
 mod gradle_lock;
 #[cfg(test)]
@@ -321,9 +321,6 @@ mod yarn_lock_test;
 mod yarn_pnp;
 #[cfg(test)]
 mod yarn_pnp_test;
-
-#[cfg(all(test, feature = "golden-tests"))]
-mod golden_test;
 
 use std::cell::RefCell;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -547,6 +544,19 @@ pub fn try_parse_rpm_archive(path: &Path) -> Option<ParsePackagesResult> {
     try_parse_rpm_archive_with_license_engine(path, None)
 }
 
+#[cfg(feature = "golden-tests")]
+pub fn try_parse_compiled_bytes(bytes: &[u8]) -> Option<ParsePackagesResult> {
+    self::compiled_binary::try_parse_compiled_bytes(bytes)
+}
+
+#[cfg(feature = "golden-tests")]
+pub fn try_parse_windows_executable_bytes(
+    path: &Path,
+    bytes: &[u8],
+) -> Option<ParsePackagesResult> {
+    self::windows_executable::try_parse_windows_executable_bytes(path, bytes)
+}
+
 pub(crate) fn path_looks_like_rpm_archive(path: &Path) -> bool {
     self::rpm_parser::path_looks_like_rpm_archive(path)
 }
@@ -555,6 +565,12 @@ pub use self::about::AboutFileParser;
 pub use self::alpine::{AlpineApkParser, AlpineApkbuildParser, AlpineInstalledParser};
 pub use self::android::{
     AndroidAabParser, AndroidApkParser, AndroidManifestParser, AndroidSoongMetadataParser,
+};
+#[cfg(feature = "golden-tests")]
+pub use self::android::{
+    ProtoItem, ProtoPrimitive, ProtoRawStringValue, ProtoSourcePosition, ProtoStringValue,
+    ProtoXmlAttribute, ProtoXmlElement, ProtoXmlNamespace, ProtoXmlNode, proto_item,
+    proto_primitive, proto_xml_node,
 };
 pub use self::arch::{ArchPkginfoParser, ArchSrcinfoParser};
 pub use self::autotools::AutotoolsConfigureParser;
