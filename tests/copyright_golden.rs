@@ -10,7 +10,7 @@
 //! The expected output files are owned by this repo so we can adjust them for
 //! intentional differences (e.g., unicode name preservation, bug fixes).
 
-#[cfg(all(test, feature = "golden-tests"))]
+#[cfg(feature = "golden-tests")]
 mod tests {
     use std::collections::BTreeSet;
     use std::fs;
@@ -21,8 +21,8 @@ mod tests {
     use rayon::prelude::*;
     use serde::Deserialize;
 
-    use super::super::detect_copyrights;
-    use super::super::golden_utils::{canonicalize_golden_value, read_input_content};
+    use provenant::copyright::detect_copyrights;
+    use provenant::copyright::golden_utils::{canonicalize_golden_value, read_input_content};
 
     /// Expected output structure matching Python ScanCode's YAML test format.
     #[derive(Debug, Deserialize, Default)]
@@ -1483,22 +1483,6 @@ mod tests {
         );
         let content = read_input_content(&input_path).expect("read input");
 
-        let numbered_lines: Vec<(usize, String)> = content
-            .lines()
-            .enumerate()
-            .map(|(i, line)| (i + 1, line.to_string()))
-            .collect();
-        let groups = crate::copyright::candidates::collect_candidate_lines(numbered_lines);
-        let tokens: Vec<crate::copyright::types::Token> = groups
-            .first()
-            .map(|g| crate::copyright::lexer::get_tokens(g))
-            .unwrap_or_default();
-        let tree = if tokens.is_empty() {
-            Vec::new()
-        } else {
-            crate::copyright::parser::parse(tokens.clone())
-        };
-
         let (copyrights, holders, _authors) = detect_copyrights(&content, None);
         let actual_copyrights: Vec<String> =
             copyrights.iter().map(|c| c.copyright.clone()).collect();
@@ -1520,7 +1504,7 @@ mod tests {
         let all_match = diffs.iter().all(|d| d.is_match());
         assert!(
             all_match,
-            "Fixture mismatch: misco4/linux5/susecaps\n{}\n\nActual copyrights: {actual_copyrights:#?}\nActual holders: {actual_holders:#?}\n\nGroups: {groups:#?}\n\nTokens: {tokens:#?}\n\nTree: {tree:#?}",
+            "Fixture mismatch: misco4/linux5/susecaps\n{}\n\nActual copyrights: {actual_copyrights:#?}\nActual holders: {actual_holders:#?}",
             diffs
                 .iter()
                 .map(|d| d.to_string())

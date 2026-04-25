@@ -325,7 +325,7 @@ Golden test suites (copyrights, holders, authors, ICS) validate output against t
 
 Current Rust golden coverage primarily validates the **detector over normalized text content**, not the full scanner ingestion path.
 
-- `src/copyright/golden_test.rs` loads fixture bytes through `src/copyright/golden_utils.rs::read_input_content()` and then calls `detect_copyrights(&content)` directly.
+- `tests/copyright_golden.rs` loads fixture bytes through `src/copyright/golden_utils.rs::read_input_content()` and then calls `detect_copyrights(&content)` directly.
 - The golden harness now shares the same path-aware ingestion helper as the live scanner for decoded non-UTF text, PDFs with extractable text, printable `.dll` / `.exe` strings, and supported-image EXIF/XMP metadata.
 - Rust currently ports the upstream `copyrights`, `holders`, `authors`, and `ics` fixture families into local copyright golden tests, but does **not** yet provide equivalent scanner-level parity coverage for upstream `credits`, `years`, `generated`, and `copyright_fossology` families.
 
@@ -342,7 +342,7 @@ This implementation follows a simple compatibility contract:
 
 For users migrating from Python ScanCode, the expected experience is high compatibility with occasional differences in edge cases, each either documented as an intentional improvement or tracked as a parity gap.
 
-Run golden tests with: `cargo test --features golden-tests copyright::golden_test -- --nocapture`
+Run golden tests with: `cargo test --test copyright_golden --features golden-tests -- --nocapture`
 
 ---
 
@@ -467,10 +467,10 @@ Key coverage areas:
 cargo test --all
 
 # Golden tests:
-cargo test --features golden-tests copyright::golden_test -- --nocapture
+cargo test --test copyright_golden --features golden-tests -- --nocapture
 
 # Specific golden suite:
-cargo test --features golden-tests copyright::golden_test::tests::test_golden_copyrights -- --nocapture
+cargo test --test copyright_golden --features golden-tests test_golden_copyrights -- --nocapture
 ```
 
 ---
