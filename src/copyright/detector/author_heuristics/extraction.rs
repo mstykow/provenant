@@ -521,6 +521,7 @@ pub(in super::super) fn extract_multiline_written_by_author_blocks(
                 break;
             }
             if !(next_lower.contains(" by ")
+                || next_lower.starts_with("for ")
                 || next_lower.starts_with("overhauled by ")
                 || next_lower.starts_with("ported ")
                 || next_lower.starts_with("updated ")
