@@ -259,7 +259,13 @@ pub(crate) fn extract_text_for_detection_with_diagnostics(
     }
 
     if let Some(text) = extract_font_metadata_text(path, bytes) {
-        return (text, ExtractedTextKind::FontMetadata, None);
+        let strings = extract_printable_strings(bytes);
+        let combined = if strings.is_empty() {
+            text
+        } else {
+            combine_extracted_text_fragments(Some(text), strings)
+        };
+        return (combined, ExtractedTextKind::FontMetadata, None);
     }
 
     let windows_executable_metadata_text = extract_windows_executable_metadata_text(bytes);
@@ -2250,6 +2256,7 @@ mod tests {
             text.contains("Open Font License") || text.contains("OFL"),
             "{text}"
         );
+        assert!(text.contains("Lato"), "{text}");
     }
 
     #[test]
