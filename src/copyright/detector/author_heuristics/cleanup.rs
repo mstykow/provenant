@@ -620,6 +620,13 @@ pub(in super::super) fn drop_written_by_authors_preceded_by_copyright(
         if who.is_empty() {
             continue;
         }
+        if who.contains('@')
+            || who.contains('<')
+            || who.contains("http://")
+            || who.contains("https://")
+        {
+            continue;
+        }
         if !COPYRIGHT_HINT_RE.is_match(prev.prepared) {
             continue;
         }

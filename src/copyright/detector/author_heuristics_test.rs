@@ -228,6 +228,41 @@ fn test_written_by_author_email_for_project_is_extracted() {
 }
 
 #[test]
+fn test_written_by_author_with_contact_after_copyright_is_kept() {
+    let input = concat!(
+        "Copyright 2021-2025 The OpenSSL Project Authors. All Rights Reserved.\n",
+        "\n",
+        "Written by Ben Avison <bavison@riscosopen.org> for the OpenSSL\n",
+        "project. Rights for redistribution and usage in source and binary\n",
+        "forms are granted according to the OpenSSL license.\n",
+    );
+    let (_copyrights, _holders, authors) = super::super::detect_copyrights_from_text(input);
+    assert!(
+        authors
+            .iter()
+            .any(|a| a.author == "Ben Avison <bavison@riscosopen.org>"),
+        "authors: {:?}",
+        authors.iter().map(|a| &a.author).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_originally_written_by_for_project_block_without_contact_is_extracted() {
+    let input = concat!(
+        "Originally written by Christophe Renou and Peter Sylvester,\n",
+        "for the EdelKey project.\n",
+    );
+    let (_copyrights, _holders, authors) = super::super::detect_copyrights_from_text(input);
+    assert!(
+        authors
+            .iter()
+            .any(|a| a.author == "Christophe Renou and Peter Sylvester"),
+        "authors: {:?}",
+        authors.iter().map(|a| &a.author).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn test_prose_snippet_does_not_report_laboriously_took_the_trouble_as_author() {
     let input = concat!(
         "<para>the authors laboriously took the trouble of searching for workarounds ",
