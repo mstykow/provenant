@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::models::FileInfo;
-#[cfg(test)]
+#[cfg(any(test, feature = "golden-tests"))]
 use crate::models::Package;
 
 use super::FileIx;
@@ -87,7 +87,7 @@ pub(super) fn apply_file_classification(
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "golden-tests"))]
 pub(super) fn classify_key_files(files: &mut [FileInfo], packages: &[Package]) {
     let package_file_index = PackageFileIndex::build(files, packages);
     apply_file_classification(files, &package_file_index);

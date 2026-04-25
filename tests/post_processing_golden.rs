@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: Provenant contributors
 // SPDX-License-Identifier: Apache-2.0
 
-#[cfg(all(test, feature = "golden-tests"))]
+#![cfg(feature = "golden-tests")]
+
+#[cfg(feature = "golden-tests")]
 mod tests {
     use std::fs;
     use std::path::Path;
@@ -10,18 +12,18 @@ mod tests {
     use serde_json::{Value, json};
     use tempfile::tempdir;
 
-    use super::super::materialize_generated_flags;
-    use super::super::test_utils::{
+    use provenant::models::FileType;
+    use provenant::post_processing::materialize_generated_flags_for_golden_tests;
+    use provenant::post_processing::test_utils::{
         FixtureOutputOptions, assert_classify_fixture_matches_expected,
         assert_facet_fixture_matches_expected, assert_file_info_fixture_matches_expected,
         assert_package_fixture_matches_expected, assert_reference_follow_fixture_matches_expected,
         assert_summary_fixture_matches_expected, assert_tally_fixture_matches_expected,
         compare_scan_json_values, fixture_exclude_patterns, normalize_paths_for_test,
-        normalize_scan_json,
+        normalize_scan_json, test_license_engine,
     };
-    use crate::models::FileType;
-    use crate::progress::{ProgressMode, ScanProgress};
-    use crate::scanner::{
+    use provenant::progress::{ProgressMode, ScanProgress};
+    use provenant::scanner::{
         LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected,
     };
 
@@ -186,7 +188,7 @@ mod tests {
                 .to_str()
                 .expect("fixture path should be UTF-8"),
         );
-        materialize_generated_flags(&mut files);
+        materialize_generated_flags_for_golden_tests(&mut files);
         let actual = serde_json::json!({
             "files": files
                 .into_iter()
@@ -246,7 +248,7 @@ Copyright - split out libs\0\xff",
         let mut files = process_collected(
             &collected,
             progress,
-            Some(super::super::test_utils::test_license_engine()),
+            Some(test_license_engine()),
             LicenseScanOptions::default(),
             &TextDetectionOptions {
                 collect_info: true,

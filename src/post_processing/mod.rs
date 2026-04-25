@@ -30,8 +30,6 @@ use self::tallies::{
 use crate::assembly;
 pub(crate) use crate::license_detection::DEFAULT_LICENSEDB_URL_TEMPLATE;
 #[cfg(test)]
-use crate::models::DatasourceId;
-#[cfg(test)]
 use crate::models::Match;
 use crate::models::{
     ExtraData, FileInfo, FileType, HEADER_NOTICE, Header, OUTPUT_FORMAT_VERSION, Output, Package,
@@ -60,8 +58,6 @@ mod facet_test;
 mod font_policy;
 #[cfg(test)]
 mod generated_test;
-#[cfg(all(test, feature = "golden-tests"))]
-mod golden_test;
 mod license_policy;
 mod license_references;
 mod output_indexes;
@@ -75,8 +71,10 @@ mod summary_helpers;
 mod tallies;
 #[cfg(test)]
 mod tallies_test;
-#[cfg(test)]
+#[cfg(all(test, not(feature = "golden-tests")))]
 mod test_utils;
+#[cfg(feature = "golden-tests")]
+pub mod test_utils;
 
 pub(crate) struct CreateOutputOptions<'a> {
     pub(crate) facet_rules: &'a [FacetRule],
@@ -376,7 +374,7 @@ mod system_environment_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "golden-tests"))]
 fn classify_key_files(files: &mut [FileInfo], packages: &[Package]) {
     classification::classify_key_files(files, packages);
 }
@@ -566,6 +564,11 @@ fn materialize_generated_flags(files: &mut [FileInfo]) {
             file.is_generated = Some(false);
         }
     }
+}
+
+#[cfg(feature = "golden-tests")]
+pub fn materialize_generated_flags_for_golden_tests(files: &mut [FileInfo]) {
+    materialize_generated_flags(files);
 }
 
 #[cfg(test)]

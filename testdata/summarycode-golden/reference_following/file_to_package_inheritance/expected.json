@@ -27,6 +27,10 @@
     "holders": [],
     "authors": [
       {
+        "value": "Example Corp",
+        "count": 1
+      },
+      {
         "value": "Example Corp.",
         "count": 1
       }
@@ -43,6 +47,10 @@
     "copyrights": [],
     "holders": [],
     "authors": [
+      {
+        "value": "Example Corp",
+        "count": 1
+      },
       {
         "value": "Example Corp.",
         "count": 1

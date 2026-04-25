@@ -22,18 +22,20 @@ use tar::Archive;
 #[cfg(feature = "golden-tests")]
 use tempfile::{TempDir, tempdir};
 
+#[cfg(feature = "golden-tests")]
+use super::classify_key_files;
 use super::*;
 use crate::assembly;
 use crate::cache::{DEFAULT_CACHE_DIR_NAME, build_collection_exclude_patterns};
 #[cfg(feature = "golden-tests")]
 use crate::license_detection::LicenseDetectionEngine;
-use crate::models::{FileInfo, FileType, Package, PackageType, PackageUid};
+use crate::models::{DatasourceId, FileInfo, FileType, Package, PackageType, PackageUid};
 use crate::progress::{ProgressMode, ScanProgress};
 #[cfg(feature = "golden-tests")]
 use crate::scan_result_shaping::normalize_paths;
 use crate::scanner::{LicenseScanOptions, TextDetectionOptions, collect_paths, process_collected};
 
-pub(crate) fn file(path: &str) -> FileInfo {
+pub fn file(path: &str) -> FileInfo {
     FileInfo::new(
         Path::new(path)
             .file_name()
@@ -74,7 +76,7 @@ pub(crate) fn file(path: &str) -> FileInfo {
     )
 }
 
-pub(crate) fn dir(path: &str) -> FileInfo {
+pub fn dir(path: &str) -> FileInfo {
     FileInfo::new(
         Path::new(path)
             .file_name()
@@ -111,7 +113,7 @@ pub(crate) fn dir(path: &str) -> FileInfo {
     )
 }
 
-pub(crate) fn package(uid: &str, path: &str) -> Package {
+pub fn package(uid: &str, path: &str) -> Package {
     Package {
         package_type: Some(PackageType::Gem),
         namespace: None,
@@ -159,7 +161,7 @@ pub(crate) fn package(uid: &str, path: &str) -> Package {
 }
 
 #[cfg(feature = "golden-tests")]
-pub(crate) fn test_license_engine() -> Arc<LicenseDetectionEngine> {
+pub fn test_license_engine() -> Arc<LicenseDetectionEngine> {
     static ENGINE: OnceLock<Arc<LicenseDetectionEngine>> = OnceLock::new();
     Arc::clone(ENGINE.get_or_init(|| {
         Arc::new(
@@ -177,7 +179,7 @@ pub(crate) struct FixtureScanRoot {
 }
 
 #[cfg(feature = "golden-tests")]
-pub(crate) fn compare_scan_json_values(
+pub fn compare_scan_json_values(
     actual: &Value,
     expected: &Value,
     path: &str,
@@ -282,7 +284,7 @@ pub(crate) fn compare_scan_json_values(
 }
 
 #[cfg(feature = "golden-tests")]
-pub(crate) fn normalize_scan_json(value: &mut Value, parent_key: Option<&str>) {
+pub fn normalize_scan_json(value: &mut Value, parent_key: Option<&str>) {
     match value {
         Value::Array(values) => {
             for item in values.iter_mut() {
@@ -313,7 +315,7 @@ pub(crate) fn normalize_scan_json(value: &mut Value, parent_key: Option<&str>) {
     }
 }
 
-pub(crate) fn fixture_exclude_patterns(root: &Path) -> Vec<Pattern> {
+pub fn fixture_exclude_patterns(root: &Path) -> Vec<Pattern> {
     build_collection_exclude_patterns(root, &root.join(DEFAULT_CACHE_DIR_NAME))
 }
 
@@ -422,7 +424,7 @@ pub(crate) fn strip_root_prefix_for_test(path: &Path, root: &Path) -> Option<Pat
 }
 
 #[cfg(feature = "golden-tests")]
-pub(crate) fn normalize_paths_for_test(files: &mut [FileInfo], scan_root: &str) {
+pub fn normalize_paths_for_test(files: &mut [FileInfo], scan_root: &str) {
     normalize_paths(files, scan_root, true, false);
 }
 
@@ -438,17 +440,17 @@ pub(crate) fn normalize_package_datafile_paths(packages: &mut [Package], scan_ro
 }
 
 #[cfg(feature = "golden-tests")]
-pub(crate) struct FixtureOutputOptions<'a> {
-    pub(crate) facet_defs: &'a [String],
-    pub(crate) include_classify: bool,
-    pub(crate) include_summary: bool,
-    pub(crate) include_license_clarity_score: bool,
-    pub(crate) include_tallies: bool,
-    pub(crate) include_tallies_of_key_files: bool,
-    pub(crate) include_tallies_with_details: bool,
-    pub(crate) include_tallies_by_facet: bool,
-    pub(crate) include_generated: bool,
-    pub(crate) include_top_level_license_data: bool,
+pub struct FixtureOutputOptions<'a> {
+    pub facet_defs: &'a [String],
+    pub include_classify: bool,
+    pub include_summary: bool,
+    pub include_license_clarity_score: bool,
+    pub include_tallies: bool,
+    pub include_tallies_of_key_files: bool,
+    pub include_tallies_with_details: bool,
+    pub include_tallies_by_facet: bool,
+    pub include_generated: bool,
+    pub include_top_level_license_data: bool,
 }
 
 #[cfg(feature = "golden-tests")]
@@ -617,7 +619,7 @@ pub(crate) fn compute_fixture_summary(
 }
 
 #[cfg(feature = "golden-tests")]
-pub(crate) fn assert_summary_fixture_matches_expected(
+pub fn assert_summary_fixture_matches_expected(
     fixture_dir: &str,
     expected_file: &str,
     include_summary: bool,
@@ -739,7 +741,7 @@ pub(crate) fn project_tally_fields(value: &Value) -> Value {
                     "is_key_file": file.get("is_key_file").cloned().unwrap_or(Value::Bool(false)),
                     "is_community": file.get("is_community").cloned().unwrap_or(Value::Bool(false)),
                     "facets": file.get("facets").cloned().unwrap_or_else(|| json!([])),
-                    "tallies": file.get("tallies").cloned().unwrap_or(Value::Null),
+                    "tallies": project_tallies(file.get("tallies")),
                 })
             })
             .collect::<Vec<_>>()
@@ -1077,10 +1079,7 @@ pub(crate) fn project_reference_follow_fields(value: &Value) -> Value {
 }
 
 #[cfg(feature = "golden-tests")]
-pub(crate) fn assert_reference_follow_fixture_matches_expected(
-    fixture_dir: &str,
-    expected_file: &str,
-) {
+pub fn assert_reference_follow_fixture_matches_expected(fixture_dir: &str, expected_file: &str) {
     let actual = project_reference_follow_fields(&compute_fixture_output(
         fixture_dir,
         FixtureOutputOptions {
@@ -1120,7 +1119,7 @@ pub(crate) fn assert_reference_follow_fixture_matches_expected(
 }
 
 #[cfg(feature = "golden-tests")]
-pub(crate) fn assert_package_fixture_matches_expected(fixture_dir: &str, expected_file: &str) {
+pub fn assert_package_fixture_matches_expected(fixture_dir: &str, expected_file: &str) {
     let actual = project_package_fields(&compute_fixture_output(
         fixture_dir,
         FixtureOutputOptions {
@@ -1243,7 +1242,7 @@ mod tests {
 }
 
 #[cfg(feature = "golden-tests")]
-pub(crate) fn assert_facet_fixture_matches_expected(
+pub fn assert_facet_fixture_matches_expected(
     fixture_dir: &str,
     expected_file: &str,
     facet_defs: &[String],
@@ -1287,7 +1286,7 @@ pub(crate) fn assert_facet_fixture_matches_expected(
 }
 
 #[cfg(feature = "golden-tests")]
-pub(crate) fn assert_tally_fixture_matches_expected(
+pub fn assert_tally_fixture_matches_expected(
     fixture_dir: &str,
     expected_file: &str,
     options: FixtureOutputOptions<'_>,
@@ -1317,7 +1316,7 @@ pub(crate) fn assert_tally_fixture_matches_expected(
 }
 
 #[cfg(feature = "golden-tests")]
-pub(crate) fn assert_classify_fixture_matches_expected(
+pub fn assert_classify_fixture_matches_expected(
     fixture_dir: &str,
     expected_file: &str,
     normalize_against_parent: bool,
@@ -1395,7 +1394,7 @@ pub(crate) fn assert_classify_fixture_matches_expected(
 }
 
 #[cfg(feature = "golden-tests")]
-pub(crate) fn assert_file_info_fixture_matches_expected(
+pub fn assert_file_info_fixture_matches_expected(
     fixture_dir: &str,
     expected_file: &str,
     normalize_against_parent: bool,
@@ -1472,9 +1471,7 @@ pub(crate) fn assert_file_info_fixture_matches_expected(
     }
 }
 
-pub(crate) fn scan_and_assemble_with_keyfiles(
-    path: &Path,
-) -> (Vec<FileInfo>, assembly::AssemblyResult) {
+pub fn scan_and_assemble_with_keyfiles(path: &Path) -> (Vec<FileInfo>, assembly::AssemblyResult) {
     let progress = Arc::new(ScanProgress::new(ProgressMode::Quiet));
     let collected = collect_paths(path, 0, &fixture_exclude_patterns(path));
     let result = process_collected(
