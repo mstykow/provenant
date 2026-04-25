@@ -4,7 +4,6 @@
 use super::*;
 use crate::models::LineNumber;
 use std::fs;
-use std::path::PathBuf;
 
 // ── End-to-end pipeline tests ────────────────────────────────────
 
@@ -142,20 +141,6 @@ fn test_trailing_copy_year_suffix_is_kept() {
 }
 
 #[test]
-fn test_swift_convention_c_signatures_do_not_produce_copyrights_or_holders() {
-    let input = concat!(
-        "let invokeSuperSetter: @convention(c) (NSObject, AnyClass, Selector, AnyObject?) -> Void = { object, superclass, selector, delegate in\n",
-        "typealias Setter = @convention(c) (NSObject, Selector, AnyObject?) -> Void\n",
-    );
-
-    let (copyrights, holders, authors) = detect_copyrights_from_text(input);
-
-    assert!(copyrights.is_empty(), "copyrights: {copyrights:?}");
-    assert!(holders.is_empty(), "holders: {holders:?}");
-    assert!(authors.is_empty(), "authors: {authors:?}");
-}
-
-#[test]
 fn test_added_copyright_year_for_line_is_extracted() {
     let input = "Added the Copyright year (2020) for A11yance";
 
@@ -213,27 +198,6 @@ copied from [title]. Copyright ©\n\
 }
 
 #[test]
-fn test_boost_html_holder_drops_symbol_table_run_junk() {
-    let input = concat!(
-        "<p>Copyright &copy; John Maddock, Joel de Guzman, Eric Niebler and Matias Capeletto</p>\n",
-        "<p>(r), & 175, & 176, & 177, & 178, & 179, & 180, & 181, & 182, & 183</p>",
-    );
-
-    let (_copyrights, holders, _authors) = detect_copyrights_from_text(input);
-    let values: Vec<&str> = holders.iter().map(|h| h.holder.as_str()).collect();
-
-    assert_eq!(
-        values,
-        vec!["John Maddock, Joel de Guzman, Eric Niebler and Matias Capeletto"],
-        "holders: {values:?}"
-    );
-    assert!(
-        !values.iter().any(|holder| holder.starts_with("(r), & 175")),
-        "holders: {values:?}"
-    );
-}
-
-#[test]
 fn test_current_year_placeholder_copyright_holder_detected() {
     let input = "Copyright 2016- CURRENT_YEAR The Apache Software Foundation";
 
@@ -273,22 +237,6 @@ fn test_copyright_prefix_preserved_multiline_debian() {
 }
 
 #[test]
-fn test_copyright_prefix_preserved_with_html_tags() {
-    let input = "    Copyright \u{00A9} 1998       <s>Tom Tromey</s>\n    Copyright \u{00A9} 1999       <s>Free Software Foundation, Inc.</s>";
-    let (c, _h, _a) = detect_copyrights_from_text(input);
-    let missing: Vec<_> = c
-        .iter()
-        .filter(|cr| !cr.copyright.starts_with("Copyright"))
-        .map(|cr| &cr.copyright)
-        .collect();
-    assert!(
-        missing.is_empty(),
-        "All copyrights should start with 'Copyright', but these don't: {:?}",
-        missing
-    );
-}
-
-#[test]
 fn test_copyright_prefix_preserved_debian_copyright_header() {
     let input = "Copyright:\n\n\tCopyright (C) 1998-2005 <s>Oliver Rauch</s>";
     let (c, _h, _a) = detect_copyrights_from_text(input);
@@ -312,18 +260,6 @@ fn test_copyright_prefix_preserved_multi_copyright_block() {
         missing.is_empty(),
         "All copyrights should start with 'Copyright', but these don't: {:?}",
         missing
-    );
-}
-
-#[test]
-fn test_detect_html_multiline_copyright_keeps_copyright_word() {
-    let input = "<li><p class=\"Legal\" style=\"margin-left: 0pt;\">Copyright \u{00A9} 2002-2009 \n\t Charlie Poole</p></li>";
-    let (c, _h, _a) = detect_copyrights_from_text(input);
-    assert!(
-        c.iter()
-            .any(|cr| cr.copyright == "Copyright (c) 2002-2009 Charlie Poole"),
-        "Expected merged Copyright (c) statement, got: {:?}",
-        c.iter().map(|cr| &cr.copyright).collect::<Vec<_>>()
     );
 }
 
@@ -408,72 +344,6 @@ fn test_detect_person_name_with_middle_initial() {
 }
 
 #[test]
-fn test_busybox_env_modified_by_line_does_not_absorb_correct_usage_bullet() {
-    let content = "* Modified by Vladimir Oleynik <dzo@simtreas.ru> (C) 2003\n* - correct \"-\" option usage\n";
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
-
-    assert!(
-        copyrights
-            .iter()
-            .any(|c| c.copyright == "Vladimir Oleynik <dzo@simtreas.ru> (c) 2003"),
-        "copyrights: {:#?}",
-        copyrights.iter().map(|c| &c.copyright).collect::<Vec<_>>()
-    );
-    assert!(
-        !copyrights.iter().any(|c| c.copyright.contains("- correct")),
-        "copyrights: {:#?}",
-        copyrights.iter().map(|c| &c.copyright).collect::<Vec<_>>()
-    );
-    assert!(
-        holders.iter().any(|h| h.holder == "Vladimir Oleynik"),
-        "holders: {:#?}",
-        holders.iter().map(|h| &h.holder).collect::<Vec<_>>()
-    );
-}
-
-#[test]
-fn test_copyright_span_does_not_absorb_following_author_line() {
-    let input = "Copyright (c) Ian F. Darwin 1986\nSoftware written by Ian F. Darwin and others;";
-    let (_c, holders, _authors) = detect_copyrights_from_text(input);
-    let hs: Vec<String> = holders.into_iter().map(|h| h.holder).collect();
-    assert!(hs.iter().any(|h| h == "Ian F. Darwin"), "holders: {hs:#?}");
-    assert!(
-        !hs.iter().any(|h| h == "Ian F. Darwin Software"),
-        "holders: {hs:#?}"
-    );
-}
-
-#[test]
-fn test_copyright_span_does_not_absorb_following_lint_directive_line() {
-    let input = concat!(
-        "// (c) Example Corp. and affiliates. Confidential and proprietary.\n",
-        "// @lint-ignore-every FBOBJCIMPORTORDER1 METHOD_BRACKETSMETHOD_BRACKETS\n",
-    );
-
-    let (copyrights, _holders, _authors) = detect_copyrights_from_text(input);
-    let values: Vec<String> = copyrights.into_iter().map(|c| c.copyright).collect();
-
-    assert!(
-        values
-            .iter()
-            .any(|c| c == "(c) Example Corp. and affiliates. Confidential and proprietary"),
-        "copyrights: {values:#?}"
-    );
-    assert!(
-        !values.iter().any(|c| c.contains("@lint-ignore-every")),
-        "copyrights: {values:#?}"
-    );
-}
-
-#[test]
-fn test_detect_arch_floppy_h_bare_1995_dropped_for_x86() {
-    let content =
-        "* Copyright (C) 1995\n */\n#ifndef _ASM_X86_FLOPPY_H\n#define _ASM_X86_FLOPPY_H\n";
-    let (copyrights, _holders, _authors) = detect_copyrights_from_text(content);
-    assert!(copyrights.is_empty());
-}
-
-#[test]
 fn test_detect_arch_floppy_h_bare_1995_kept_for_alpha() {
     let content =
         "* Copyright (C) 1995\n */\n#ifndef __ASM_ALPHA_FLOPPY_H\n#define __ASM_ALPHA_FLOPPY_H\n";
@@ -499,21 +369,6 @@ fn test_detect_changelog_timestamp_copyright_and_holder() {
 }
 
 #[test]
-fn test_detect_changelog_single_timestamp_is_ignored() {
-    let content = "updated year in copyright\n\n2008-01-26 11:46  vruppert\n";
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
-    assert!(copyrights.is_empty());
-    assert!(holders.is_empty());
-}
-
-#[test]
-fn test_drop_obfuscated_email_year_only_copyright() {
-    let content = "Copyright (C) 2008 <srinivasa.deevi at conexant dot com>\n";
-    let (copyrights, _holders, _authors) = detect_copyrights_from_text(content);
-    assert!(copyrights.is_empty());
-}
-
-#[test]
 fn test_extract_parenthesized_copyright_notice() {
     let content = "an appropriate copyright notice (3dfx Interactive, Inc. 1999), a notice\n";
     let (copyrights, _holders, _authors) = detect_copyrights_from_text(content);
@@ -522,17 +377,6 @@ fn test_extract_parenthesized_copyright_notice() {
         cr.iter()
             .any(|s| s == "copyright notice (3dfx Interactive, Inc. 1999)")
     );
-}
-
-#[test]
-fn test_glide_3dfx_copyright_notice_does_not_trigger_for_notice_s_plural() {
-    let content = "copyright notice(s)\n";
-    let (copyrights, _holders, _authors) = detect_copyrights_from_text(content);
-    assert!(!copyrights.iter().any(|c| {
-        c.copyright
-            .to_ascii_lowercase()
-            .contains("copyright notice")
-    }));
 }
 
 #[test]
@@ -598,159 +442,6 @@ fn test_detect_versioned_project_banner_with_mixed_case_brand_holder() {
         holders.iter().any(|h| h.holder == "jQuery Foundation"),
         "holders: {holders:?}"
     );
-}
-
-#[test]
-fn test_play_header_does_not_emit_bare_c_from_year_shadow() {
-    let content = "Copyright (C) from 2022 The Play Framework Contributors <https://github.com/playframework>, 2011-2021 Lightbend Inc. <https://www.lightbend.com>\n";
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
-
-    assert!(
-        copyrights
-            .iter()
-            .any(|c| c.copyright.contains("The Play Framework Contributors")),
-        "copyrights: {copyrights:?}"
-    );
-    assert!(
-        !copyrights.iter().any(|c| c.copyright == "(c) from 2022"),
-        "copyrights: {copyrights:?}"
-    );
-    assert!(
-        holders
-            .iter()
-            .any(|h| h.holder.contains("The Play Framework Contributors")),
-        "holders: {holders:?}"
-    );
-}
-
-#[test]
-fn test_extract_html_meta_name_copyright_content() {
-    let content = concat!(
-        r#"<meta name="copyright" content="copyright 2005-2006 Cedrik LIME"/>"#,
-        "\n",
-        r#"<meta content="copyright 2005-2006 Cedrik LIME" name="copyright"/>"#,
-        "\n",
-        r#"<meta NAME = 'copyright' CONTENT = 'copyright 2005-2006 Cedrik LIME'/>"#,
-        "\n",
-        r#"<meta content='copyright 2005-2006 Cedrik LIME' name='copyright'/>"#,
-    );
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
-    assert!(
-        copyrights
-            .iter()
-            .any(|c| c.copyright == "copyright 2005-2006 Cedrik LIME")
-    );
-    assert!(holders.iter().any(|h| h.holder == "Cedrik LIME"));
-}
-
-#[test]
-fn test_extract_xml_copyright_and_company_attributes() {
-    let content = r#"<assembly company="Microsoft Corporation" copyright="Microsoft Corporation" supportInformation="https://support.microsoft.com/help/5049993">"#;
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
-
-    assert!(
-        copyrights
-            .iter()
-            .any(|c| c.copyright == "copyright Microsoft Corporation"),
-        "copyrights: {copyrights:?}"
-    );
-    assert!(
-        holders.iter().any(|h| h.holder == "Microsoft Corporation"),
-        "holders: {holders:?}"
-    );
-}
-
-#[test]
-fn test_company_attribute_without_copyright_attribute_does_not_emit_copyright() {
-    let content = r#"<assembly company="Microsoft Corporation">"#;
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
-
-    assert!(copyrights.is_empty(), "copyrights: {copyrights:?}");
-    assert!(holders.is_empty(), "holders: {holders:?}");
-}
-
-#[test]
-fn test_extract_pudn_footer_canonicalizes_to_domain_only() {
-    let content = "&#169; 2004-2009 <a href=\"http://www.pudn.com/\"><font color=\"red\">pudn.com</font></a> ÏæICP±¸07000446";
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
-
-    assert!(
-        copyrights
-            .iter()
-            .any(|c| c.copyright == "(c) 2004-2009 pudn.com"),
-        "copyrights: {copyrights:?}"
-    );
-    assert!(
-        holders.iter().any(|h| h.holder == "pudn.com"),
-        "holders: {holders:?}"
-    );
-    assert!(!holders.iter().any(|h| h.holder.contains("upload_log.asp")));
-}
-
-#[test]
-fn test_extract_pudn_upload_log_link_does_not_create_copyright() {
-    let content = r#"&nbsp;&nbsp;�� �� ��: <a href="http://s.pudn.com/upload_log.asp?e=234428" target="_blank">ɭ��</a>"#;
-    let (copyrights, _holders, _authors) = detect_copyrights_from_text(content);
-
-    assert!(
-        !copyrights
-            .iter()
-            .any(|c| c.copyright.contains("upload_log.asp")),
-        "copyrights: {copyrights:?}"
-    );
-}
-
-#[test]
-fn test_identical_pudn_html_fixtures_produce_identical_canonical_output() {
-    let url_path =
-        PathBuf::from("testdata/copyright-golden/copyrights/url_in_html-detail_9_html.html");
-    let incorrect_path =
-        PathBuf::from("testdata/copyright-golden/copyrights/html_incorrect-detail_9_html.html");
-
-    let url_bytes = fs::read(&url_path).expect("url_in_html fixture must be readable");
-    let incorrect_bytes =
-        fs::read(&incorrect_path).expect("html_incorrect fixture must be readable");
-
-    assert_eq!(
-        url_bytes, incorrect_bytes,
-        "fixtures must be byte-identical"
-    );
-
-    let url_content = crate::copyright::golden_utils::read_input_content(&url_path)
-        .expect("url_in_html fixture content must load");
-    let incorrect_content = crate::copyright::golden_utils::read_input_content(&incorrect_path)
-        .expect("html_incorrect fixture content must load");
-
-    let (c1, h1, a1) = detect_copyrights_from_text(&url_content);
-    let (c2, h2, a2) = detect_copyrights_from_text(&incorrect_content);
-
-    let mut c1v: Vec<String> = c1.into_iter().map(|d| d.copyright).collect();
-    let mut h1v: Vec<String> = h1.into_iter().map(|d| d.holder).collect();
-    let mut a1v: Vec<String> = a1.into_iter().map(|d| d.author).collect();
-    let mut c2v: Vec<String> = c2.into_iter().map(|d| d.copyright).collect();
-    let mut h2v: Vec<String> = h2.into_iter().map(|d| d.holder).collect();
-    let mut a2v: Vec<String> = a2.into_iter().map(|d| d.author).collect();
-
-    c1v.sort();
-    h1v.sort();
-    a1v.sort();
-    c2v.sort();
-    h2v.sort();
-    a2v.sort();
-    c1v.dedup();
-    h1v.dedup();
-    a1v.dedup();
-    c2v.dedup();
-    h2v.dedup();
-    a2v.dedup();
-
-    assert_eq!(c1v, c2v, "copyright outputs differ for identical content");
-    assert_eq!(h1v, h2v, "holder outputs differ for identical content");
-    assert_eq!(a1v, a2v, "author outputs differ for identical content");
-
-    assert_eq!(c1v, vec!["(c) 2004-2009 pudn.com".to_string()]);
-    assert_eq!(h1v, vec!["pudn.com".to_string()]);
-    assert!(a1v.is_empty());
 }
 
 #[test]
@@ -1005,50 +696,6 @@ fn test_detect_regents_multi_line_merges_year_only_prefix() {
 }
 
 #[test]
-fn test_index_html_end_to_end_has_copyright_word() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let path = root.join("testdata/copyright-golden/copyrights/index.html");
-    let content = fs::read_to_string(&path).expect("read index.html fixture");
-    let (c, _h, _a) = detect_copyrights_from_text(&content);
-
-    assert!(
-        c.iter()
-            .any(|cr| cr.copyright == "Copyright (c) 2002-2009 Charlie Poole"),
-        "End-to-end detection missing expected Copyright (c) line. Got: {:?}",
-        c.iter().map(|cr| &cr.copyright).collect::<Vec<_>>()
-    );
-
-    assert!(
-        !c.iter()
-            .any(|cr| cr.copyright == "(c) 2002-2009 Charlie Poole"),
-        "Expected bare (c) variant to be dropped. Got: {:?}",
-        c.iter().map(|cr| &cr.copyright).collect::<Vec<_>>()
-    );
-}
-
-#[test]
-fn test_index_html_does_not_emit_shadowed_digia_plc_holder() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let path = root.join("testdata/copyright-golden/copyrights/index.html");
-    let content = fs::read_to_string(&path).expect("read index.html fixture");
-    let (_c, h, _a) = detect_copyrights_from_text(&content);
-
-    assert!(
-        h.iter().any(|hd| {
-            hd.holder == "Digia Plc and/or its subsidiary(-ies) and other contributors"
-        }),
-        "Expected full Digia holder, got: {:?}",
-        h.iter().map(|hd| &hd.holder).collect::<Vec<_>>()
-    );
-
-    assert!(
-        !h.iter().any(|hd| hd.holder == "Digia Plc"),
-        "Expected shadowed short holder to be dropped, got: {:?}",
-        h.iter().map(|hd| &hd.holder).collect::<Vec<_>>()
-    );
-}
-
-#[test]
 fn test_mpl_portions_created_prefix_preserved() {
     let input = "Portions created by the Initial Developer are Copyright (C) 2002\n  the Initial Developer.";
     let (c, h, _a) = detect_copyrights_from_text(input);
@@ -1077,98 +724,6 @@ fn test_bare_c_year_only_detected() {
         c.iter().any(|cr| cr.copyright == "(c) 2008"),
         "Expected bare (c) year, got: {:?}",
         c.iter().map(|cr| &cr.copyright).collect::<Vec<_>>()
-    );
-}
-
-#[test]
-fn test_drop_symbol_year_only_copyright() {
-    let input = "Copyright © 2021\nCopyright (c) 2017\n";
-    let (c, _h, _a) = detect_copyrights_from_text(input);
-    assert!(
-        !c.iter().any(|cr| cr.copyright == "Copyright (c) 2021"),
-        "Expected © year-only to be dropped, got: {:?}",
-        c.iter().map(|cr| &cr.copyright).collect::<Vec<_>>()
-    );
-    assert!(
-        c.iter().any(|cr| cr.copyright == "Copyright (c) 2017"),
-        "Expected non-© year-only to be kept, got: {:?}",
-        c.iter().map(|cr| &cr.copyright).collect::<Vec<_>>()
-    );
-}
-
-#[test]
-fn test_c_sign_path_fragment_is_not_detected_as_copyright() {
-    let input = "(C)Ljoptsimple/AbstractOptionSpec";
-    let (c, h, a) = detect_copyrights_from_text(input);
-    assert!(c.is_empty(), "copyrights: {c:#?}");
-    assert!(h.is_empty(), "holders: {h:#?}");
-    assert!(a.is_empty(), "authors: {a:#?}");
-}
-
-#[test]
-fn test_copyright_scan_phrase_is_not_detected_as_copyright() {
-    let input = "Measures the end-to-end composer copyright scan";
-    let (c, h, a) = detect_copyrights_from_text(input);
-    assert!(c.is_empty(), "copyrights: {c:#?}");
-    assert!(h.is_empty(), "holders: {h:#?}");
-    assert!(a.is_empty(), "authors: {a:#?}");
-}
-
-#[test]
-fn test_generated_annotation_line_is_not_absorbed_into_copyright() {
-    let input = "/* Copyright (C) 2024 Acme Corp.\n * @generated by protobuf */";
-    let (c, h, _a) = detect_copyrights_from_text(input);
-    assert!(
-        c.iter()
-            .any(|cr| cr.copyright == "Copyright (c) 2024 Acme Corp."),
-        "copyrights: {c:#?}"
-    );
-    assert!(
-        !c.iter().any(|cr| cr.copyright.contains("@generated")),
-        "copyrights: {c:#?}"
-    );
-    assert!(
-        h.iter().any(|holder| holder.holder == "Acme Corp."),
-        "holders: {h:#?}"
-    );
-}
-
-#[test]
-fn test_dart_structured_literal_keys_are_not_absorbed_into_marvel_copyright() {
-    let input = "'copyright': '© 2020 MARVEL',\n'attributionText': 'Data provided by Marvel. © 2020 MARVEL',\n'etag': 'eba58984956be48bdfd28818fa4fad1ff5f5cf81',\n'data': {}";
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(input);
-
-    assert!(
-        copyrights
-            .iter()
-            .any(|entry| entry.copyright == "(c) 2020 MARVEL"),
-        "copyrights: {copyrights:#?}"
-    );
-    assert!(
-        copyrights
-            .iter()
-            .any(|entry| entry.copyright == "Marvel. (c) 2020 MARVEL"),
-        "copyrights: {copyrights:#?}"
-    );
-    assert!(
-        !copyrights.iter().any(|entry| {
-            entry.copyright.contains("attributionText") || entry.copyright.contains("etag")
-        }),
-        "copyrights: {copyrights:#?}"
-    );
-    assert!(
-        holders.iter().any(|entry| entry.holder == "MARVEL"),
-        "holders: {holders:#?}"
-    );
-    assert!(
-        holders.iter().any(|entry| entry.holder == "Marvel. MARVEL"),
-        "holders: {holders:#?}"
-    );
-    assert!(
-        !holders
-            .iter()
-            .any(|entry| entry.holder.contains("attributionText") || entry.holder.contains("etag")),
-        "holders: {holders:#?}"
     );
 }
 
@@ -1394,14 +949,6 @@ fn test_detect_empty_input() {
 }
 
 #[test]
-fn test_detect_no_copyright() {
-    let (c, h, a) = detect_copyrights_from_text("This is just some random code.");
-    assert!(c.is_empty());
-    assert!(h.is_empty());
-    assert!(a.is_empty());
-}
-
-#[test]
 fn test_detect_simple_copyright() {
     let (c, h, _a) = detect_copyrights_from_text("Copyright 2024 Acme Inc.");
     assert!(!c.is_empty(), "Should detect copyright");
@@ -1561,16 +1108,6 @@ fn test_detect_multiline_copyright() {
 }
 
 #[test]
-fn test_detect_junk_filtered() {
-    let (c, _h, _a) = detect_copyrights_from_text("Copyright (c)");
-    // "Copyright (c)" alone is junk.
-    assert!(
-        c.is_empty(),
-        "Bare 'Copyright (c)' should be filtered as junk"
-    );
-}
-
-#[test]
 fn test_detect_multiple_copyrights() {
     let text = "Copyright 2020 Foo Inc.\n\n\n\nCopyright 2024 Bar Corp.";
     let (c, h, _a) = detect_copyrights_from_text(text);
@@ -1643,66 +1180,6 @@ fn test_fixture_sample_py_motorola_holder_has_dash_variant_only() {
 }
 
 #[test]
-fn test_mso_document_properties_non_confidential_uses_template_lastauthor_variant() {
-    let content = "<o:Description>Copyright 2009</o:Description>\n<o:Template>techdoc.dot</o:Template>\n<o:LastAuthor>Jennifer Hruska</o:LastAuthor>";
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
-
-    assert!(
-        copyrights
-            .iter()
-            .any(|c| c.copyright == "Copyright 2009 techdoc.dot o:LastAuthor Jennifer Hruska"),
-        "copyrights: {:?}",
-        copyrights
-    );
-    assert!(
-        holders
-            .iter()
-            .any(|h| h.holder == "techdoc.dot o:LastAuthor Jennifer Hruska"),
-        "holders: {:?}",
-        holders
-    );
-    assert!(
-        !copyrights
-            .iter()
-            .any(|c| c.copyright == "Jennifer Hruska Copyright 2009")
-    );
-    assert!(!holders.iter().any(|h| h.holder == "Jennifer Hruska"));
-}
-
-#[test]
-fn test_mso_document_properties_confidential_does_not_emit_template_lastauthor_variant() {
-    let content = "<o:Description>Copyright 2009 Confidential Information</o:Description>\n<o:Template>techdoc.dot</o:Template>\n<o:LastAuthor>Jennifer Hruska</o:LastAuthor>";
-    let (copyrights, holders, _authors) = detect_copyrights_from_text(content);
-
-    assert!(
-        copyrights
-            .iter()
-            .any(|c| c.copyright == "Copyright 2009 Confidential"),
-        "copyrights: {:?}",
-        copyrights
-    );
-    assert!(
-        holders.iter().any(|h| h.holder == "Confidential"),
-        "holders: {:?}",
-        holders
-    );
-    assert!(
-        !copyrights.iter().any(|c| c
-            .copyright
-            .contains("techdoc.dot o:LastAuthor Jennifer Hruska")),
-        "copyrights: {:?}",
-        copyrights
-    );
-    assert!(
-        !holders.iter().any(|h| h
-            .holder
-            .contains("techdoc.dot o:LastAuthor Jennifer Hruska")),
-        "holders: {:?}",
-        holders
-    );
-}
-
-#[test]
 fn test_detect_copyright_holder_suffix_authors() {
     let (c, h, a) = detect_copyrights_from_text("Copyright 2015 The Error Prone Authors.");
     assert!(
@@ -1720,31 +1197,6 @@ fn test_detect_copyright_holder_suffix_authors() {
         a.is_empty(),
         "Should not treat trailing 'Authors' token as an author: {:?}",
         a
-    );
-}
-
-#[test]
-fn test_detect_filters_code_like_c_marker_lines() {
-    let text = "(c) (const unsigned char*)ptr\n(c) c ? foo : bar\n(c) c & 0x3f\n(c) flags |= 0x80";
-    let (copyrights, holders, authors) = detect_copyrights_from_text(text);
-    assert!(copyrights.is_empty(), "copyrights: {copyrights:?}");
-    assert!(holders.is_empty(), "holders: {holders:?}");
-    assert!(authors.is_empty(), "authors: {authors:?}");
-}
-
-#[test]
-fn test_complex_html_preserves_parenthesized_obfuscated_email_continuation() {
-    let content =
-        fs::read_to_string("testdata/copyright-golden/copyrights/misco4/linux9/complex-html.txt")
-            .unwrap();
-
-    let (copyrights, _holders, _authors) = detect_copyrights_from_text(&content);
-    assert!(
-        copyrights
-            .iter()
-            .any(|c| c.copyright == "Copyright (c) 2001 Karl Garrison (karl AT indy.rr.com)"),
-        "copyrights: {:?}",
-        copyrights
     );
 }
 
@@ -1782,23 +1234,6 @@ fn test_detect_copyright_holder_suffix_as_represented() {
             hd.holder == "United States Government as represented by the Secretary of the Navy"
         }),
         "Should keep 'as represented by' continuation in holder: {:?}",
-        h
-    );
-}
-
-#[test]
-fn test_detect_copyright_does_not_absorb_unexpected_as_represented() {
-    let text = "Copyright 1993 United States Government as represented by the\nDirector, National Security Agency.";
-    let (c, h, _a) = detect_copyrights_from_text(text);
-    assert!(
-        c.iter()
-            .any(|cr| cr.copyright == "Copyright 1993 United States Government"),
-        "Should keep only government without continuation: {:?}",
-        c
-    );
-    assert!(
-        h.iter().any(|hd| hd.holder == "United States Government"),
-        "Should keep only government holder without continuation: {:?}",
         h
     );
 }
@@ -2058,60 +1493,5 @@ fn test_notice_file_multiple_copyrights() {
         "Should detect at least 9 copyrights, got {}: {:?}",
         c.len(),
         cr_texts
-    );
-}
-
-#[test]
-fn test_doc_doc_no_overabsorb() {
-    let input = "are copyrighted by Douglas C. Schmidt and his research group at Washington University, University of California, Irvine, and Vanderbilt University, Copyright (c) 1993-2008, all rights reserved.";
-    let (c, _h, _a) = detect_copyrights_from_text(input);
-    assert!(
-            c.iter().any(|cr| cr.copyright == "copyrighted by Douglas C. Schmidt and his research group at Washington University, University of California, Irvine, and Vanderbilt University, Copyright (c) 1993-2008"),
-            "Should merge trailing Copyright (c) clause, got: {:?}",
-            c
-        );
-}
-
-#[test]
-fn test_json_escaped_html_anchor_copyright_url_detected() {
-    let input = r#"&copy; <a href=\"http://www.openstreetmap.org/copyright\">OpenStreetMap</a>"#;
-    let (c, h, _a) = detect_copyrights_from_text(input);
-
-    assert!(
-        c.iter().any(|cr| {
-            cr.copyright == "(c) http://www.openstreetmap.org/copyright OpenStreetMap"
-        }),
-        "copyrights: {c:?}"
-    );
-    assert!(
-        h.iter().any(|hr| hr.holder == "OpenStreetMap"),
-        "holders: {h:?}"
-    );
-    assert!(
-        !c.iter()
-            .any(|cr| cr.copyright == "(c) http://www.openstreetmap.org/copyright"),
-        "copyrights: {c:?}"
-    );
-    assert!(
-        !h.iter()
-            .any(|hr| hr.holder == "http://www.openstreetmap.org/copyright"),
-        "holders: {h:?}"
-    );
-}
-
-#[test]
-fn test_json_description_keeps_explicit_anchor_attribution() {
-    let input = r#"{"description":"&copy; <a href=\"http://www.openstreetmap.org/copyright\">OpenStreetMap</a>"}"#;
-    let (c, h, _a) = detect_copyrights_from_text(input);
-
-    assert!(
-        c.iter().any(|cr| {
-            cr.copyright == "(c) http://www.openstreetmap.org/copyright OpenStreetMap"
-        }),
-        "copyrights: {c:?}"
-    );
-    assert!(
-        h.iter().any(|hr| hr.holder == "OpenStreetMap"),
-        "holders: {h:?}"
     );
 }

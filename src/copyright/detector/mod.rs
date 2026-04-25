@@ -406,6 +406,14 @@ use tree_walk::{
 mod tests;
 
 #[cfg(test)]
+#[path = "tests_false_positives.rs"]
+mod tests_false_positives;
+
+#[cfg(test)]
+#[path = "tests_structured_metadata.rs"]
+mod tests_structured_metadata;
+
+#[cfg(test)]
 #[path = "tests_author_pipeline.rs"]
 mod tests_author_pipeline;
 
