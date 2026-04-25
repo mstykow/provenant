@@ -1,19 +1,12 @@
 // SPDX-FileCopyrightText: Provenant contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use std::sync::LazyLock;
-
-use regex::Regex;
-
-use crate::copyright::refiner::{is_junk_copyright, refine_author};
 use crate::copyright::types::{
     AuthorDetection, CopyrightDetection, HolderDetection, ParseNode, PosTag, Token, TreeLabel,
 };
 use crate::models::LineNumber;
 
-#[cfg(test)]
-#[path = "tree_walk_test.rs"]
-mod tests;
+use super::super as detector;
 
 fn mpl_portions_created_prefix_tokens<'a>(
     tree: &'a [ParseNode],
@@ -21,7 +14,7 @@ fn mpl_portions_created_prefix_tokens<'a>(
     copyright_node: &'a ParseNode,
     trailing_tokens: &[&'a Token],
 ) -> Option<Vec<&'a Token>> {
-    let leaves = super::token_utils::collect_all_leaves(copyright_node);
+    let leaves = detector::token_utils::collect_all_leaves(copyright_node);
     let first = *leaves.first()?;
     if first.tag != PosTag::Copy || !first.value.eq_ignore_ascii_case("copyright") {
         return None;
@@ -48,7 +41,7 @@ fn mpl_portions_created_prefix_tokens<'a>(
     let mut j = idx;
     while j > 0 && prev_rev.len() < 7 {
         j -= 1;
-        let leaves = super::token_utils::collect_all_leaves(&tree[j]);
+        let leaves = detector::token_utils::collect_all_leaves(&tree[j]);
         for &t in leaves.iter().rev() {
             if t.start_line != line {
                 continue;
@@ -82,7 +75,7 @@ fn single_portions_prefix_token<'a>(
     idx: usize,
     copyright_node: &'a ParseNode,
 ) -> Option<&'a Token> {
-    let first = *super::token_utils::collect_all_leaves(copyright_node).first()?;
+    let first = *detector::token_utils::collect_all_leaves(copyright_node).first()?;
     if idx == 0 {
         return None;
     }
@@ -155,20 +148,20 @@ pub fn extract_from_tree_nodes(
                     Some(TreeLabel::Copyright) | Some(TreeLabel::Copyright2)
                 )
                 && !is_year_only_copyright_clause_node(next_node)
-                && super::token_utils::collect_all_leaves(node)
+                && detector::token_utils::collect_all_leaves(node)
                     .first()
                     .is_some_and(|t| {
-                        super::token_utils::collect_all_leaves(next_node)
+                        detector::token_utils::collect_all_leaves(next_node)
                             .first()
                             .is_some_and(|n| n.start_line == t.start_line + 1)
                     })
             {
-                let leaves = super::token_utils::collect_filtered_leaves(
+                let leaves = detector::token_utils::collect_filtered_leaves(
                     node,
-                    super::NON_COPYRIGHT_LABELS,
-                    super::NON_COPYRIGHT_POS_TAGS,
+                    detector::NON_COPYRIGHT_LABELS,
+                    detector::NON_COPYRIGHT_POS_TAGS,
                 );
-                let leaves = super::token_utils::strip_all_rights_reserved(leaves);
+                let leaves = detector::token_utils::strip_all_rights_reserved(leaves);
                 if !leaves.is_empty() {
                     preceding_year_only_prefix = Some(leaves);
                     i += 1;
@@ -176,7 +169,7 @@ pub fn extract_from_tree_nodes(
                 }
             }
 
-            let allow_single_word_contributors = super::token_utils::collect_all_leaves(node)
+            let allow_single_word_contributors = detector::token_utils::collect_all_leaves(node)
                 .iter()
                 .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
             let prefix_token = get_orphaned_copy_prefix(tree, i);
@@ -185,7 +178,7 @@ pub fn extract_from_tree_nodes(
             let mut trailing_copyright_only_tokens: Vec<&Token> = Vec::new();
 
             if trailing_tokens.is_empty() {
-                let last_line = super::token_utils::collect_all_leaves(node)
+                let last_line = detector::token_utils::collect_all_leaves(node)
                     .last()
                     .map(|t| t.start_line);
                 if let Some(last_line) = last_line {
@@ -196,7 +189,7 @@ pub fn extract_from_tree_nodes(
                         if idx >= tree.len() {
                             break;
                         }
-                        let leaves = super::token_utils::collect_all_leaves(&tree[idx]);
+                        let leaves = detector::token_utils::collect_all_leaves(&tree[idx]);
                         if leaves.first().is_none_or(|t| t.start_line != last_line) {
                             break;
                         }
@@ -204,7 +197,7 @@ pub fn extract_from_tree_nodes(
                             true
                         } else {
                             ((i + 1)..idx).any(|k| {
-                                super::token_utils::collect_all_leaves(&tree[k])
+                                detector::token_utils::collect_all_leaves(&tree[k])
                                     .iter()
                                     .any(|t| {
                                         t.value == ","
@@ -222,7 +215,7 @@ pub fn extract_from_tree_nodes(
                                 .iter()
                                 .take(idx + 1)
                                 .skip(i + 1)
-                                .flat_map(super::collect_all_leaves)
+                                .flat_map(detector::collect_all_leaves)
                                 .collect();
                             trailing_copyright_only_tokens = combined;
                             skip = idx - (i + 1) + 1;
@@ -244,7 +237,7 @@ pub fn extract_from_tree_nodes(
                                 .iter()
                                 .take(idx)
                                 .skip(i + 1)
-                                .flat_map(super::collect_all_leaves)
+                                .flat_map(detector::collect_all_leaves)
                                 .collect();
                             combined.extend(clause_tokens);
                             trailing_copyright_only_tokens = combined;
@@ -273,7 +266,7 @@ pub fn extract_from_tree_nodes(
             }
 
             if !trailing_tokens.is_empty() {
-                let last_line = super::token_utils::collect_all_leaves(node)
+                let last_line = detector::token_utils::collect_all_leaves(node)
                     .last()
                     .map(|t| t.start_line);
                 let last_token_has_comma = trailing_tokens.last().is_some_and(|t| {
@@ -287,14 +280,14 @@ pub fn extract_from_tree_nodes(
                         if idx >= tree.len() {
                             break;
                         }
-                        let leaves = super::token_utils::collect_all_leaves(&tree[idx]);
+                        let leaves = detector::token_utils::collect_all_leaves(&tree[idx]);
                         if leaves.first().is_none_or(|t| t.start_line != last_line) {
                             break;
                         }
 
                         if is_year_only_copyright_clause_node(&tree[idx]) {
                             trailing_copyright_only_tokens
-                                .extend(super::token_utils::collect_all_leaves(&tree[idx]));
+                                .extend(detector::token_utils::collect_all_leaves(&tree[idx]));
                             skip += clause_offset + 1;
                             break;
                         }
@@ -318,16 +311,16 @@ pub fn extract_from_tree_nodes(
             let portions_prefix = single_portions_prefix_token(tree, i, node);
 
             if trailing_tokens.is_empty() && trailing_copyright_only_tokens.is_empty() {
-                let has_holder = super::token_utils::build_holder_from_node(
+                let has_holder = detector::token_utils::build_holder_from_node(
                     node,
-                    super::NON_HOLDER_LABELS,
-                    super::NON_HOLDER_POS_TAGS,
+                    detector::NON_HOLDER_LABELS,
+                    detector::NON_HOLDER_POS_TAGS,
                 )
                 .is_some()
-                    || super::token_utils::build_holder_from_node(
+                    || detector::token_utils::build_holder_from_node(
                         node,
-                        super::NON_HOLDER_LABELS_MINI,
-                        super::NON_HOLDER_POS_TAGS_MINI,
+                        detector::NON_HOLDER_LABELS_MINI,
+                        detector::NON_HOLDER_POS_TAGS_MINI,
                     )
                     .is_some();
 
@@ -363,12 +356,12 @@ pub fn extract_from_tree_nodes(
                     if let Some(prefix) = mpl_prefix.as_ref() {
                         cr_tokens.extend(prefix.iter().copied());
                     }
-                    let node_leaves = super::token_utils::collect_filtered_leaves(
+                    let node_leaves = detector::token_utils::collect_filtered_leaves(
                         node,
-                        super::NON_COPYRIGHT_LABELS,
-                        super::NON_COPYRIGHT_POS_TAGS,
+                        detector::NON_COPYRIGHT_LABELS,
+                        detector::NON_COPYRIGHT_POS_TAGS,
                     );
-                    let node_leaves = super::token_utils::strip_all_rights_reserved(node_leaves);
+                    let node_leaves = detector::token_utils::strip_all_rights_reserved(node_leaves);
                     cr_tokens.extend(&node_leaves);
 
                     let mut extra_skip = 0;
@@ -377,34 +370,36 @@ pub fn extract_from_tree_nodes(
                         && !is_orphan_boundary(&tree[j])
                         && is_orphan_continuation(&tree[j])
                     {
-                        let leaves = super::token_utils::collect_all_leaves(&tree[j]);
+                        let leaves = detector::token_utils::collect_all_leaves(&tree[j]);
                         cr_tokens.extend(leaves);
                         j += 1;
                         extra_skip += 1;
                     }
-                    let cr_tokens = super::token_utils::strip_all_rights_reserved(cr_tokens);
-                    if let Some(det) = super::token_utils::build_copyright_from_tokens(&cr_tokens) {
+                    let cr_tokens = detector::token_utils::strip_all_rights_reserved(cr_tokens);
+                    if let Some(det) =
+                        detector::token_utils::build_copyright_from_tokens(&cr_tokens)
+                    {
                         copyrights.push(det);
                     }
 
                     let mut holder_tokens: Vec<&Token> = Vec::new();
-                    let node_holder_leaves = super::token_utils::collect_holder_filtered_leaves(
+                    let node_holder_leaves = detector::token_utils::collect_holder_filtered_leaves(
                         node,
-                        super::NON_HOLDER_LABELS,
-                        super::NON_HOLDER_POS_TAGS,
+                        detector::NON_HOLDER_LABELS,
+                        detector::NON_HOLDER_POS_TAGS,
                     );
                     let node_holder_leaves =
-                        super::token_utils::strip_all_rights_reserved(node_holder_leaves);
+                        detector::token_utils::strip_all_rights_reserved(node_holder_leaves);
                     holder_tokens.extend(&node_holder_leaves);
                     let mut k = i + 1;
                     while k < j {
-                        let leaves = super::token_utils::collect_all_leaves(&tree[k]);
+                        let leaves = detector::token_utils::collect_all_leaves(&tree[k]);
                         holder_tokens.extend(leaves);
                         k += 1;
                     }
                     let holder_tokens =
-                        super::token_utils::strip_all_rights_reserved(holder_tokens);
-                    if let Some(det) = super::token_utils::build_holder_from_tokens(
+                        detector::token_utils::strip_all_rights_reserved(holder_tokens);
+                    if let Some(det) = detector::token_utils::build_holder_from_tokens(
                         &holder_tokens,
                         allow_single_word_contributors,
                     ) {
@@ -433,17 +428,17 @@ pub fn extract_from_tree_nodes(
 
                 if !has_holder && i + 1 < tree.len() {
                     let copyright_ends_with_year = {
-                        let leaves = super::token_utils::collect_all_leaves(node);
+                        let leaves = detector::token_utils::collect_all_leaves(node);
                         leaves.last().is_some_and(|t| {
                             matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr)
                         })
                     };
                     let next_node = &tree[i + 1];
                     let next_line_ok = {
-                        let last_line = super::token_utils::collect_all_leaves(node)
+                        let last_line = detector::token_utils::collect_all_leaves(node)
                             .last()
                             .map(|t| t.start_line);
-                        let first_next_line = super::token_utils::collect_all_leaves(next_node)
+                        let first_next_line = detector::token_utils::collect_all_leaves(next_node)
                             .first()
                             .map(|t| t.start_line);
                         last_line.is_some_and(|l| first_next_line == Some(l + 1))
@@ -484,16 +479,16 @@ pub fn extract_from_tree_nodes(
                         if let Some(prefix) = mpl_prefix.as_ref() {
                             cr_tokens.extend(prefix.iter().copied());
                         }
-                        let node_leaves = super::token_utils::collect_filtered_leaves(
+                        let node_leaves = detector::token_utils::collect_filtered_leaves(
                             node,
-                            super::NON_COPYRIGHT_LABELS,
-                            super::NON_COPYRIGHT_POS_TAGS,
+                            detector::NON_COPYRIGHT_LABELS,
+                            detector::NON_COPYRIGHT_POS_TAGS,
                         );
                         let node_leaves =
-                            super::token_utils::strip_all_rights_reserved(node_leaves);
+                            detector::token_utils::strip_all_rights_reserved(node_leaves);
                         cr_tokens.extend(&node_leaves);
 
-                        let name_leaves = super::token_utils::collect_all_leaves(name_node);
+                        let name_leaves = detector::token_utils::collect_all_leaves(name_node);
                         let mut holder_tokens: Vec<&Token> = name_leaves.clone();
                         cr_tokens.extend(&name_leaves);
 
@@ -502,21 +497,21 @@ pub fn extract_from_tree_nodes(
                             && !is_orphan_boundary(&tree[j])
                             && is_name_continuation(&tree[j])
                         {
-                            let leaves = super::token_utils::collect_all_leaves(&tree[j]);
+                            let leaves = detector::token_utils::collect_all_leaves(&tree[j]);
                             cr_tokens.extend(leaves.iter());
                             holder_tokens.extend(leaves);
                             j += 1;
                         }
-                        let cr_tokens = super::token_utils::strip_all_rights_reserved(cr_tokens);
+                        let cr_tokens = detector::token_utils::strip_all_rights_reserved(cr_tokens);
                         if let Some(det) =
-                            super::token_utils::build_copyright_from_tokens(&cr_tokens)
+                            detector::token_utils::build_copyright_from_tokens(&cr_tokens)
                         {
                             copyrights.push(det);
                         }
 
                         let holder_tokens =
-                            super::token_utils::strip_all_rights_reserved(holder_tokens);
-                        if let Some(det) = super::token_utils::build_holder_from_tokens(
+                            detector::token_utils::strip_all_rights_reserved(holder_tokens);
+                        if let Some(det) = detector::token_utils::build_holder_from_tokens(
                             &holder_tokens,
                             allow_single_word_contributors,
                         ) {
@@ -541,29 +536,31 @@ pub fn extract_from_tree_nodes(
                     if let Some(prefix) = mpl_prefix.as_ref() {
                         cr_tokens.extend(prefix.iter().copied());
                     }
-                    let node_leaves = super::token_utils::collect_filtered_leaves(
+                    let node_leaves = detector::token_utils::collect_filtered_leaves(
                         node,
-                        super::NON_COPYRIGHT_LABELS,
-                        super::NON_COPYRIGHT_POS_TAGS,
+                        detector::NON_COPYRIGHT_LABELS,
+                        detector::NON_COPYRIGHT_POS_TAGS,
                     );
-                    let node_leaves = super::token_utils::strip_all_rights_reserved(node_leaves);
+                    let node_leaves = detector::token_utils::strip_all_rights_reserved(node_leaves);
                     cr_tokens.extend(&node_leaves);
                     cr_tokens.extend(&yr_tokens);
-                    let cr_tokens = super::token_utils::strip_all_rights_reserved(cr_tokens);
-                    if let Some(det) = super::token_utils::build_copyright_from_tokens(&cr_tokens) {
+                    let cr_tokens = detector::token_utils::strip_all_rights_reserved(cr_tokens);
+                    if let Some(det) =
+                        detector::token_utils::build_copyright_from_tokens(&cr_tokens)
+                    {
                         copyrights.push(det);
                     }
-                    let holder = super::token_utils::build_holder_from_node(
+                    let holder = detector::token_utils::build_holder_from_node(
                         node,
-                        super::NON_HOLDER_LABELS,
-                        super::NON_HOLDER_POS_TAGS,
+                        detector::NON_HOLDER_LABELS,
+                        detector::NON_HOLDER_POS_TAGS,
                     );
                     if let Some(det) = holder {
                         holders.push(det);
-                    } else if let Some(det) = super::token_utils::build_holder_from_node(
+                    } else if let Some(det) = detector::token_utils::build_holder_from_node(
                         node,
-                        super::NON_HOLDER_LABELS_MINI,
-                        super::NON_HOLDER_POS_TAGS_MINI,
+                        detector::NON_HOLDER_LABELS_MINI,
+                        detector::NON_HOLDER_POS_TAGS_MINI,
                     ) {
                         holders.push(det);
                     }
@@ -585,16 +582,16 @@ pub fn extract_from_tree_nodes(
                     }
 
                     let cr_ok = if let Some(det) = {
-                        let leaves = super::token_utils::collect_filtered_leaves(
+                        let leaves = detector::token_utils::collect_filtered_leaves(
                             node,
-                            super::NON_COPYRIGHT_LABELS,
-                            super::NON_COPYRIGHT_POS_TAGS,
+                            detector::NON_COPYRIGHT_LABELS,
+                            detector::NON_COPYRIGHT_POS_TAGS,
                         );
-                        let filtered = super::token_utils::strip_all_rights_reserved(leaves);
+                        let filtered = detector::token_utils::strip_all_rights_reserved(leaves);
                         let mut all_tokens: Vec<&Token> = Vec::new();
                         all_tokens.extend(&prefixes);
                         all_tokens.extend(filtered);
-                        super::token_utils::build_copyright_from_tokens(&all_tokens)
+                        detector::token_utils::build_copyright_from_tokens(&all_tokens)
                     } {
                         copyrights.push(det);
                         true
@@ -604,41 +601,44 @@ pub fn extract_from_tree_nodes(
 
                     if let Some(not) = not_prefix {
                         let mut holder_tokens: Vec<&Token> = vec![not];
-                        let node_holder_leaves = super::token_utils::collect_holder_filtered_leaves(
-                            node,
-                            super::NON_HOLDER_LABELS,
-                            super::NON_HOLDER_POS_TAGS,
-                        );
                         let node_holder_leaves =
-                            super::token_utils::strip_all_rights_reserved(node_holder_leaves);
+                            detector::token_utils::collect_holder_filtered_leaves(
+                                node,
+                                detector::NON_HOLDER_LABELS,
+                                detector::NON_HOLDER_POS_TAGS,
+                            );
+                        let node_holder_leaves =
+                            detector::token_utils::strip_all_rights_reserved(node_holder_leaves);
                         holder_tokens.extend(node_holder_leaves);
                         let holder_tokens =
-                            super::token_utils::strip_all_rights_reserved(holder_tokens);
-                        if let Some(det) = super::token_utils::build_holder_from_tokens(
+                            detector::token_utils::strip_all_rights_reserved(holder_tokens);
+                        if let Some(det) = detector::token_utils::build_holder_from_tokens(
                             &holder_tokens,
                             allow_single_word_contributors,
                         ) {
                             holders.push(det);
                         }
                     } else {
-                        let holder = super::token_utils::build_holder_from_copyright_node(
+                        let holder = detector::token_utils::build_holder_from_copyright_node(
                             node,
-                            super::NON_HOLDER_LABELS,
-                            super::NON_HOLDER_POS_TAGS,
+                            detector::NON_HOLDER_LABELS,
+                            detector::NON_HOLDER_POS_TAGS,
                         );
                         if let Some(det) = holder {
                             holders.push(det);
                         } else if let Some(det) =
-                            super::token_utils::build_holder_from_copyright_node(
+                            detector::token_utils::build_holder_from_copyright_node(
                                 node,
-                                super::NON_HOLDER_LABELS_MINI,
-                                super::NON_HOLDER_POS_TAGS_MINI,
+                                detector::NON_HOLDER_LABELS_MINI,
+                                detector::NON_HOLDER_POS_TAGS_MINI,
                             )
                         {
                             holders.push(det);
                         }
                     }
-                    if cr_ok && let Some(det) = extract_author_from_copyright_node(node) {
+                    if cr_ok
+                        && let Some(det) = super::author::extract_author_from_copyright_node(node)
+                    {
                         authors.push(det);
                     }
                 }
@@ -653,17 +653,17 @@ pub fn extract_from_tree_nodes(
                 if let Some(prefix) = mpl_prefix.as_ref() {
                     cr_tokens.extend(prefix.iter().copied());
                 }
-                let node_leaves = super::token_utils::collect_filtered_leaves(
+                let node_leaves = detector::token_utils::collect_filtered_leaves(
                     node,
-                    super::NON_COPYRIGHT_LABELS,
-                    super::NON_COPYRIGHT_POS_TAGS,
+                    detector::NON_COPYRIGHT_LABELS,
+                    detector::NON_COPYRIGHT_POS_TAGS,
                 );
-                let node_leaves = super::token_utils::strip_all_rights_reserved(node_leaves);
+                let node_leaves = detector::token_utils::strip_all_rights_reserved(node_leaves);
                 cr_tokens.extend(&node_leaves);
 
                 let mut short_cr_tokens = cr_tokens.clone();
 
-                let copy_count = super::token_utils::collect_all_leaves(node)
+                let copy_count = detector::token_utils::collect_all_leaves(node)
                     .iter()
                     .filter(|t| t.tag == PosTag::Copy)
                     .count();
@@ -675,15 +675,15 @@ pub fn extract_from_tree_nodes(
                 cr_tokens.extend(&trailing_tokens);
                 cr_tokens.extend(&trailing_copyright_only_tokens);
 
-                let cr_tokens = super::token_utils::strip_all_rights_reserved(cr_tokens);
-                short_cr_tokens = super::token_utils::strip_all_rights_reserved(short_cr_tokens);
-                let full_cr = super::token_utils::build_copyright_from_tokens(&cr_tokens);
+                let cr_tokens = detector::token_utils::strip_all_rights_reserved(cr_tokens);
+                short_cr_tokens = detector::token_utils::strip_all_rights_reserved(short_cr_tokens);
+                let full_cr = detector::token_utils::build_copyright_from_tokens(&cr_tokens);
                 if let Some(det) = full_cr.as_ref() {
                     copyrights.push(det.clone());
                 }
                 if emit_short_linux_variant
                     && let Some(short_det) =
-                        super::token_utils::build_copyright_from_tokens(&short_cr_tokens)
+                        detector::token_utils::build_copyright_from_tokens(&short_cr_tokens)
                     && full_cr
                         .as_ref()
                         .is_none_or(|f| f.copyright != short_det.copyright)
@@ -692,87 +692,89 @@ pub fn extract_from_tree_nodes(
                 }
 
                 let mut holder_tokens: Vec<&Token> = Vec::new();
-                let copy_line = super::token_utils::collect_all_leaves(node)
+                let copy_line = detector::token_utils::collect_all_leaves(node)
                     .iter()
                     .filter(|t| t.tag == PosTag::Copy && t.value.eq_ignore_ascii_case("copyright"))
                     .map(|t| t.start_line)
                     .min();
                 let keep_prefix_lines = copy_line
-                    .map(|cl| super::token_utils::signal_lines_before_copy_line(node, cl))
+                    .map(|cl| detector::token_utils::signal_lines_before_copy_line(node, cl))
                     .unwrap_or_default();
-                let node_holder_leaves = super::token_utils::collect_holder_filtered_leaves(
+                let node_holder_leaves = detector::token_utils::collect_holder_filtered_leaves(
                     node,
-                    super::NON_HOLDER_LABELS,
-                    super::NON_HOLDER_POS_TAGS,
+                    detector::NON_HOLDER_LABELS,
+                    detector::NON_HOLDER_POS_TAGS,
                 );
                 let mut node_holder_leaves =
-                    super::token_utils::strip_all_rights_reserved(node_holder_leaves);
+                    detector::token_utils::strip_all_rights_reserved(node_holder_leaves);
                 if let Some(copy_line) = copy_line {
                     node_holder_leaves.retain(|t| {
                         t.start_line >= copy_line || keep_prefix_lines.contains(&t.start_line.get())
                     });
                 }
-                super::token_utils::strip_trailing_commas(&mut node_holder_leaves);
+                detector::token_utils::strip_trailing_commas(&mut node_holder_leaves);
                 holder_tokens.extend(&node_holder_leaves);
 
                 let mut short_holder_tokens = holder_tokens.clone();
 
                 let node_ends_with_year = {
-                    let all_leaves = super::token_utils::collect_all_leaves(node);
+                    let all_leaves = detector::token_utils::collect_all_leaves(node);
                     let mut found = false;
                     for t in all_leaves.iter().rev() {
                         if t.tag == PosTag::Cc && t.value == "," {
-                            // Skip commas between years (e.g. "2006,")
                             continue;
                         }
-                        if super::token_utils::YEAR_LIKE_POS_TAGS.contains(&t.tag) {
+                        if detector::token_utils::YEAR_LIKE_POS_TAGS.contains(&t.tag) {
                             found = true;
                         }
-                        // Stop at first non-comma token (year or not)
                         break;
                     }
                     found
                 };
-                holder_tokens.extend(super::token_utils::filter_holder_tokens_with_state(
+                holder_tokens.extend(detector::token_utils::filter_holder_tokens_with_state(
                     &trailing_tokens,
-                    super::NON_HOLDER_POS_TAGS,
+                    detector::NON_HOLDER_POS_TAGS,
                     node_ends_with_year,
                 ));
-                let holder_tokens = super::token_utils::strip_all_rights_reserved(holder_tokens);
+                let holder_tokens = detector::token_utils::strip_all_rights_reserved(holder_tokens);
 
-                let full_holder = if let Some(det) = super::token_utils::build_holder_from_tokens(
+                let full_holder = if let Some(det) = detector::token_utils::build_holder_from_tokens(
                     &holder_tokens,
                     allow_single_word_contributors,
                 ) {
                     Some(det)
                 } else {
                     let mut holder_tokens_mini: Vec<&Token> = Vec::new();
-                    let node_holder_mini = super::token_utils::collect_holder_filtered_leaves(
+                    let node_holder_mini = detector::token_utils::collect_holder_filtered_leaves(
                         node,
-                        super::NON_HOLDER_LABELS_MINI,
-                        super::NON_HOLDER_POS_TAGS_MINI,
+                        detector::NON_HOLDER_LABELS_MINI,
+                        detector::NON_HOLDER_POS_TAGS_MINI,
                     );
                     let mut node_holder_mini =
-                        super::token_utils::strip_all_rights_reserved(node_holder_mini);
+                        detector::token_utils::strip_all_rights_reserved(node_holder_mini);
                     if let Some(copy_line) = copy_line {
                         node_holder_mini.retain(|t| {
                             t.start_line >= copy_line
                                 || keep_prefix_lines.contains(&t.start_line.get())
                         });
                     }
-                    super::token_utils::strip_trailing_commas(&mut node_holder_mini);
+                    detector::token_utils::strip_trailing_commas(&mut node_holder_mini);
                     holder_tokens_mini.extend(&node_holder_mini);
-                    let node_ends_with_year_mini = super::token_utils::collect_all_leaves(node)
+                    let node_ends_with_year_mini = detector::token_utils::collect_all_leaves(node)
                         .last()
-                        .is_some_and(|t| super::token_utils::YEAR_LIKE_POS_TAGS.contains(&t.tag));
-                    holder_tokens_mini.extend(super::token_utils::filter_holder_tokens_with_state(
-                        &trailing_tokens,
-                        super::NON_HOLDER_POS_TAGS_MINI,
-                        node_ends_with_year_mini,
-                    ));
+                        .is_some_and(|t| {
+                            detector::token_utils::YEAR_LIKE_POS_TAGS.contains(&t.tag)
+                        });
+                    holder_tokens_mini.extend(
+                        detector::token_utils::filter_holder_tokens_with_state(
+                            &trailing_tokens,
+                            detector::NON_HOLDER_POS_TAGS_MINI,
+                            node_ends_with_year_mini,
+                        ),
+                    );
                     let holder_tokens_mini =
-                        super::token_utils::strip_all_rights_reserved(holder_tokens_mini);
-                    super::token_utils::build_holder_from_tokens(
+                        detector::token_utils::strip_all_rights_reserved(holder_tokens_mini);
+                    detector::token_utils::build_holder_from_tokens(
                         &holder_tokens_mini,
                         allow_single_word_contributors,
                     )
@@ -784,8 +786,8 @@ pub fn extract_from_tree_nodes(
 
                 if emit_short_linux_variant {
                     short_holder_tokens =
-                        super::token_utils::strip_all_rights_reserved(short_holder_tokens);
-                    if let Some(short_det) = super::token_utils::build_holder_from_tokens(
+                        detector::token_utils::strip_all_rights_reserved(short_holder_tokens);
+                    if let Some(short_det) = detector::token_utils::build_holder_from_tokens(
                         &short_holder_tokens,
                         allow_single_word_contributors,
                     ) && full_holder
@@ -798,15 +800,16 @@ pub fn extract_from_tree_nodes(
                 i += skip;
             }
         } else if label == Some(TreeLabel::Author) {
-            if let Some(dets) = extract_sectioned_authors_from_author_node(node) {
+            if let Some(dets) = super::author::extract_sectioned_authors_from_author_node(node) {
                 authors.extend(dets);
                 i += 1;
                 continue;
             }
-            if let Some((det, skip)) = build_author_with_trailing(node, tree, i + 1) {
+            if let Some((det, skip)) = super::author::build_author_with_trailing(node, tree, i + 1)
+            {
                 authors.push(det);
                 i += skip;
-            } else if let Some(det) = super::token_utils::build_author_from_node(node) {
+            } else if let Some(det) = detector::token_utils::build_author_from_node(node) {
                 authors.push(det);
             }
         } else if let ParseNode::Leaf(token) = node
@@ -844,39 +847,39 @@ pub fn extract_from_tree_nodes(
                 }
                 cr_tokens.push(token);
                 cr_tokens.extend(extra_copy_tokens);
-                let name_leaves = super::token_utils::collect_filtered_leaves(
+                let name_leaves = detector::token_utils::collect_filtered_leaves(
                     next,
-                    super::NON_COPYRIGHT_LABELS,
-                    super::NON_COPYRIGHT_POS_TAGS,
+                    detector::NON_COPYRIGHT_LABELS,
+                    detector::NON_COPYRIGHT_POS_TAGS,
                 );
-                let name_leaves = super::token_utils::strip_all_rights_reserved(name_leaves);
+                let name_leaves = detector::token_utils::strip_all_rights_reserved(name_leaves);
                 cr_tokens.extend(&name_leaves);
                 let allow_single_word_contributors = cr_tokens
                     .iter()
                     .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
-                if let Some(det) = super::token_utils::build_copyright_from_tokens(&cr_tokens) {
+                if let Some(det) = detector::token_utils::build_copyright_from_tokens(&cr_tokens) {
                     copyrights.push(det);
                 }
 
-                let holder_leaves = super::token_utils::collect_holder_filtered_leaves(
+                let holder_leaves = detector::token_utils::collect_holder_filtered_leaves(
                     next,
-                    super::NON_HOLDER_LABELS,
-                    super::NON_HOLDER_POS_TAGS,
+                    detector::NON_HOLDER_LABELS,
+                    detector::NON_HOLDER_POS_TAGS,
                 );
-                let holder_leaves = super::token_utils::strip_all_rights_reserved(holder_leaves);
-                if let Some(det) = super::token_utils::build_holder_from_tokens(
+                let holder_leaves = detector::token_utils::strip_all_rights_reserved(holder_leaves);
+                if let Some(det) = detector::token_utils::build_holder_from_tokens(
                     &holder_leaves,
                     allow_single_word_contributors,
                 ) {
                     holders.push(det);
                 } else {
-                    let holder_mini = super::token_utils::collect_holder_filtered_leaves(
+                    let holder_mini = detector::token_utils::collect_holder_filtered_leaves(
                         next,
-                        super::NON_HOLDER_LABELS_MINI,
-                        super::NON_HOLDER_POS_TAGS_MINI,
+                        detector::NON_HOLDER_LABELS_MINI,
+                        detector::NON_HOLDER_POS_TAGS_MINI,
                     );
-                    let holder_mini = super::token_utils::strip_all_rights_reserved(holder_mini);
-                    if let Some(det) = super::token_utils::build_holder_from_tokens(
+                    let holder_mini = detector::token_utils::strip_all_rights_reserved(holder_mini);
+                    if let Some(det) = detector::token_utils::build_holder_from_tokens(
                         &holder_mini,
                         allow_single_word_contributors,
                     ) {
@@ -886,14 +889,14 @@ pub fn extract_from_tree_nodes(
                 i = name_idx + 1;
                 continue;
             }
-        } else if let Some((det, skip)) = try_extract_orphaned_by_author(tree, i) {
+        } else if let Some((det, skip)) = super::author::try_extract_orphaned_by_author(tree, i) {
             authors.push(det);
             i += skip;
-        } else if let Some((det, skip)) = try_extract_date_by_author(tree, i) {
+        } else if let Some((det, skip)) = super::author::try_extract_date_by_author(tree, i) {
             authors.push(det);
             i += skip;
         } else if !group_has_copyright
-            && let Some((det, skip)) = try_extract_by_name_email_author(tree, i)
+            && let Some((det, skip)) = super::author::try_extract_by_name_email_author(tree, i)
         {
             authors.push(det);
             i += skip;
@@ -915,7 +918,7 @@ fn merge_copyright_with_following_author<'a>(
         return None;
     }
 
-    let author_leaves = super::token_utils::collect_all_leaves(author_node);
+    let author_leaves = detector::token_utils::collect_all_leaves(author_node);
 
     let auth_token = author_leaves
         .iter()
@@ -924,7 +927,7 @@ fn merge_copyright_with_following_author<'a>(
         return None;
     }
 
-    let cr_leaves_all = super::token_utils::collect_all_leaves(copyright_node);
+    let cr_leaves_all = detector::token_utils::collect_all_leaves(copyright_node);
     let cr_last_line = cr_leaves_all
         .last()
         .map(|t| t.start_line)
@@ -979,72 +982,19 @@ fn merge_copyright_with_following_author<'a>(
     if let Some(prefix) = prefix_token {
         cr_tokens.push(prefix);
     }
-    let cr_leaves = super::token_utils::collect_filtered_leaves(
+    let cr_leaves = detector::token_utils::collect_filtered_leaves(
         copyright_node,
-        super::NON_COPYRIGHT_LABELS,
-        super::NON_COPYRIGHT_POS_TAGS,
+        detector::NON_COPYRIGHT_LABELS,
+        detector::NON_COPYRIGHT_POS_TAGS,
     );
-    let cr_leaves = super::token_utils::strip_all_rights_reserved(cr_leaves);
+    let cr_leaves = detector::token_utils::strip_all_rights_reserved(cr_leaves);
     cr_tokens.extend(&cr_leaves);
 
     cr_tokens.extend(author_tail);
 
-    let cr_det = super::token_utils::build_copyright_from_tokens(&cr_tokens)?;
+    let cr_det = detector::token_utils::build_copyright_from_tokens(&cr_tokens)?;
 
     Some((cr_det, None, 0))
-}
-
-fn extract_sectioned_authors_from_author_node(node: &ParseNode) -> Option<Vec<AuthorDetection>> {
-    let all_leaves = super::token_utils::collect_all_leaves(node);
-    let mut header_lines: Vec<LineNumber> = Vec::new();
-    for t in &all_leaves {
-        let v = t
-            .value
-            .trim_matches(|c: char| c.is_ascii_punctuation())
-            .to_ascii_lowercase();
-        let is_section_header = v.starts_with("author")
-            || v.starts_with("contributor")
-            || v.starts_with("committer")
-            || v.starts_with("maintainer");
-
-        if (is_section_header
-            || matches!(
-                t.tag,
-                PosTag::Auth
-                    | PosTag::Auth2
-                    | PosTag::Auths
-                    | PosTag::AuthDot
-                    | PosTag::Maint
-                    | PosTag::Contributors
-                    | PosTag::Commit
-                    | PosTag::SpdxContrib
-            ))
-            && header_lines.last().copied() != Some(t.start_line)
-        {
-            header_lines.push(t.start_line);
-        }
-    }
-    if header_lines.len() < 2 {
-        return None;
-    }
-
-    let mut result: Vec<AuthorDetection> = Vec::new();
-    for line in header_lines {
-        let tokens: Vec<&Token> = all_leaves
-            .iter()
-            .copied()
-            .filter(|t| t.start_line == line && !super::NON_AUTHOR_POS_TAGS.contains(&t.tag))
-            .collect();
-        if let Some(det) = super::token_utils::build_author_from_tokens(&tokens) {
-            result.push(det);
-        }
-    }
-
-    if result.len() >= 2 {
-        Some(result)
-    } else {
-        None
-    }
 }
 
 fn get_orphaned_copy_prefix(tree: &[ParseNode], idx: usize) -> Option<&Token> {
@@ -1103,7 +1053,7 @@ fn get_orphaned_not_prefix<'a>(
     if idx == 0 {
         return None;
     }
-    let first_line = super::token_utils::collect_all_leaves(copyright_node)
+    let first_line = detector::token_utils::collect_all_leaves(copyright_node)
         .first()
         .map(|t| t.start_line)?;
     let prev = &tree[idx - 1];
@@ -1112,7 +1062,7 @@ fn get_orphaned_not_prefix<'a>(
         && token.value.eq_ignore_ascii_case("not")
     {
         for n in &tree[..idx - 1] {
-            for t in super::token_utils::collect_all_leaves(n) {
+            for t in detector::token_utils::collect_all_leaves(n) {
                 if t.start_line != first_line {
                     continue;
                 }
@@ -1152,11 +1102,6 @@ fn looks_like_filename_prefix_token(token: &Token) -> bool {
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '+'))
 }
 
-/// Check if a Copyright node is followed by a trailing YrRange/YrAnd that
-/// should be part of the copyright statement (e.g. "Copyright (c) Company 2008"
-/// where the grammar placed the year outside the Copyright tree).
-///
-/// Returns the year tokens and how many tree nodes to skip, or None.
 fn get_trailing_year_range<'a>(
     copyright_node: &ParseNode,
     tree: &'a [ParseNode],
@@ -1173,13 +1118,13 @@ fn get_trailing_year_range<'a>(
     if !is_yr_tree {
         return None;
     }
-    let node_has_year = super::token_utils::collect_all_leaves(copyright_node)
+    let node_has_year = detector::token_utils::collect_all_leaves(copyright_node)
         .iter()
         .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
     if node_has_year {
         return None;
     }
-    let yr_tokens = super::token_utils::collect_all_leaves(next);
+    let yr_tokens = detector::token_utils::collect_all_leaves(next);
     Some((yr_tokens, 1))
 }
 
@@ -1269,7 +1214,7 @@ fn is_same_line_holder_suffix_prefix(tree: &[ParseNode], idx: usize, line: LineN
     let Some(node) = tree.get(idx) else {
         return false;
     };
-    let leaves = super::token_utils::collect_all_leaves(node);
+    let leaves = detector::token_utils::collect_all_leaves(node);
     let Some(first_token) = leaves.first() else {
         return false;
     };
@@ -1296,7 +1241,7 @@ fn is_same_line_holder_suffix_prefix(tree: &[ParseNode], idx: usize, line: LineN
 
     let end = std::cmp::min(idx + 6, tree.len());
     tree[idx..end].iter().any(|node| {
-        super::token_utils::collect_all_leaves(node)
+        detector::token_utils::collect_all_leaves(node)
             .iter()
             .any(|token| {
                 token.start_line == line
@@ -1314,7 +1259,7 @@ fn has_same_line_confidential_proprietary_suffix(
     start: usize,
     line: LineNumber,
 ) -> bool {
-    let node_has_confidential = super::token_utils::collect_all_leaves(copyright_node)
+    let node_has_confidential = detector::token_utils::collect_all_leaves(copyright_node)
         .iter()
         .any(|t| t.start_line == line && t.value.eq_ignore_ascii_case("Confidential"));
     if !node_has_confidential {
@@ -1323,7 +1268,7 @@ fn has_same_line_confidential_proprietary_suffix(
 
     let end = std::cmp::min(start + 6, tree.len());
     tree[start + 1..end].iter().any(|node| {
-        super::token_utils::collect_all_leaves(node)
+        detector::token_utils::collect_all_leaves(node)
             .iter()
             .any(|token| {
                 token.start_line == line
@@ -1339,7 +1284,7 @@ fn is_orphan_copy_name_match(node: &ParseNode) -> bool {
     match node.label() {
         Some(TreeLabel::NameYear) | Some(TreeLabel::NameEmail) | Some(TreeLabel::Company) => true,
         Some(TreeLabel::Name | TreeLabel::NameCaps) => {
-            let leaves = super::token_utils::collect_all_leaves(node);
+            let leaves = detector::token_utils::collect_all_leaves(node);
             leaves
                 .iter()
                 .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr))
@@ -1384,17 +1329,17 @@ pub fn should_start_absorbing(
     }
     let first = &tree[start];
 
-    let last_line = super::token_utils::collect_all_leaves(copyright_node)
+    let last_line = detector::token_utils::collect_all_leaves(copyright_node)
         .last()
         .map(|t| t.start_line);
 
     if last_line.is_some()
         && last_line
-            == super::token_utils::collect_all_leaves(first)
+            == detector::token_utils::collect_all_leaves(first)
                 .first()
                 .map(|t| t.start_line)
     {
-        let last_tag = super::token_utils::collect_all_leaves(copyright_node)
+        let last_tag = detector::token_utils::collect_all_leaves(copyright_node)
             .last()
             .map(|t| t.tag);
         if matches!(
@@ -1422,10 +1367,10 @@ pub fn should_start_absorbing(
         )
     {
         let same_line = last_line.is_some_and(|l| l == token.start_line);
-        let node_has_year = super::token_utils::collect_all_leaves(copyright_node)
+        let node_has_year = detector::token_utils::collect_all_leaves(copyright_node)
             .iter()
             .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
-        let has_holder_like_tokens = super::token_utils::collect_all_leaves(copyright_node)
+        let has_holder_like_tokens = detector::token_utils::collect_all_leaves(copyright_node)
             .iter()
             .any(|t| {
                 matches!(
@@ -1452,7 +1397,7 @@ pub fn should_start_absorbing(
         ..
     } = first
     {
-        let leaves = super::token_utils::collect_all_leaves(first);
+        let leaves = detector::token_utils::collect_all_leaves(first);
         let same_line =
             !leaves.is_empty() && leaves.iter().all(|t| last_line == Some(t.start_line));
         let has_author_keyword = leaves.iter().any(|t| {
@@ -1462,7 +1407,7 @@ pub fn should_start_absorbing(
             )
         });
         if same_line && has_author_keyword {
-            let node_has_year = super::token_utils::collect_all_leaves(copyright_node)
+            let node_has_year = detector::token_utils::collect_all_leaves(copyright_node)
                 .iter()
                 .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
             if node_has_year {
@@ -1482,10 +1427,10 @@ pub fn should_start_absorbing(
         && token.tag == PosTag::By
         && last_line.is_some_and(|l| l == token.start_line)
     {
-        let node_has_holder = super::token_utils::build_holder_from_node(
+        let node_has_holder = detector::token_utils::build_holder_from_node(
             copyright_node,
-            super::NON_HOLDER_LABELS,
-            super::NON_HOLDER_POS_TAGS,
+            detector::NON_HOLDER_LABELS,
+            detector::NON_HOLDER_POS_TAGS,
         )
         .is_some();
         if !node_has_holder && has_name_like_within(tree, start + 1, 3) {
@@ -1499,13 +1444,13 @@ pub fn should_start_absorbing(
     {
         let end = std::cmp::min(start + 5, tree.len());
         let has_company_suffix = tree[start..end].iter().any(|n| {
-            super::token_utils::collect_all_leaves(n)
+            detector::token_utils::collect_all_leaves(n)
                 .iter()
                 .any(|t| t.tag == PosTag::Comp)
         });
         let has_comma_boundary = token.value.ends_with(',')
             || tree.get(start + 1).is_some_and(|n| {
-                super::token_utils::collect_all_leaves(n)
+                detector::token_utils::collect_all_leaves(n)
                     .iter()
                     .any(|t| t.value == ",")
             });
@@ -1520,7 +1465,7 @@ pub fn should_start_absorbing(
     {
         let end = std::cmp::min(start + 5, tree.len());
         let has_email = tree[start..end].iter().any(|n| {
-            super::token_utils::collect_all_leaves(n)
+            detector::token_utils::collect_all_leaves(n)
                 .iter()
                 .any(|t| t.tag == PosTag::Email)
         });
@@ -1534,14 +1479,16 @@ pub fn should_start_absorbing(
     {
         let end = std::cmp::min(start + 8, tree.len());
         let has_expected_title = tree[start..end].iter().any(|n| {
-            super::token_utils::collect_all_leaves(n).iter().any(|t| {
-                t.value.eq_ignore_ascii_case("secretary")
-                    || t.value.eq_ignore_ascii_case("administrator")
-            })
+            detector::token_utils::collect_all_leaves(n)
+                .iter()
+                .any(|t| {
+                    t.value.eq_ignore_ascii_case("secretary")
+                        || t.value.eq_ignore_ascii_case("administrator")
+                })
         });
         if has_expected_title {
             let same_line = last_line.is_some_and(|l| l == token.start_line);
-            let has_holder_like_tokens = super::token_utils::collect_all_leaves(copyright_node)
+            let has_holder_like_tokens = detector::token_utils::collect_all_leaves(copyright_node)
                 .iter()
                 .any(|t| {
                     matches!(
@@ -1588,13 +1535,15 @@ pub fn should_start_absorbing(
     {
         let end = std::cmp::min(start + 6, tree.len());
         let suffix_boundary_on_same_line = tree[start..end].iter().any(|n| {
-            super::token_utils::collect_all_leaves(n).iter().any(|t| {
-                t.start_line == token.start_line
-                    && matches!(
-                        t.tag,
-                        PosTag::Auths | PosTag::AuthDot | PosTag::Contributors | PosTag::Commit
-                    )
-            })
+            detector::token_utils::collect_all_leaves(n)
+                .iter()
+                .any(|t| {
+                    t.start_line == token.start_line
+                        && matches!(
+                            t.tag,
+                            PosTag::Auths | PosTag::AuthDot | PosTag::Contributors | PosTag::Commit
+                        )
+                })
         });
         if suffix_boundary_on_same_line {
             return true;
@@ -1609,7 +1558,7 @@ pub fn should_start_absorbing(
         let has_expected_continuation = tree[start + 1..end].iter().any(|n| {
             is_name_continuation(n)
                 || matches!(n.label(), Some(TreeLabel::YrRange) | Some(TreeLabel::YrAnd))
-                || super::token_utils::collect_all_leaves(n)
+                || detector::token_utils::collect_all_leaves(n)
                     .iter()
                     .any(|t| t.tag == PosTag::Maint)
         });
@@ -1637,13 +1586,13 @@ pub fn should_start_absorbing(
             ..
         } = first
     {
-        let leaves = super::token_utils::collect_all_leaves(first);
+        let leaves = detector::token_utils::collect_all_leaves(first);
         let same_line = !leaves.is_empty()
             && last_line.is_some_and(|l| leaves.first().is_some_and(|t| t.start_line == l));
-        let node_has_year = super::token_utils::collect_all_leaves(copyright_node)
+        let node_has_year = detector::token_utils::collect_all_leaves(copyright_node)
             .iter()
             .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
-        let last_tag = super::token_utils::collect_all_leaves(copyright_node)
+        let last_tag = detector::token_utils::collect_all_leaves(copyright_node)
             .last()
             .map(|t| t.tag);
         if same_line && node_has_year && matches!(last_tag, Some(PosTag::Caps)) {
@@ -1655,7 +1604,6 @@ pub fn should_start_absorbing(
         ParseNode::Leaf(token) if token.tag == PosTag::Of || token.tag == PosTag::Van => {
             has_name_like_within(tree, start + 1, 2)
         }
-
         ParseNode::Tree { label, .. } => matches!(
             label,
             TreeLabel::Name
@@ -1674,7 +1622,7 @@ pub fn should_start_absorbing(
     }
 
     if last_leaf_ends_with_comma(copyright_node) {
-        let node_has_year = super::token_utils::collect_all_leaves(copyright_node)
+        let node_has_year = detector::token_utils::collect_all_leaves(copyright_node)
             .iter()
             .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
         if node_has_year {
@@ -1707,14 +1655,14 @@ pub fn should_start_absorbing(
         && last_line.is_some_and(|l| l == token.start_line)
         && has_company_signal_nearby(tree, start)
     {
-        let copy_count = super::token_utils::collect_all_leaves(copyright_node)
+        let copy_count = detector::token_utils::collect_all_leaves(copyright_node)
             .iter()
             .filter(|t| t.tag == PosTag::Copy)
             .count();
         if copy_count != 1 {
             return false;
         }
-        let has_holder_like_tokens = super::token_utils::collect_all_leaves(copyright_node)
+        let has_holder_like_tokens = detector::token_utils::collect_all_leaves(copyright_node)
             .iter()
             .any(|t| {
                 matches!(
@@ -1799,7 +1747,7 @@ fn has_company_signal_nearby(tree: &[ParseNode], start: usize) -> bool {
 }
 
 fn last_leaf_ends_with_comma(node: &ParseNode) -> bool {
-    let leaves = super::token_utils::collect_all_leaves(node);
+    let leaves = detector::token_utils::collect_all_leaves(node);
     leaves.last().is_some_and(|t| t.value.ends_with(','))
 }
 
@@ -1816,7 +1764,7 @@ pub fn collect_trailing_orphan_tokens<'a>(
         copyright_node: &ParseNode,
         node: &ParseNode,
     ) -> bool {
-        let last_line = super::token_utils::collect_all_leaves(copyright_node)
+        let last_line = detector::token_utils::collect_all_leaves(copyright_node)
             .last()
             .map(|t| t.start_line);
         let Some(last_line) = last_line else {
@@ -1839,7 +1787,7 @@ pub fn collect_trailing_orphan_tokens<'a>(
                 label: TreeLabel::Author | TreeLabel::AndAuth,
                 ..
             } => {
-                let leaves = super::token_utils::collect_all_leaves(node);
+                let leaves = detector::token_utils::collect_all_leaves(node);
                 !leaves.is_empty()
                     && leaves.iter().all(|t| t.start_line == last_line)
                     && leaves.iter().any(|t| {
@@ -1860,7 +1808,7 @@ pub fn collect_trailing_orphan_tokens<'a>(
     let mut tokens: Vec<&Token> = Vec::new();
     let mut j = start;
 
-    let last_line = super::token_utils::collect_all_leaves(copyright_node)
+    let last_line = detector::token_utils::collect_all_leaves(copyright_node)
         .last()
         .map(|t| t.start_line);
 
@@ -1873,7 +1821,7 @@ pub fn collect_trailing_orphan_tokens<'a>(
                 Some(TreeLabel::Copyright) | Some(TreeLabel::Copyright2)
             )
         {
-            let leaves = super::token_utils::collect_all_leaves(node);
+            let leaves = detector::token_utils::collect_all_leaves(node);
             if leaves.first().is_some_and(|t| t.start_line > last_line) {
                 break;
             }
@@ -1907,7 +1855,7 @@ pub fn collect_trailing_orphan_tokens<'a>(
             break;
         }
 
-        let leaves = super::token_utils::collect_all_leaves(node);
+        let leaves = detector::token_utils::collect_all_leaves(node);
         let already_have_url = tokens
             .iter()
             .any(|t| matches!(t.tag, PosTag::Url | PosTag::Url2));
@@ -1947,7 +1895,7 @@ fn collect_following_copyright_clause_tokens(
 
     while j < max_nodes {
         let node = &tree[j];
-        let leaves = super::token_utils::collect_all_leaves(node);
+        let leaves = detector::token_utils::collect_all_leaves(node);
         if leaves.first().is_none_or(|t| t.start_line != line) {
             break;
         }
@@ -1999,7 +1947,7 @@ fn is_year_only_copyright_clause_node(node: &ParseNode) -> bool {
         return false;
     }
 
-    let leaves = super::token_utils::collect_all_leaves(node);
+    let leaves = detector::token_utils::collect_all_leaves(node);
     let has_year = leaves
         .iter()
         .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
@@ -2007,16 +1955,16 @@ fn is_year_only_copyright_clause_node(node: &ParseNode) -> bool {
         return false;
     }
 
-    let has_holder = super::token_utils::build_holder_from_node(
+    let has_holder = detector::token_utils::build_holder_from_node(
         node,
-        super::NON_HOLDER_LABELS,
-        super::NON_HOLDER_POS_TAGS,
+        detector::NON_HOLDER_LABELS,
+        detector::NON_HOLDER_POS_TAGS,
     )
     .is_some()
-        || super::token_utils::build_holder_from_node(
+        || detector::token_utils::build_holder_from_node(
             node,
-            super::NON_HOLDER_LABELS_MINI,
-            super::NON_HOLDER_POS_TAGS_MINI,
+            detector::NON_HOLDER_LABELS_MINI,
+            detector::NON_HOLDER_POS_TAGS_MINI,
         )
         .is_some();
     !has_holder
@@ -2037,7 +1985,7 @@ fn merge_year_only_copyright_clause_with_preceding_copyrighted_by(
         return None;
     }
 
-    let node_line = super::token_utils::collect_all_leaves(node)
+    let node_line = detector::token_utils::collect_all_leaves(node)
         .first()
         .map(|t| t.start_line)?;
 
@@ -2046,7 +1994,7 @@ fn merge_year_only_copyright_clause_with_preceding_copyrighted_by(
 
     let start_search = copyright_idx.saturating_sub(14);
     for idx in (start_search..copyright_idx).rev() {
-        let leaves = super::token_utils::collect_all_leaves(&tree[idx]);
+        let leaves = detector::token_utils::collect_all_leaves(&tree[idx]);
         if leaves.first().is_none_or(|t| t.start_line != node_line) {
             continue;
         }
@@ -2066,7 +2014,7 @@ fn merge_year_only_copyright_clause_with_preceding_copyrighted_by(
         .take(copyright_idx)
         .skip(copyrighted_idx + 1)
     {
-        let leaves = super::token_utils::collect_all_leaves(node);
+        let leaves = detector::token_utils::collect_all_leaves(node);
         if leaves.first().is_none_or(|t| t.start_line != node_line) {
             break;
         }
@@ -2085,7 +2033,7 @@ fn merge_year_only_copyright_clause_with_preceding_copyrighted_by(
     }
 
     let has_comma_boundary = (by_idx + 1..copyright_idx).any(|idx| {
-        super::token_utils::collect_all_leaves(&tree[idx])
+        detector::token_utils::collect_all_leaves(&tree[idx])
             .iter()
             .any(|t| t.value == "," || t.tag == PosTag::Cc || t.value.ends_with(','))
     });
@@ -2105,538 +2053,25 @@ fn merge_year_only_copyright_clause_with_preceding_copyrighted_by(
     }
 
     for node in tree.iter().take(copyright_idx + 1).skip(copyrighted_idx) {
-        cr_tokens.extend(super::token_utils::collect_all_leaves(node));
+        cr_tokens.extend(detector::token_utils::collect_all_leaves(node));
     }
-    let cr_tokens = super::token_utils::strip_all_rights_reserved(cr_tokens);
-    let cr_det = super::token_utils::build_copyright_from_tokens(&cr_tokens)?;
+    let cr_tokens = detector::token_utils::strip_all_rights_reserved(cr_tokens);
+    let cr_det = detector::token_utils::build_copyright_from_tokens(&cr_tokens)?;
 
     let mut holder_tokens: Vec<&Token> = Vec::new();
     for node in tree.iter().take(copyright_idx).skip(by_idx + 1) {
-        holder_tokens.extend(super::token_utils::collect_all_leaves(node));
+        holder_tokens.extend(detector::token_utils::collect_all_leaves(node));
     }
-    let holder_tokens = super::token_utils::strip_all_rights_reserved(holder_tokens);
+    let holder_tokens = detector::token_utils::strip_all_rights_reserved(holder_tokens);
     let allow_single_word_contributors = holder_tokens
         .iter()
         .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
-    let holder_det = super::token_utils::build_holder_from_tokens(
+    let holder_det = detector::token_utils::build_holder_from_tokens(
         &holder_tokens,
         allow_single_word_contributors,
     )?;
 
     Some((cr_det, holder_det))
-}
-
-const AUTHOR_BY_KEYWORDS: &[&str] = &[
-    "originally",
-    "modified",
-    "contributed",
-    "adapted",
-    "hacking",
-    "ported",
-    "patches",
-];
-
-fn is_line_initial_keyword(tree: &[ParseNode], idx: usize, keyword_line: LineNumber) -> bool {
-    if idx == 0 {
-        return true;
-    }
-    let prev = &tree[idx - 1];
-    match prev {
-        ParseNode::Tree { label, .. } => {
-            if matches!(
-                label,
-                TreeLabel::Copyright | TreeLabel::Copyright2 | TreeLabel::Author
-            ) {
-                return true;
-            }
-            let leaves = super::token_utils::collect_all_leaves(prev);
-            leaves.last().is_none_or(|t| t.start_line != keyword_line)
-        }
-        ParseNode::Leaf(token) => token.start_line != keyword_line,
-    }
-}
-
-fn try_extract_orphaned_by_author(
-    tree: &[ParseNode],
-    idx: usize,
-) -> Option<(AuthorDetection, usize)> {
-    let node = &tree[idx];
-    let (keyword, keyword_line) = match node {
-        ParseNode::Leaf(token)
-            if matches!(token.tag, PosTag::Junk | PosTag::Nn | PosTag::Auth2) =>
-        {
-            (token.value.to_lowercase(), token.start_line)
-        }
-        _ => return None,
-    };
-
-    if !AUTHOR_BY_KEYWORDS.contains(&keyword.as_str()) {
-        return None;
-    }
-
-    if idx > 0 && !is_line_initial_keyword(tree, idx, keyword_line) {
-        return None;
-    }
-
-    let by_idx = idx + 1;
-    if by_idx >= tree.len() {
-        return None;
-    }
-    match &tree[by_idx] {
-        ParseNode::Leaf(token) if token.tag == PosTag::By => {}
-        _ => return None,
-    }
-
-    let name_idx = by_idx + 1;
-    if name_idx >= tree.len() {
-        return None;
-    }
-
-    let mut author_tokens: Vec<&Token> = Vec::new();
-    let mut consumed = name_idx - idx;
-
-    let mut j = name_idx;
-    while j < tree.len() {
-        match &tree[j] {
-            ParseNode::Tree {
-                label:
-                    TreeLabel::Name | TreeLabel::NameEmail | TreeLabel::NameYear | TreeLabel::Company,
-                ..
-            } => {
-                let leaves = super::token_utils::collect_filtered_leaves(
-                    &tree[j],
-                    &[TreeLabel::YrRange, TreeLabel::YrAnd],
-                    super::NON_AUTHOR_POS_TAGS,
-                );
-                author_tokens.extend(leaves);
-                consumed = j - idx;
-                j += 1;
-            }
-            ParseNode::Leaf(token)
-                if matches!(
-                    token.tag,
-                    PosTag::Nnp | PosTag::Nn | PosTag::Email | PosTag::Url
-                ) =>
-            {
-                if is_author_tail_preposition(token) {
-                    break;
-                }
-                author_tokens.push(token);
-                consumed = j - idx;
-                j += 1;
-            }
-            _ => break,
-        }
-    }
-
-    if author_tokens.is_empty() {
-        return None;
-    }
-
-    let det = super::token_utils::build_author_from_tokens(&author_tokens)?;
-    Some((det, consumed))
-}
-
-fn try_extract_date_by_author(tree: &[ParseNode], idx: usize) -> Option<(AuthorDetection, usize)> {
-    let node = &tree[idx];
-    match node {
-        ParseNode::Leaf(token) if token.tag == PosTag::By => {}
-        _ => return None,
-    }
-
-    if idx == 0 {
-        return None;
-    }
-    let prev_is_date = match &tree[idx - 1] {
-        ParseNode::Leaf(token) => matches!(token.tag, PosTag::Yr | PosTag::BareYr),
-        ParseNode::Tree { label, .. } => matches!(label, TreeLabel::YrRange | TreeLabel::YrAnd),
-    };
-    if !prev_is_date {
-        return None;
-    }
-
-    let name_idx = idx + 1;
-    if name_idx >= tree.len() {
-        return None;
-    }
-
-    let mut author_tokens: Vec<&Token> = Vec::new();
-    let mut consumed = name_idx - idx;
-
-    let mut j = name_idx;
-    while j < tree.len() {
-        match &tree[j] {
-            ParseNode::Tree {
-                label:
-                    TreeLabel::Name | TreeLabel::NameEmail | TreeLabel::NameYear | TreeLabel::Company,
-                ..
-            } => {
-                let leaves = super::token_utils::collect_filtered_leaves(
-                    &tree[j],
-                    &[TreeLabel::YrRange, TreeLabel::YrAnd],
-                    super::NON_AUTHOR_POS_TAGS,
-                );
-                author_tokens.extend(leaves);
-                consumed = j - idx;
-                j += 1;
-            }
-            ParseNode::Leaf(token)
-                if matches!(
-                    token.tag,
-                    PosTag::Nnp | PosTag::Nn | PosTag::Email | PosTag::Url
-                ) =>
-            {
-                if is_author_tail_preposition(token) {
-                    break;
-                }
-                author_tokens.push(token);
-                consumed = j - idx;
-                j += 1;
-            }
-            _ => break,
-        }
-    }
-
-    if author_tokens.is_empty() {
-        return None;
-    }
-
-    let det = super::token_utils::build_author_from_tokens(&author_tokens)?;
-    if super::token_utils::looks_like_bad_generic_author_candidate(&det.author) {
-        return None;
-    }
-    Some((det, consumed))
-}
-
-fn is_author_tail_preposition(token: &Token) -> bool {
-    token.tag == PosTag::Nn
-        && matches!(
-            token.value.to_ascii_lowercase().as_str(),
-            "in" | "for" | "to" | "from" | "by"
-        )
-}
-
-fn try_extract_by_name_email_author(
-    tree: &[ParseNode],
-    idx: usize,
-) -> Option<(AuthorDetection, usize)> {
-    let by_token = match &tree[idx] {
-        ParseNode::Leaf(token) if token.tag == PosTag::By => token,
-        _ => return None,
-    };
-
-    let by_line = by_token.start_line;
-
-    // Require at least 2 preceding tokens on the same line as "by".
-    // This allows "for Linux by Erik" but blocks "Debianized by Norbert"
-    // where a single verb before "by" indicates a contextual phrase.
-    let mut same_line_preceding = 0;
-    for j in (0..idx).rev() {
-        let leaves = super::token_utils::collect_all_leaves(&tree[j]);
-        for leaf in &leaves {
-            if leaf.start_line == by_line {
-                same_line_preceding += 1;
-            }
-        }
-    }
-    if same_line_preceding < 2 {
-        return None;
-    }
-
-    let name_idx = idx + 1;
-    if name_idx >= tree.len() {
-        return None;
-    }
-
-    let name_node = &tree[name_idx];
-    match name_node.label() {
-        Some(
-            TreeLabel::NameYear | TreeLabel::NameEmail | TreeLabel::Name | TreeLabel::NameCaps,
-        ) => {}
-        _ => return None,
-    }
-
-    let all_leaves = super::token_utils::collect_all_leaves(name_node);
-    let has_email = all_leaves.iter().any(|t| t.tag == PosTag::Email);
-    if !has_email {
-        return None;
-    }
-
-    let author_tokens: Vec<&Token> = super::token_utils::collect_filtered_leaves(
-        name_node,
-        &[TreeLabel::YrRange, TreeLabel::YrAnd],
-        super::NON_AUTHOR_POS_TAGS,
-    );
-
-    let det = super::token_utils::build_author_from_tokens(&author_tokens)?;
-    Some((det, 1))
-}
-
-fn build_author_with_trailing(
-    node: &ParseNode,
-    tree: &[ParseNode],
-    start: usize,
-) -> Option<(AuthorDetection, usize)> {
-    if start >= tree.len() {
-        return None;
-    }
-    match &tree[start] {
-        ParseNode::Leaf(token) if matches!(token.tag, PosTag::Email | PosTag::Url) => {}
-        _ => return None,
-    }
-
-    let all_leaves = super::token_utils::collect_all_leaves(node);
-    let last_leaf = all_leaves.last()?;
-    let last_is_email_with_comma =
-        matches!(last_leaf.tag, PosTag::Email | PosTag::Url) && last_leaf.value.ends_with(',');
-    if !last_is_email_with_comma {
-        return None;
-    }
-
-    let mut author_tokens: Vec<&Token> = super::token_utils::collect_filtered_leaves(
-        node,
-        &[TreeLabel::YrRange, TreeLabel::YrAnd],
-        super::NON_AUTHOR_POS_TAGS,
-    );
-
-    let mut j = start;
-    while j < tree.len() {
-        match &tree[j] {
-            ParseNode::Leaf(token)
-                if matches!(token.tag, PosTag::Email | PosTag::Url | PosTag::Cc) =>
-            {
-                if !super::NON_AUTHOR_POS_TAGS.contains(&token.tag) {
-                    author_tokens.push(token);
-                }
-                j += 1;
-            }
-            _ => break,
-        }
-    }
-
-    let skip = j - start;
-    if skip == 0 {
-        return None;
-    }
-    let det = super::token_utils::build_author_from_tokens(&author_tokens)?;
-    Some((det, skip))
-}
-
-fn extract_author_from_copyright_node(node: &ParseNode) -> Option<AuthorDetection> {
-    static INLINE_ATTRIBUTION_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(
-            r"(?i)(?:\(|\b)(?:written|authored|created|developed)\s+by\s+(?P<who>[A-Z][^()]*?)(?:\)|$)",
-        )
-        .unwrap()
-    });
-
-    let all_leaves = super::token_utils::collect_all_leaves(node);
-    if all_leaves.len() < 2 {
-        return None;
-    }
-
-    let raw_text = super::token_utils::normalize_whitespace(
-        &all_leaves
-            .iter()
-            .map(|t| t.value.as_str())
-            .collect::<Vec<_>>()
-            .join(" "),
-    );
-    if let Some(cap) = INLINE_ATTRIBUTION_RE.captures(&raw_text) {
-        let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
-        if !who.is_empty()
-            && let Some(author) = refine_author(who)
-        {
-            let start_line = all_leaves.first()?.start_line;
-            let end_line = all_leaves.last()?.start_line;
-            return Some(AuthorDetection {
-                author,
-                start_line,
-                end_line,
-            });
-        }
-    }
-
-    let auth_idx = all_leaves.iter().position(|t| {
-        matches!(
-            t.tag,
-            PosTag::Auth | PosTag::Auth2 | PosTag::Auths | PosTag::AuthDot
-        )
-    })?;
-
-    // Only extract if the auth token is on a DIFFERENT line than the preceding
-    // token — prevents "OProfile authors" from being extracted as an author.
-    if auth_idx > 0 && all_leaves[auth_idx].start_line == all_leaves[auth_idx - 1].start_line {
-        return None;
-    }
-
-    let auth_line = all_leaves[auth_idx].start_line;
-    let after_auth = &all_leaves[auth_idx + 1..];
-
-    let has_name_on_same_line = after_auth.iter().any(|t| {
-        t.start_line == auth_line
-            && !super::NON_AUTHOR_POS_TAGS.contains(&t.tag)
-            && !matches!(t.tag, PosTag::Email | PosTag::Url)
-    });
-    if !has_name_on_same_line {
-        return None;
-    }
-
-    let has_email = after_auth.iter().any(|t| t.tag == PosTag::Email);
-    if !has_email {
-        return None;
-    }
-
-    let author_tokens: Vec<&Token> = after_auth
-        .iter()
-        .copied()
-        .filter(|t| !super::NON_AUTHOR_POS_TAGS.contains(&t.tag))
-        .collect();
-
-    super::token_utils::build_author_from_tokens(&author_tokens)
-}
-
-pub fn extract_orphaned_by_authors(tree: &[ParseNode]) -> Vec<AuthorDetection> {
-    let mut authors: Vec<AuthorDetection> = Vec::new();
-
-    let mut i = 0;
-    while i < tree.len() {
-        if let Some((det, skip)) = try_extract_orphaned_by_author(tree, i) {
-            authors.push(det);
-            i += skip;
-        } else if let Some((det, skip)) = try_extract_date_by_author(tree, i) {
-            authors.push(det);
-            i += skip;
-        }
-        i += 1;
-    }
-
-    authors
-}
-
-pub fn fix_truncated_contributors_authors(tree: &[ParseNode], authors: &mut Vec<AuthorDetection>) {
-    let all_leaves: Vec<&Token> = tree.iter().flat_map(super::collect_all_leaves).collect();
-
-    // Fix existing authors truncated before "contributors"
-    for author in authors.iter_mut() {
-        let author_line = author.end_line;
-        let trailing_contributors = all_leaves.iter().find(|t| {
-            t.tag == PosTag::Contributors
-                && t.start_line == author_line
-                && t.value.to_ascii_lowercase().starts_with("contributor")
-        });
-        let Some(trailing_contributors) = trailing_contributors else {
-            continue;
-        };
-
-        if author.author.ends_with("and its") || author.author.ends_with("and her") {
-            author.author.push_str(" contributors");
-            continue;
-        }
-
-        if author.author.to_ascii_lowercase().contains("contributor") {
-            continue;
-        }
-
-        if author.author.contains(',') {
-            continue;
-        }
-
-        author.author = restore_trailing_contributors_suffix(
-            &author.author,
-            trailing_contributors
-                .value
-                .trim_matches(|c: char| c.is_ascii_punctuation() || c.is_whitespace()),
-        );
-    }
-
-    // Detect "developed/written by ... contributors" pattern directly from tokens.
-    // extract_from_spans fails on this when the span extends too far past
-    // "contributors" into non-author text.
-    let mut i = 0;
-    while i < all_leaves.len() {
-        let token = all_leaves[i];
-        if token.tag == PosTag::Auth2 && i + 1 < all_leaves.len() {
-            let next = all_leaves[i + 1];
-            if next.tag == PosTag::By {
-                let name_start = i + 2;
-                let mut end = name_start;
-                let mut found_contributors = false;
-                while end < all_leaves.len() {
-                    let t = all_leaves[end];
-                    if t.tag == PosTag::Contributors {
-                        found_contributors = true;
-                        end += 1;
-                        break;
-                    }
-                    if matches!(
-                        t.tag,
-                        PosTag::EmptyLine
-                            | PosTag::Junk
-                            | PosTag::Copy
-                            | PosTag::Auth
-                            | PosTag::Auth2
-                            | PosTag::Auths
-                            | PosTag::Maint
-                    ) {
-                        break;
-                    }
-                    end += 1;
-                }
-                if found_contributors && end > name_start {
-                    let name_tokens: Vec<&Token> = all_leaves[name_start..end]
-                        .iter()
-                        .copied()
-                        .filter(|t| !super::NON_AUTHOR_POS_TAGS.contains(&t.tag))
-                        .collect();
-                    if !name_tokens.is_empty() {
-                        let name_str =
-                            super::token_utils::normalized_tokens_to_string(&name_tokens);
-                        let refined = refine_author(&name_str);
-                        if let Some(mut author_text) = refined {
-                            if !author_text.ends_with("contributors") {
-                                author_text.push_str(" contributors");
-                            }
-                            let already_detected = authors.iter().any(|a| a.author == author_text);
-                            if !already_detected && !is_junk_copyright(&author_text) {
-                                authors.push(AuthorDetection {
-                                    author: author_text,
-                                    start_line: all_leaves[name_start].start_line,
-                                    end_line: all_leaves[end - 1].start_line,
-                                });
-                            }
-                        }
-                    }
-                    i = end;
-                    continue;
-                }
-            }
-        }
-        i += 1;
-    }
-}
-
-fn restore_trailing_contributors_suffix(author: &str, suffix: &str) -> String {
-    if suffix.is_empty() {
-        return author.to_string();
-    }
-
-    if let Some(email_start) = author.rfind(" <") {
-        let name = author[..email_start].trim_end();
-        let email = &author[email_start..];
-        return format!("{name} {suffix}{email}");
-    }
-
-    if let Some(email_start) = author.rfind(" (")
-        && author.ends_with(')')
-        && author[email_start + 2..author.len() - 1].contains('@')
-    {
-        let name = author[..email_start].trim_end();
-        let email = &author[email_start..];
-        return format!("{name} {suffix}{email}");
-    }
-
-    format!("{author} {suffix}")
 }
 
 pub fn extract_holder_is_name(
@@ -2661,25 +2096,28 @@ pub fn extract_holder_is_name(
                     | Some(TreeLabel::Company)
             )
         {
-            let name_leaves = super::token_utils::collect_filtered_leaves(
+            let name_leaves = detector::token_utils::collect_filtered_leaves(
                 &tree[i + 2],
-                super::NON_COPYRIGHT_LABELS,
-                super::NON_COPYRIGHT_POS_TAGS,
+                detector::NON_COPYRIGHT_LABELS,
+                detector::NON_COPYRIGHT_POS_TAGS,
             );
-            let name_leaves_stripped = super::token_utils::strip_all_rights_reserved(name_leaves);
+            let name_leaves_stripped =
+                detector::token_utils::strip_all_rights_reserved(name_leaves);
             let mut cr_tokens: Vec<&Token> = vec![token, is_token];
             cr_tokens.extend(&name_leaves_stripped);
-            if let Some(det) = super::token_utils::build_copyright_from_tokens(&cr_tokens) {
+            if let Some(det) = detector::token_utils::build_copyright_from_tokens(&cr_tokens) {
                 copyrights.push(det);
             }
 
-            let holder_leaves = super::token_utils::collect_holder_filtered_leaves(
+            let holder_leaves = detector::token_utils::collect_holder_filtered_leaves(
                 &tree[i + 2],
-                super::NON_HOLDER_LABELS,
-                super::NON_HOLDER_POS_TAGS,
+                detector::NON_HOLDER_LABELS,
+                detector::NON_HOLDER_POS_TAGS,
             );
-            let holder_leaves = super::token_utils::strip_all_rights_reserved(holder_leaves);
-            if let Some(det) = super::token_utils::build_holder_from_tokens(&holder_leaves, false) {
+            let holder_leaves = detector::token_utils::strip_all_rights_reserved(holder_leaves);
+            if let Some(det) =
+                detector::token_utils::build_holder_from_tokens(&holder_leaves, false)
+            {
                 holders.push(det);
             }
             i += 3;
@@ -2691,16 +2129,13 @@ pub fn extract_holder_is_name(
     (copyrights, holders)
 }
 
-/// Handle "bare copyright" pattern: a Copy leaf followed by a NameYear/Name/Company
-/// tree without a wrapping Copyright tree.
-/// Also handles "Portions/Parts (c) ..." by including a preceding Portions token.
 pub fn extract_bare_copyrights(
     tree: &[ParseNode],
 ) -> (Vec<CopyrightDetection>, Vec<HolderDetection>) {
     fn has_line_start_copyright_prefix(tree: &[ParseNode], idx: usize, line: LineNumber) -> bool {
         let mut found_copyright = false;
         for j in (0..idx).rev() {
-            for t in super::token_utils::collect_all_leaves(&tree[j])
+            for t in detector::token_utils::collect_all_leaves(&tree[j])
                 .iter()
                 .rev()
             {
@@ -2759,12 +2194,12 @@ pub fn extract_bare_copyrights(
                     cr_tokens.push(prefix);
                 }
                 cr_tokens.push(token);
-                let name_leaves = super::token_utils::collect_filtered_leaves(
+                let name_leaves = detector::token_utils::collect_filtered_leaves(
                     next,
-                    super::NON_COPYRIGHT_LABELS,
-                    super::NON_COPYRIGHT_POS_TAGS,
+                    detector::NON_COPYRIGHT_LABELS,
+                    detector::NON_COPYRIGHT_POS_TAGS,
                 );
-                let name_leaves = super::token_utils::strip_all_rights_reserved(name_leaves);
+                let name_leaves = detector::token_utils::strip_all_rights_reserved(name_leaves);
                 let allow_single_word_contributors = name_leaves
                     .iter()
                     .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
@@ -2788,29 +2223,29 @@ pub fn extract_bare_copyrights(
                         _ => break,
                     }
                 }
-                if let Some(det) = super::token_utils::build_copyright_from_tokens(&cr_tokens) {
+                if let Some(det) = detector::token_utils::build_copyright_from_tokens(&cr_tokens) {
                     copyrights.push(det);
                 }
 
-                let holder_leaves = super::token_utils::collect_holder_filtered_leaves(
+                let holder_leaves = detector::token_utils::collect_holder_filtered_leaves(
                     next,
-                    super::NON_HOLDER_LABELS,
-                    super::NON_HOLDER_POS_TAGS,
+                    detector::NON_HOLDER_LABELS,
+                    detector::NON_HOLDER_POS_TAGS,
                 );
-                let holder_leaves = super::token_utils::strip_all_rights_reserved(holder_leaves);
-                if let Some(det) = super::token_utils::build_holder_from_tokens(
+                let holder_leaves = detector::token_utils::strip_all_rights_reserved(holder_leaves);
+                if let Some(det) = detector::token_utils::build_holder_from_tokens(
                     &holder_leaves,
                     allow_single_word_contributors,
                 ) {
                     holders.push(det);
                 } else {
-                    let holder_mini = super::token_utils::collect_holder_filtered_leaves(
+                    let holder_mini = detector::token_utils::collect_holder_filtered_leaves(
                         next,
-                        super::NON_HOLDER_LABELS_MINI,
-                        super::NON_HOLDER_POS_TAGS_MINI,
+                        detector::NON_HOLDER_LABELS_MINI,
+                        detector::NON_HOLDER_POS_TAGS_MINI,
                     );
-                    let holder_mini = super::token_utils::strip_all_rights_reserved(holder_mini);
-                    if let Some(det) = super::token_utils::build_holder_from_tokens(
+                    let holder_mini = detector::token_utils::strip_all_rights_reserved(holder_mini);
+                    if let Some(det) = detector::token_utils::build_holder_from_tokens(
                         &holder_mini,
                         allow_single_word_contributors,
                     ) {
@@ -2839,7 +2274,7 @@ pub fn extract_from_spans(
     let mut holders: Vec<HolderDetection> = Vec::new();
     let mut authors: Vec<AuthorDetection> = Vec::new();
 
-    let all_leaves: Vec<&Token> = tree.iter().flat_map(super::collect_all_leaves).collect();
+    let all_leaves: Vec<&Token> = tree.iter().flat_map(detector::collect_all_leaves).collect();
 
     if all_leaves.is_empty() {
         return (copyrights, holders, authors);
@@ -2875,8 +2310,6 @@ pub fn extract_from_spans(
             };
 
         if token.tag == PosTag::Copy || token.tag == PosTag::SpdxContrib {
-            // Skip Copy tokens preceded by Portions — already handled by
-            // extract_bare_copyrights with the prefix included.
             if token.tag == PosTag::Copy
                 && token.value.eq_ignore_ascii_case("(c)")
                 && i > 0
@@ -2927,11 +2360,12 @@ pub fn extract_from_spans(
             let copy_idx = i;
             i += 1;
             let mut allow_merge_following_copyright_clause = true;
-            while i < all_leaves.len() && super::token_utils::is_copyright_span_token(all_leaves[i])
+            while i < all_leaves.len()
+                && detector::token_utils::is_copyright_span_token(all_leaves[i])
             {
                 if all_leaves[i].tag == PosTag::Copy && i > start + 1 {
                     if allow_merge_following_copyright_clause
-                        && super::token_utils::should_merge_following_copyright_clause(
+                        && detector::token_utils::should_merge_following_copyright_clause(
                             &all_leaves,
                             start,
                             i,
@@ -2941,7 +2375,7 @@ pub fn extract_from_spans(
                         i += 1;
                         continue;
                     }
-                    if super::token_utils::should_merge_following_c_sign_after_year(
+                    if detector::token_utils::should_merge_following_c_sign_after_year(
                         &all_leaves,
                         start,
                         i,
@@ -2961,7 +2395,7 @@ pub fn extract_from_spans(
                 && copy_start == copy_idx
                 && all_leaves[copy_idx..i]
                     .iter()
-                    .any(|t| super::token_utils::YEAR_LIKE_POS_TAGS.contains(&t.tag))
+                    .any(|t| detector::token_utils::YEAR_LIKE_POS_TAGS.contains(&t.tag))
                 && !all_leaves[copy_idx..i].iter().any(|t| {
                     matches!(
                         t.tag,
@@ -2995,7 +2429,7 @@ pub fn extract_from_spans(
                 if has_holderish_before {
                     while start > 0
                         && all_leaves[start - 1].start_line == line
-                        && super::token_utils::is_copyright_span_token(all_leaves[start - 1])
+                        && detector::token_utils::is_copyright_span_token(all_leaves[start - 1])
                     {
                         start -= 1;
                     }
@@ -3008,12 +2442,12 @@ pub fn extract_from_spans(
                 let allow_single_word_contributors = span
                     .iter()
                     .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
-                let filtered = super::token_utils::strip_all_rights_reserved_slice(span);
-                if let Some(det) = super::token_utils::build_copyright_from_tokens(&filtered) {
+                let filtered = detector::token_utils::strip_all_rights_reserved_slice(span);
+                if let Some(det) = detector::token_utils::build_copyright_from_tokens(&filtered) {
                     copyrights.push(det);
                 }
 
-                if super::token_utils::is_copyright_of_header(span) {
+                if detector::token_utils::is_copyright_of_header(span) {
                     continue;
                 }
 
@@ -3021,9 +2455,9 @@ pub fn extract_from_spans(
                     let holder_tokens: Vec<&Token> = span
                         .iter()
                         .copied()
-                        .filter(|t| !super::NON_HOLDER_POS_TAGS.contains(&t.tag))
+                        .filter(|t| !detector::NON_HOLDER_POS_TAGS.contains(&t.tag))
                         .collect();
-                    if let Some(det) = super::token_utils::build_holder_from_tokens(
+                    if let Some(det) = detector::token_utils::build_holder_from_tokens(
                         &holder_tokens,
                         allow_single_word_contributors,
                     ) {
@@ -3032,9 +2466,9 @@ pub fn extract_from_spans(
                         let holder_tokens_mini: Vec<&Token> = span
                             .iter()
                             .copied()
-                            .filter(|t| !super::NON_HOLDER_POS_TAGS_MINI.contains(&t.tag))
+                            .filter(|t| !detector::NON_HOLDER_POS_TAGS_MINI.contains(&t.tag))
                             .collect();
-                        if let Some(det) = super::token_utils::build_holder_from_tokens(
+                        if let Some(det) = detector::token_utils::build_holder_from_tokens(
                             &holder_tokens_mini,
                             allow_single_word_contributors,
                         ) {
@@ -3055,7 +2489,8 @@ pub fn extract_from_spans(
             let start = i;
             let start_line = token.start_line;
             i += 1;
-            while i < all_leaves.len() && super::token_utils::is_author_span_token(all_leaves[i]) {
+            while i < all_leaves.len() && detector::token_utils::is_author_span_token(all_leaves[i])
+            {
                 let t = all_leaves[i];
                 if t.start_line != start_line {
                     let v = t
@@ -3085,10 +2520,10 @@ pub fn extract_from_spans(
                 let author_tokens: Vec<&Token> = span
                     .iter()
                     .copied()
-                    .filter(|t| !super::NON_AUTHOR_POS_TAGS.contains(&t.tag))
+                    .filter(|t| !detector::NON_AUTHOR_POS_TAGS.contains(&t.tag))
                     .collect();
-                if let Some(det) = super::token_utils::build_author_from_tokens(&author_tokens)
-                    && !super::token_utils::looks_like_bad_generic_author_candidate(&det.author)
+                if let Some(det) = detector::token_utils::build_author_from_tokens(&author_tokens)
+                    && !detector::token_utils::looks_like_bad_generic_author_candidate(&det.author)
                 {
                     authors.push(det);
                 }
@@ -3108,7 +2543,7 @@ pub fn extract_copyrights_from_spans(
     let mut copyrights: Vec<CopyrightDetection> = Vec::new();
     let mut holders: Vec<HolderDetection> = Vec::new();
 
-    let all_leaves: Vec<&Token> = tree.iter().flat_map(super::collect_all_leaves).collect();
+    let all_leaves: Vec<&Token> = tree.iter().flat_map(detector::collect_all_leaves).collect();
     if all_leaves.is_empty() {
         return (copyrights, holders);
     }
@@ -3168,11 +2603,12 @@ pub fn extract_copyrights_from_spans(
             let copy_idx = i;
             i += 1;
             let mut allow_merge_following_copyright_clause = true;
-            while i < all_leaves.len() && super::token_utils::is_copyright_span_token(all_leaves[i])
+            while i < all_leaves.len()
+                && detector::token_utils::is_copyright_span_token(all_leaves[i])
             {
                 if all_leaves[i].tag == PosTag::Copy && i > start + 1 {
                     if allow_merge_following_copyright_clause
-                        && super::token_utils::should_merge_following_copyright_clause(
+                        && detector::token_utils::should_merge_following_copyright_clause(
                             &all_leaves,
                             start,
                             i,
@@ -3182,7 +2618,7 @@ pub fn extract_copyrights_from_spans(
                         i += 1;
                         continue;
                     }
-                    if super::token_utils::should_merge_following_c_sign_after_year(
+                    if detector::token_utils::should_merge_following_c_sign_after_year(
                         &all_leaves,
                         start,
                         i,
@@ -3202,7 +2638,7 @@ pub fn extract_copyrights_from_spans(
                 && copy_start == copy_idx
                 && all_leaves[copy_idx..i]
                     .iter()
-                    .any(|t| super::token_utils::YEAR_LIKE_POS_TAGS.contains(&t.tag))
+                    .any(|t| detector::token_utils::YEAR_LIKE_POS_TAGS.contains(&t.tag))
                 && !all_leaves[copy_idx..i].iter().any(|t| {
                     matches!(
                         t.tag,
@@ -3236,7 +2672,7 @@ pub fn extract_copyrights_from_spans(
                 if has_holderish_before {
                     while start > 0
                         && all_leaves[start - 1].start_line == line
-                        && super::token_utils::is_copyright_span_token(all_leaves[start - 1])
+                        && detector::token_utils::is_copyright_span_token(all_leaves[start - 1])
                     {
                         start -= 1;
                     }
@@ -3250,12 +2686,12 @@ pub fn extract_copyrights_from_spans(
                     .iter()
                     .any(|t| matches!(t.tag, PosTag::Yr | PosTag::YrPlus | PosTag::BareYr));
 
-                let filtered = super::token_utils::strip_all_rights_reserved_slice(span);
-                if let Some(det) = super::token_utils::build_copyright_from_tokens(&filtered) {
+                let filtered = detector::token_utils::strip_all_rights_reserved_slice(span);
+                if let Some(det) = detector::token_utils::build_copyright_from_tokens(&filtered) {
                     copyrights.push(det);
                 }
 
-                if super::token_utils::is_copyright_of_header(span) {
+                if detector::token_utils::is_copyright_of_header(span) {
                     continue;
                 }
 
@@ -3263,9 +2699,9 @@ pub fn extract_copyrights_from_spans(
                     let holder_tokens: Vec<&Token> = span
                         .iter()
                         .copied()
-                        .filter(|t| !super::NON_HOLDER_POS_TAGS.contains(&t.tag))
+                        .filter(|t| !detector::NON_HOLDER_POS_TAGS.contains(&t.tag))
                         .collect();
-                    if let Some(det) = super::token_utils::build_holder_from_tokens(
+                    if let Some(det) = detector::token_utils::build_holder_from_tokens(
                         &holder_tokens,
                         allow_single_word_contributors,
                     ) {
@@ -3274,9 +2710,9 @@ pub fn extract_copyrights_from_spans(
                         let holder_tokens_mini: Vec<&Token> = span
                             .iter()
                             .copied()
-                            .filter(|t| !super::NON_HOLDER_POS_TAGS_MINI.contains(&t.tag))
+                            .filter(|t| !detector::NON_HOLDER_POS_TAGS_MINI.contains(&t.tag))
                             .collect();
-                        if let Some(det) = super::token_utils::build_holder_from_tokens(
+                        if let Some(det) = detector::token_utils::build_holder_from_tokens(
                             &holder_tokens_mini,
                             allow_single_word_contributors,
                         ) {
