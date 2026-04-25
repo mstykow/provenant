@@ -62,6 +62,7 @@ use crate::utils::text::strip_utf8_bom_str;
 
 use crate::license_detection::detection::{
     attach_source_path_to_detections, empty_detection, populate_detection_from_group_with_spdx,
+    split_groups_across_frontmatter_boundary,
 };
 use crate::license_detection::models::MatcherKind;
 
@@ -798,7 +799,10 @@ impl LicenseDetectionEngine {
                 let mut matches = hash_matches;
                 sort_matches_by_line(&mut matches);
 
-                let groups = group_matches_by_region(&matches);
+                let groups = split_groups_across_frontmatter_boundary(
+                    group_matches_by_region(&matches),
+                    Some(content),
+                );
                 let detections: Vec<LicenseDetection> = groups
                     .iter()
                     .map(|group| {
@@ -922,7 +926,10 @@ impl LicenseDetectionEngine {
         let mut sorted = refined;
         sort_matches_by_line(&mut sorted);
 
-        let groups = group_matches_by_region(&sorted);
+        let groups = split_groups_across_frontmatter_boundary(
+            group_matches_by_region(&sorted),
+            Some(content),
+        );
 
         let detections: Vec<LicenseDetection> = groups
             .iter()
