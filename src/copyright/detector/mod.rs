@@ -319,7 +319,7 @@ pub fn detect_copyrights_from_text_with_deadline(
 
     let prepared_lines = prepared_cache.materialize();
 
-    primary_phase::run_phase_primary_extractions(
+    phases::run_phase_primary_extractions(
         content,
         &groups,
         &line_number_index,
@@ -329,7 +329,7 @@ pub fn detect_copyrights_from_text_with_deadline(
         &mut seen,
     );
 
-    postprocess_phase::run_phase_postprocess(
+    phases::run_phase_postprocess(
         content,
         &raw_lines,
         &prepared_lines,
@@ -372,9 +372,8 @@ pub fn detect_copyrights_from_text_with_deadline(
 
 mod author_heuristics;
 mod pattern_extract;
-mod postprocess_phase;
+mod phases;
 mod postprocess_transforms;
-mod primary_phase;
 mod seen_text;
 mod token_utils;
 mod tree_walk;

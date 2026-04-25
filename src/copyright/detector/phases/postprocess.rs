@@ -4,7 +4,7 @@
 use crate::copyright::line_tracking::PreparedLines;
 use crate::copyright::types::{AuthorDetection, CopyrightDetection, HolderDetection};
 
-use super::seen_text::SeenTextSets;
+use super::super::seen_text::SeenTextSets;
 
 #[allow(clippy::too_many_arguments)]
 fn run_initial_detection_repairs(
@@ -593,7 +593,7 @@ fn run_final_variant_and_cleanup_repairs(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn run_phase_postprocess(
+pub(in super::super) fn run_phase_postprocess(
     content: &str,
     raw_lines: &[&str],
     prepared_cache: &PreparedLines<'_>,
