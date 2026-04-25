@@ -8,7 +8,7 @@ This guide provides essential information for AI coding agents working on the `P
 - **Contributor Workflow & Compliance**: [`CONTRIBUTING.md`](CONTRIBUTING.md) - Canonical contributor expectations including DCO sign-off and SPDX header policy
 - **Documentation Index**: [`docs/DOCUMENTATION_INDEX.md`](docs/DOCUMENTATION_INDEX.md) - Best entry point for navigating the broader docs set
 - **How-To Guides**: [`docs/HOW_TO_ADD_A_PARSER.md`](docs/HOW_TO_ADD_A_PARSER.md) - Step-by-step guide for adding new parsers
-- **Architectural Decision Records**: [`docs/adr/`](docs/adr/) - Index of accepted design decisions and contributor guidance
+- **Architectural Decision Records**: [`docs/adr/README.md`](docs/adr/README.md) - Index of accepted decisions covering parser architecture, extraction boundaries, golden tests, security, auto-generated docs, assembly, embedded license data, output schema separation, and large-parser structure
 - **Beyond-Parity Features**: [`docs/improvements/`](docs/improvements/) - Index of parser and subsystem improvements beyond Python parity
 - **License Detection Architecture**: [`docs/LICENSE_DETECTION_ARCHITECTURE.md`](docs/LICENSE_DETECTION_ARCHITECTURE.md) - Current license detection architecture, embedded index flow, and maintainer workflow
 - **Maintainer Workflows**: [`xtask/README.md`](xtask/README.md) - Canonical list of Rust-based maintainer commands from `xtask/Cargo.toml`, including benchmarking, output comparison, golden-fixture maintenance, and artifact generation
@@ -18,7 +18,7 @@ This guide provides essential information for AI coding agents working on the `P
 
 ## Project Context
 
-**Provenant** is a Rust rewrite of [ScanCode Toolkit](https://github.com/aboutcode-org/scancode-toolkit/) that aims to be a trustworthy drop-in replacement while fixing bugs and using Rust-specific strengths. The original Python codebase is available as a reference submodule at `reference/scancode-toolkit/`.
+**Provenant** is an independent Rust implementation for ScanCode-aligned workflows that aims for strong compatibility while fixing bugs and using Rust-specific strengths. The original Python codebase is available as an optional reference submodule at `reference/scancode-toolkit/`.
 
 ### Core Philosophy: Correctness and Feature Parity Above All
 
@@ -32,7 +32,7 @@ The primary goal is functional parity users can trust. When implementing feature
 
 ### Using the Reference Submodule
 
-Use the reference submodule as a behavioral specification: study the original implementation, tests, outputs, and known bugs to understand what must be preserved. Do **not** port it line by line. Use it to learn **what** the Rust implementation must do, not **how** it should be written. For deeper contributor guidance, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/HOW_TO_ADD_A_PARSER.md`](docs/HOW_TO_ADD_A_PARSER.md).
+Use the reference submodule as a behavioral specification for parity work: study the original implementation, tests, outputs, and known bugs to understand what must be preserved. Do **not** port it line by line. Use it to learn **what** the Rust implementation must do, not **how** it should be written. Routine scans use the embedded license index, so the submodule is mainly needed for parity research, embedded-license-data maintenance, and maintainer workflows that depend on upstream material. For deeper contributor guidance, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/HOW_TO_ADD_A_PARSER.md`](docs/HOW_TO_ADD_A_PARSER.md).
 
 When an upstream test fixture is needed for Provenant tests, copy it into Provenant-owned `testdata/` and reference that local copy. Do **not** make tests or golden fixtures depend directly on paths under `reference/scancode-toolkit/`.
 
@@ -81,7 +81,7 @@ Let the repository formatters and linters enforce mechanical style. Keep human g
 
 ## Adding or Changing Package Parsers
 
-Use [`docs/HOW_TO_ADD_A_PARSER.md`](docs/HOW_TO_ADD_A_PARSER.md) as the canonical guide for parser work. It covers parser invariants, registration, datasource wiring, expected tests, assembly/file-reference integration, and validation against the Python reference or authoritative format specs.
+Use [`docs/HOW_TO_ADD_A_PARSER.md`](docs/HOW_TO_ADD_A_PARSER.md) as the canonical guide for parser work. It covers parser invariants, registration in `src/parsers/mod.rs`, parser metadata registration, datasource wiring, dependency-semantics guardrails, assembly/file-reference integration, and validation against the Python reference or authoritative format specs.
 
 ## CI/CD
 
@@ -112,11 +112,18 @@ Canonical hook and CI definitions live in [`lefthook.yml`](lefthook.yml), [`pack
 
 For scanner/assembly architecture, concurrency assumptions, benchmark workflows, and compare-output workflows, use [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`xtask/README.md`](xtask/README.md) as the canonical sources.
 
+Keep these architectural mental models in mind when changing core behavior:
+
+- Provenant keeps ScanCode-like high-level stages, but wires them statically through Rust traits and explicit pipeline stages rather than a runtime plugin system.
+- Parsers are file-local extractors. Cross-file ownership, topology-aware workspace handling, and file-reference resolution belong in assembly unless an existing documented scanner-owned exception says otherwise.
+- Parsers should prefer honest unknowns over guessed compatibility defaults. If a datasource does not prove dependency intent such as `is_runtime`, `is_optional`, `is_direct`, or `is_pinned`, leave it unset and keep any compatibility normalization as an explicit output-layer decision.
+- Internal domain types and the public ScanCode-compatible output schema are intentionally separate. Put domain semantics in `src/models/` and output-shaping concerns in `src/output_schema/`.
+
 ## Common Pitfalls
 
 1. **Taking shortcuts or porting Python line-by-line**: Preserve behavior, not implementation details. Study the tests and edge cases, then implement the Rust version properly.
 2. **Datasource ID mistakes**: Setting `datasource_id: None`, choosing the wrong `DatasourceId` variant, or missing an error-path assignment breaks assembly. See [Datasource IDs: The Assembly Bridge](#datasource-ids-the-assembly-bridge).
-3. **License data missing**: Run `./setup.sh` to initialize submodule
+3. **License data workflow confusion**: Routine scans use the embedded license index. Run `./setup.sh` when parity work, embedded-license-data maintenance, or other maintainer workflows need the reference submodule.
 4. **Cross-platform paths**: Use `Path` and `PathBuf`, not string concatenation
 5. **Line endings**: Be careful with `\n` vs `\r\n` in tests
 6. **Unwrap in library code**: Use `?` or `match` instead
@@ -133,20 +140,18 @@ When porting behavior from the Python reference, use it as the spec for requirem
 1. **Research exhaustively**: read the original implementation, tests, and documentation before designing the Rust version.
 2. **Aim for feature parity, not code parity**: preserve behavior and output semantics while using idiomatic Rust.
 3. **Design for correctness**: use strong types, explicit error handling, and tests that cover edge cases and bug fixes from the original.
-4. **Leverage Rust advantages**: prefer zero-copy parsing, compile-time guarantees, and designs that make invalid states unrepresentable.
-5. **Document intentional differences**: if Rust diverges behaviorally, explain why and add tests that demonstrate the improvement.
-6. **For parser-specific implementation rules**: follow [`docs/HOW_TO_ADD_A_PARSER.md`](docs/HOW_TO_ADD_A_PARSER.md).
+4. **Document intentional differences**: if Rust diverges behaviorally, explain why and add tests that demonstrate the improvement.
+5. **For parser-specific implementation rules**: follow [`docs/HOW_TO_ADD_A_PARSER.md`](docs/HOW_TO_ADD_A_PARSER.md).
 
 ### Quality Checklist
 
 Before considering a feature complete:
 
-- [ ] All original functionality is preserved
+- [ ] The targeted behavior and edge cases for this change are preserved or intentionally improved
 - [ ] All edge cases from original tests are covered
 - [ ] Known bugs from original are fixed (and tested)
 - [ ] Error handling is comprehensive and explicit
 - [ ] Code is idiomatic Rust (passes `clippy` without warnings — no suppressed lints unless permanently justified)
-- [ ] Performance is equal to or better than original
 - [ ] Real-world testdata produces correct output
 - [ ] Golden test expected files are unchanged unless output genuinely improved (documented)
 - [ ] Documentation explains any intentional behavioral differences
@@ -170,6 +175,6 @@ For the full datasource and assembly workflow, see [`docs/HOW_TO_ADD_A_PARSER.md
 
 - **Rust toolchain**: Version pinned in `rust-toolchain.toml`
 - **Output format**: ScanCode Toolkit-compatible JSON with `OUTPUT_FORMAT_VERSION`
-- **License detection**: Uses an embedded license index built from the ScanCode rules dataset; see [`docs/LICENSE_DETECTION_ARCHITECTURE.md`](docs/LICENSE_DETECTION_ARCHITECTURE.md) for current detection behavior and maintenance workflow
+- **License detection**: Uses an embedded license index built from the upstream ScanCode rules dataset plus Provenant's checked-in build policy and overlay files; see [`docs/LICENSE_DETECTION_ARCHITECTURE.md`](docs/LICENSE_DETECTION_ARCHITECTURE.md) for current detection behavior and maintenance workflow
 - **Exclusion patterns**: Supports glob patterns (e.g., `*.git*`, `node_modules/*`)
-- **Git submodules**: `reference/scancode-toolkit/` remains the behavioral reference and license-data source for parity work, but routine scans use the embedded index
+- **Git submodules**: `reference/scancode-toolkit/` remains the behavioral reference for parity work and embedded-license-data maintenance, but routine scans use the embedded index
