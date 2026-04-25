@@ -7,9 +7,8 @@ use crate::copyright::types::{CopyrightDetection, HolderDetection};
 use super::super::seen_text::SeenTextSets;
 
 #[allow(clippy::too_many_arguments)]
-pub(in super::super) fn run_phase_primary_extractions(
+fn run_pre_pattern_repairs(
     content: &str,
-    groups: &[Vec<(usize, String)>],
     line_number_index: &LineNumberIndex,
     prepared_cache: &PreparedLines<'_>,
     copyrights: &mut Vec<CopyrightDetection>,
@@ -175,7 +174,17 @@ pub(in super::super) fn run_phase_primary_extractions(
         copyrights,
     );
     seen.dedup_new_copyrights(copyrights, c_before);
+}
 
+#[allow(clippy::too_many_arguments)]
+fn run_group_based_extractions(
+    content: &str,
+    groups: &[Vec<(usize, String)>],
+    prepared_cache: &PreparedLines<'_>,
+    copyrights: &mut Vec<CopyrightDetection>,
+    holders: &mut Vec<HolderDetection>,
+    seen: &mut SeenTextSets,
+) {
     let c_before = copyrights.len();
     let h_before = holders.len();
     super::super::pattern_extract::extract_copr_lines(groups, copyrights, holders);
@@ -358,7 +367,18 @@ pub(in super::super) fn run_phase_primary_extractions(
     seen.dedup_new_holders(&mut new_h, 0);
     copyrights.extend(new_c);
     holders.extend(new_h);
+}
 
+#[allow(clippy::too_many_arguments)]
+fn run_content_and_markup_extractions(
+    content: &str,
+    groups: &[Vec<(usize, String)>],
+    line_number_index: &LineNumberIndex,
+    prepared_cache: &PreparedLines<'_>,
+    copyrights: &mut Vec<CopyrightDetection>,
+    holders: &mut Vec<HolderDetection>,
+    seen: &mut SeenTextSets,
+) {
     let c_before = copyrights.len();
     let h_before = holders.len();
     let (extracted_c, extracted_h) =
@@ -535,4 +555,34 @@ pub(in super::super) fn run_phase_primary_extractions(
     seen.register_holders(&new_h);
     copyrights.extend(new_c);
     holders.extend(new_h);
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(in super::super) fn run_phase_primary_extractions(
+    content: &str,
+    groups: &[Vec<(usize, String)>],
+    line_number_index: &LineNumberIndex,
+    prepared_cache: &PreparedLines<'_>,
+    copyrights: &mut Vec<CopyrightDetection>,
+    holders: &mut Vec<HolderDetection>,
+    seen: &mut SeenTextSets,
+) {
+    run_pre_pattern_repairs(
+        content,
+        line_number_index,
+        prepared_cache,
+        copyrights,
+        holders,
+        seen,
+    );
+    run_group_based_extractions(content, groups, prepared_cache, copyrights, holders, seen);
+    run_content_and_markup_extractions(
+        content,
+        groups,
+        line_number_index,
+        prepared_cache,
+        copyrights,
+        holders,
+        seen,
+    );
 }
