@@ -8,4 +8,5 @@ copyrights:
 holders:
   - Dialog Semiconductor
   - Renesas Solutions Corp. Cleanups
-authors: []
+authors:
+  - David Chen <Dajun.chen@diasemi.com>
