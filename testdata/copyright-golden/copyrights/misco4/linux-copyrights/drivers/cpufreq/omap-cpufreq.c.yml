@@ -10,4 +10,5 @@ holders:
   - Nokia Corporation
   - Russell King
   - Texas Instruments, Inc.
-authors: []
+authors:
+  - Tony Lindgren <tony@atomide.com>
