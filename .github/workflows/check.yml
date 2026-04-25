@@ -273,7 +273,7 @@ jobs:
             test-target: integration
           - shard: post-processing
             filter: "post_processing_golden"
-            profile: release
+            profile: ci-release
             test-target: integration
           - shard: parsers
             filter: "parsers_golden"
