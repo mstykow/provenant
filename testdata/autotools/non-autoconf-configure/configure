@@ -1,0 +1,20 @@
+#!/bin/sh
+
+# Copyright (C) Igor Sysoev
+# Copyright (C) Nginx, Inc.
+
+LC_ALL=C
+export LC_ALL
+
+. auto/options
+. auto/init
+. auto/sources
+
+test -d $NGX_OBJS || mkdir -p $NGX_OBJS
+
+echo > $NGX_AUTO_HEADERS_H
+echo > $NGX_AUTOCONF_ERR
+
+echo "#define NGX_CONFIGURE \"$NGX_CONFIGURE\"" > $NGX_AUTO_CONFIG_H
+
+. auto/summary

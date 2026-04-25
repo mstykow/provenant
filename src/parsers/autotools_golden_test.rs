@@ -32,12 +32,4 @@ mod golden_tests {
             "testdata/autotools/another-project/configure.ac.expected.json",
         );
     }
-
-    #[test]
-    fn test_golden_autotools_root_configure() {
-        run_golden(
-            "configure",
-            "testdata/autotools/root-configure.expected.json",
-        );
-    }
 }
