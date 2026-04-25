@@ -264,9 +264,9 @@ jobs:
             profile: debug
             test-target: integration
           - shard: finder
-            filter: "finder::golden_test::tests::"
+            filter: "finder_golden"
             profile: debug
-            test-target: lib
+            test-target: integration
           - shard: license-detection
             filter: "license_detection_golden"
             profile: ci-release
