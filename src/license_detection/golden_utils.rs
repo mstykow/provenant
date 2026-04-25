@@ -67,7 +67,7 @@ pub fn detect_license_expressions_for_golden(
     )
 }
 
-#[cfg(all(test, feature = "golden-tests"))]
+#[cfg(feature = "golden-tests")]
 pub fn detect_detection_expressions_for_golden(
     engine: &LicenseDetectionEngine,
     test_file: &Path,

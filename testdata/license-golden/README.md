@@ -41,7 +41,7 @@ license_expressions:
 
 ```bash
 # Run all license golden tests
-cargo test license_detection_golden
+cargo test --test license_detection_golden --features golden-tests
 
 # Run specific suite
 cargo test test_golden_lic1
@@ -52,7 +52,7 @@ cargo test test_golden_summary -- --nocapture
 
 ## Test Implementation
 
-Tests are defined in `src/license_detection_golden_test.rs`:
+Tests are defined in `tests/license_detection_golden.rs`:
 
 - `test_golden_lic1()` - Run lic1 test suite
 - `test_golden_lic2()` - Run lic2 test suite  

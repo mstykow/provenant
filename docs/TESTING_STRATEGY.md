@@ -105,7 +105,7 @@ Doctests should cover the public API entry points that benefit from executable e
 
 **Why This Matters**: Prevents accidentally breaking stable parser or subsystem contracts, whether the expected surface is Python-derived or Rust-owned.
 
-**Location**: Parser goldens live in `src/parsers/*_golden_test.rs`, with additional subsystem goldens near their owning modules such as `src/license_detection/golden_test.rs`, `src/finder/golden_test.rs`, `src/assembly/assembly_golden_test.rs`, and `src/post_processing/golden_test.rs`.
+**Location**: Parser goldens live in `src/parsers/*_golden_test.rs`, with additional subsystem goldens near their owning modules such as `tests/license_detection_golden.rs`, `src/finder/golden_test.rs`, `src/assembly/assembly_golden_test.rs`, and `src/post_processing/golden_test.rs`.
 
 **Parser Test Utilities**: Parser-local goldens commonly use `golden_test_utils::compare_package_data_parser_only()` which:
 
