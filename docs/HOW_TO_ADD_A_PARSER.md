@@ -387,7 +387,7 @@ to attach those files to the package.
 
 If the ecosystem assembles multiple files into one logical package, add assembly fixtures under
 `testdata/assembly-golden/<ecosystem>-basic/` and a matching test in
-`src/assembly/assembly_golden_test.rs`.
+`tests/assembly_golden.rs`.
 
 Use assembly goldens to prove the final assembled package shape, not just parser extraction.
 

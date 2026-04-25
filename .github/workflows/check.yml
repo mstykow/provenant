@@ -260,9 +260,9 @@ jobs:
             profile: ci-release
             test-target: integration
           - shard: assembly
-            filter: "assembly::assembly_golden_test::"
+            filter: "assembly_golden"
             profile: debug
-            test-target: lib
+            test-target: integration
           - shard: finder
             filter: "finder::golden_test::tests::"
             profile: debug

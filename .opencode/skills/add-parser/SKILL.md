@@ -241,7 +241,7 @@ cargo run --manifest-path xtask/Cargo.toml --bin update-parser-golden -- <Parser
 
 **File-reference resolution**: If the parser emits `PackageData.file_references`, register the datasource in `src/assembly/file_ref_resolve.rs` and add a scan test proving files link back to the package.
 
-**Assembly goldens**: If the ecosystem assembles multiple files into one logical package, add assembly fixtures under `testdata/assembly-golden/<ecosystem>-basic/` and a matching test in `src/assembly/assembly_golden_test.rs`.
+**Assembly goldens**: If the ecosystem assembles multiple files into one logical package, add assembly fixtures under `testdata/assembly-golden/<ecosystem>-basic/` and a matching test in `tests/assembly_golden.rs`.
 
 ### Step 6: Validate behavior
 

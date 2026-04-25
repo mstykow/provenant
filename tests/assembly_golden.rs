@@ -1,17 +1,16 @@
 // SPDX-FileCopyrightText: Provenant contributors
 // SPDX-License-Identifier: Apache-2.0
 
-#[cfg(all(test, feature = "golden-tests"))]
+#[cfg(feature = "golden-tests")]
 mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
+    use provenant::assembly::{AssemblyResult, assemble};
+    use provenant::models::{FileInfo, FileType};
+    use provenant::parsers::try_parse_file;
     use regex::Regex;
     use serde_json::{Value, json};
-
-    use crate::assembly::{AssemblyResult, assemble};
-    use crate::models::{FileInfo, FileType};
-    use crate::parsers::try_parse_file;
 
     /// Normalize all UUID v4 values to a fixed placeholder for deterministic testing.
     ///
@@ -185,15 +184,15 @@ mod tests {
             })
             .collect();
 
-        let output_packages: Vec<crate::output_schema::OutputPackage> = actual
+        let output_packages: Vec<provenant::output_schema::OutputPackage> = actual
             .packages
             .iter()
-            .map(crate::output_schema::OutputPackage::from)
+            .map(provenant::output_schema::OutputPackage::from)
             .collect();
-        let output_deps: Vec<crate::output_schema::OutputTopLevelDependency> = actual
+        let output_deps: Vec<provenant::output_schema::OutputTopLevelDependency> = actual
             .dependencies
             .iter()
-            .map(crate::output_schema::OutputTopLevelDependency::from)
+            .map(provenant::output_schema::OutputTopLevelDependency::from)
             .collect();
         let actual_json = json!({
             "packages": output_packages,
@@ -365,15 +364,15 @@ mod tests {
                 })
                 .collect();
 
-            let output_packages: Vec<crate::output_schema::OutputPackage> = result
+            let output_packages: Vec<provenant::output_schema::OutputPackage> = result
                 .packages
                 .iter()
-                .map(crate::output_schema::OutputPackage::from)
+                .map(provenant::output_schema::OutputPackage::from)
                 .collect();
-            let output_deps: Vec<crate::output_schema::OutputTopLevelDependency> = result
+            let output_deps: Vec<provenant::output_schema::OutputTopLevelDependency> = result
                 .dependencies
                 .iter()
-                .map(crate::output_schema::OutputTopLevelDependency::from)
+                .map(provenant::output_schema::OutputTopLevelDependency::from)
                 .collect();
             let output_json = json!({
                 "packages": output_packages,
@@ -482,19 +481,19 @@ mod tests {
         let conda_pkg = result
             .packages
             .iter()
-            .find(|pkg| pkg.package_type == Some(crate::models::PackageType::Conda))
+            .find(|pkg| pkg.package_type == Some(provenant::models::PackageType::Conda))
             .expect("expected assembled conda package");
 
         assert_eq!(conda_pkg.name.as_deref(), Some("requests"));
         assert!(
             conda_pkg
                 .datasource_ids
-                .contains(&crate::models::DatasourceId::CondaMetaJson)
+                .contains(&provenant::models::DatasourceId::CondaMetaJson)
         );
         assert!(
             conda_pkg
                 .datasource_ids
-                .contains(&crate::models::DatasourceId::CondaMetaYaml)
+                .contains(&provenant::models::DatasourceId::CondaMetaYaml)
         );
         assert!(
             conda_pkg
