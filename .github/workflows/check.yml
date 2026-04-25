@@ -268,9 +268,9 @@ jobs:
             profile: debug
             test-target: lib
           - shard: license-detection
-            filter: "license_detection::golden_test::golden_tests::"
+            filter: "license_detection_golden"
             profile: ci-release
-            test-target: lib
+            test-target: integration
           - shard: post-processing
             filter: "post_processing::golden_test::tests::"
             profile: release
@@ -296,7 +296,12 @@ jobs:
         with:
           shared-key: golden-tests-${{ matrix.profile }}
 
+      - name: Run license detection golden test
+        if: matrix.shard == 'license-detection'
+        run: cargo test --test license_detection_golden --profile ci-release --verbose --features golden-tests
+
       - name: Run golden test shard
+        if: matrix.shard != 'license-detection'
         shell: bash
         run: |
           set -euo pipefail

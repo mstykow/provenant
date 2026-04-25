@@ -17,8 +17,6 @@ mod token_set;
 #[cfg(test)]
 mod embedded_test;
 pub mod expression;
-#[cfg(all(test, feature = "golden-tests"))]
-mod golden_test;
 #[cfg(feature = "golden-tests")]
 pub mod golden_utils;
 pub mod hash_match;

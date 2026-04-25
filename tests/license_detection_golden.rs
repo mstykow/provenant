@@ -27,13 +27,13 @@
 //! ## Running Tests
 //!
 //! ```bash
-//! cargo test license_detection_golden
+//! cargo test --test license_detection_golden --features golden-tests
 //! ```
 
-#[cfg(all(test, feature = "golden-tests"))]
+#[cfg(feature = "golden-tests")]
 mod golden_tests {
-    use crate::license_detection::LicenseDetectionEngine;
-    use crate::license_detection::golden_utils::{
+    use provenant::license_detection::LicenseDetectionEngine;
+    use provenant::license_detection::golden_utils::{
         detect_detection_expressions_for_golden, detect_license_expressions_for_golden,
     };
     use serde::Deserialize;
