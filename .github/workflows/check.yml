@@ -276,9 +276,9 @@ jobs:
             profile: release
             test-target: bin
           - shard: parsers
-            filter: "parsers::golden_test::"
+            filter: "parsers_golden"
             profile: debug
-            test-target: lib
+            test-target: integration
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:

@@ -1,16 +1,11 @@
 // SPDX-FileCopyrightText: Provenant contributors
 // SPDX-License-Identifier: Apache-2.0
 
-#[cfg(all(test, feature = "golden-tests"))]
 use crate::models::PackageData;
-#[cfg(all(test, feature = "golden-tests"))]
 use serde_json::Value;
-#[cfg(all(test, feature = "golden-tests"))]
 use std::fs;
-#[cfg(all(test, feature = "golden-tests"))]
 use std::path::Path;
 
-#[cfg(all(test, feature = "golden-tests"))]
 pub fn compare_package_data_parser_only(
     actual: &PackageData,
     expected_path: &Path,
@@ -29,7 +24,6 @@ pub fn compare_package_data_parser_only(
     compare_json_values_parser_only(&actual_json, expected_json, "")
 }
 
-#[cfg(all(test, feature = "golden-tests"))]
 pub fn compare_package_data_collection_parser_only(
     actual: &[PackageData],
     expected_path: &Path,
@@ -48,7 +42,6 @@ pub fn compare_package_data_collection_parser_only(
     compare_json_values_parser_only(&actual_json, expected_json, "")
 }
 
-#[cfg(all(test, feature = "golden-tests"))]
 fn unwrap_expected_parser_package(expected_value: &Value) -> Result<&Value, String> {
     if let Some(expected_array) = expected_value.as_array() {
         if expected_array.is_empty() {
@@ -73,7 +66,6 @@ fn unwrap_expected_parser_package(expected_value: &Value) -> Result<&Value, Stri
     Ok(expected_value)
 }
 
-#[cfg(all(test, feature = "golden-tests"))]
 fn unwrap_expected_parser_package_collection(expected_value: &Value) -> Result<&Value, String> {
     if expected_value.is_array() {
         return Ok(expected_value);
@@ -95,7 +87,6 @@ fn unwrap_expected_parser_package_collection(expected_value: &Value) -> Result<&
     Err("Expected file does not contain a package collection".to_string())
 }
 
-#[cfg(all(test, feature = "golden-tests"))]
 fn compare_json_values_parser_only(
     actual: &Value,
     expected: &Value,
