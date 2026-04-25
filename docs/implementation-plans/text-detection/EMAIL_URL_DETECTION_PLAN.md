@@ -54,7 +54,7 @@ Email and URL detection extracts email addresses and URLs from text-bearing scan
 - ✅ `OutputURL` includes `start_line`/`end_line`
 - ✅ Scanner integration via `process_with_options(...)`
 - ✅ CLI flags: `--email`, `--max-email`, `--url`, `--max-url`
-- ✅ Local golden tests and fixtures in `src/finder/golden_test.rs` and `testdata/plugin_email_url/`
+- ✅ Local golden tests and fixtures in `tests/finder_golden.rs` and `testdata/plugin_email_url/`
 
 **Notes:**
 

@@ -1,17 +1,14 @@
 // SPDX-FileCopyrightText: Provenant contributors
 // SPDX-License-Identifier: Apache-2.0
 
-#[cfg(all(test, feature = "golden-tests"))]
+#[cfg(feature = "golden-tests")]
 mod tests {
     use std::fs;
     use std::path::PathBuf;
 
+    use provenant::finder::{DetectionConfig, find_emails, find_urls};
+    use provenant::utils::file::extract_text_for_detection;
     use serde::{Deserialize, Serialize};
-
-    use crate::finder::emails::EmailDetection;
-    use crate::finder::urls::UrlDetection;
-    use crate::finder::{DetectionConfig, find_emails, find_urls};
-    use crate::utils::file::extract_text_for_detection;
 
     #[derive(Debug, Deserialize)]
     struct ExpectedReport {
@@ -57,28 +54,6 @@ mod tests {
         content
     }
 
-    fn to_expected_emails(detections: Vec<EmailDetection>) -> Vec<ExpectedEmail> {
-        detections
-            .into_iter()
-            .map(|d| ExpectedEmail {
-                email: d.email,
-                start_line: d.start_line.get(),
-                end_line: d.end_line.get(),
-            })
-            .collect()
-    }
-
-    fn to_expected_urls(detections: Vec<UrlDetection>) -> Vec<ExpectedUrl> {
-        detections
-            .into_iter()
-            .map(|d| ExpectedUrl {
-                url: d.url,
-                start_line: d.start_line.get(),
-                end_line: d.end_line.get(),
-            })
-            .collect()
-    }
-
     fn assert_emails_fixture(expected_name: &str, max_emails: usize) {
         let expected = read_expected(expected_name);
         let cfg = DetectionConfig {
@@ -89,7 +64,14 @@ mod tests {
 
         for file in expected.files {
             let content = read_input(&file.path);
-            let actual = to_expected_emails(find_emails(&content, &cfg));
+            let actual = find_emails(&content, &cfg)
+                .into_iter()
+                .map(|d| ExpectedEmail {
+                    email: d.email,
+                    start_line: d.start_line.get(),
+                    end_line: d.end_line.get(),
+                })
+                .collect::<Vec<_>>();
             let expected_emails = file.emails.unwrap_or_default();
             assert_eq!(
                 actual, expected_emails,
@@ -109,7 +91,14 @@ mod tests {
 
         for file in expected.files {
             let content = read_input(&file.path);
-            let actual = to_expected_urls(find_urls(&content, &cfg));
+            let actual = find_urls(&content, &cfg)
+                .into_iter()
+                .map(|d| ExpectedUrl {
+                    url: d.url,
+                    start_line: d.start_line.get(),
+                    end_line: d.end_line.get(),
+                })
+                .collect::<Vec<_>>();
             let expected_urls = file.urls.unwrap_or_default();
             assert_eq!(
                 actual, expected_urls,

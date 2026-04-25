@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 mod emails;
-#[cfg(all(test, feature = "golden-tests"))]
-mod golden_test;
 mod host;
 mod junk_data;
 mod urls;
