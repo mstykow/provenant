@@ -12,7 +12,7 @@ The chart below uses a log-log scatter plot: file count on the x-axis, wall-cloc
 
 ![Scan duration vs. file count for Provenant and ScanCode](benchmarks/scan-duration-vs-files.svg)
 
-> Provenant is faster on 171 of 171 recorded runs, with a **11.4× median speedup** and **10.6× geometric-mean speedup** overall; the median gap grows from **7.0×** on sub-100-file targets to **19.1×** on 10k+ file targets.
+> Provenant is faster on 172 of 172 recorded runs, with a **11.5× median speedup** and **10.6× geometric-mean speedup** overall; the median gap grows from **7.0×** on sub-100-file targets to **19.1×** on 10k+ file targets.
 > Generated from the benchmark timing rows in this document via `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart`.
 
 ## Current benchmark examples
@@ -685,6 +685,13 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Run context: 2026-04-21 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc
 - Timing: Provenant `35.69s`; ScanCode `501.03s`
 - Broader BitBake package and dependency visibility (`1437` vs `0` packages, `10149` vs `0` dependencies) from committed `.bb`, `.bbappend`, and `.inc` metadata, plus recipe-side declared-license and source-reference recovery on manifests such as `nilfs-utils_v2.2.11.bb`, with patch-header and comment-style author recovery kept separate from ScanCode's bare-word GPL/LGPL and patch-prose overcalls
+
+##### [openssl/openssl @ 7fb28b9](https://github.com/openssl/openssl/tree/7fb28b9cd05ba89cbbe038dfa85804fe22bc146a) — **20.36× faster**
+
+- Files: 6,074
+- Run context: 2026-04-25 · openssl-2710 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `58.93s`; ScanCode `1199.73s`
+- Broader package and dependency visibility (`1` vs `0` packages, `41` vs `0` dependencies) from bundled `external/perl/Text-Template-1.56` CPAN metadata plus committed `.gitmodules` and `test/quic-openssl-docker/Dockerfile` surfaces, with stronger `Written by ...` author recovery on OpenSSL-style comment headers and cleaner rejection of weak CPAL or MIT overcalls on standard OpenSSL license footers
 
 ##### [protocolbuffers/protobuf @ e3370c2](https://github.com/protocolbuffers/protobuf/tree/e3370c2e26bbfaa63bc9f8e4ac0f8dc066ba3eeb) — **28.62× faster**
 
