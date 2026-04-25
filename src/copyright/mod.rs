@@ -27,9 +27,6 @@ mod prepare;
 mod refiner;
 mod types;
 
-#[cfg(all(test, feature = "golden-tests"))]
-mod golden_test;
-
 pub use credits::{detect_credits_authors, is_credits_file};
 pub use types::{AuthorDetection, CopyrightDetection, HolderDetection};
 

@@ -256,9 +256,9 @@ jobs:
       matrix:
         include:
           - shard: copyright
-            filter: "copyright::golden_test::tests::"
+            filter: "copyright_golden"
             profile: ci-release
-            test-target: lib
+            test-target: integration
           - shard: assembly
             filter: "assembly::assembly_golden_test::"
             profile: debug
@@ -296,23 +296,22 @@ jobs:
         with:
           shared-key: golden-tests-${{ matrix.profile }}
 
-      - name: Run license detection golden test
-        if: matrix.shard == 'license-detection'
-        run: cargo test --test license_detection_golden --profile ci-release --verbose --features golden-tests
-
       - name: Run golden test shard
-        if: matrix.shard != 'license-detection'
         shell: bash
         run: |
           set -euo pipefail
           cargo_args=(test --lib --verbose --features golden-tests "${{ matrix.filter }}")
           if [[ "${{ matrix.test-target }}" == "bin" ]]; then
             cargo_args=(test --bin provenant --verbose --features golden-tests "${{ matrix.filter }}")
+          elif [[ "${{ matrix.test-target }}" == "integration" ]]; then
+            cargo_args=(test --test "${{ matrix.filter }}" --verbose --features golden-tests)
           fi
           if [[ "${{ matrix.profile }}" == "ci-release" ]]; then
             cargo_args=(test --lib --profile ci-release --verbose --features golden-tests "${{ matrix.filter }}")
             if [[ "${{ matrix.test-target }}" == "bin" ]]; then
               cargo_args=(test --bin provenant --profile ci-release --verbose --features golden-tests "${{ matrix.filter }}")
+            elif [[ "${{ matrix.test-target }}" == "integration" ]]; then
+              cargo_args=(test --test "${{ matrix.filter }}" --profile ci-release --verbose --features golden-tests)
             fi
           fi
 
