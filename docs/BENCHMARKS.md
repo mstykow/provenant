@@ -12,7 +12,7 @@ The chart below uses a log-log scatter plot: file count on the x-axis, wall-cloc
 
 ![Scan duration vs. file count for Provenant and ScanCode](benchmarks/scan-duration-vs-files.svg)
 
-> Provenant is faster on 172 of 172 recorded runs, with a **11.5× median speedup** and **10.6× geometric-mean speedup** overall; the median gap grows from **7.0×** on sub-100-file targets to **19.1×** on 10k+ file targets.
+> Provenant is faster on 173 of 173 recorded runs, with a **11.5× median speedup** and **10.7× geometric-mean speedup** overall; the median gap grows from **7.0×** on sub-100-file targets to **19.1×** on 10k+ file targets.
 > Generated from the benchmark timing rows in this document via `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart`.
 
 ## Current benchmark examples
@@ -678,6 +678,13 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Run context: 2026-04-08 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc
 - Timing: Provenant `52.87s`; ScanCode `447.07s`
 - Broader package/dependency extraction (`18` vs `2` packages, `13` vs `2` dependencies), preserved NPSL/source-available handling across core Nmap and Zenmap reference-notice files, and cleaner rejection of weak translated-manpage GPL bare-word and placeholder noise
+
+##### [nginx/nginx @ 6e14e95](https://github.com/nginx/nginx/tree/6e14e954aaacce9a433d9b07b4653809c7594ab8) — **17.78× faster**
+
+- Files: 521
+- Run context: 2026-04-25 · nginx-35550 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `11.92s`; ScanCode `211.97s`
+- Direct CPAN package visibility (`1` vs `0` packages) from the embedded Perl `src/http/modules/perl/Makefile.PL`, with concrete `pkg:cpan/nginx@%%VERSION%%` identity and author metadata instead of ScanCode's generic CPAN placeholder, plus safer rejection of nginx's custom `auto/configure` shell script as Autotools package metadata and cleaner author, email, and URL normalization across manpage markup and README badge links
 
 ##### [openembedded/meta-openembedded @ 7bf89d0](https://github.com/openembedded/meta-openembedded/tree/7bf89d06a41405b48fa3af260da36bc686973afc) — **14.04× faster**
 
