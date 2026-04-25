@@ -18,6 +18,7 @@ use crate::license_detection::models::LicenseMatch;
 use crate::license_detection::spdx_mapping::SpdxMapping;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use crate::license_detection::expression::licensing_contains;
 use crate::license_detection::expression::parse_expression;
 use analysis::{
     analyze_detection, classify_detection, compute_detection_score,
@@ -198,6 +199,113 @@ pub(crate) fn empty_detection() -> LicenseDetection {
         identifier: None,
         file_regions: Vec::new(),
     }
+}
+
+pub(crate) fn split_groups_across_frontmatter_boundary(
+    groups: Vec<DetectionGroup>,
+    source_text: Option<&str>,
+) -> Vec<DetectionGroup> {
+    let Some(source_text) = source_text else {
+        return groups;
+    };
+    let Some(frontmatter_end_line) = frontmatter_end_line(source_text) else {
+        return groups;
+    };
+
+    groups
+        .into_iter()
+        .flat_map(|group| split_group_across_frontmatter_boundary(group, frontmatter_end_line))
+        .collect()
+}
+
+fn frontmatter_end_line(source_text: &str) -> Option<usize> {
+    let mut lines = source_text.lines();
+    if lines.next()?.trim() != "---" {
+        return None;
+    }
+
+    for (index, line) in source_text.lines().enumerate().skip(1) {
+        if index > 40 {
+            return None;
+        }
+        if line.trim() == "---" {
+            return Some(index + 1);
+        }
+    }
+
+    None
+}
+
+fn split_group_across_frontmatter_boundary(
+    group: DetectionGroup,
+    frontmatter_end_line: usize,
+) -> Vec<DetectionGroup> {
+    if group.matches.len() < 2 {
+        return vec![group];
+    }
+
+    let Some(anchor_start_line) =
+        find_frontmatter_spanning_anchor_start_line(&group, frontmatter_end_line)
+    else {
+        return vec![group];
+    };
+
+    let split_index = group
+        .matches
+        .iter()
+        .position(|match_item| match_item.end_line.get() >= anchor_start_line)
+        .unwrap_or(group.matches.len());
+
+    if split_index == 0 || split_index >= group.matches.len() {
+        return vec![group];
+    }
+
+    let leading_matches = &group.matches[..split_index];
+    let trailing_matches = &group.matches[split_index..];
+
+    if !trailing_matches.iter().any(is_unknown_reference_like_match) {
+        return vec![group];
+    }
+
+    if !leading_matches.iter().all(|match_item| {
+        match_item.matched_length <= 12
+            && !match_item.is_license_clue()
+            && !is_unknown_reference_like_match(match_item)
+            && trailing_matches.iter().any(|body_match| {
+                !body_match.is_license_clue()
+                    && !is_unknown_reference_like_match(body_match)
+                    && licensing_contains(
+                        body_match.license_expression.as_str(),
+                        match_item.license_expression.as_str(),
+                    )
+            })
+    }) {
+        return vec![group];
+    }
+
+    vec![
+        DetectionGroup::new(leading_matches.to_vec()),
+        DetectionGroup::new(trailing_matches.to_vec()),
+    ]
+}
+
+fn find_frontmatter_spanning_anchor_start_line(
+    group: &DetectionGroup,
+    frontmatter_end_line: usize,
+) -> Option<usize> {
+    group
+        .matches
+        .iter()
+        .filter(|match_item| {
+            !match_item.is_license_clue()
+                && !is_unknown_reference_like_match(match_item)
+                && match_item.start_line.get() > 1
+                && match_item.start_line.get() <= frontmatter_end_line
+                && match_item.end_line.get() > frontmatter_end_line + 10
+                && match_item.matched_length >= 100
+        })
+        .map(|match_item| match_item.start_line.get())
+        .min()
 }
 
 pub(crate) fn attach_source_path_to_detections(
@@ -790,6 +898,104 @@ mod tests {
         );
 
         assert_eq!(selected, vec![referenced_license]);
+    }
+
+    #[test]
+    fn split_groups_across_frontmatter_boundary_separates_mysql_style_header_hits() {
+        let source = r#"---
+short_name: MySQL FLOSS exception to GPL 2.0
+name: MySQL FLOSS exception to GPL 2.0
+category: Copyleft Limited
+owner: Oracle Corporation
+homepage_url: https://mariadb.com/kb/en/mariadb/mariadb-license/#the-floss-exception
+spdx_license_key: LicenseRef-scancode-mysql-floss-exception-2.0
+other_urls:
+  - http://www.gnu.org/licenses/gpl-2.0.txt
+ignorable_urls:
+  - http://www.gnu.org/philosophy/free-sw.html
+  - http://www.opensource.org/docs/definition.php
+---
+
+MySQL FLOSS License Exception body starts here.
+"#;
+
+        let mut header_gpl_one = create_test_match(3, 3, "2-aho", "gpl-2.0_52.RULE");
+        header_gpl_one.license_expression = "gpl-2.0".to_string();
+        header_gpl_one.license_expression_spdx = Some("GPL-2.0-only".to_string());
+        header_gpl_one.matched_length = 3;
+
+        let mut header_gpl_two = create_test_match(4, 4, "2-aho", "gpl-2.0_52.RULE");
+        header_gpl_two.license_expression = "gpl-2.0".to_string();
+        header_gpl_two.license_expression_spdx = Some("GPL-2.0-only".to_string());
+        header_gpl_two.matched_length = 3;
+
+        let mut body_with_exception = create_test_match(
+            7,
+            40,
+            "3-seq",
+            "gpl-2.0-plus_with_mysql-floss-exception-2.0_1.RULE",
+        );
+        body_with_exception.license_expression =
+            "gpl-2.0-plus WITH mysql-floss-exception-2.0".to_string();
+        body_with_exception.license_expression_spdx =
+            Some("GPL-2.0-or-later WITH LicenseRef-scancode-mysql-floss-exception-2.0".to_string());
+        body_with_exception.matched_length = 300;
+
+        let mut body_gpl = create_test_match(11, 11, "2-aho", "gpl-2.0_29.RULE");
+        body_gpl.license_expression = "gpl-2.0".to_string();
+        body_gpl.license_expression_spdx = Some("GPL-2.0-only".to_string());
+        body_gpl.matched_length = 9;
+
+        let mut body_unknown =
+            create_test_match(14, 14, "2-aho", "unknown-license-reference_299.RULE");
+        body_unknown.license_expression = "unknown-license-reference".to_string();
+        body_unknown.license_expression_spdx =
+            Some("LicenseRef-scancode-unknown-license-reference".to_string());
+        body_unknown.matched_length = 7;
+
+        let groups = split_groups_across_frontmatter_boundary(
+            vec![DetectionGroup::new(vec![
+                header_gpl_one.clone(),
+                header_gpl_two.clone(),
+                body_with_exception.clone(),
+                body_gpl.clone(),
+                body_unknown.clone(),
+            ])],
+            Some(source),
+        );
+
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].matches, vec![header_gpl_one, header_gpl_two]);
+        assert_eq!(
+            groups[1].matches,
+            vec![body_with_exception, body_gpl, body_unknown]
+        );
+    }
+
+    #[test]
+    fn split_groups_across_frontmatter_boundary_does_not_split_without_spanning_body_match() {
+        let source = "---\nname: GPL 2.0\n---\nGPL 2.0\n";
+
+        let mut header_gpl = create_test_match(2, 2, "2-aho", "gpl-2.0_52.RULE");
+        header_gpl.license_expression = "gpl-2.0".to_string();
+        header_gpl.license_expression_spdx = Some("GPL-2.0-only".to_string());
+        header_gpl.matched_length = 3;
+
+        let mut body_gpl = create_test_match(4, 4, "2-aho", "gpl-2.0_29.RULE");
+        body_gpl.license_expression = "gpl-2.0".to_string();
+        body_gpl.license_expression_spdx = Some("GPL-2.0-only".to_string());
+        body_gpl.matched_length = 3;
+
+        let groups = split_groups_across_frontmatter_boundary(
+            vec![DetectionGroup::new(vec![
+                header_gpl.clone(),
+                body_gpl.clone(),
+            ])],
+            Some(source),
+        );
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].matches, vec![header_gpl, body_gpl]);
     }
 
     fn create_test_license() -> License {
