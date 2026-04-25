@@ -449,6 +449,9 @@ ScanCode: 379.55s</title></rect>
     <rect x="683.62" y="336.32" width="8" height="8" fill="#d97706" rx="1.5"><title>apache/felix-dev @ 20aee77
 Files: 5354
 ScanCode: 479.56s</title></rect>
+    <rect x="692.31" y="293.00" width="8" height="8" fill="#d97706" rx="1.5"><title>openssl/openssl @ 7fb28b9
+Files: 6074
+ScanCode: 1199.73s</title></rect>
     <rect x="694.77" y="315.99" width="8" height="8" fill="#d97706" rx="1.5"><title>yoctoproject/poky @ cb2dcb4
 Files: 6295
 ScanCode: 737.50s</title></rect>
@@ -964,6 +967,9 @@ Provenant: 38.15s</title></circle>
     <circle cx="687.62" cy="444.62" r="4.5" fill="#2563eb"><title>apache/felix-dev @ 20aee77
 Files: 5354
 Provenant: 52.75s</title></circle>
+    <circle cx="696.31" cy="439.39" r="4.5" fill="#2563eb"><title>openssl/openssl @ 7fb28b9
+Files: 6074
+Provenant: 58.93s</title></circle>
     <circle cx="698.77" cy="449.75" r="4.5" fill="#2563eb"><title>yoctoproject/poky @ cb2dcb4
 Files: 6295
 Provenant: 47.33s</title></circle>
