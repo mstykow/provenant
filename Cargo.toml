@@ -188,6 +188,12 @@ opt-level = 3
 # Strip debug symbols to reduce binary size
 strip = true
 
+[profile.ci-release]
+inherits = "release"
+lto = false
+codegen-units = 16
+strip = false
+
 [profile.profiling]
 inherits = "release"
 strip = false

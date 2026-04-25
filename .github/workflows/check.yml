@@ -105,7 +105,7 @@ jobs:
         run: cargo check --all --verbose
 
       - name: Run doctests
-        run: cargo test --doc --release --verbose
+        run: cargo test --doc --profile ci-release --verbose
 
       - name: Check dependency policy
         uses: EmbarkStudios/cargo-deny-action@44db170f6a7d12a6e90340e9e0fca1f650d34b14
@@ -141,10 +141,10 @@ jobs:
       - name: Set up Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: rust-library-tests-release
+          shared-key: rust-library-tests-ci-release
 
       - name: Run library tests except scanner/assembly contract layer
-        run: "cargo test -p provenant-cli --lib --release --verbose -- --skip _scan_test::"
+        run: "cargo test -p provenant-cli --lib --profile ci-release --verbose -- --skip _scan_test::"
 
   windows-build-smoke:
     name: Windows Build Smoke Test
@@ -206,9 +206,9 @@ jobs:
       matrix:
         include:
           - shard: contracts
-            shared_key: rust-scan-integration-tests-release-contracts
+            shared_key: rust-scan-integration-tests-ci-release-contracts
           - shard: integration
-            shared_key: rust-scan-integration-tests-release-integration
+            shared_key: rust-scan-integration-tests-ci-release-integration
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
@@ -228,23 +228,23 @@ jobs:
 
       - name: Run parser-local scanner/assembly contract tests
         if: matrix.shard == 'contracts'
-        run: "cargo test --lib --release --verbose _scan_test::"
+        run: "cargo test --lib --profile ci-release --verbose _scan_test::"
 
       - name: Run scanner integration suite
         if: matrix.shard == 'integration'
-        run: cargo test --test scanner_integration --release --verbose
+        run: cargo test --test scanner_integration --profile ci-release --verbose
 
       - name: Run scanner copyright/credits integration suite
         if: matrix.shard == 'integration'
-        run: cargo test --test scanner_copyright_credits --release --verbose
+        run: cargo test --test scanner_copyright_credits --profile ci-release --verbose
 
       - name: Run progress CLI integration suite
         if: matrix.shard == 'integration'
-        run: cargo test --test progress_cli_integration --release --verbose
+        run: cargo test --test progress_cli_integration --profile ci-release --verbose
 
       - name: Run output contract fixture suite
         if: matrix.shard == 'integration'
-        run: cargo test --test output_format_golden --release --verbose
+        run: cargo test --test output_format_golden --profile ci-release --verbose
 
   golden-tests:
     name: Golden Tests (${{ matrix.shard }})
@@ -257,7 +257,7 @@ jobs:
         include:
           - shard: copyright
             filter: "copyright::golden_test::tests::"
-            profile: release
+            profile: ci-release
             test-target: lib
           - shard: assembly
             filter: "assembly::assembly_golden_test::"
@@ -269,7 +269,7 @@ jobs:
             test-target: lib
           - shard: license-detection
             filter: "license_detection::golden_test::golden_tests::"
-            profile: release
+            profile: ci-release
             test-target: lib
           - shard: post-processing
             filter: "post_processing::golden_test::tests::"
@@ -304,10 +304,10 @@ jobs:
           if [[ "${{ matrix.test-target }}" == "bin" ]]; then
             cargo_args=(test --bin provenant --verbose --features golden-tests "${{ matrix.filter }}")
           fi
-          if [[ "${{ matrix.profile }}" == "release" ]]; then
-            cargo_args=(test --lib --release --verbose --features golden-tests "${{ matrix.filter }}")
+          if [[ "${{ matrix.profile }}" == "ci-release" ]]; then
+            cargo_args=(test --lib --profile ci-release --verbose --features golden-tests "${{ matrix.filter }}")
             if [[ "${{ matrix.test-target }}" == "bin" ]]; then
-              cargo_args=(test --bin provenant --release --verbose --features golden-tests "${{ matrix.filter }}")
+              cargo_args=(test --bin provenant --profile ci-release --verbose --features golden-tests "${{ matrix.filter }}")
             fi
           fi
 
