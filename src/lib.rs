@@ -41,6 +41,9 @@ pub mod models;
 pub mod output;
 pub mod output_schema;
 pub mod parsers;
+#[cfg(feature = "golden-tests")]
+pub mod post_processing;
+#[cfg(not(feature = "golden-tests"))]
 pub(crate) mod post_processing;
 pub mod progress;
 pub(crate) mod scan_result_shaping;
