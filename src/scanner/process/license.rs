@@ -99,6 +99,9 @@ pub(super) fn extract_license_information(
                 }
                 Err(_) => None,
             };
+            let mut detections = detections;
+            promote_legal_notice_low_quality_detections(&mut detections, path);
+
             let mut model_detections = Vec::new();
             let mut model_clues = Vec::new();
 
@@ -257,6 +260,88 @@ fn promote_reference_url_clue_detection(
         },
         identifier: detection.identifier.clone(),
     })
+}
+
+fn promote_legal_notice_low_quality_detections(
+    detections: &mut [InternalLicenseDetection],
+    path: &Path,
+) {
+    if !is_legal_notice_like_path(path) {
+        return;
+    }
+
+    let has_concrete_detection = detections
+        .iter()
+        .any(|detection| detection.license_expression.is_some());
+    if !has_concrete_detection {
+        return;
+    }
+
+    for detection in detections {
+        if detection.license_expression.is_some()
+            || !detection
+                .detection_log
+                .iter()
+                .any(|log| log == "low-quality-match-fragments")
+            || detection.matches.is_empty()
+        {
+            continue;
+        }
+
+        if !detection.matches.iter().all(|license_match| {
+            !license_match.is_license_clue()
+                && !license_match.license_expression.is_empty()
+                && !license_match.license_expression.contains("unknown")
+        }) {
+            continue;
+        }
+
+        let Some(license_expression) =
+            crate::utils::spdx::combine_license_expressions_preserving_structure(
+                detection
+                    .matches
+                    .iter()
+                    .map(|license_match| license_match.license_expression.clone())
+                    .collect::<Vec<_>>(),
+            )
+        else {
+            continue;
+        };
+        let license_expression_spdx =
+            crate::utils::spdx::combine_license_expressions_preserving_structure(
+                detection
+                    .matches
+                    .iter()
+                    .filter_map(|license_match| license_match.license_expression_spdx.clone())
+                    .collect::<Vec<_>>(),
+            );
+
+        detection.license_expression = Some(license_expression);
+        detection.license_expression_spdx = license_expression_spdx;
+        detection
+            .detection_log
+            .push("promoted-low-quality-legal-notice".to_string());
+    }
+}
+
+fn is_legal_notice_like_path(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let Some(base_name) = path.file_stem().and_then(|stem| stem.to_str()) else {
+        return false;
+    };
+
+    let name = name.to_ascii_lowercase();
+    let base_name = base_name.to_ascii_lowercase();
+    ["notice", "copyright", "copying", "license", "licence"]
+        .iter()
+        .any(|pattern| {
+            name.starts_with(pattern)
+                || name.ends_with(pattern)
+                || base_name.starts_with(pattern)
+                || base_name.ends_with(pattern)
+        })
 }
 
 fn match_has_exact_reference_url(
