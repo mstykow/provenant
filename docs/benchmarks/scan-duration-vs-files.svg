@@ -257,6 +257,9 @@ ScanCode: 96.27s</title></rect>
     <rect x="522.27" y="462.08" width="8" height="8" fill="#d97706" rx="1.5"><title>nix-community/dream2nix @ 69eb01f
 Files: 515
 ScanCode: 33.50s</title></rect>
+    <rect x="523.07" y="374.90" width="8" height="8" fill="#d97706" rx="1.5"><title>nginx/nginx @ 6e14e95
+Files: 521
+ScanCode: 211.97s</title></rect>
     <rect x="526.30" y="381.25" width="8" height="8" fill="#d97706" rx="1.5"><title>ocaml/ocaml-lsp @ 788ff73
 Files: 546
 ScanCode: 185.33s</title></rect>
@@ -775,6 +778,9 @@ Provenant: 13.20s</title></circle>
     <circle cx="526.27" cy="490.66" r="4.5" fill="#2563eb"><title>nix-community/dream2nix @ 69eb01f
 Files: 515
 Provenant: 19.91s</title></circle>
+    <circle cx="527.07" cy="514.90" r="4.5" fill="#2563eb"><title>nginx/nginx @ 6e14e95
+Files: 521
+Provenant: 11.92s</title></circle>
     <circle cx="530.30" cy="507.88" r="4.5" fill="#2563eb"><title>ocaml/ocaml-lsp @ 788ff73
 Files: 546
 Provenant: 13.83s</title></circle>
