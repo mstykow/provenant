@@ -102,12 +102,12 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Timing: Provenant `42.96s`; ScanCode `393.40s`
 - Broader ABOUT and Python package visibility (`25` vs `1` packages, `284` vs `56` dependencies) across committed `.ABOUT` files, root and suffixed `pyproject.toml` manifests, and `uv.lock`, plus zero scan-file errors where ScanCode times out on large generated scan-result JSON fixtures
 
-##### [aboutcode-org/scancode-toolkit @ 6570c13](https://github.com/aboutcode-org/scancode-toolkit/tree/6570c131e2821388286f661368a70e0120aaf2c6) — **12.38× faster**
+##### [aboutcode-org/scancode-toolkit @ 6570c13](https://github.com/aboutcode-org/scancode-toolkit/tree/6570c131e2821388286f661368a70e0120aaf2c6) — **13.48× faster**
 
 - Files: 64,369
-- Run context: 2026-04-24 · scancode-toolkit-35446 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
-- Timing: Provenant `582.86s`; ScanCode `7214.43s`
-- Far broader ABOUT-adjacent package and dependency visibility (`1281` vs `6` packages, `10943` vs `377` dependencies) across committed `.ABOUT` sidecars, Python/Swift/Dart/CocoaPods fixture manifests, and bounded RPM header metadata recovery, with real ecosystem PURLs derived from ABOUT `download_url` metadata instead of `pkg:about/...` fallbacks and zero scan-file errors where ScanCode times out on heavy fixture snapshots
+- Run context: 2026-04-25 · scancode-toolkit-41061 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `535.40s`; ScanCode `7214.43s`
+- Far broader ABOUT-adjacent package and dependency visibility (`1281` vs `6` packages, `10943` vs `377` dependencies) across committed `.ABOUT` sidecars, Python/Swift/Dart/CocoaPods fixture manifests, and bounded RPM header metadata recovery, with real ecosystem PURLs derived from ABOUT `download_url` metadata instead of `pkg:about/...` fallbacks and zero scan-file errors where ScanCode times out on heavy fixture snapshots; the remaining ScanCode edge is concentrated in a small set of license-detection corpus and legal-text cases where it still preserves extra detections beyond Provenant’s current policy or refinement choices
 
 ##### [apache/airflow @ 47ce5f3](https://github.com/apache/airflow/tree/47ce5f32b4fae95f5865ba256d409c778d53a3d5) — **14.33× faster**
 
