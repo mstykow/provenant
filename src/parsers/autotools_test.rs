@@ -11,20 +11,19 @@ use std::path::PathBuf;
 
 #[test]
 fn test_is_match() {
-    // Should match configure
+    // Should match generated configure
     assert!(AutotoolsConfigureParser::is_match(&PathBuf::from(
-        "configure"
-    )));
-    assert!(AutotoolsConfigureParser::is_match(&PathBuf::from(
-        "/path/to/myproject/configure"
+        "testdata/autotools/myproject/configure"
     )));
 
     // Should match configure.ac
     assert!(AutotoolsConfigureParser::is_match(&PathBuf::from(
-        "configure.ac"
+        "testdata/autotools/another-project/configure.ac"
     )));
-    assert!(AutotoolsConfigureParser::is_match(&PathBuf::from(
-        "/path/to/myproject/configure.ac"
+
+    // Should NOT match a custom non-Autoconf configure script
+    assert!(!AutotoolsConfigureParser::is_match(&PathBuf::from(
+        "testdata/autotools/non-autoconf-configure/configure"
     )));
 
     // Should NOT match configure.in (deprecated legacy format)
@@ -86,24 +85,4 @@ fn test_nested_path() {
         package_data.purl.as_deref(),
         Some("pkg:autotools/my-awesome-project")
     );
-}
-
-#[test]
-fn test_root_path_edge_case() {
-    let path = PathBuf::from("configure");
-    let package_data = AutotoolsConfigureParser::extract_first_package(&path);
-
-    assert_eq!(package_data.package_type, Some(PackageType::Autotools));
-    assert_eq!(package_data.name, Some("input".to_string()));
-    assert_eq!(package_data.purl.as_deref(), Some("pkg:autotools/input"));
-}
-
-#[test]
-fn test_root_configure_ac_uses_input_name() {
-    let path = PathBuf::from("configure.ac");
-    let package_data = AutotoolsConfigureParser::extract_first_package(&path);
-
-    assert_eq!(package_data.package_type, Some(PackageType::Autotools));
-    assert_eq!(package_data.name, Some("input".to_string()));
-    assert_eq!(package_data.purl.as_deref(), Some("pkg:autotools/input"));
 }
