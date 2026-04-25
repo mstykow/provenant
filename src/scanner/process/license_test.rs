@@ -3,7 +3,7 @@
 
 use super::{
     LicenseExtractionInput, compute_percentage_of_license_text, convert_detection_to_model,
-    extract_license_information,
+    extract_license_information, promote_legal_notice_low_quality_detections,
 };
 use crate::license_detection::LicenseDetection as InternalLicenseDetection;
 use crate::license_detection::LicenseDetectionEngine;
@@ -75,6 +75,40 @@ fn create_test_index(entries: &[(&str, u16)], len_legalese: usize) -> LicenseInd
     let mut index = LicenseIndex::new(dictionary);
     index.len_legalese = len_legalese;
     index
+}
+
+fn make_internal_notice_match(
+    expr: &str,
+    expr_spdx: &str,
+    start_line: usize,
+    end_line: usize,
+) -> LicenseMatch {
+    LicenseMatch {
+        rid: 0,
+        license_expression: expr.to_string(),
+        license_expression_spdx: Some(expr_spdx.to_string()),
+        from_file: Some("NOTICE".to_string()),
+        start_line: LineNumber::new(start_line).expect("valid start line"),
+        end_line: LineNumber::new(end_line).expect("valid end line"),
+        start_token: start_line,
+        end_token: end_line + 1,
+        matcher: MatcherKind::Seq,
+        score: MatchScore::from_percentage(50.0),
+        matched_length: 11,
+        rule_length: 22,
+        match_coverage: 50.0,
+        rule_relevance: 100,
+        rule_identifier: "apache-2.0_559.RULE".to_string(),
+        rule_url: String::new(),
+        matched_text: None,
+        referenced_filenames: None,
+        rule_kind: RuleKind::Text,
+        is_from_license: false,
+        rule_start_token: 0,
+        coordinates: MatchCoordinates::query_region(PositionSpan::empty()),
+        candidate_resemblance: 0.0,
+        candidate_containment: 0.0,
+    }
 }
 
 #[test]
@@ -261,6 +295,95 @@ fn test_convert_detection_to_model_promotes_exact_reference_url_clue() {
     assert_eq!(converted.matches.len(), 1);
     assert_eq!(converted.matches[0].license_expression, "cc-by-sa-3.0");
     assert!(clues.is_empty());
+}
+
+#[test]
+fn test_promote_legal_notice_low_quality_detections_promotes_apache_notice_fragment() {
+    let concrete = InternalLicenseDetection {
+        license_expression: Some("cve-tou".to_string()),
+        license_expression_spdx: Some("cve-tou".to_string()),
+        matches: vec![make_internal_notice_match("cve-tou", "cve-tou", 39, 42)],
+        detection_log: Vec::new(),
+        identifier: None,
+        file_regions: Vec::new(),
+    };
+    let low_quality = InternalLicenseDetection {
+        license_expression: None,
+        license_expression_spdx: None,
+        matches: vec![make_internal_notice_match("apache-2.0", "Apache-2.0", 7, 8)],
+        detection_log: vec!["low-quality-match-fragments".to_string()],
+        identifier: None,
+        file_regions: Vec::new(),
+    };
+    let mut detections = vec![concrete, low_quality];
+
+    promote_legal_notice_low_quality_detections(&mut detections, std::path::Path::new("NOTICE"));
+
+    assert_eq!(
+        detections[1].license_expression.as_deref(),
+        Some("apache-2.0")
+    );
+    assert_eq!(
+        detections[1].license_expression_spdx.as_deref(),
+        Some("Apache-2.0")
+    );
+    assert!(
+        detections[1]
+            .detection_log
+            .contains(&"promoted-low-quality-legal-notice".to_string())
+    );
+}
+
+#[test]
+fn test_promote_legal_notice_low_quality_detections_ignores_non_legal_path() {
+    let concrete = InternalLicenseDetection {
+        license_expression: Some("cve-tou".to_string()),
+        license_expression_spdx: Some("cve-tou".to_string()),
+        matches: vec![make_internal_notice_match("cve-tou", "cve-tou", 39, 42)],
+        detection_log: Vec::new(),
+        identifier: None,
+        file_regions: Vec::new(),
+    };
+    let low_quality = InternalLicenseDetection {
+        license_expression: None,
+        license_expression_spdx: None,
+        matches: vec![make_internal_notice_match("apache-2.0", "Apache-2.0", 7, 8)],
+        detection_log: vec!["low-quality-match-fragments".to_string()],
+        identifier: None,
+        file_regions: Vec::new(),
+    };
+    let mut detections = vec![concrete, low_quality];
+
+    promote_legal_notice_low_quality_detections(&mut detections, std::path::Path::new("README.md"));
+
+    assert!(detections[1].license_expression.is_none());
+}
+
+#[test]
+fn test_promote_legal_notice_low_quality_detections_ignores_true_clue_rules() {
+    let concrete = InternalLicenseDetection {
+        license_expression: Some("cve-tou".to_string()),
+        license_expression_spdx: Some("cve-tou".to_string()),
+        matches: vec![make_internal_notice_match("cve-tou", "cve-tou", 39, 42)],
+        detection_log: Vec::new(),
+        identifier: None,
+        file_regions: Vec::new(),
+    };
+    let mut clue_match = make_internal_notice_match("apache-2.0", "Apache-2.0", 7, 8);
+    clue_match.rule_kind = RuleKind::Clue;
+    let low_quality = InternalLicenseDetection {
+        license_expression: None,
+        license_expression_spdx: None,
+        matches: vec![clue_match],
+        detection_log: vec!["low-quality-match-fragments".to_string()],
+        identifier: None,
+        file_regions: Vec::new(),
+    };
+    let mut detections = vec![concrete, low_quality];
+
+    promote_legal_notice_low_quality_detections(&mut detections, std::path::Path::new("NOTICE"));
+
+    assert!(detections[1].license_expression.is_none());
 }
 
 #[test]
