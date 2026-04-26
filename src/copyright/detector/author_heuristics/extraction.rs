@@ -221,8 +221,23 @@ fn trim_following_sentence_clause(who: &str) -> String {
     trimmed.to_string()
 }
 
+fn trim_notice_support_sentence(who: &str) -> String {
+    static NOTICE_SUPPORT_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?is)^(?P<head>.+?)\.\s+Visit\b.*$").unwrap());
+
+    let trimmed = who.trim();
+    if let Some(cap) = NOTICE_SUPPORT_RE.captures(trimmed) {
+        let head = cap.name("head").map(|m| m.as_str()).unwrap_or("").trim();
+        if !head.is_empty() {
+            return head.to_string();
+        }
+    }
+
+    trimmed.to_string()
+}
+
 fn refine_notice_collective_author(who: &str) -> Option<String> {
-    let trimmed = trim_following_sentence_clause(who)
+    let trimmed = trim_notice_support_sentence(&trim_following_sentence_clause(who))
         .trim_end_matches(&['.', ';', ','][..])
         .trim_matches(&['"', '\''][..])
         .trim()
@@ -2042,6 +2057,11 @@ pub(in super::super) fn extract_notice_developed_by_authors(
             .trim_matches(&['"', '\''][..])
             .trim_end_matches(&['.', ';', '"', '\''][..])
             .trim();
+        let who_lower = who.to_ascii_lowercase();
+        let has_url = who.contains("http://") || who.contains("https://");
+        if !has_url && !who_lower.starts_with("the ") {
+            continue;
+        }
         let Some(author) = refine_notice_collective_author(who) else {
             continue;
         };

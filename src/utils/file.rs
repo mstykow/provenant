@@ -703,7 +703,7 @@ fn is_wrapped_invalid_json_string_text(bytes: &[u8]) -> bool {
 }
 
 fn json_binary_override(bytes: &[u8]) -> Option<bool> {
-    if has_valid_json_text(bytes) || decode_utf16_json_text(bytes).is_some() {
+    if has_valid_json_text(bytes) {
         return Some(false);
     }
 
