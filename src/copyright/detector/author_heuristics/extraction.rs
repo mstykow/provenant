@@ -205,6 +205,87 @@ fn trim_attribution_tail(who: &str) -> String {
     }
 }
 
+fn trim_following_sentence_clause(who: &str) -> String {
+    static FOLLOWING_SENTENCE_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?is)^(?P<head>.+?)\.\s+(?:it|this|these|those|the|a|an)\b.*$").unwrap()
+    });
+
+    let trimmed = who.trim();
+    if let Some(cap) = FOLLOWING_SENTENCE_RE.captures(trimmed) {
+        let head = cap.name("head").map(|m| m.as_str()).unwrap_or("").trim();
+        if !head.is_empty() {
+            return head.to_string();
+        }
+    }
+
+    trimmed.to_string()
+}
+
+fn refine_notice_collective_author(who: &str) -> Option<String> {
+    let trimmed = trim_following_sentence_clause(who)
+        .trim_end_matches(&['.', ';', ','][..])
+        .trim_matches(&['"', '\''][..])
+        .trim()
+        .to_string();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Some(author) = refine_author(&trimmed) {
+        return Some(author);
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    if !lower.starts_with("the ") {
+        return None;
+    }
+
+    let collective_suffix = [" project", " foundation", " group", " team", " committee"]
+        .iter()
+        .any(|suffix| lower.contains(suffix));
+    if !collective_suffix {
+        return None;
+    }
+
+    let mut capitalized = trimmed.clone();
+    capitalized.replace_range(..1, "T");
+    if refine_author(&capitalized).is_some() {
+        return Some(trimmed);
+    }
+
+    let capitalized_words = trimmed
+        .split_whitespace()
+        .filter_map(|word| word.chars().find(|ch| ch.is_alphabetic()))
+        .filter(|ch| ch.is_uppercase())
+        .count();
+    let has_url = trimmed.contains("http://") || trimmed.contains("https://");
+    if has_url && capitalized_words >= 2 {
+        Some(trimmed)
+    } else {
+        None
+    }
+}
+
+fn extract_written_by_subject(line: &str) -> Option<String> {
+    static WRITTEN_BY_PREFIX_LINE_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)^(?:original(?:ly)?\s+)?(?:original\s+driver\s+)?(?:written|authored|created|developed)\s+by\s+(?P<who>.+)$",
+        )
+        .unwrap()
+    });
+    static WRITTEN_BY_ANYWHERE_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?i)\b(?:original(?:ly)?\s+)?(?:original\s+driver\s+)?(?:written|authored|created|developed)\s+by\s+(?P<who>.+)$",
+        )
+        .unwrap()
+    });
+
+    WRITTEN_BY_PREFIX_LINE_RE
+        .captures(line)
+        .or_else(|| WRITTEN_BY_ANYWHERE_RE.captures(line))
+        .and_then(|cap| cap.name("who").map(|m| m.as_str().trim().to_string()))
+}
+
 fn extract_dash_bullet_attribution_author(line: &str) -> Option<String> {
     static DASH_BULLET_BY_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
@@ -430,12 +511,6 @@ pub(in super::super) fn extract_multiline_written_by_author_blocks(
         LazyLock::new(|| Regex::new(r"(?i)^\s*written\s+by\s+(?P<who>.+?)(?:\s+for\b|$)").unwrap());
     static AUTHOR_EMAIL_HEAD_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)^(?P<head>.+?<[^>]+>)(?:\s+(?:for|to)\b.*)?$").unwrap());
-    static WRITTEN_BY_PREFIX_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(
-            r"(?i)^(?:original(?:ly)?\s+)?(?:original\s+driver\s+)?(?:written|authored|created|developed)\s+by\s+(?P<who>.+)$",
-        )
-        .unwrap()
-    });
     static MAINTAINED_BY_PREFIX_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
             r"(?i)^(?:(?:it|this\s+package)\s+is\s+)?maintained(?:\s+for\s+debian)?\s+by\s+(?P<who>.+)$",
@@ -570,13 +645,15 @@ pub(in super::super) fn extract_multiline_written_by_author_blocks(
                 .map(|(_, raw_line)| raw_line.trim())
                 .collect::<Vec<_>>()
                 .join(" ");
-            let combined_candidate = WRITTEN_BY_PREFIX_RE
-                .captures(&combined_raw)
-                .or_else(|| MAINTAINED_BY_PREFIX_RE.captures(&combined_raw))
-                .and_then(|cap| cap.name("who").map(|m| m.as_str().trim()))
-                .unwrap_or(combined_raw.as_str())
-                .trim_end_matches('.')
-                .trim();
+            let combined_candidate = extract_written_by_subject(&combined_raw)
+                .or_else(|| {
+                    MAINTAINED_BY_PREFIX_RE
+                        .captures(&combined_raw)
+                        .and_then(|cap| cap.name("who").map(|m| m.as_str().trim().to_string()))
+                })
+                .unwrap_or(combined_raw);
+            let combined_candidate = trim_following_sentence_clause(&combined_candidate);
+            let combined_candidate = combined_candidate.trim_end_matches('.').trim();
             if let Some(combined) = refine_author(combined_candidate) {
                 authors.retain(|a| a.start_line < start_line || a.end_line > end_line);
                 authors.push(AuthorDetection {
@@ -592,25 +669,24 @@ pub(in super::super) fn extract_multiline_written_by_author_blocks(
         let mut extracted_any = false;
         for (_l, raw_line) in &block_lines {
             let candidate = raw_line.trim();
-            if let Some(cap) = WRITTEN_BY_PREFIX_RE
-                .captures(candidate)
-                .or_else(|| MAINTAINED_BY_PREFIX_RE.captures(candidate))
-            {
-                let who = cap.name("who").map(|m| m.as_str()).unwrap_or("").trim();
-                if !who.is_empty() {
-                    let who = who.trim_end_matches('.').trim();
-                    if !who.to_ascii_lowercase().starts_with("the ") {
-                        if let Some(author) = refine_author(who) {
-                            authors.push(AuthorDetection {
-                                author,
-                                start_line,
-                                end_line,
-                            });
-                        }
-                        extracted_any = true;
+            if let Some(who) = extract_written_by_subject(candidate).or_else(|| {
+                MAINTAINED_BY_PREFIX_RE
+                    .captures(candidate)
+                    .and_then(|cap| cap.name("who").map(|m| m.as_str().trim().to_string()))
+            }) {
+                let who = trim_following_sentence_clause(&who);
+                let who = who.trim_end_matches('.').trim();
+                if !who.to_ascii_lowercase().starts_with("the ") {
+                    if let Some(author) = refine_author(who) {
+                        authors.push(AuthorDetection {
+                            author,
+                            start_line,
+                            end_line,
+                        });
                     }
-                    continue;
+                    extracted_any = true;
                 }
+                continue;
             }
         }
 
@@ -620,13 +696,15 @@ pub(in super::super) fn extract_multiline_written_by_author_blocks(
                 .map(|(_, raw_line)| raw_line.trim())
                 .collect::<Vec<_>>()
                 .join(" ");
-            let combined_candidate = WRITTEN_BY_PREFIX_RE
-                .captures(&combined_raw)
-                .or_else(|| MAINTAINED_BY_PREFIX_RE.captures(&combined_raw))
-                .and_then(|cap| cap.name("who").map(|m| m.as_str().trim()))
-                .unwrap_or(combined_raw.as_str())
-                .trim_end_matches('.')
-                .trim();
+            let combined_candidate = extract_written_by_subject(&combined_raw)
+                .or_else(|| {
+                    MAINTAINED_BY_PREFIX_RE
+                        .captures(&combined_raw)
+                        .and_then(|cap| cap.name("who").map(|m| m.as_str().trim().to_string()))
+                })
+                .unwrap_or(combined_raw);
+            let combined_candidate = trim_following_sentence_clause(&combined_candidate);
+            let combined_candidate = combined_candidate.trim_end_matches('.').trim();
             if let Some(combined) = refine_author(combined_candidate) {
                 authors.retain(|a| a.start_line < start_line || a.end_line > end_line);
                 authors.push(AuthorDetection {
@@ -1897,6 +1975,74 @@ pub(in super::super) fn extract_developed_by_contributors_authors(
         }
 
         let Some(author) = refine_author(who) else {
+            continue;
+        };
+
+        authors.push(AuthorDetection {
+            author,
+            start_line: prepared_line.line_number,
+            end_line,
+        });
+    }
+
+    authors
+}
+
+pub(in super::super) fn extract_notice_developed_by_authors(
+    prepared_cache: &PreparedLines<'_>,
+) -> Vec<AuthorDetection> {
+    let mut authors = Vec::new();
+    if prepared_cache.is_empty() {
+        return authors;
+    }
+
+    const NOTICE_PREFIX: &str = "this product includes software developed by";
+    const NOTICE_ALSO_PREFIX: &str = "this product also includes software developed by";
+
+    for prepared_line in prepared_cache.iter_non_empty() {
+        let lower = prepared_line.prepared.to_ascii_lowercase();
+        if !lower.contains("this product") || !lower.contains("includes software developed by") {
+            continue;
+        }
+
+        let mut window = prepared_line.prepared.to_string();
+        let mut end_line = prepared_line.line_number;
+        let should_extend = lower.trim_end().ends_with("developed by")
+            || (!window.contains(')') && !window.trim_end().ends_with('.'));
+        if should_extend {
+            for offset in 1..=2 {
+                let next_value = prepared_line.line_number.get() + offset;
+                let Some(next_line) =
+                    prepared_cache.line(LineNumber::new(next_value).expect("valid line"))
+                else {
+                    break;
+                };
+                if next_line.prepared.is_empty() {
+                    break;
+                }
+                window.push(' ');
+                window.push_str(next_line.prepared);
+                end_line = next_line.line_number;
+                if next_line.prepared.contains('.') {
+                    break;
+                }
+            }
+        }
+
+        let window_lower = window.to_ascii_lowercase();
+        let who = if let Some(index) = window_lower.find(NOTICE_ALSO_PREFIX) {
+            &window[index + NOTICE_ALSO_PREFIX.len()..]
+        } else if let Some(index) = window_lower.find(NOTICE_PREFIX) {
+            &window[index + NOTICE_PREFIX.len()..]
+        } else {
+            continue;
+        };
+        let who = who
+            .trim()
+            .trim_matches(&['"', '\''][..])
+            .trim_end_matches(&['.', ';', '"', '\''][..])
+            .trim();
+        let Some(author) = refine_notice_collective_author(who) else {
             continue;
         };
 

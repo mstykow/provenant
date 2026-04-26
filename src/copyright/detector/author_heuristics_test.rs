@@ -304,6 +304,39 @@ fn test_developed_by_phrase_author_is_extracted() {
 }
 
 #[test]
+fn test_notice_developed_by_multiline_collective_author_is_extracted() {
+    let input = concat!(
+        "This product includes software developed by\n",
+        "The Apache Software Foundation (http://www.apache.org/).\n",
+    );
+
+    let (_c, _h, authors) = super::super::detect_copyrights_from_text(input);
+
+    assert!(
+        authors
+            .iter()
+            .any(|a| a.author == "The Apache Software Foundation (http://www.apache.org/)"),
+        "authors: {:?}",
+        authors.iter().map(|a| &a.author).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_notice_developed_by_quoted_project_author_is_extracted() {
+    let input = "\"This product includes software developed by the Spring Framework Project (http://www.springframework.org).\"";
+
+    let (_c, _h, authors) = super::super::detect_copyrights_from_text(input);
+
+    assert!(
+        authors
+            .iter()
+            .any(|a| a.author == "the Spring Framework Project (http://www.springframework.org)"),
+        "authors: {:?}",
+        authors.iter().map(|a| &a.author).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn test_modified_portion_developed_by_author_with_url_is_extracted() {
     let input = concat!(
         "# This product contains a modified portion of 'Flask App Builder' developed by Daniel Vaz Gaspar.\n",

@@ -250,6 +250,59 @@ fn test_json_sponsor_description_does_not_create_authors() {
 }
 
 #[test]
+fn test_written_by_sentence_trims_following_description_clause() {
+    let input = "JUnit is a regression testing framework written by Erich Gamma and Kent Beck. It is used by the developer who implements unit tests in Java.";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    let values: Vec<&str> = authors.iter().map(|a| a.author.as_str()).collect();
+    assert!(
+        values.contains(&"Erich Gamma and Kent Beck"),
+        "authors: {authors:?}"
+    );
+    assert!(
+        !values
+            .iter()
+            .any(|value| value.contains("It is used by the developer")),
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_multiline_xml_description_written_by_sentence_keeps_only_author_names() {
+    let input = concat!(
+        "<description>JUnit is a regression testing framework written by Erich Gamma and Kent Beck.\n",
+        "It is used by the developer who implements unit tests in Java.</description>\n",
+    );
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    let values: Vec<&str> = authors.iter().map(|a| a.author.as_str()).collect();
+    assert!(
+        values.contains(&"Erich Gamma and Kent Beck"),
+        "authors: {authors:?}"
+    );
+    assert!(
+        !values
+            .iter()
+            .any(|value| value.contains("JUnit is a regression testing framework")),
+        "authors: {authors:?}"
+    );
+    assert!(
+        !values
+            .iter()
+            .any(|value| value.contains("It is used by the developer")),
+        "authors: {authors:?}"
+    );
+}
+
+#[test]
+fn test_required_scope_word_is_not_author() {
+    let input = "required";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
 fn test_fast_path_proposal_phrase_not_author() {
     let input = "Clinger's fast path, inspired by Jakub Jelínek's proposal";
     let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
