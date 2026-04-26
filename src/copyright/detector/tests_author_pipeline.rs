@@ -303,6 +303,19 @@ fn test_required_scope_word_is_not_author() {
 }
 
 #[test]
+fn test_notice_developed_by_org_list_without_url_is_not_author() {
+    let input = concat!(
+        "This product includes software developed by NASA Ames Research Center,\n",
+        "Lawrence Livermore National Laboratory, and Veridian Information Solutions,\n",
+        "Inc. Visit www.OpenPBS.org for OpenPBS software support,\n",
+        "products, and information.\n",
+    );
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
 fn test_fast_path_proposal_phrase_not_author() {
     let input = "Clinger's fast path, inspired by Jakub Jelínek's proposal";
     let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
