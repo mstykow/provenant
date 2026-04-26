@@ -57,6 +57,8 @@ pub fn find_emails(text: &str, config: &DetectionConfig) -> Vec<EmailDetection> 
     };
 
     if config.max_emails > 0 && detections.len() > config.max_emails {
+        let mut seen = std::collections::HashSet::<String>::new();
+        detections.retain(|d| seen.insert(d.email.clone()));
         detections.truncate(config.max_emails);
     }
 

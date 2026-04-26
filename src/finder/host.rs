@@ -43,6 +43,15 @@ pub(crate) fn is_good_host(host: &str) -> bool {
         return false;
     }
 
+    let labels: Vec<&str> = host.split('.').collect();
+    if labels.len() >= 3
+        && labels[..labels.len() - 1]
+            .iter()
+            .all(|label| !label.is_empty() && label.chars().all(|ch| ch.is_ascii_digit()))
+    {
+        return false;
+    }
+
     classify_host(&host)
 }
 
