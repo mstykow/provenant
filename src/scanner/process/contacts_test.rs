@@ -200,3 +200,56 @@ fn test_extract_email_url_information_keeps_gettext_mo_contacts() {
     assert_eq!(file.emails[0].email, "ll@li.org");
     assert_eq!(file.emails[1].email, "cs@sweetgood.de");
 }
+
+#[test]
+fn test_extract_email_url_information_prefers_unique_text_emails_before_cap() {
+    let mut builder = FileInfoBuilder::default();
+    let options = TextDetectionOptions {
+        collect_info: false,
+        detect_packages: false,
+        detect_application_packages: false,
+        detect_system_packages: false,
+        detect_packages_in_compiled: false,
+        detect_copyrights: false,
+        detect_generated: false,
+        detect_emails: true,
+        detect_urls: false,
+        max_emails: 4,
+        max_urls: 50,
+        timeout_seconds: 120.0,
+    };
+
+    let text = concat!(
+        "dev-subscribe@camel.apache.org\n",
+        "dev-subscribe@camel.apache.org\n",
+        "users@maven.apache.org\n",
+        "users@maven.apache.org\n",
+        "mvel2@2.5.2.final\n",
+        "dev-subscribe@parquet.apache.org\n",
+        "jaxrs-dev@eclipse.org\n",
+    );
+
+    extract_email_url_information(&mut builder, Path::new("sbom.txt"), text, &options, false);
+
+    let file = builder
+        .name("sbom.txt".to_string())
+        .base_name("sbom".to_string())
+        .extension(".txt".to_string())
+        .path("sbom.txt".to_string())
+        .file_type(FileType::File)
+        .size(1)
+        .build()
+        .expect("builder should produce file info");
+
+    let emails: Vec<&str> = file
+        .emails
+        .iter()
+        .map(|email| email.email.as_str())
+        .collect();
+    assert_eq!(emails.len(), 4, "emails: {:?}", file.emails);
+    assert_eq!(emails[0], "dev-subscribe@camel.apache.org");
+    assert_eq!(emails[1], "users@maven.apache.org");
+    assert!(emails.contains(&"dev-subscribe@parquet.apache.org"));
+    assert!(emails.contains(&"jaxrs-dev@eclipse.org"));
+    assert!(!emails.contains(&"mvel2@2.5.2.final"));
+}
