@@ -154,6 +154,7 @@ static AUTHORS_JUNK: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
         "review",
         "disclaims",
         "liability",
+        "required",
         "desired",
         "intended",
         "someone",
