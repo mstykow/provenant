@@ -566,6 +566,9 @@ ScanCode: 2291.67s</title></rect>
     <rect x="815.39" y="217.51" width="8" height="8" fill="#d97706" rx="1.5"><title>tensorflow/tensorflow @ 2cd48d2
 Files: 36237
 ScanCode: 5927.08s</title></rect>
+    <rect x="816.43" y="222.46" width="8" height="8" fill="#d97706" rx="1.5"><title>apache/camel @ c9c34a1
+Files: 36792
+ScanCode: 5338.67s</title></rect>
     <rect x="822.70" y="228.21" width="8" height="8" fill="#d97706" rx="1.5"><title>elastic/elasticsearch @ a414f3d
 Files: 40293
 ScanCode: 4726.52s</title></rect>
@@ -1087,6 +1090,9 @@ Provenant: 141.58s</title></circle>
     <circle cx="819.39" cy="364.02" r="4.5" fill="#2563eb"><title>tensorflow/tensorflow @ 2cd48d2
 Files: 36237
 Provenant: 290.44s</title></circle>
+    <circle cx="820.43" cy="341.35" r="4.5" fill="#2563eb"><title>apache/camel @ c9c34a1
+Files: 36792
+Provenant: 469.31s</title></circle>
     <circle cx="826.70" cy="396.34" r="4.5" fill="#2563eb"><title>elastic/elasticsearch @ a414f3d
 Files: 40293
 Provenant: 146.56s</title></circle>

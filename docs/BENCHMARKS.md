@@ -12,7 +12,7 @@ The chart below uses a log-log scatter plot: file count on the x-axis, wall-cloc
 
 ![Scan duration vs. file count for Provenant and ScanCode](benchmarks/scan-duration-vs-files.svg)
 
-> Provenant is faster on 173 of 173 recorded runs, with a **11.5× median speedup** and **10.7× geometric-mean speedup** overall; the median gap grows from **7.0×** on sub-100-file targets to **19.1×** on 10k+ file targets.
+> Provenant is faster on 174 of 174 recorded runs, with a **11.5× median speedup** and **10.7× geometric-mean speedup** overall; the median gap grows from **7.0×** on sub-100-file targets to **18.6×** on 10k+ file targets.
 > Generated from the benchmark timing rows in this document via `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart`.
 
 ## Current benchmark examples
@@ -410,6 +410,13 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Run context: 2026-04-12 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc
 - Timing: Provenant `52.75s`; ScanCode `479.56s`
 - Matched Maven/OSGi package coverage (`196` vs `196`) with richer dependency extraction (`995` vs `962`) from classifier/type-aware Maven coordinates, OSGi integration-test POMs, and committed JAR or `MANIFEST.MF` metadata
+
+##### [apache/camel @ c9c34a1](https://github.com/apache/camel/tree/c9c34a1c2fbc5d093241565c0272ca466407a8e1) — **11.38× faster**
+
+- Files: 36,792
+- Run context: 2026-04-26 · camel-80585 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `469.31s`; ScanCode `5338.67s`
+- Broader Maven dependency extraction (`14818` vs `7645`) from the large multi-module reactor, archetype template POMs, and mixed package-adjacent Helm, Docker, and Cargo surfaces, plus restored UTF-16 template license detection and broader notice-author recovery across Apache/Spring/OpenShift acknowledgements, with zero scan-file errors where ScanCode times out on the committed `camel-sbom.json` and `camel-sbom.xml`
 
 ##### [apache/kafka @ 0d9fe51](https://github.com/apache/kafka/tree/0d9fe518b616725fecd96162297fee89a7b7a6a5) — **14.02× faster**
 
