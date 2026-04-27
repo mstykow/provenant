@@ -307,13 +307,11 @@ pub(super) fn apply_npm_workspace_domain(
         .collect();
 
     // Step 5: Handle root dependencies (hoist to workspace level)
-    if let Some(idx) = workspace_domain.root_package_json_idx
-        && !workspace_domain.is_pnpm_with_root_package
-    {
+    if !workspace_domain.is_pnpm_with_root_package {
         remove_root_level_dependencies(dependencies, &workspace_domain.root_dir);
         hoist_root_dependencies(
             files,
-            idx,
+            workspace_domain.root_package_json_idx,
             &workspace_domain.root_dir,
             dependencies,
             &member_versions,
@@ -483,20 +481,13 @@ fn remove_root_package(
     packages: &mut Vec<Package>,
     dependencies: &mut Vec<TopLevelDependency>,
 ) {
-    let root_purl = root_file
-        .package_data
-        .iter()
-        .find(|pkg| pkg.datasource_id == Some(DatasourceId::NpmPackageJson))
-        .and_then(|pkg| pkg.purl.as_ref())
-        .cloned();
-
-    let Some(purl) = root_purl else {
-        return;
-    };
-
     let mut removed_uid = None;
     packages.retain(|pkg| {
-        if pkg.purl.as_ref() == Some(&purl) {
+        if pkg
+            .datafile_paths
+            .iter()
+            .any(|path| path == &root_file.path)
+        {
             removed_uid = Some(pkg.package_uid.clone());
             false
         } else {
@@ -547,11 +538,28 @@ fn create_member_packages(
     members: &[NpmWorkspaceMemberDomain],
 ) -> Vec<(Package, Vec<TopLevelDependency>)> {
     let mut results = Vec::new();
+    let npm_config = npm_family_assembler_config();
 
     for member in members {
-        let file = &files[member.manifest_idx];
+        let member_file_indices: Vec<usize> = files
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, file)| {
+                (Path::new(&file.path).parent() == Some(member.dir_path.as_path())).then_some(idx)
+            })
+            .collect();
 
-        // Find the first valid PackageData
+        if let Some((package, deps, _)) =
+            sibling_merge::assemble_siblings(npm_config, files, &member_file_indices)
+                .into_iter()
+                .next()
+            && let Some(package) = package
+        {
+            results.push((package, deps));
+            continue;
+        }
+
+        let file = &files[member.manifest_idx];
         let pkg_data = if let Some(pkg) = file.package_data.iter().find(|pkg| {
             pkg.datasource_id == Some(DatasourceId::NpmPackageJson) && pkg.purl.is_some()
         }) {
@@ -565,7 +573,6 @@ fn create_member_packages(
         let package = Package::from_package_data(pkg_data, datafile_path.clone());
         let for_package_uid = Some(package.package_uid.clone());
 
-        // Collect dependencies
         let deps: Vec<TopLevelDependency> = pkg_data
             .dependencies
             .iter()
@@ -592,44 +599,40 @@ fn create_member_packages(
 /// If None, deps are workspace-level with no owning package.
 fn hoist_root_dependencies(
     files: &[FileInfo],
-    root_idx: usize,
+    root_idx: Option<usize>,
     root_dir: &Path,
     dependencies: &mut Vec<TopLevelDependency>,
     member_versions: &HashMap<String, String>,
     for_package_uid: Option<PackageUid>,
 ) {
-    let root_file = &files[root_idx];
+    if let Some(root_idx) = root_idx {
+        let root_file = &files[root_idx];
 
-    // Find root PackageData
-    let root_pkg_data = if let Some(pkg) = root_file
-        .package_data
-        .iter()
-        .find(|pkg| pkg.datasource_id == Some(DatasourceId::NpmPackageJson))
-    {
-        pkg
-    } else {
-        return;
-    };
+        if let Some(root_pkg_data) = root_file
+            .package_data
+            .iter()
+            .find(|pkg| pkg.datasource_id == Some(DatasourceId::NpmPackageJson))
+        {
+            for dep in &root_pkg_data.dependencies {
+                if dep.purl.is_some() {
+                    let mut top_dep = TopLevelDependency::from_dependency(
+                        dep,
+                        root_file.path.clone(),
+                        DatasourceId::NpmPackageJson,
+                        for_package_uid.clone(),
+                    );
 
-    for dep in &root_pkg_data.dependencies {
-        if dep.purl.is_some() {
-            let mut top_dep = TopLevelDependency::from_dependency(
-                dep,
-                root_file.path.clone(),
-                DatasourceId::NpmPackageJson,
-                for_package_uid.clone(),
-            );
+                    if let Some(req) = &top_dep.extracted_requirement
+                        && req.starts_with("workspace:")
+                        && let Some(resolved) =
+                            resolve_workspace_requirement(req, &top_dep.purl, member_versions)
+                    {
+                        top_dep.extracted_requirement = Some(resolved);
+                    }
 
-            // Resolve workspace: version immediately
-            if let Some(req) = &top_dep.extracted_requirement
-                && req.starts_with("workspace:")
-                && let Some(resolved) =
-                    resolve_workspace_requirement(req, &top_dep.purl, member_versions)
-            {
-                top_dep.extracted_requirement = Some(resolved);
+                    dependencies.push(top_dep);
+                }
             }
-
-            dependencies.push(top_dep);
         }
     }
 
@@ -651,9 +654,10 @@ fn hoist_root_dependencies(
         let matches_datasource = |datasource_id: DatasourceId| match file_name {
             "bun.lock" => datasource_id == DatasourceId::BunLock,
             "bun.lockb" => datasource_id == DatasourceId::BunLockb,
-            ".package-lock.json" | "package-lock.json" | ".npm-shrinkwrap.json" => {
-                datasource_id == DatasourceId::NpmPackageLockJson
-            }
+            ".package-lock.json"
+            | "package-lock.json"
+            | ".npm-shrinkwrap.json"
+            | "npm-shrinkwrap.json" => datasource_id == DatasourceId::NpmPackageLockJson,
             "yarn.lock" => matches!(
                 datasource_id,
                 DatasourceId::YarnLock | DatasourceId::YarnLockV1 | DatasourceId::YarnLockV2
