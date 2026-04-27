@@ -158,9 +158,6 @@ ScanCode: 122.53s</title></rect>
     <rect x="397.32" y="478.15" width="8" height="8" fill="#d97706" rx="1.5"><title>Alpine 3.23.3 minirootfs @ sha256:42d0e6d
 Files: 84
 ScanCode: 23.84s</title></rect>
-    <rect x="397.32" y="456.66" width="8" height="8" fill="#d97706" rx="1.5"><title>numtide/devshell @ 255a2b1
-Files: 84
-ScanCode: 37.57s</title></rect>
     <rect x="399.74" y="430.21" width="8" height="8" fill="#d97706" rx="1.5"><title>numtide/devshell @ 255a2b1
 Files: 87
 ScanCode: 65.75s</title></rect>
@@ -404,9 +401,6 @@ ScanCode: 394.76s</title></rect>
     <rect x="640.96" y="398.96" width="8" height="8" fill="#d97706" rx="1.5"><title>rust-lang/cargo @ b54fe55
 Files: 2883
 ScanCode: 127.38s</title></rect>
-    <rect x="641.11" y="408.36" width="8" height="8" fill="#d97706" rx="1.5"><title>NixOS/nix @ 262e98f
-Files: 2889
-ScanCode: 104.41s</title></rect>
     <rect x="641.77" y="372.34" width="8" height="8" fill="#d97706" rx="1.5"><title>NixOS/nix @ 6a659e1
 Files: 2917
 ScanCode: 223.79s</title></rect>
@@ -691,9 +685,6 @@ Provenant: 11.11s</title></circle>
     <circle cx="401.32" cy="491.72" r="4.5" fill="#2563eb"><title>Alpine 3.23.3 minirootfs @ sha256:42d0e6d
 Files: 84
 Provenant: 19.47s</title></circle>
-    <circle cx="401.32" cy="520.58" r="4.5" fill="#2563eb"><title>numtide/devshell @ 255a2b1
-Files: 84
-Provenant: 10.57s</title></circle>
     <circle cx="403.74" cy="529.03" r="4.5" fill="#2563eb"><title>numtide/devshell @ 255a2b1
 Files: 87
 Provenant: 8.84s</title></circle>
@@ -937,9 +928,6 @@ Provenant: 16.30s</title></circle>
     <circle cx="644.96" cy="503.26" r="4.5" fill="#2563eb"><title>rust-lang/cargo @ b54fe55
 Files: 2883
 Provenant: 15.25s</title></circle>
-    <circle cx="645.11" cy="486.25" r="4.5" fill="#2563eb"><title>NixOS/nix @ 262e98f
-Files: 2889
-Provenant: 21.86s</title></circle>
     <circle cx="645.77" cy="513.46" r="4.5" fill="#2563eb"><title>NixOS/nix @ 6a659e1
 Files: 2917
 Provenant: 12.29s</title></circle>
@@ -1111,9 +1099,9 @@ Provenant: 469.31s</title></circle>
     <circle cx="826.70" cy="396.34" r="4.5" fill="#2563eb"><title>elastic/elasticsearch @ a414f3d
 Files: 40293
 Provenant: 146.56s</title></circle>
-    <circle cx="844.49" cy="360.72" r="4.5" fill="#2563eb"><title>NixOS/nixpkgs @ c407343
+    <circle cx="844.49" cy="359.01" r="4.5" fill="#2563eb"><title>NixOS/nixpkgs @ c407343
 Files: 52167
-Provenant: 311.46s</title></circle>
+Provenant: 322.93s</title></circle>
     <circle cx="844.86" cy="360.39" r="4.5" fill="#2563eb"><title>mongodb/mongo @ d6877a3
 Files: 52443
 Provenant: 313.61s</title></circle>
