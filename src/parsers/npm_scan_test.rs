@@ -294,6 +294,305 @@ mod tests {
     }
 
     #[test]
+    fn test_pnpm_workspace_member_scan_keeps_member_lockfile_dependencies() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        let member_dir = temp_dir.path().join("packages").join("fixture");
+
+        fs::create_dir_all(&member_dir).expect("create workspace member dir");
+        fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{
+  "name": "root",
+  "private": true
+}
+"#,
+        )
+        .expect("write root package.json");
+        fs::write(
+            temp_dir.path().join("pnpm-workspace.yaml"),
+            "packages:\n  - \"packages/*\"\n",
+        )
+        .expect("write pnpm-workspace.yaml");
+        fs::write(
+            member_dir.join("package.json"),
+            r#"{
+  "name": "fixture",
+  "version": "1.0.0",
+  "dependencies": {
+    "write-json-file": "^2.2.0"
+  },
+  "optionalDependencies": {
+    "is-negative": "^2.1.0"
+  },
+  "devDependencies": {
+    "is-positive": "^3.1.0"
+  }
+}
+"#,
+        )
+        .expect("write member package.json");
+        fs::write(
+            member_dir.join("pnpm-lock.yaml"),
+            include_str!("../../testdata/pnpm/pnpm-v9.yaml"),
+        )
+        .expect("write member pnpm-lock.yaml");
+
+        let (files, result) = scan_and_assemble(temp_dir.path());
+
+        let package = result
+            .packages
+            .iter()
+            .find(|package| package.name.as_deref() == Some("fixture"))
+            .expect("workspace member should be assembled");
+
+        assert!(package.datasource_ids.contains(&DatasourceId::PnpmLockYaml));
+        assert!(
+            package
+                .datafile_paths
+                .iter()
+                .any(|path| path.ends_with("/packages/fixture/pnpm-lock.yaml"))
+        );
+        assert_dependency_present(
+            &result.dependencies,
+            "pkg:npm/write-json-file",
+            "package.json",
+        );
+        assert_dependency_present(
+            &result.dependencies,
+            "pkg:npm/%40babel/helper-string-parser@7.24.8",
+            "pnpm-lock.yaml",
+        );
+
+        let lockfile = files
+            .iter()
+            .find(|file| file.path.ends_with("/packages/fixture/pnpm-lock.yaml"))
+            .expect("pnpm-lock.yaml should be scanned");
+        assert!(lockfile.for_packages.contains(&package.package_uid));
+        assert!(
+            lockfile
+                .package_data
+                .iter()
+                .any(|pkg_data| pkg_data.datasource_id == Some(DatasourceId::PnpmLockYaml))
+        );
+    }
+
+    #[test]
+    fn test_pnpm_workspace_roots_with_same_purl_do_not_clobber_each_other() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+
+        for workspace_name in ["one", "two"] {
+            let workspace_root = temp_dir.path().join(workspace_name);
+            let member_dir = workspace_root.join("packages").join("a");
+
+            fs::create_dir_all(&member_dir).expect("create workspace member dir");
+            fs::write(
+                workspace_root.join("package.json"),
+                r#"{
+  "name": "root",
+  "version": "1.0.0",
+  "dependencies": {
+    "@scope/a": "workspace:*"
+  }
+}
+"#,
+            )
+            .expect("write workspace root package.json");
+            fs::write(
+                workspace_root.join("pnpm-workspace.yaml"),
+                "packages:\n  - \"packages/*\"\n",
+            )
+            .expect("write workspace config");
+            fs::write(
+                member_dir.join("package.json"),
+                r#"{
+  "name": "@scope/a",
+  "version": "1.0.0"
+}
+"#,
+            )
+            .expect("write member package.json");
+        }
+
+        let (_files, result) = scan_and_assemble(temp_dir.path());
+
+        assert_eq!(
+            result
+                .packages
+                .iter()
+                .filter(|package| package.purl.as_deref() == Some("pkg:npm/root@1.0.0"))
+                .count(),
+            2,
+            "workspace roots with identical purls should both survive assembly"
+        );
+        assert_dependency_present(
+            &result.dependencies,
+            "pkg:npm/%40scope/a",
+            "one/package.json",
+        );
+        assert_dependency_present(
+            &result.dependencies,
+            "pkg:npm/%40scope/a",
+            "two/package.json",
+        );
+    }
+
+    #[test]
+    fn test_pnpm_workspace_without_root_manifest_keeps_shared_lockfile_dependencies() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        let member_dir = temp_dir.path().join("pkg");
+
+        fs::create_dir_all(&member_dir).expect("create workspace member dir");
+        fs::write(
+            temp_dir.path().join("pnpm-workspace.yaml"),
+            "packages:\n  - \"pkg\"\n",
+        )
+        .expect("write workspace config");
+        fs::write(
+            temp_dir.path().join("pnpm-lock.yaml"),
+            r#"lockfileVersion: '9.0'
+
+importers:
+
+  pkg:
+    dependencies:
+      is-positive:
+        specifier: 1.0.0
+        version: 1.0.0
+
+packages:
+
+  is-positive@1.0.0:
+    resolution: {integrity: sha512-xxzPGZ4P2uN6rROUa5N9Z7zTX6ERuE0hs6GUOc/cKBLF2NqKc16UwqHMt3tFg4CO6EBTE5UecUasg+3jZx3Ckg==}
+
+snapshots:
+
+  is-positive@1.0.0: {}
+"#,
+        )
+        .expect("write shared pnpm-lock.yaml");
+        fs::write(
+            member_dir.join("package.json"),
+            r#"{
+  "name": "pkg",
+  "version": "1.0.0",
+  "dependencies": {
+    "is-positive": "1.0.0"
+  }
+}
+"#,
+        )
+        .expect("write member package.json");
+
+        let (files, result) = scan_and_assemble(temp_dir.path());
+
+        assert_dependency_present(
+            &result.dependencies,
+            "pkg:npm/is-positive@1.0.0",
+            "pnpm-lock.yaml",
+        );
+
+        let lockfile = files
+            .iter()
+            .find(|file| file.path.ends_with("/pnpm-lock.yaml"))
+            .expect("pnpm-lock.yaml should be scanned");
+        assert!(
+            lockfile
+                .package_data
+                .iter()
+                .any(|pkg_data| pkg_data.datasource_id == Some(DatasourceId::PnpmLockYaml))
+        );
+    }
+
+    #[test]
+    fn test_npm_workspace_without_root_manifest_keeps_shared_shrinkwrap_dependencies() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        let member_dir = temp_dir.path().join("packages").join("foo");
+
+        fs::create_dir_all(&member_dir).expect("create workspace member dir");
+        fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{
+  "private": true,
+  "name": "workspace-root",
+  "version": "1.0.0",
+  "workspaces": [
+    "packages/**"
+  ]
+}
+"#,
+        )
+        .expect("write workspace root package.json");
+        fs::write(
+            temp_dir.path().join("npm-shrinkwrap.json"),
+            r#"{
+  "name": "workspace-root",
+  "version": "1.0.0",
+  "lockfileVersion": 2,
+  "packages": {
+    "": {
+      "name": "workspace-root",
+      "version": "1.0.0",
+      "workspaces": [
+        "packages/**"
+      ]
+    },
+    "node_modules/foo": {
+      "resolved": "packages/foo",
+      "link": true
+    },
+    "node_modules/is-positive": {
+      "version": "1.0.0",
+      "resolved": "https://registry.npmjs.org/is-positive/-/is-positive-1.0.0.tgz",
+      "integrity": "sha1-iACYVrZKLx632LsBeUGEJK4EUss="
+    },
+    "packages/foo": {
+      "version": "0.0.0",
+      "dependencies": {
+        "is-positive": "^1.0.0"
+      }
+    }
+  },
+  "dependencies": {
+    "foo": {
+      "version": "file:packages/foo",
+      "requires": {
+        "is-positive": "^1.0.0"
+      }
+    },
+    "is-positive": {
+      "version": "1.0.0",
+      "resolved": "https://registry.npmjs.org/is-positive/-/is-positive-1.0.0.tgz",
+      "integrity": "sha1-iACYVrZKLx632LsBeUGEJK4EUss="
+    }
+  }
+}
+"#,
+        )
+        .expect("write shared npm-shrinkwrap.json");
+        fs::write(
+            member_dir.join("package.json"),
+            r#"{
+  "name": "foo",
+  "version": "0.0.0",
+  "dependencies": {
+    "is-positive": "^1.0.0"
+  }
+}
+"#,
+        )
+        .expect("write member package.json");
+
+        let (_files, result) = scan_and_assemble(temp_dir.path());
+
+        assert_dependency_present(
+            &result.dependencies,
+            "pkg:npm/is-positive@1.0.0",
+            "npm-shrinkwrap.json",
+        );
+        assert_dependency_present(&result.dependencies, "pkg:npm/foo", "npm-shrinkwrap.json");
+    }
+
+    #[test]
     fn test_yarn_pnp_scan_assembles_dependency_source_into_root_package() {
         let temp_dir = tempfile::TempDir::new().expect("create temp dir");
 
