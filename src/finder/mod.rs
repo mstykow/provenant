@@ -212,6 +212,31 @@ mod tests {
     }
 
     #[test]
+    fn test_find_urls_keeps_closed_template_placeholders() {
+        let text =
+            "https://flutter-dashboard.appspot.com/#/build?repo=flutter&branch=${branchName}";
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        assert_eq!(urls.len(), 1, "urls: {urls:#?}");
+        assert_eq!(
+            urls[0].url,
+            "https://flutter-dashboard.appspot.com/#/build?repo=flutter&branch=${branchName}"
+        );
+    }
+
+    #[test]
+    fn test_find_urls_trims_open_template_suffixes() {
+        let text =
+            "https://github.com/flutter/flutter/pull/${{ github.event.pull_request.number }}";
+        let config = DetectionConfig::default();
+        let urls = find_urls(text, &config);
+
+        assert_eq!(urls.len(), 1, "urls: {urls:#?}");
+        assert_eq!(urls[0].url, "https://github.com/flutter/flutter/pull");
+    }
+
+    #[test]
     fn test_find_urls_ignores_markdown_emphasis_inside_hostname() {
         let text = "Use https://**yourcompany**.atlassian.net for Jira Cloud.";
         let config = DetectionConfig::default();
