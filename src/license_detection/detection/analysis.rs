@@ -122,6 +122,9 @@ pub(super) fn is_false_positive(matches: &[LicenseMatch]) -> bool {
     let all_rule_length_one = rule_length_values.iter().all(|&l| l == 1);
 
     let all_low_relevance = matches.iter().all(|m| m.rule_relevance < 60);
+    let all_exact_spdx_license_id_rules = matches
+        .iter()
+        .all(|m| m.rule_identifier.starts_with("spdx_license_id_"));
 
     let is_single = matches.len() == 1;
 
@@ -142,6 +145,7 @@ pub(super) fn is_false_positive(matches: &[LicenseMatch]) -> bool {
     // Python: any(rule_length <= 3) not all(rule_length == 1)
     if all_low_relevance
         && start_line > FALSE_POSITIVE_START_LINE_THRESHOLD
+        && !all_exact_spdx_license_id_rules
         && rule_length_values
             .iter()
             .any(|&l| l <= FALSE_POSITIVE_RULE_LENGTH_THRESHOLD)
@@ -900,6 +904,23 @@ mod tests {
             "mit.LICENSE",
         )];
         assert!(is_false_positive(&matches));
+    }
+
+    #[test]
+    fn test_is_false_positive_late_exact_spdx_id_rule_not_filtered() {
+        let matches = vec![create_test_match_full(
+            "mpl-2.0",
+            "2-aho",
+            1500,
+            1503,
+            MatchScore::from_percentage(50.0),
+            3,
+            3,
+            100.0,
+            50,
+            "spdx_license_id_mpl-2.0_for_mpl-2.0.RULE",
+        )];
+        assert!(!is_false_positive(&matches));
     }
 
     #[test]
