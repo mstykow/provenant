@@ -55,11 +55,8 @@ const PACKAGE_TYPE: PackageType = PackageType::Gem;
 /// In Ruby, `.freeze` makes a string immutable. We need to remove this suffix
 /// when parsing gem names and versions from Gemfile.
 ///
-/// # Examples
-/// ```ignore
-/// assert_eq!(strip_freeze_suffix("\"name\".freeze"), "\"name\"");
-/// assert_eq!(strip_freeze_suffix("'1.0.0'.freeze"), "'1.0.0'");
-/// ```
+/// For example, `"name".freeze` becomes `"name"` and `'1.0.0'.freeze`
+/// becomes `'1.0.0'`.
 pub fn strip_freeze_suffix(s: &str) -> &str {
     s.trim_end_matches(".freeze")
 }

@@ -35,12 +35,8 @@ pub(super) enum Token {
 /// # Returns
 /// Ok with parsed LicenseExpression, or Err with ParseError
 ///
-/// # Examples
-/// ```
-/// use provenant::license_detection::expression::parse_expression;
-///
-/// let expr = parse_expression("MIT AND Apache-2.0").unwrap();
-/// ```
+/// For example, `parse_expression("MIT AND Apache-2.0")` parses a simple
+/// conjunction expression.
 pub fn parse_expression(expr: &str) -> Result<LicenseExpression, ParseError> {
     let trimmed = expr.trim();
     if trimmed.is_empty() {

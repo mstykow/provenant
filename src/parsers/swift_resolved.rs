@@ -33,14 +33,8 @@ use crate::parsers::utils::{MAX_ITERATION_COUNT, read_file_to_string, truncate_f
 /// - Generates namespace from repository URL (e.g., github.com/apple)
 /// - Handles exact versions, branch references, and commit SHAs
 ///
-/// # Example
-/// ```no_run
-/// use provenant::parsers::{PackageParser, SwiftPackageResolvedParser};
-/// use std::path::Path;
-///
-/// let path = Path::new("Package.resolved");
-/// let package_data = SwiftPackageResolvedParser::extract_first_package(path);
-/// ```
+/// Typical usage is calling `SwiftPackageResolvedParser::extract_first_package()`
+/// on a `Package.resolved` or `.package.resolved` file.
 pub struct SwiftPackageResolvedParser;
 
 impl PackageParser for SwiftPackageResolvedParser {

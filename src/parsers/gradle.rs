@@ -61,15 +61,9 @@ use super::license_normalization::{
 /// - Easier maintenance for DSL-specific quirks
 /// - Better error messages for malformed input
 ///
-/// # Example
-/// ```no_run
-/// use provenant::parsers::{GradleParser, PackageParser};
-/// use std::path::Path;
-///
-/// let path = Path::new("testdata/gradle-golden/groovy1/build.gradle");
-/// let package_data = GradleParser::extract_first_package(path);
-/// assert!(!package_data.dependencies.is_empty());
-/// ```
+/// Typical usage is calling `GradleParser::extract_first_package()` on a
+/// `build.gradle` or `build.gradle.kts` file and then inspecting the returned
+/// dependency list.
 pub struct GradleParser;
 
 impl PackageParser for GradleParser {

@@ -28,15 +28,8 @@ use std::str::FromStr;
 /// Python reference values. The JSON output is identical to the
 /// Python ScanCode Toolkit.
 ///
-/// # Examples
-///
-/// ```ignore
-/// use provenant::models::PackageType;
-///
-/// let pt = PackageType::Npm;
-/// assert_eq!(pt.as_ref(), "npm");
-/// assert_eq!(pt.to_string(), "npm");
-/// ```
+/// For example, `PackageType::Npm` formats as `npm` for both `AsRef<str>` and
+/// `Display`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PackageType {

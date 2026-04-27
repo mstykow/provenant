@@ -466,7 +466,7 @@ macro_rules! parser_warn {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
 /// use provenant::models::{PackageData, PackageType};
 /// use provenant::parsers::PackageParser;
 /// use std::path::Path;

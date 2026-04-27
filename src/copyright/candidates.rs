@@ -816,11 +816,8 @@ fn is_year_only_copy_marker_line(prepared: &str) -> bool {
 ///
 /// Only strips if the parentheses are truly wrapping (no inner parens).
 ///
-/// # Examples
-/// ```ignore
-/// assert_eq!(strip_balanced_edge_parens("(Hello World)"), "Hello World");
-/// assert_eq!(strip_balanced_edge_parens("(Hello (World)"), "(Hello (World)");
-/// ```
+/// For example, `(Hello World)` unwraps to `Hello World`, while unbalanced
+/// input such as `(Hello (World)` is left unchanged.
 pub fn strip_balanced_edge_parens(s: &str) -> &str {
     if s.starts_with('(') && s.ends_with(')') {
         let inner = &s[1..s.len() - 1];

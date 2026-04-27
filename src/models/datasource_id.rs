@@ -22,15 +22,8 @@ use strum::{EnumCount, EnumIter};
 /// Variants serialize to snake_case strings matching the Python reference values.
 /// The JSON output is identical to the Python ScanCode Toolkit.
 ///
-/// # Examples
-///
-/// ```ignore
-/// use provenant::models::DatasourceId;
-///
-/// let id = DatasourceId::NpmPackageJson;
-/// assert_eq!(id.as_ref(), "npm_package_json");
-/// assert_eq!(id.to_string(), "npm_package_json");
-/// ```
+/// For example, `DatasourceId::NpmPackageJson` formats as
+/// `npm_package_json` for both `AsRef<str>` and `Display`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, EnumCount, EnumIter)]
 #[serde(rename_all = "snake_case")]
 pub enum DatasourceId {

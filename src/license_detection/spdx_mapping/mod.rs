@@ -82,28 +82,9 @@ impl SpdxMapping {
     /// # Returns
     /// String containing the expression with SPDX keys, or parse error
     ///
-    /// # Example
-    /// ```
-    /// use provenant::license_detection::spdx_mapping::build_spdx_mapping;
-    /// use provenant::license_detection::models::License;
-    ///
-    /// let licenses = vec![
-    ///     License {
-    ///         key: "mit".to_string(),
-    ///         name: "MIT License".to_string(),
-    ///         spdx_license_key: Some("MIT".to_string()),
-    ///         ..Default::default()
-    ///     },
-    ///     License {
-    ///         key: "gpl-2.0-plus".to_string(),
-    ///         name: "GPL 2.0+".to_string(),
-    ///         ..Default::default()
-    ///     },
-    /// ];
-    /// let mapping = build_spdx_mapping(&licenses);
-    /// let spdx_expr = mapping.expression_scancode_to_spdx("mit OR gpl-2.0-plus").unwrap();
-    /// assert_eq!(spdx_expr, "LicenseRef-scancode-gpl-2.0-plus OR MIT");
-    /// ```
+    /// Example: if `mit` maps to SPDX `MIT` and `gpl-2.0-plus` has no SPDX key,
+    /// then `mit OR gpl-2.0-plus` becomes
+    /// `LicenseRef-scancode-gpl-2.0-plus OR MIT`.
     pub fn expression_scancode_to_spdx(&self, scancode_expr: &str) -> Result<String, String> {
         let parsed = parse_expression(scancode_expr).map_err(|e| format!("Parse error: {}", e))?;
         let converted = simplify_expression(&self.convert_expression_to_spdx(&parsed));

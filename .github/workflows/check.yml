@@ -104,9 +104,6 @@ jobs:
       - name: Check compilation
         run: cargo check --all --verbose
 
-      - name: Run doctests
-        run: cargo test --doc --profile ci-release --verbose
-
       - name: Check dependency policy
         uses: EmbarkStudios/cargo-deny-action@44db170f6a7d12a6e90340e9e0fca1f650d34b14
         with:

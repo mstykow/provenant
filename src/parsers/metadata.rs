@@ -29,7 +29,9 @@ inventory::collect!(ParserMetadata);
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
+/// use provenant::register_parser;
+///
 /// register_parser!(
 ///     "npm package.json manifest",
 ///     &["**/package.json"],
