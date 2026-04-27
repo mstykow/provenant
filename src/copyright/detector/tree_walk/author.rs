@@ -9,7 +9,7 @@ use crate::copyright::refiner::{is_junk_copyright, refine_author};
 use crate::copyright::types::{AuthorDetection, ParseNode, PosTag, Token, TreeLabel};
 use crate::models::LineNumber;
 
-use super::super as detector;
+use crate::copyright::detector;
 
 pub(super) fn extract_sectioned_authors_from_author_node(
     node: &ParseNode,
