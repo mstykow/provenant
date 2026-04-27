@@ -82,7 +82,7 @@ fn assemble_single_sibling_package(
                     saw_unpackageable_npm_manifest = true;
                 }
 
-                if should_skip_lock_merge(package.as_ref(), pkg_data) {
+                if should_skip_assembly_package_data(package.as_ref(), pkg_data) {
                     continue;
                 }
 
@@ -208,7 +208,7 @@ fn assemble_cocoapods_multiple_podspecs(
                     continue;
                 }
 
-                if should_skip_lock_merge(Some(&primary_package), pkg_data) {
+                if should_skip_assembly_package_data(Some(&primary_package), pkg_data) {
                     continue;
                 }
 
@@ -432,15 +432,20 @@ fn is_handled_by(pkg_data: &PackageData, config: &AssemblerConfig) -> bool {
         .is_some_and(|dsid| config.datasource_ids.contains(&dsid))
 }
 
-fn should_skip_lock_merge(package: Option<&Package>, pkg_data: &PackageData) -> bool {
-    let Some(existing_package) = package else {
-        return false;
-    };
+fn should_skip_assembly_package_data(package: Option<&Package>, pkg_data: &PackageData) -> bool {
+    should_skip_composer_lock_virtual_package(pkg_data)
+        || package.is_some_and(|existing_package| {
+            should_skip_npm_lock_merge(existing_package, pkg_data)
+                || should_skip_bun_lock_merge(existing_package, pkg_data)
+                || should_skip_python_uv_lock_merge(existing_package, pkg_data)
+                || should_skip_python_pip_cache_merge(existing_package, pkg_data)
+        })
+}
 
-    should_skip_npm_lock_merge(existing_package, pkg_data)
-        || should_skip_bun_lock_merge(existing_package, pkg_data)
-        || should_skip_python_uv_lock_merge(existing_package, pkg_data)
-        || should_skip_python_pip_cache_merge(existing_package, pkg_data)
+fn should_skip_composer_lock_virtual_package(pkg_data: &PackageData) -> bool {
+    pkg_data.datasource_id == Some(DatasourceId::PhpComposerLock)
+        && pkg_data.is_virtual
+        && pkg_data.purl.is_some()
 }
 
 fn should_skip_npm_lock_merge(package: &Package, pkg_data: &PackageData) -> bool {
