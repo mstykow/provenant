@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::{
-    LicenseExtractionInput, compute_percentage_of_license_text, convert_detection_to_model,
-    extract_license_information, promote_legal_notice_low_quality_detections,
+    LicenseExtractionInput, MAX_OUTPUT_MATCHED_TEXT_BYTES, MAX_OUTPUT_MATCHED_TEXT_LINE_LENGTH,
+    compute_percentage_of_license_text, convert_detection_to_model, extract_license_information,
+    promote_legal_notice_low_quality_detections,
 };
 use crate::license_detection::LicenseDetection as InternalLicenseDetection;
 use crate::license_detection::LicenseDetectionEngine;
@@ -464,6 +465,105 @@ fn test_convert_detection_to_model_includes_diagnostics_when_enabled() {
     assert!(diagnostics.contains('['));
     assert!(diagnostics.contains(']'));
     assert_ne!(diagnostics, text.trim_end());
+}
+
+#[test]
+fn test_convert_detection_to_model_preserves_whole_line_matched_text_for_normal_files() {
+    let text = "Header\nMIT License\nFooter";
+    let index = create_test_index(&[("mit", 0), ("license", 1)], 2);
+    let query = Query::from_extracted_text(text, &index, false).expect("query should build");
+    let mut detection = make_detection("");
+    detection.matches[0].matched_text = None;
+    detection.matches[0].start_line = LineNumber::new(2).unwrap();
+    detection.matches[0].end_line = LineNumber::new(2).unwrap();
+    detection.matches[0].coordinates =
+        MatchCoordinates::query_region(PositionSpan::from_positions(vec![0, 1]));
+
+    let (converted, clues) = convert_detection_to_model(
+        &detection,
+        LicenseScanOptions {
+            include_text: true,
+            ..LicenseScanOptions::default()
+        },
+        text,
+        Some(&query),
+        None,
+    );
+
+    let converted = converted.expect("detection should convert");
+    assert!(clues.is_empty());
+    assert_eq!(
+        converted.matches[0].matched_text.as_deref(),
+        Some("MIT License")
+    );
+}
+
+#[test]
+fn test_convert_detection_to_model_compacts_oversized_long_line_matched_text() {
+    let padding = "a".repeat(MAX_OUTPUT_MATCHED_TEXT_LINE_LENGTH + 128);
+    let text = format!("{padding} MIT License {padding}");
+    let index = create_test_index(&[("mit", 0), ("license", 1)], 2);
+    let query = Query::from_extracted_text(&text, &index, false).expect("query should build");
+    let mut detection = make_detection("");
+    detection.matches[0].matched_text = None;
+    detection.matches[0].coordinates =
+        MatchCoordinates::query_region(PositionSpan::from_positions(vec![0, 1]));
+    detection.matches[0].matched_length = 2;
+    detection.matches[0].rule_length = 2;
+    detection.matches[0].start_token = 0;
+    detection.matches[0].end_token = 2;
+
+    let (converted, clues) = convert_detection_to_model(
+        &detection,
+        LicenseScanOptions {
+            include_text: true,
+            ..LicenseScanOptions::default()
+        },
+        &text,
+        Some(&query),
+        None,
+    );
+
+    let converted = converted.expect("detection should convert");
+    let matched_text = converted.matches[0]
+        .matched_text
+        .as_deref()
+        .expect("matched_text should be present");
+
+    assert!(clues.is_empty());
+    assert!(matched_text.contains("MIT"));
+    assert!(matched_text.contains("License"));
+    assert!(matched_text.len() < text.len());
+    assert!(matched_text.len() < MAX_OUTPUT_MATCHED_TEXT_LINE_LENGTH);
+}
+
+#[test]
+fn test_convert_detection_to_model_truncates_output_only_when_query_missing() {
+    let text = "ß".repeat(MAX_OUTPUT_MATCHED_TEXT_BYTES) + " MIT";
+    let mut detection = make_detection("");
+    detection.matches[0].matched_text = None;
+
+    let (converted, clues) = convert_detection_to_model(
+        &detection,
+        LicenseScanOptions {
+            include_text: true,
+            ..LicenseScanOptions::default()
+        },
+        &text,
+        None,
+        None,
+    );
+
+    let converted = converted.expect("detection should convert");
+    let matched_text = converted.matches[0]
+        .matched_text
+        .as_deref()
+        .expect("matched_text should be present");
+
+    assert!(clues.is_empty());
+    assert!(matched_text.ends_with("… [truncated]"));
+    assert!(matched_text.len() <= MAX_OUTPUT_MATCHED_TEXT_BYTES);
+    assert!(matched_text.len() < text.len());
 }
 
 #[test]

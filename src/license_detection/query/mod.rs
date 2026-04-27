@@ -105,15 +105,6 @@ pub struct Query<'a> {
     /// Corresponds to Python: `self.is_binary = False` (line 225)
     pub is_binary: bool,
 
-    /// True if the text has very long lines (e.g., minified JS/CSS).
-    ///
-    /// When true, `matched_text` extraction should use token-span mode
-    /// instead of whole-line mode to avoid capturing megabytes of text
-    /// for a small license match on a minified single-line file.
-    ///
-    /// Corresponds to Python: `self.has_long_lines` in query.py (line 221)
-    pub has_long_lines: bool,
-
     /// Raw query run ranges (start, end) computed during tokenization.
     ///
     /// QueryRuns are created on-demand from these ranges.
@@ -133,12 +124,6 @@ pub struct Query<'a> {
     pub index: &'a LicenseIndex,
 }
 
-/// Maximum length of a single line in matched_text output.
-/// Lines exceeding this are truncated with a marker.
-/// This is a safety fallback for when token-span extraction is unavailable
-/// (e.g., query is None) but the file still has very long lines.
-const MAX_MATCHED_TEXT_LINE_LENGTH: usize = 10_000;
-
 pub fn matched_text_from_text(text: &str, start_line: usize, end_line: usize) -> String {
     if start_line == 0 || end_line == 0 || start_line > end_line {
         return String::new();
@@ -149,13 +134,7 @@ pub fn matched_text_from_text(text: &str, start_line: usize, end_line: usize) ->
         .filter_map(|(idx, line)| {
             let line_num = idx + 1;
             if line_num >= start_line && line_num <= end_line {
-                if line.len() > MAX_MATCHED_TEXT_LINE_LENGTH {
-                    // Truncate at a UTF-8 char boundary
-                    let truncated = &line[..line.floor_char_boundary(MAX_MATCHED_TEXT_LINE_LENGTH)];
-                    Some(truncated)
-                } else {
-                    Some(line)
-                }
+                Some(line)
             } else {
                 None
             }
@@ -674,7 +653,6 @@ impl<'a> Query<'a> {
             high_matchables,
             low_matchables,
             is_binary,
-            has_long_lines,
             query_run_ranges: query_runs,
             spdx_lines,
             index,

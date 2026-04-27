@@ -399,6 +399,17 @@ mod tests {
     }
 
     #[test]
+    fn test_query_matched_text_keeps_full_long_line() {
+        let index = create_query_test_index();
+        let text = format!("{} license", "a".repeat(12_000));
+        let query = build_query(&text, &index).unwrap();
+
+        let matched = query.matched_text(1, 1);
+
+        assert_eq!(matched, text);
+    }
+
+    #[test]
     fn test_query_run_get_index() {
         let index = create_query_test_index();
         let query = build_query("license copyright", &index).unwrap();
