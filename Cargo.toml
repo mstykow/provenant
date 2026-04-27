@@ -105,7 +105,7 @@ bzip2 = "0.6.1"
 chrono = "0.4.44"
 clap = { workspace = true }
 csv = "1.4.0"
-daachorse = "2.1.0"
+daachorse = "2.1.1"
 derive_builder = "0.20.2"
 directories = "6.0.0"
 env_logger = "0.11.10"
