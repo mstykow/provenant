@@ -125,7 +125,7 @@ liblzma = "0.4.6"
 log = "0.4.29"
 md-5 = "0.11.0"
 mime_guess = "2.0.5"
-object = { version = "0.39.0", default-features = false, features = ["read_core", "elf", "macho", "pe"] }
+object = { version = "0.39.1", default-features = false, features = ["read_core", "elf", "macho", "pe"] }
 os_info = "3.14.0"
 packageurl = "0.6.0"
 pdf_oxide = "0.3.38"
