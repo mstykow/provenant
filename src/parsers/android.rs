@@ -39,16 +39,71 @@ pub struct AndroidManifestParser;
 pub struct AndroidApkParser;
 pub struct AndroidAabParser;
 
+fn looks_like_android_soong_metadata_content(content: &str) -> bool {
+    let mut saw_named_field = false;
+
+    for line in content.lines().take(40) {
+        let trimmed = line.trim();
+
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        if trimmed.starts_with("//") {
+            return false;
+        }
+
+        if trimmed.starts_with("third_party {")
+            || trimmed.starts_with("third_party{")
+            || trimmed.starts_with("url {")
+            || trimmed.starts_with("url{")
+            || trimmed.starts_with("identifier {")
+            || trimmed.starts_with("identifier{")
+            || trimmed.starts_with("security {")
+            || trimmed.starts_with("security{")
+            || trimmed.starts_with("last_upgrade_date {")
+            || trimmed.starts_with("last_upgrade_date{")
+        {
+            return true;
+        }
+
+        if let Some(value) = trimmed.strip_prefix("license_type:") {
+            let value = value.trim();
+            if !value.is_empty()
+                && value
+                    .chars()
+                    .all(|character| character.is_ascii_uppercase() || character == '_')
+            {
+                return true;
+            }
+        }
+
+        if trimmed.starts_with("name:")
+            || trimmed.starts_with("description:")
+            || trimmed.starts_with("homepage:")
+        {
+            saw_named_field = true;
+        }
+    }
+
+    saw_named_field && content.contains("third_party")
+}
+
 impl PackageParser for AndroidSoongMetadataParser {
     const PACKAGE_TYPE: PackageType = PACKAGE_TYPE;
 
     fn is_match(path: &Path) -> bool {
-        path.file_name().and_then(|name| name.to_str()) == Some("METADATA")
-            && !path
-                .parent()
-                .and_then(|parent| parent.file_name())
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.ends_with(".dist-info"))
+        if path.file_name().and_then(|name| name.to_str()) != Some("METADATA") {
+            return false;
+        }
+
+        if !path.is_file() {
+            return false;
+        }
+
+        crate::parsers::utils::read_file_to_string(path, Some(MAX_MANIFEST_SIZE))
+            .map(|content| looks_like_android_soong_metadata_content(&content))
+            .unwrap_or(false)
     }
 
     fn extract_packages(path: &Path) -> Vec<PackageData> {
