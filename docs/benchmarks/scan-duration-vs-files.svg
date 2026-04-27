@@ -161,6 +161,9 @@ ScanCode: 23.84s</title></rect>
     <rect x="397.32" y="456.66" width="8" height="8" fill="#d97706" rx="1.5"><title>numtide/devshell @ 255a2b1
 Files: 84
 ScanCode: 37.57s</title></rect>
+    <rect x="399.74" y="430.21" width="8" height="8" fill="#d97706" rx="1.5"><title>numtide/devshell @ 255a2b1
+Files: 87
+ScanCode: 65.75s</title></rect>
     <rect x="403.59" y="423.65" width="8" height="8" fill="#d97706" rx="1.5"><title>sous-chefs/mysql @ 6b7110b
 Files: 92
 ScanCode: 75.55s</title></rect>
@@ -404,6 +407,9 @@ ScanCode: 127.38s</title></rect>
     <rect x="641.11" y="408.36" width="8" height="8" fill="#d97706" rx="1.5"><title>NixOS/nix @ 262e98f
 Files: 2889
 ScanCode: 104.41s</title></rect>
+    <rect x="641.77" y="372.34" width="8" height="8" fill="#d97706" rx="1.5"><title>NixOS/nix @ 6a659e1
+Files: 2917
+ScanCode: 223.79s</title></rect>
     <rect x="643.66" y="353.67" width="8" height="8" fill="#d97706" rx="1.5"><title>scipy/scipy @ 8a4633f
 Files: 2998
 ScanCode: 332.23s</title></rect>
@@ -572,6 +578,9 @@ ScanCode: 5338.67s</title></rect>
     <rect x="822.70" y="228.21" width="8" height="8" fill="#d97706" rx="1.5"><title>elastic/elasticsearch @ a414f3d
 Files: 40293
 ScanCode: 4726.52s</title></rect>
+    <rect x="840.49" y="229.06" width="8" height="8" fill="#d97706" rx="1.5"><title>NixOS/nixpkgs @ c407343
+Files: 52167
+ScanCode: 4641.96s</title></rect>
     <rect x="840.86" y="231.99" width="8" height="8" fill="#d97706" rx="1.5"><title>mongodb/mongo @ d6877a3
 Files: 52443
 ScanCode: 4363.53s</title></rect>
@@ -685,6 +694,9 @@ Provenant: 19.47s</title></circle>
     <circle cx="401.32" cy="520.58" r="4.5" fill="#2563eb"><title>numtide/devshell @ 255a2b1
 Files: 84
 Provenant: 10.57s</title></circle>
+    <circle cx="403.74" cy="529.03" r="4.5" fill="#2563eb"><title>numtide/devshell @ 255a2b1
+Files: 87
+Provenant: 8.84s</title></circle>
     <circle cx="407.59" cy="515.70" r="4.5" fill="#2563eb"><title>sous-chefs/mysql @ 6b7110b
 Files: 92
 Provenant: 11.72s</title></circle>
@@ -928,6 +940,9 @@ Provenant: 15.25s</title></circle>
     <circle cx="645.11" cy="486.25" r="4.5" fill="#2563eb"><title>NixOS/nix @ 262e98f
 Files: 2889
 Provenant: 21.86s</title></circle>
+    <circle cx="645.77" cy="513.46" r="4.5" fill="#2563eb"><title>NixOS/nix @ 6a659e1
+Files: 2917
+Provenant: 12.29s</title></circle>
     <circle cx="647.66" cy="482.69" r="4.5" fill="#2563eb"><title>scipy/scipy @ 8a4633f
 Files: 2998
 Provenant: 23.57s</title></circle>
@@ -1096,6 +1111,9 @@ Provenant: 469.31s</title></circle>
     <circle cx="826.70" cy="396.34" r="4.5" fill="#2563eb"><title>elastic/elasticsearch @ a414f3d
 Files: 40293
 Provenant: 146.56s</title></circle>
+    <circle cx="844.49" cy="360.72" r="4.5" fill="#2563eb"><title>NixOS/nixpkgs @ c407343
+Files: 52167
+Provenant: 311.46s</title></circle>
     <circle cx="844.86" cy="360.39" r="4.5" fill="#2563eb"><title>mongodb/mongo @ d6877a3
 Files: 52443
 Provenant: 313.61s</title></circle>
