@@ -664,11 +664,8 @@ fn looks_like_conda_environment_yaml(yaml: &Value) -> bool {
 
 /// Extract Jinja2-style variables from a Conda meta.yaml
 ///
-/// Example:
-/// ```ignore
-/// {% set version = "0.45.0" %}
-/// {% set sha256 = "abc123..." %}
-/// ```
+/// For example, lines like `{% set version = "0.45.0" %}` and
+/// `{% set sha256 = "abc123..." %}` are captured as variables.
 pub fn extract_jinja2_variables(content: &str) -> HashMap<String, String> {
     let mut variables = HashMap::new();
 

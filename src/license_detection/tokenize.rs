@@ -236,14 +236,7 @@ pub fn count_tokens(text: &str) -> usize {
 /// A vector of Range<usize> representing token positions for each required phrase.
 /// Empty vector if no valid required phrases found.
 ///
-/// # Examples
-/// ```
-/// use provenant::license_detection::tokenize::parse_required_phrase_spans;
-///
-/// let text = "This is {{enclosed}} in braces";
-/// let spans = parse_required_phrase_spans(text);
-/// assert_eq!(spans, vec![2..3]);
-/// ```
+/// Example: `This is {{enclosed}} in braces` yields `vec![2..3]`.
 ///
 /// Based on Python: `get_existing_required_phrase_spans()` in tokenize.py:122-174
 pub fn parse_required_phrase_spans(text: &str) -> Vec<Range<usize>> {

@@ -63,14 +63,8 @@ pub struct Rfc822Metadata {
 ///
 /// An `Rfc822Metadata` struct with parsed headers and body.
 ///
-/// # Examples
-///
-/// ```ignore
-/// let content = "Name: example\nVersion: 1.0\n\nBody text here";
-/// let metadata = parse_rfc822_content(content);
-/// assert_eq!(get_header_first(&metadata.headers, "name"), Some("example".to_string()));
-/// assert_eq!(metadata.body, "Body text here");
-/// ```
+/// For example, parsing `Name: example\nVersion: 1.0\n\nBody text here`
+/// yields `name=example` in the headers and `Body text here` as the body.
 pub fn parse_rfc822_content(content: &str) -> Rfc822Metadata {
     let mut headers: HashMap<String, Vec<String>> = HashMap::new();
     let mut current_name: Option<String> = None;

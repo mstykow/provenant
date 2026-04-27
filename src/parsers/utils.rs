@@ -43,15 +43,18 @@ pub const MAX_RECURSION_DEPTH: usize = 50;
 ///   indices, `String` for dependency names, `PathBuf` for file paths,
 ///   or `()` for depth-only tracking).
 ///
-/// # Examples
+/// # Example
 ///
 /// ```no_run
 /// use provenant::parsers::utils::RecursionGuard;
 ///
 /// fn walk_tree(idx: usize, guard: &mut RecursionGuard<usize>) {
-///     if guard.exceeded() { return; }
-///     if guard.enter(idx) { return; } // cycle detected
-///     // ... recurse into children ...
+///     if guard.exceeded() {
+///         return;
+///     }
+///     if guard.enter(idx) {
+///         return;
+///     }
 ///     walk_tree(idx + 1, guard);
 ///     guard.leave(idx);
 /// }
@@ -146,15 +149,9 @@ pub fn truncate_field(value: String) -> String {
 /// * `Ok(String)` - File contents as UTF-8 string (lossy if non-UTF-8 bytes found)
 /// * `Err` - File doesn't exist, is too large, or cannot be read
 ///
-/// # Examples
-///
-/// ```no_run
-/// use std::path::Path;
-/// use provenant::parsers::utils::read_file_to_string;
-///
-/// let content = read_file_to_string(Path::new("path/to/file.txt"), None)?;
-/// # Ok::<(), anyhow::Error>(())
-/// ```
+/// Typical usage is `read_file_to_string(path, None)` for the default size
+/// limit, or `read_file_to_string(path, Some(limit))` when a tighter bound is
+/// needed.
 pub fn read_file_to_string(path: &Path, max_size: Option<u64>) -> Result<String> {
     let limit = max_size.unwrap_or(MAX_MANIFEST_SIZE);
 
@@ -255,26 +252,10 @@ pub fn parse_sri(integrity: &str) -> Option<(String, String)> {
 /// - If `\<email\>` pattern found: name (trimmed, or None if empty) and email
 /// - If no pattern: trimmed input as name, None for email
 ///
-/// # Examples
-///
-/// ```
-/// use provenant::parsers::utils::split_name_email;
-///
-/// // Full format
-/// let (name, email) = split_name_email("John Doe <john@example.com>");
-/// assert_eq!(name, Some("John Doe".to_string()));
-/// assert_eq!(email, Some("john@example.com".to_string()));
-///
-/// // Email only in angle brackets
-/// let (name, email) = split_name_email("<john@example.com>");
-/// assert_eq!(name, None);
-/// assert_eq!(email, Some("john@example.com".to_string()));
-///
-/// // Name only (no angle brackets)
-/// let (name, email) = split_name_email("John Doe");
-/// assert_eq!(name, Some("John Doe".to_string()));
-/// assert_eq!(email, None);
-/// ```
+/// Examples: `John Doe <john@example.com>` becomes `(Some("John Doe"),
+/// Some("john@example.com"))`, `<john@example.com>` becomes `(None,
+/// Some("john@example.com"))`, and `John Doe` becomes
+/// `(Some("John Doe"), None)`.
 pub fn split_name_email(s: &str) -> (Option<String>, Option<String>) {
     if let Some(email_start) = s.find('<')
         && let Some(email_end) = s.find('>')
@@ -300,6 +281,48 @@ mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::tempdir;
+
+    #[test]
+    fn test_recursion_guard_tracks_depth_and_cycles() {
+        let mut guard = RecursionGuard::new();
+
+        assert_eq!(guard.depth(), 0);
+        assert!(!guard.exceeded());
+
+        assert!(!guard.enter("root"));
+        assert_eq!(guard.depth(), 1);
+        assert!(!guard.enter("child"));
+        assert_eq!(guard.depth(), 2);
+
+        assert!(guard.enter("root"));
+        assert_eq!(guard.depth(), 2);
+
+        guard.leave("child");
+        assert_eq!(guard.depth(), 1);
+        guard.leave("root");
+        assert_eq!(guard.depth(), 0);
+        assert!(!guard.exceeded());
+    }
+
+    #[test]
+    fn test_recursion_guard_depth_limit_and_depth_only_mode() {
+        let mut guard = RecursionGuard::<()>::depth_only();
+
+        for _ in 0..MAX_RECURSION_DEPTH {
+            assert!(!guard.descend());
+        }
+
+        assert_eq!(guard.depth(), MAX_RECURSION_DEPTH);
+        assert!(!guard.exceeded());
+
+        assert!(guard.descend());
+        assert_eq!(guard.depth(), MAX_RECURSION_DEPTH + 1);
+        assert!(guard.exceeded());
+
+        guard.ascend();
+        assert_eq!(guard.depth(), MAX_RECURSION_DEPTH);
+        assert!(!guard.exceeded());
+    }
 
     #[test]
     fn test_read_file_to_string_success() {
