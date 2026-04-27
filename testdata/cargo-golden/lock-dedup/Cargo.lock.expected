@@ -15,6 +15,15 @@
         "is_direct": true
       },
       {
+        "purl": "pkg:cargo/my-app@0.4.0",
+        "extracted_requirement": "0.4.0",
+        "scope": null,
+        "is_runtime": null,
+        "is_optional": null,
+        "is_pinned": true,
+        "is_direct": true
+      },
+      {
         "purl": "pkg:cargo/serde@1.0.228",
         "extracted_requirement": "1.0.228",
         "scope": null,

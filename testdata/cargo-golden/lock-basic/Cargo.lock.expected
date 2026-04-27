@@ -52,6 +52,19 @@
           "checksum": "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa",
           "source": "registry+https://github.com/rust-lang/crates.io-index"
         }
+      },
+      {
+        "purl": "pkg:cargo/test-project@0.1.0",
+        "extracted_requirement": "0.1.0",
+        "scope": null,
+        "is_runtime": null,
+        "is_optional": null,
+        "is_pinned": true,
+        "is_direct": true,
+        "resolved_package": null,
+        "extra_data": {
+          "checksum": "abc123def456"
+        }
       }
     ],
     "repository_homepage_url": null,
