@@ -141,6 +141,7 @@ fn parse_lockfile_v2_plus(
     let (root_name, root_version) = extract_root_package_identity(json, root_name, root_version);
     let (namespace, name, version, purl) =
         normalize_root_package_metadata(&root_name, &root_version);
+    let linked_workspace_names = collect_linked_workspace_names(packages);
 
     // Collect root-level dependencies from top-level sections
     let mut root_deps = std::collections::HashSet::new();
@@ -182,6 +183,7 @@ fn parse_lockfile_v2_plus(
             .map(str::trim)
             .filter(|name| !name.is_empty())
             .map(str::to_string)
+            .or_else(|| linked_workspace_names.get(key).cloned())
             .unwrap_or_else(|| install_name.clone());
 
         let version = value
@@ -295,6 +297,35 @@ fn parse_lockfile_v2_plus(
         datasource_id: Some(DatasourceId::NpmPackageLockJson),
         purl,
     }
+}
+
+fn collect_linked_workspace_names(
+    packages: &serde_json::Map<String, Value>,
+) -> HashMap<String, String> {
+    let mut linked_names = HashMap::new();
+
+    for (key, value) in packages.iter().take(MAX_ITERATION_COUNT) {
+        let is_link = value
+            .get(FIELD_LINK)
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        if !is_link {
+            continue;
+        }
+
+        let Some(resolved) = value.get(FIELD_RESOLVED).and_then(|v| v.as_str()) else {
+            continue;
+        };
+
+        let install_name = extract_package_name_from_path(key);
+        if install_name.is_empty() || install_name == key.as_str() {
+            continue;
+        }
+
+        linked_names.insert(resolved.to_string(), install_name);
+    }
+
+    linked_names
 }
 
 /// Parse lockfile version 1 (nested structure with "dependencies" key)
