@@ -12,7 +12,7 @@ The chart below uses a log-log scatter plot: file count on the x-axis, wall-cloc
 
 ![Scan duration vs. file count for Provenant and ScanCode](benchmarks/scan-duration-vs-files.svg)
 
-> Provenant is faster on 176 of 176 recorded runs, with a **11.6× median speedup** and **10.9× geometric-mean speedup** overall; the median gap grows from **7.1×** on sub-100-file targets to **17.4×** on 10k+ file targets.
+> Provenant is faster on 177 of 177 recorded runs, with a **11.6× median speedup** and **10.9× geometric-mean speedup** overall; the median gap grows from **7.1×** on sub-100-file targets to **18.6×** on 10k+ file targets.
 > Generated from the benchmark timing rows in this document via `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart`.
 
 ## Current benchmark examples
@@ -827,6 +827,13 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Run context: 2026-04-14 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc
 - Timing: Provenant `25.02s`; ScanCode `219.35s`
 - Broader Flutter/Firebase package and dependency extraction (`102` vs `100` packages, `964` vs `803` dependencies) from many committed `pubspec.yaml`, CocoaPods `podspec` / `Podfile`, and Android Gradle inputs, plus contributor-roster visibility from `AUTHORS` where ScanCode stays silent
+
+##### [flutter/flutter @ 238d79a](https://github.com/flutter/flutter/tree/238d79aba784bc75c87f226ca7e7e7015b12bfd6) — **20.54× faster**
+
+- Files: 15,670
+- Run context: 2026-04-27 · flutter-8526 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `124.69s`; ScanCode `2561.81s`
+- Broader Dart/Flutter package and dependency extraction (`141` vs `126` packages, `1477` vs `1185` dependencies) across repo-root, engine, benchmark, and integration-test `pubspec.yaml` manifests plus committed AndroidManifest and podspec surfaces, with contributor-roster visibility from `AUTHORS` files that ScanCode leaves empty
 
 ##### [flutter/packages @ 06fee7a](https://github.com/flutter/packages/tree/06fee7af139504f708b5eb10bfb5593c08a24985) — **22.90× faster**
 
