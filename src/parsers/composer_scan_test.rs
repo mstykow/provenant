@@ -52,5 +52,16 @@ mod tests {
             &package.package_uid,
             DatasourceId::PhpComposerLock,
         );
+
+        let lock_file = files
+            .iter()
+            .find(|file| file.path.ends_with("/composer.lock"))
+            .expect("composer.lock should be scanned");
+        assert!(
+            lock_file
+                .package_data
+                .iter()
+                .any(|pkg| pkg.purl.as_deref() == Some("pkg:composer/phpunit/phpunit@10.0.0"))
+        );
     }
 }

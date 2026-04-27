@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 mod tests {
-    use crate::models::{Dependency, PackageType, Sha1Digest};
+    use crate::models::{DatasourceId, Dependency, PackageType, Sha1Digest};
     use crate::parsers::{ComposerJsonParser, ComposerLockParser, PackageParser};
     use serde_json::Value;
     use std::fs;
@@ -594,6 +594,35 @@ mod tests {
         assert_eq!(dev_package_dep.scope.as_deref(), Some("require-dev"));
         assert_eq!(dev_package_dep.is_runtime, Some(false));
         assert_eq!(dev_package_dep.is_optional, Some(true));
+    }
+
+    #[test]
+    fn test_extract_composer_lock_surfaces_locked_packages_as_package_data() {
+        let content = sample_composer_lock();
+        let (_temp_dir, composer_path) = create_temp_file("composer.lock", &content);
+        let package_data = ComposerLockParser::extract_packages(&composer_path);
+
+        assert_eq!(package_data.len(), 3);
+
+        let runtime_pkg = package_data
+            .iter()
+            .find(|pkg| pkg.purl.as_deref() == Some("pkg:composer/acme/runtime@1.0.0"))
+            .expect("runtime package should be emitted as file-level package_data");
+        assert_eq!(runtime_pkg.name.as_deref(), Some("runtime"));
+        assert_eq!(runtime_pkg.namespace.as_deref(), Some("acme"));
+        assert_eq!(runtime_pkg.version.as_deref(), Some("1.0.0"));
+        assert_eq!(
+            runtime_pkg.datasource_id,
+            Some(DatasourceId::PhpComposerLock)
+        );
+
+        let dev_pkg = package_data
+            .iter()
+            .find(|pkg| pkg.purl.as_deref() == Some("pkg:composer/acme/devpkg@2.0.0"))
+            .expect("dev package should be emitted as file-level package_data");
+        assert_eq!(dev_pkg.name.as_deref(), Some("devpkg"));
+        assert_eq!(dev_pkg.namespace.as_deref(), Some("acme"));
+        assert_eq!(dev_pkg.version.as_deref(), Some("2.0.0"));
     }
 
     #[test]

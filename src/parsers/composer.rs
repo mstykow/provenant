@@ -211,7 +211,10 @@ impl PackageParser for ComposerLockParser {
 
         let mut package_data = default_package_data(Some(DatasourceId::PhpComposerLock));
         package_data.dependencies = dependencies;
-        vec![package_data]
+
+        let mut packages = vec![package_data];
+        packages.extend(extract_lock_packages(&json_content));
+        packages
     }
 
     fn is_match(path: &Path) -> bool {
@@ -307,6 +310,35 @@ fn extract_lock_dependencies(json_content: &Value) -> Vec<Dependency> {
     ));
 
     dependencies
+}
+
+fn extract_lock_packages(json_content: &Value) -> Vec<PackageData> {
+    let packages = json_content
+        .get(FIELD_PACKAGES)
+        .and_then(|value| value.as_array())
+        .map(|packages| packages.as_slice())
+        .unwrap_or(&[]);
+    let packages_dev = json_content
+        .get(FIELD_PACKAGES_DEV)
+        .and_then(|value| value.as_array())
+        .map(|packages| packages.as_slice())
+        .unwrap_or(&[]);
+
+    let mut extracted = Vec::with_capacity(packages.len() + packages_dev.len());
+
+    for package in packages.iter().take(MAX_ITERATION_COUNT) {
+        if let Some(package_data) = build_lock_package_data(package, false) {
+            extracted.push(package_data);
+        }
+    }
+
+    for package in packages_dev.iter().take(MAX_ITERATION_COUNT) {
+        if let Some(package_data) = build_lock_package_data(package, true) {
+            extracted.push(package_data);
+        }
+    }
+
+    extracted
 }
 
 fn extract_lock_package_list(
@@ -460,6 +492,66 @@ fn build_lock_dependency(
         resolved_package: Some(Box::new(resolved_package)),
         extra_data,
     })
+}
+
+fn build_lock_package_data(package: &Value, is_dev_package: bool) -> Option<PackageData> {
+    let dependency = build_lock_dependency(
+        package,
+        if is_dev_package {
+            "packages-dev"
+        } else {
+            "packages"
+        },
+        !is_dev_package,
+        is_dev_package,
+    )?;
+    let resolved = dependency.resolved_package.as_deref()?;
+
+    let mut package_data = default_package_data(Some(DatasourceId::PhpComposerLock));
+    package_data.package_type = Some(ComposerLockParser::PACKAGE_TYPE);
+    package_data.namespace = (!resolved.namespace.is_empty()).then(|| resolved.namespace.clone());
+    package_data.name = Some(truncate_field(resolved.name.clone()));
+    package_data.version = Some(truncate_field(resolved.version.clone()));
+    package_data.primary_language = resolved.primary_language.clone();
+    package_data.description = resolved.description.clone();
+    package_data.release_date = resolved.release_date.clone();
+    package_data.parties = resolved.parties.clone();
+    package_data.keywords = resolved.keywords.clone();
+    package_data.homepage_url = resolved.homepage_url.clone();
+    package_data.download_url = resolved.download_url.clone();
+    package_data.sha1 = resolved.sha1;
+    package_data.md5 = resolved.md5;
+    package_data.sha256 = resolved.sha256;
+    package_data.sha512 = resolved.sha512;
+    package_data.bug_tracking_url = resolved.bug_tracking_url.clone();
+    package_data.code_view_url = resolved.code_view_url.clone();
+    package_data.vcs_url = resolved.vcs_url.clone();
+    package_data.copyright = resolved.copyright.clone();
+    package_data.holder = resolved.holder.clone();
+    package_data.declared_license_expression = resolved.declared_license_expression.clone();
+    package_data.declared_license_expression_spdx =
+        resolved.declared_license_expression_spdx.clone();
+    package_data.license_detections = resolved.license_detections.clone();
+    package_data.other_license_expression = resolved.other_license_expression.clone();
+    package_data.other_license_expression_spdx = resolved.other_license_expression_spdx.clone();
+    package_data.other_license_detections = resolved.other_license_detections.clone();
+    package_data.extracted_license_statement = resolved.extracted_license_statement.clone();
+    package_data.notice_text = resolved.notice_text.clone();
+    package_data.source_packages = resolved.source_packages.clone();
+    package_data.file_references = resolved.file_references.clone();
+    package_data.is_private = resolved.is_private;
+    package_data.is_virtual = resolved.is_virtual;
+    package_data.extra_data = dependency
+        .extra_data
+        .clone()
+        .or_else(|| resolved.extra_data.clone());
+    package_data.dependencies = resolved.dependencies.clone();
+    package_data.repository_homepage_url = resolved.repository_homepage_url.clone();
+    package_data.repository_download_url = resolved.repository_download_url.clone();
+    package_data.api_data_url = resolved.api_data_url.clone();
+    package_data.purl = dependency.purl.clone();
+
+    Some(package_data)
 }
 
 fn extract_dist_hashes(
