@@ -16,6 +16,10 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
+const MAX_OUTPUT_MATCHED_TEXT_LINE_LENGTH: usize = 10_000;
+const MAX_OUTPUT_MATCHED_TEXT_BYTES: usize = 128 * 1024;
+const MATCHED_TEXT_TRUNCATION_MARKER: &str = "… [truncated]";
+
 pub(super) struct LicenseExtractionInput<'a> {
     pub(super) path: &'a Path,
     pub(super) text_content: String,
@@ -375,6 +379,179 @@ fn normalize_reference_url_candidate(text: &str) -> String {
     text.trim().trim_end_matches('/').to_ascii_lowercase()
 }
 
+fn extract_output_matched_text(
+    license_match: &InternalLicenseMatch,
+    text_content: &str,
+    query: Option<&Query<'_>>,
+) -> String {
+    if let Some(matched_text) = &license_match.matched_text {
+        return cap_output_matched_text(matched_text.clone());
+    }
+
+    let start_line = license_match.start_line.get();
+    let end_line = license_match.end_line.get();
+
+    if line_range_has_oversized_line(
+        text_content,
+        start_line,
+        end_line,
+        MAX_OUTPUT_MATCHED_TEXT_LINE_LENGTH,
+    ) {
+        if let Some(compact_text) = compact_matched_text_from_query(query, license_match) {
+            return cap_output_matched_text(compact_text);
+        }
+
+        return cap_output_matched_text(bounded_matched_text_from_text(
+            text_content,
+            start_line,
+            end_line,
+        ));
+    }
+
+    let whole_line =
+        crate::license_detection::query::matched_text_from_text(text_content, start_line, end_line);
+
+    if whole_line.len() > MAX_OUTPUT_MATCHED_TEXT_BYTES
+        && let Some(compact_text) = compact_matched_text_from_query(query, license_match)
+    {
+        return cap_output_matched_text(compact_text);
+    }
+
+    cap_output_matched_text(whole_line)
+}
+
+fn compact_matched_text_from_query(
+    query: Option<&Query<'_>>,
+    license_match: &InternalLicenseMatch,
+) -> Option<String> {
+    let query = query?;
+    let matched_positions: PositionSet = license_match.query_span().iter().collect();
+    let start_pos = matched_positions.iter().min()?;
+    let end_pos = matched_positions.iter().max()?;
+
+    Some(crate::license_detection::query::matched_text_from_tokens(
+        &query.text,
+        query,
+        &matched_positions,
+        start_pos,
+        end_pos,
+        license_match.start_line.get(),
+        license_match.end_line.get(),
+    ))
+}
+
+fn line_range_has_oversized_line(
+    text: &str,
+    start_line: usize,
+    end_line: usize,
+    max_line_length: usize,
+) -> bool {
+    if start_line == 0 || end_line == 0 || start_line > end_line {
+        return false;
+    }
+
+    text.lines().enumerate().any(|(idx, line)| {
+        let line_num = idx + 1;
+        line_num >= start_line && line_num <= end_line && line.len() > max_line_length
+    })
+}
+
+fn bounded_matched_text_from_text(text: &str, start_line: usize, end_line: usize) -> String {
+    matched_text_from_text_with_line_cap(
+        text,
+        start_line,
+        end_line,
+        MAX_OUTPUT_MATCHED_TEXT_LINE_LENGTH,
+    )
+}
+
+fn matched_text_from_text_with_line_cap(
+    text: &str,
+    start_line: usize,
+    end_line: usize,
+    max_line_length: usize,
+) -> String {
+    if start_line == 0 || end_line == 0 || start_line > end_line {
+        return String::new();
+    }
+
+    let mut selected_lines = Vec::new();
+
+    for (idx, line) in text.split_inclusive('\n').enumerate() {
+        let line_num = idx + 1;
+        if line_num < start_line || line_num > end_line {
+            continue;
+        }
+
+        let (line_text, line_ending) = split_line_ending(line);
+        let capped_line = if line_text.len() > max_line_length {
+            truncate_with_marker(line_text, max_line_length)
+        } else {
+            line_text.to_string()
+        };
+
+        selected_lines.push((capped_line, line_ending.to_string()));
+    }
+
+    let total_lines = selected_lines.len();
+    let mut rendered = String::new();
+    for (idx, (line_text, line_ending)) in selected_lines.into_iter().enumerate() {
+        rendered.push_str(&line_text);
+        if idx + 1 < total_lines {
+            rendered.push_str(&line_ending);
+        }
+    }
+
+    rendered
+}
+
+fn split_line_ending(line: &str) -> (&str, &str) {
+    if let Some(line) = line.strip_suffix("\r\n") {
+        (line, "\r\n")
+    } else if let Some(line) = line.strip_suffix('\n') {
+        (line, "\n")
+    } else {
+        (line, "")
+    }
+}
+
+fn cap_output_matched_text(text: String) -> String {
+    if text.len() <= MAX_OUTPUT_MATCHED_TEXT_BYTES {
+        return text;
+    }
+
+    truncate_with_marker(&text, MAX_OUTPUT_MATCHED_TEXT_BYTES)
+}
+
+fn truncate_with_marker(text: &str, max_bytes: usize) -> String {
+    if text.len() <= max_bytes {
+        return text.to_string();
+    }
+
+    if max_bytes <= MATCHED_TEXT_TRUNCATION_MARKER.len() {
+        return truncate_at_char_boundary(MATCHED_TEXT_TRUNCATION_MARKER, max_bytes).to_string();
+    }
+
+    let prefix = truncate_at_char_boundary(
+        text,
+        max_bytes.saturating_sub(MATCHED_TEXT_TRUNCATION_MARKER.len()),
+    );
+    format!("{prefix}{MATCHED_TEXT_TRUNCATION_MARKER}")
+}
+
+fn truncate_at_char_boundary(text: &str, max_bytes: usize) -> &str {
+    if text.len() <= max_bytes {
+        return text;
+    }
+
+    let mut end = max_bytes;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+
+    &text[..end]
+}
+
 fn convert_match_to_model(
     m: &crate::license_detection::models::LicenseMatch,
     license_options: LicenseScanOptions,
@@ -387,35 +564,7 @@ fn convert_match_to_model(
         Some(m.rule_url.clone())
     };
     let matched_text = if license_options.include_text {
-        m.matched_text.clone().or_else(|| {
-            // For files with long lines (e.g., minified JS), use token-span extraction
-            // to avoid capturing megabytes of text for a small license match.
-            // This mirrors ScanCode's `whole_lines=False` guard for long-line files.
-            if let Some(query) = query
-                && query.has_long_lines
-            {
-                let matched_positions: PositionSet = m.query_span().iter().collect();
-                if let (Some(start_pos), Some(end_pos)) = (
-                    matched_positions.iter().min(),
-                    matched_positions.iter().max(),
-                ) {
-                    return Some(crate::license_detection::query::matched_text_from_tokens(
-                        &query.text,
-                        query,
-                        &matched_positions,
-                        start_pos,
-                        end_pos,
-                        m.start_line.get(),
-                        m.end_line.get(),
-                    ));
-                }
-            }
-            Some(crate::license_detection::query::matched_text_from_text(
-                text_content,
-                m.start_line.get(),
-                m.end_line.get(),
-            ))
-        })
+        Some(extract_output_matched_text(m, text_content, query))
     } else {
         None
     };
@@ -484,28 +633,30 @@ fn matched_text_diagnostics_from_match(
 ) -> String {
     let matched_positions: PositionSet = license_match.query_span().iter().collect();
     let Some(start_pos) = matched_positions.iter().min() else {
-        return crate::license_detection::query::matched_text_from_text(
+        return bounded_matched_text_from_text(
             &query.text,
             license_match.start_line.get(),
             license_match.end_line.get(),
         );
     };
     let Some(end_pos) = matched_positions.iter().max() else {
-        return crate::license_detection::query::matched_text_from_text(
+        return bounded_matched_text_from_text(
             &query.text,
             license_match.start_line.get(),
             license_match.end_line.get(),
         );
     };
 
-    crate::license_detection::query::matched_text_diagnostics_from_text(
-        &query.text,
-        query,
-        &matched_positions,
-        start_pos,
-        end_pos,
-        license_match.start_line.get(),
-        license_match.end_line.get(),
+    cap_output_matched_text(
+        crate::license_detection::query::matched_text_diagnostics_from_text(
+            &query.text,
+            query,
+            &matched_positions,
+            start_pos,
+            end_pos,
+            license_match.start_line.get(),
+            license_match.end_line.get(),
+        ),
     )
 }
 
