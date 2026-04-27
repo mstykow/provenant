@@ -161,6 +161,27 @@ mod tests {
 
     #[test]
     fn test_android_parser_is_match() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let soong_metadata_path = temp_dir.path().join("METADATA");
+        fs::write(
+            &soong_metadata_path,
+            r#"
+third_party {
+  license_type: NOTICE
+}
+"#,
+        )
+        .expect("write soong metadata");
+
+        let python_dist_info = temp_dir.path().join("demo-1.0.0.dist-info");
+        fs::create_dir_all(&python_dist_info).expect("create dist-info dir");
+        let python_metadata_path = python_dist_info.join("METADATA");
+        fs::write(
+            &python_metadata_path,
+            "Metadata-Version: 2.1\nName: demo\nVersion: 1.0.0\nSummary: demo\n",
+        )
+        .expect("write python metadata");
+
         let (_apk_dir, apk_path) = create_zip(
             &[
                 ("AndroidManifest.xml", &decode_binary_manifest_fixture()),
@@ -176,12 +197,8 @@ mod tests {
             "sample.aab",
         );
 
-        assert!(AndroidSoongMetadataParser::is_match(&PathBuf::from(
-            "vendor/fmt/METADATA"
-        )));
-        assert!(!AndroidSoongMetadataParser::is_match(&PathBuf::from(
-            "site-packages/demo-1.0.0.dist-info/METADATA"
-        )));
+        assert!(AndroidSoongMetadataParser::is_match(&soong_metadata_path));
+        assert!(!AndroidSoongMetadataParser::is_match(&python_metadata_path));
         assert!(AndroidManifestParser::is_match(&PathBuf::from(
             "app/src/main/AndroidManifest.xml"
         )));
@@ -191,6 +208,38 @@ mod tests {
         let broken_apk = apk_path.with_file_name("broken.apk");
         fs::write(&broken_apk, b"not a zip archive").expect("write broken apk");
         assert!(!AndroidApkParser::is_match(&broken_apk));
+    }
+
+    #[test]
+    fn test_soong_metadata_match_requires_soong_like_content() {
+        let temp_dir = TempDir::new().expect("temp dir");
+
+        let soong_path = temp_dir.path().join("METADATA");
+        fs::write(
+            &soong_path,
+            r#"
+third_party {
+  license_type: NOTICE
+}
+"#,
+        )
+        .expect("write soong metadata");
+        assert!(AndroidSoongMetadataParser::is_match(&soong_path));
+
+        let generic_path = temp_dir.path().join("generic-METADATA");
+        fs::create_dir_all(&generic_path).expect("create generic metadata dir");
+        let generic_path = generic_path.join("METADATA");
+        fs::write(
+            &generic_path,
+            r#"
+name: "demo"
+description: "not actually soong"
+"#,
+        )
+        .expect("write generic metadata");
+
+        assert!(!AndroidSoongMetadataParser::is_match(&generic_path));
+        assert!(try_parse_file(&generic_path).is_none());
     }
 
     #[test]
