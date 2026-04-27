@@ -401,6 +401,9 @@ ScanCode: 394.76s</title></rect>
     <rect x="640.96" y="398.96" width="8" height="8" fill="#d97706" rx="1.5"><title>rust-lang/cargo @ b54fe55
 Files: 2883
 ScanCode: 127.38s</title></rect>
+    <rect x="641.06" y="351.33" width="8" height="8" fill="#d97706" rx="1.5"><title>pnpm/pnpm @ 2a1ffe1
+Files: 2887
+ScanCode: 349.11s</title></rect>
     <rect x="641.77" y="372.34" width="8" height="8" fill="#d97706" rx="1.5"><title>NixOS/nix @ 6a659e1
 Files: 2917
 ScanCode: 223.79s</title></rect>
@@ -928,6 +931,9 @@ Provenant: 16.30s</title></circle>
     <circle cx="644.96" cy="503.26" r="4.5" fill="#2563eb"><title>rust-lang/cargo @ b54fe55
 Files: 2883
 Provenant: 15.25s</title></circle>
+    <circle cx="645.06" cy="499.42" r="4.5" fill="#2563eb"><title>pnpm/pnpm @ 2a1ffe1
+Files: 2887
+Provenant: 16.54s</title></circle>
     <circle cx="645.77" cy="513.46" r="4.5" fill="#2563eb"><title>NixOS/nix @ 6a659e1
 Files: 2917
 Provenant: 12.29s</title></circle>

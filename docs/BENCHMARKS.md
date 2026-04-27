@@ -12,7 +12,7 @@ The chart below uses a log-log scatter plot: file count on the x-axis, wall-cloc
 
 ![Scan duration vs. file count for Provenant and ScanCode](benchmarks/scan-duration-vs-files.svg)
 
-> Provenant is faster on 175 of 175 recorded runs, with a **11.5× median speedup** and **10.8× geometric-mean speedup** overall; the median gap grows from **7.1×** on sub-100-file targets to **17.4×** on 10k+ file targets.
+> Provenant is faster on 176 of 176 recorded runs, with a **11.6× median speedup** and **10.9× geometric-mean speedup** overall; the median gap grows from **7.1×** on sub-100-file targets to **17.4×** on 10k+ file targets.
 > Generated from the benchmark timing rows in this document via `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart`.
 
 ## Current benchmark examples
@@ -366,6 +366,13 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Run context: 2026-04-09 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc
 - Timing: Provenant `43.05s`; ScanCode `849.10s`
 - Far broader Bun/npm-family package extraction (`382` vs `29` packages, `5773` vs `323` dependencies) from the repo's 52 committed `bun.lock` / `bun.lockb` inputs that ScanCode leaves at zero, plus legacy `bun.lockb` coverage on `bench/bundle` and plainer `BSD-2-Clause` rebucketing where ScanCode uses the over-specific `BSD-2-Clause-Views` label
+
+##### [pnpm/pnpm @ 2a1ffe1](https://github.com/pnpm/pnpm/tree/2a1ffe1956a75746844b1c6cd863ecfbb5a55729) — **21.11× faster**
+
+- Files: 2,887
+- Run context: 2026-04-27 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `16.54s`; ScanCode `349.11s`
+- Broader pnpm/npm monorepo package and dependency extraction (`396` vs `282` packages, `11606` vs `3080` dependencies) from the root `pnpm-lock.yaml`, nested workspace member manifests, and shared workspace `npm-shrinkwrap.json` / `pnpm-lock.yaml` roots, plus zero scan-file errors where ScanCode crashes on the root workspace manifests and catalog-protocol fixture inputs
 
 ##### [renovatebot/renovate @ 91a7213](https://github.com/renovatebot/renovate/tree/91a72131e8aefcda8f0dab7499f378f7eb41300f) — **18.82× faster**
 
