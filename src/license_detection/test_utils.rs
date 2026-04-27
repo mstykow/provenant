@@ -172,6 +172,7 @@ pub fn create_mock_query_with_tokens<'a>(tokens: &[u16], index: &'a LicenseIndex
         high_matchables: (0..token_count).collect(),
         low_matchables: PositionSet::new(),
         is_binary: false,
+        has_long_lines: false,
         query_run_ranges: Vec::new(),
         spdx_lines: Vec::new(),
         index,

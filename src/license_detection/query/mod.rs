@@ -105,6 +105,15 @@ pub struct Query<'a> {
     /// Corresponds to Python: `self.is_binary = False` (line 225)
     pub is_binary: bool,
 
+    /// True if the text has very long lines (e.g., minified JS/CSS).
+    ///
+    /// When true, `matched_text` extraction should use token-span mode
+    /// instead of whole-line mode to avoid capturing megabytes of text
+    /// for a small license match on a minified single-line file.
+    ///
+    /// Corresponds to Python: `self.has_long_lines` in query.py (line 221)
+    pub has_long_lines: bool,
+
     /// Raw query run ranges (start, end) computed during tokenization.
     ///
     /// QueryRuns are created on-demand from these ranges.
@@ -124,6 +133,12 @@ pub struct Query<'a> {
     pub index: &'a LicenseIndex,
 }
 
+/// Maximum length of a single line in matched_text output.
+/// Lines exceeding this are truncated with a marker.
+/// This is a safety fallback for when token-span extraction is unavailable
+/// (e.g., query is None) but the file still has very long lines.
+const MAX_MATCHED_TEXT_LINE_LENGTH: usize = 10_000;
+
 pub fn matched_text_from_text(text: &str, start_line: usize, end_line: usize) -> String {
     if start_line == 0 || end_line == 0 || start_line > end_line {
         return String::new();
@@ -134,7 +149,13 @@ pub fn matched_text_from_text(text: &str, start_line: usize, end_line: usize) ->
         .filter_map(|(idx, line)| {
             let line_num = idx + 1;
             if line_num >= start_line && line_num <= end_line {
-                Some(line)
+                if line.len() > MAX_MATCHED_TEXT_LINE_LENGTH {
+                    // Truncate at a UTF-8 char boundary
+                    let truncated = &line[..line.floor_char_boundary(MAX_MATCHED_TEXT_LINE_LENGTH)];
+                    Some(truncated)
+                } else {
+                    Some(line)
+                }
             } else {
                 None
             }
@@ -164,6 +185,71 @@ pub fn matched_text_diagnostics_from_text(
     let line_endings = collect_line_endings(text);
 
     render_diagnostic_tokens(&reportable_tokens, &line_endings)
+}
+
+/// Extracts matched text using token-span mode instead of whole-line mode.
+///
+/// This is used for files with very long lines (e.g., minified JS) where
+/// whole-line extraction would return megabytes of text for a small match.
+/// Instead, it returns only the tokens within the matched span, producing
+/// output similar to `matched_text_diagnostics_from_text()` but without
+/// the diagnostic `[bracket]` wrapping.
+///
+/// Falls back to `matched_text_from_text()` if token positions are unavailable.
+pub fn matched_text_from_tokens(
+    text: &str,
+    query: &Query<'_>,
+    matched_positions: &PositionSet,
+    start_pos: usize,
+    end_pos: usize,
+    start_line: usize,
+    end_line: usize,
+) -> String {
+    let tokens = tokenize_matched_text(text, query);
+    let reportable_tokens = collect_reportable_tokens(
+        tokens,
+        matched_positions,
+        start_pos,
+        end_pos,
+        start_line,
+        end_line,
+    );
+    let line_endings = collect_line_endings(text);
+
+    render_plain_tokens(&reportable_tokens, &line_endings)
+}
+
+fn render_plain_tokens(tokens: &[MatchedTextToken], line_endings: &[String]) -> String {
+    let mut rendered = String::new();
+    let mut previous_line: Option<usize> = None;
+
+    for token in tokens {
+        if let Some(prev_line) = previous_line
+            && token.line_num > prev_line
+        {
+            for line in prev_line..token.line_num {
+                if let Some(line_ending) = line_endings.get(line.saturating_sub(1)) {
+                    rendered.push_str(line_ending.as_str());
+                }
+            }
+        }
+
+        let token_value = if token.is_text {
+            token.value.as_str()
+        } else {
+            token
+                .value
+                .strip_suffix("\r\n")
+                .or_else(|| token.value.strip_suffix('\n'))
+                .unwrap_or(token.value.as_str())
+        };
+
+        rendered.push_str(token_value);
+
+        previous_line = Some(token.line_num);
+    }
+
+    rendered
 }
 
 fn tokenize_matched_text(text: &str, query: &Query<'_>) -> Vec<MatchedTextToken> {
@@ -588,6 +674,7 @@ impl<'a> Query<'a> {
             high_matchables,
             low_matchables,
             is_binary,
+            has_long_lines,
             query_run_ranges: query_runs,
             spdx_lines,
             index,
