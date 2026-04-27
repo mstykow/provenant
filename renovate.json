@@ -62,7 +62,7 @@
       "automerge": false,
       "groupName": "Rust toolchain",
       "labels": ["dependencies", "rust-toolchain"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "30 days"
     },
     {
       "description": "Automerge minor Rust toolchain updates after release age",
@@ -72,7 +72,7 @@
       "automerge": true,
       "groupName": "Rust toolchain",
       "labels": ["dependencies", "rust-toolchain"],
-      "minimumReleaseAge": "7 days"
+      "minimumReleaseAge": "30 days"
     },
     {
       "description": "Only update engines field for major Node.js versions",
