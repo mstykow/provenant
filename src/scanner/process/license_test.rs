@@ -299,6 +299,46 @@ fn test_convert_detection_to_model_promotes_exact_reference_url_clue() {
 }
 
 #[test]
+fn test_supplement_nix_manifest_license_detections_adds_missing_singleton_symbol() {
+    let detections = super::supplement_nix_manifest_license_detections(
+        std::path::Path::new("package.nix"),
+        "meta = {\n  license = lib.licenses.asl20;\n};\n",
+        &[],
+    );
+
+    assert_eq!(detections.len(), 1);
+    assert_eq!(detections[0].license_expression_spdx, "Apache-2.0");
+    assert_eq!(
+        detections[0].matches[0].start_line,
+        LineNumber::new(2).unwrap()
+    );
+}
+
+#[test]
+fn test_supplement_nix_manifest_license_detections_adds_only_missing_browser_symbol() {
+    let existing = vec![crate::models::LicenseDetection {
+        license_expression: "lgpl-2.1-plus AND lgpl-3.0-plus".to_string(),
+        license_expression_spdx: "LGPL-2.1-or-later AND LGPL-3.0-or-later".to_string(),
+        matches: vec![],
+        detection_log: vec![],
+        identifier: None,
+    }];
+
+    let detections = super::supplement_nix_manifest_license_detections(
+        std::path::Path::new("package.nix"),
+        "meta = {\n  license = with lib.licenses; [\n    mpl20\n    lgpl21Plus\n    lgpl3Plus\n    free\n  ];\n};\n",
+        &existing,
+    );
+
+    assert_eq!(detections.len(), 1);
+    assert_eq!(detections[0].license_expression_spdx, "MPL-2.0");
+    assert_eq!(
+        detections[0].matches[0].start_line,
+        LineNumber::new(3).unwrap()
+    );
+}
+
+#[test]
 fn test_promote_legal_notice_low_quality_detections_promotes_apache_notice_fragment() {
     let concrete = InternalLicenseDetection {
         license_expression: Some("cve-tou".to_string()),
