@@ -30,6 +30,8 @@ mod tests {
             package.purl.as_deref(),
             Some("pkg:composer/test/package@1.0.0")
         );
+        assert_eq!(package.download_url, None);
+        assert_eq!(package.extra_data, None);
         assert_dependency_present(
             &result.dependencies,
             "pkg:composer/phpunit/phpunit",
