@@ -2923,7 +2923,7 @@ dependencies = [
 
 [[package]]
 name = "provenant-cli"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "anyhow",
  "ar",
