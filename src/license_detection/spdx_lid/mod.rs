@@ -87,6 +87,7 @@ pub fn clean_spdx_text(text: &str) -> String {
     text = text.replace("</p>", "");
     text = text.replace("</div>", "");
     text = text.replace("</licenseUrl>", "");
+    text = text.replace('\\', "");
 
     normalize_spaces(&mut text);
 

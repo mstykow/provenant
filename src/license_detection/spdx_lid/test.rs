@@ -161,6 +161,18 @@ mod tests {
     }
 
     #[test]
+    fn test_clean_spdx_text_strips_escaped_punctuation() {
+        let clean = clean_spdx_text("Apache-2\\.0");
+        assert_eq!(clean, "Apache-2.0");
+    }
+
+    #[test]
+    fn test_clean_spdx_text_strips_escaped_punctuation_in_expression() {
+        let clean = clean_spdx_text("Apache-2\\.0 OR MIT");
+        assert_eq!(clean, "Apache-2.0 OR MIT");
+    }
+
+    #[test]
     fn test_extract_spdx_expressions_single() {
         let text = "# SPDX-License-Identifier: MIT";
         let exprs = extract_cleaned_spdx_expressions(text);
