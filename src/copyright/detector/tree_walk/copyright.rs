@@ -6,7 +6,7 @@ use crate::copyright::types::{
 };
 use crate::models::LineNumber;
 
-use super::super as detector;
+use crate::copyright::detector;
 
 fn mpl_portions_created_prefix_tokens<'a>(
     tree: &'a [ParseNode],
