@@ -249,22 +249,20 @@ fn build_expression_from_list(unique: &[LicenseExpression], is_and: bool) -> Lic
         0 => panic!("build_expression_from_list called with empty list"),
         1 => unique[0].clone(),
         _ => {
-            let mut iter = unique.iter();
-            let mut result = iter.next().unwrap().clone();
-            for expr in iter {
-                result = if is_and {
-                    LicenseExpression::And {
-                        left: Box::new(result),
-                        right: Box::new(expr.clone()),
-                    }
-                } else {
-                    LicenseExpression::Or {
-                        left: Box::new(result),
-                        right: Box::new(expr.clone()),
-                    }
-                };
+            let midpoint = unique.len() / 2;
+            let left = build_expression_from_list(&unique[..midpoint], is_and);
+            let right = build_expression_from_list(&unique[midpoint..], is_and);
+            if is_and {
+                LicenseExpression::And {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                }
+            } else {
+                LicenseExpression::Or {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                }
             }
-            result
         }
     }
 }
@@ -600,6 +598,17 @@ pub fn combine_expressions_or_preserving_structure(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn expression_depth(expr: &LicenseExpression) -> usize {
+        match expr {
+            LicenseExpression::License(_) | LicenseExpression::LicenseRef(_) => 1,
+            LicenseExpression::And { left, right }
+            | LicenseExpression::Or { left, right }
+            | LicenseExpression::With { left, right } => {
+                1 + expression_depth(left).max(expression_depth(right))
+            }
+        }
+    }
 
     #[test]
     fn test_simplify_expression_no_change() {
@@ -1092,6 +1101,28 @@ mod tests {
             result,
             "apache-2.0 AND apsl-1.0 AND apsl-2.0 AND bsd-3-clause AND gpl-2.0-only AND licenseref-scancode-oracle-openjdk-exception-2.0"
         );
+    }
+
+    #[test]
+    fn test_build_expression_from_list_balances_large_and_chains() {
+        let unique: Vec<_> = (0..1024)
+            .map(|idx| LicenseExpression::License(format!("license-{idx}")))
+            .collect();
+
+        let result = build_expression_from_list(&unique, true);
+
+        assert!(expression_depth(&result) <= 12);
+    }
+
+    #[test]
+    fn test_build_expression_from_list_balances_large_or_chains() {
+        let unique: Vec<_> = (0..1024)
+            .map(|idx| LicenseExpression::License(format!("license-{idx}")))
+            .collect();
+
+        let result = build_expression_from_list(&unique, false);
+
+        assert!(expression_depth(&result) <= 12);
     }
 }
 
