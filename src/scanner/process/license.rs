@@ -4,14 +4,19 @@
 use crate::license_detection::LicenseDetection as InternalLicenseDetection;
 use crate::license_detection::LicenseDetectionEngine;
 use crate::license_detection::PositionSet;
+use crate::license_detection::expression::parse_expression;
 use crate::license_detection::index::LicenseIndex;
 use crate::license_detection::models::LicenseMatch as InternalLicenseMatch;
 use crate::license_detection::query::Query;
 use crate::models::{
-    FileInfoBuilder, LicenseDetection as PublicLicenseDetection, Match, ScanDiagnostic,
+    FileInfoBuilder, LicenseDetection as PublicLicenseDetection, LineNumber, Match, ScanDiagnostic,
+};
+use crate::parsers::license_normalization::{
+    DeclaredLicenseMatchMetadata, build_declared_license_data, normalize_spdx_expression,
 };
 use crate::scanner::LicenseScanOptions;
 use anyhow::Error;
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
@@ -125,6 +130,12 @@ pub(super) fn extract_license_information(
                 model_clues.extend(clue_matches);
             }
 
+            model_detections.extend(supplement_nix_manifest_license_detections(
+                path,
+                &text_content,
+                &model_detections,
+            ));
+
             if !model_detections.is_empty() {
                 let expressions: Vec<String> = model_detections
                     .iter()
@@ -163,6 +174,202 @@ pub(super) fn extract_license_information(
     }
 
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct NixLicenseDeclaration {
+    symbol: String,
+    matched_text: String,
+    start_line: LineNumber,
+    end_line: LineNumber,
+}
+
+fn supplement_nix_manifest_license_detections(
+    path: &Path,
+    text_content: &str,
+    existing_detections: &[PublicLicenseDetection],
+) -> Vec<PublicLicenseDetection> {
+    if path.extension().and_then(|ext| ext.to_str()) != Some("nix")
+        || !text_content.contains("license =")
+    {
+        return Vec::new();
+    }
+
+    let mut existing_license_keys = collect_detected_license_keys(existing_detections);
+    let mut synthesized = Vec::new();
+
+    for declaration in extract_nix_manifest_license_declarations(text_content) {
+        let Some(spdx_expression) = nix_license_symbol_to_spdx(&declaration.symbol) else {
+            continue;
+        };
+        let Some(normalized) = normalize_spdx_expression(spdx_expression) else {
+            continue;
+        };
+        let declared_license_keys =
+            collect_expression_keys(&normalized.declared_license_expression);
+        let declared_spdx_keys =
+            collect_expression_keys(&normalized.declared_license_expression_spdx);
+        let all_declared_keys = declared_license_keys
+            .iter()
+            .chain(declared_spdx_keys.iter())
+            .cloned()
+            .collect::<HashSet<_>>();
+        if !all_declared_keys.is_empty()
+            && all_declared_keys
+                .iter()
+                .all(|key| existing_license_keys.contains(key))
+        {
+            continue;
+        }
+
+        let (_, _, detections) = build_declared_license_data(
+            normalized,
+            DeclaredLicenseMatchMetadata::new(
+                &declaration.matched_text,
+                declaration.start_line,
+                declaration.end_line,
+            ),
+        );
+
+        for key in all_declared_keys {
+            existing_license_keys.insert(key);
+        }
+        synthesized.extend(detections);
+    }
+
+    synthesized
+}
+
+fn collect_detected_license_keys(detections: &[PublicLicenseDetection]) -> HashSet<String> {
+    let mut keys = HashSet::new();
+    for detection in detections {
+        keys.extend(collect_expression_keys(&detection.license_expression));
+        keys.extend(collect_expression_keys(&detection.license_expression_spdx));
+    }
+    keys
+}
+
+fn collect_expression_keys(expression: &str) -> HashSet<String> {
+    parse_expression(expression)
+        .ok()
+        .map(|parsed| {
+            parsed
+                .license_keys()
+                .into_iter()
+                .map(|key| key.to_ascii_lowercase())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn extract_nix_manifest_license_declarations(text: &str) -> Vec<NixLicenseDeclaration> {
+    let mut declarations = Vec::new();
+    let mut in_license_list = false;
+
+    for (index, line) in text.lines().enumerate() {
+        let line_number = LineNumber::new(index + 1).expect("line number should be valid");
+        let line_without_comment = line.split('#').next().unwrap_or("");
+        let trimmed = line_without_comment.trim();
+
+        if in_license_list {
+            let closes_list = trimmed.contains("];");
+            for symbol in tokenize_nix_license_symbols(trimmed) {
+                declarations.push(NixLicenseDeclaration {
+                    matched_text: symbol.clone(),
+                    symbol,
+                    start_line: line_number,
+                    end_line: line_number,
+                });
+            }
+            if closes_list {
+                in_license_list = false;
+            }
+            continue;
+        }
+
+        if let Some(rest) = trimmed.strip_prefix("license = lib.licenses.") {
+            if let Some(symbol) = parse_nix_license_symbol(rest) {
+                declarations.push(NixLicenseDeclaration {
+                    matched_text: symbol.clone(),
+                    symbol,
+                    start_line: line_number,
+                    end_line: line_number,
+                });
+            }
+            continue;
+        }
+
+        if let Some(rest) = trimmed.strip_prefix("license = with lib.licenses; [") {
+            in_license_list = !trimmed.contains("];");
+            for symbol in tokenize_nix_license_symbols(rest) {
+                declarations.push(NixLicenseDeclaration {
+                    matched_text: symbol.clone(),
+                    symbol,
+                    start_line: line_number,
+                    end_line: line_number,
+                });
+            }
+            if trimmed.contains("];") {
+                in_license_list = false;
+            }
+            continue;
+        }
+
+        if let Some(rest) = trimmed.strip_prefix("license = licenses.") {
+            if let Some(symbol) = parse_nix_license_symbol(rest) {
+                declarations.push(NixLicenseDeclaration {
+                    matched_text: format!("licenses.{symbol}"),
+                    symbol,
+                    start_line: line_number,
+                    end_line: line_number,
+                });
+            }
+            continue;
+        }
+    }
+
+    declarations
+}
+
+fn parse_nix_license_symbol(input: &str) -> Option<String> {
+    let mut symbol = String::new();
+    for ch in input.chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '+' | '-') {
+            symbol.push(ch);
+        } else {
+            break;
+        }
+    }
+    (!symbol.is_empty()).then_some(symbol)
+}
+
+fn tokenize_nix_license_symbols(input: &str) -> Vec<String> {
+    input
+        .split_whitespace()
+        .filter_map(parse_nix_license_symbol)
+        .collect()
+}
+
+fn nix_license_symbol_to_spdx(symbol: &str) -> Option<&'static str> {
+    match symbol {
+        "asl20" => Some("Apache-2.0"),
+        "bsd2" => Some("BSD-2-Clause"),
+        "bsd3" => Some("BSD-3-Clause"),
+        "gpl1Only" => Some("GPL-1.0-only"),
+        "gpl1Plus" => Some("GPL-1.0-or-later"),
+        "gpl2" | "gpl2Only" => Some("GPL-2.0-only"),
+        "gpl2Plus" => Some("GPL-2.0-or-later"),
+        "gpl3" | "gpl3Only" => Some("GPL-3.0-only"),
+        "gpl3Plus" => Some("GPL-3.0-or-later"),
+        "lgpl21" => Some("LGPL-2.1-only"),
+        "lgpl21Plus" => Some("LGPL-2.1-or-later"),
+        "lgpl3" => Some("LGPL-3.0-only"),
+        "lgpl3Plus" => Some("LGPL-3.0-or-later"),
+        "mit" => Some("MIT"),
+        "mpl11" => Some("MPL-1.1"),
+        "mpl20" => Some("MPL-2.0"),
+        _ => None,
+    }
 }
 
 fn is_license_detection_timeout_error(error: &Error) -> bool {

@@ -182,7 +182,7 @@ mod hex_lock_test;
 mod julia;
 #[cfg(test)]
 mod julia_test;
-mod license_normalization;
+pub(crate) mod license_normalization;
 mod maven;
 #[cfg(test)]
 mod maven_scan_test;
