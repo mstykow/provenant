@@ -123,6 +123,30 @@ fn test_plain_json_author_string_with_parenthesized_url_and_following_key_preser
 }
 
 #[test]
+fn test_plain_json_author_string_machine_token_dropped_without_metadata_context() {
+    let input = r#""author": "makeappicon", "images": []"#;
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_author_span_prose_continuation_not_detected() {
+    let input = "contributors, for example.\nIf you want to help, start with docs.";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_author_span_legal_clause_not_detected() {
+    let input = "authors, grants you the right to use and distribute this work.";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
 fn test_json_author_object_name_preferred_over_url_tail() {
     let input =
         "\"author\": { \"name\": \"Chen Fengyuan\", \"url\": \"https://chenfengyuan.com/\" }";

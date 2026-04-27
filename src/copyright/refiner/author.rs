@@ -126,8 +126,21 @@ fn looks_like_prose_fragment_author(s: &str) -> bool {
             .all(|ch| !ch.is_alphabetic() || ch.is_lowercase());
         return !all_lower || word.len() < 6;
     }
-    if words.len() == 2 && words.iter().all(|word| starts_with_lowercase_alpha(word)) {
-        return true;
+    if words.len() == 2 {
+        if words.iter().all(|word| starts_with_lowercase_alpha(word)) {
+            return true;
+        }
+
+        if words[0].ends_with('.')
+            && starts_with_lowercase_alpha(words[0])
+            && starts_with_uppercase_alpha(words[1])
+        {
+            return true;
+        }
+
+        if starts_with_lowercase_alpha(words[0]) && words[1].contains('?') {
+            return true;
+        }
     }
     if words.len() < 3 {
         return false;
@@ -301,6 +314,12 @@ fn starts_with_lowercase_alpha(word: &str) -> bool {
     word.chars()
         .find(|ch| ch.is_alphabetic())
         .is_some_and(|ch| ch.is_lowercase())
+}
+
+fn starts_with_uppercase_alpha(word: &str) -> bool {
+    word.chars()
+        .find(|ch| ch.is_alphabetic())
+        .is_some_and(|ch| ch.is_uppercase())
 }
 
 fn restore_leading_the_for_institution_and_contributors(original: &str, refined: &str) -> String {
