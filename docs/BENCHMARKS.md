@@ -12,7 +12,7 @@ The chart below uses a log-log scatter plot: file count on the x-axis, wall-cloc
 
 ![Scan duration vs. file count for Provenant and ScanCode](benchmarks/scan-duration-vs-files.svg)
 
-> Provenant is faster on 177 of 177 recorded runs, with a **11.5× median speedup** and **10.7× geometric-mean speedup** overall; the median gap grows from **7.0×** on sub-100-file targets to **17.4×** on 10k+ file targets.
+> Provenant is faster on 175 of 175 recorded runs, with a **11.5× median speedup** and **10.8× geometric-mean speedup** overall; the median gap grows from **7.1×** on sub-100-file targets to **17.4×** on 10k+ file targets.
 > Generated from the benchmark timing rows in this document via `cargo run --manifest-path xtask/Cargo.toml --bin generate-benchmark-chart`.
 
 ## Current benchmark examples
@@ -1023,13 +1023,6 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Timing: Provenant `19.91s`; ScanCode `33.50s`
 - Broader Nix package and dependency extraction (`53` vs `22` packages, `887` vs `843` dependencies) from committed `flake.lock` inputs and flake-compat-backed `default.nix` wrapper surfaces across the tree, with cleaner root-package visibility on repository entrypoints that ScanCode leaves unassembled
 
-##### [NixOS/nix @ 262e98f](https://github.com/NixOS/nix/tree/262e98f67e09f83393dc84c2629df84cce2fe299) — **4.78× faster**
-
-- Files: 2,889
-- Run context: 2026-04-11 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc
-- Timing: Provenant `21.86s`; ScanCode `104.41s`
-- Broader Nix package and dependency extraction (`2` vs `0` packages, `67` vs `0` dependencies) from committed `flake.lock` inputs and Nix manifest surfaces across the tree, plus safer URL credential stripping and Unicode-preserving author normalization across release-note metadata
-
 ##### [NixOS/nix @ 6a659e1](https://github.com/NixOS/nix/tree/6a659e16bd2bcd871aedcb38724a1cff77690a31) — **18.21× faster**
 
 - Files: 2,917
@@ -1037,19 +1030,12 @@ The quick index below links to benchmark sections. Each benchmark entry then rec
 - Timing: Provenant `12.29s`; ScanCode `223.79s`
 - Broader Nix package and dependency extraction (`3` vs `0` packages, `69` vs `0` dependencies) from committed `flake.lock`, root `default.nix`, and other Nix manifest surfaces, with richer structured author, email, and URL recovery across repository docs and release metadata
 
-##### [NixOS/nixpkgs @ c407343](https://github.com/NixOS/nixpkgs/tree/c4073437f5ffeaeee270c37a2eddf370658d1332) — **14.90× faster**
+##### [NixOS/nixpkgs @ c407343](https://github.com/NixOS/nixpkgs/tree/c4073437f5ffeaeee270c37a2eddf370658d1332) — **14.37× faster**
 
 - Files: 52,167
-- Run context: 2026-04-27 · nixpkgs-18663 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
-- Timing: Provenant `311.46s`; ScanCode `4641.96s`
+- Run context: 2026-04-27 · nixpkgs-63582 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 4 proc
+- Timing: Provenant `322.93s`; ScanCode `4641.96s`
 - Broader Nix package visibility (`1327` vs `737` packages) across committed Nix manifests, provider metadata, and lockfile-adjacent package surfaces, plus zero scan-file errors where ScanCode times out on huge metadata captures such as `hackage-packages.nix` and `typst-packages-from-universe.toml`
-
-##### [numtide/devshell @ 255a2b1](https://github.com/numtide/devshell/tree/255a2b1725a20d060f566e4755dbf571bbbb5f76) — **3.55× faster**
-
-- Files: 84
-- Run context: 2026-04-12 · macOS 26.3.1 · Apple M1 Max · 32 GB · arm64 · 9 proc
-- Timing: Provenant `10.57s`; ScanCode `37.57s`
-- Broader Nix package and dependency extraction (`5` vs `0` packages, `17` vs `0` dependencies) from committed `flake.lock` inputs, root `default.nix`, and template flake surfaces, with cleaner root-package visibility on flake-compat-backed entrypoints that ScanCode leaves unassembled
 
 ##### [numtide/devshell @ 255a2b1](https://github.com/numtide/devshell/tree/255a2b1725a20d060f566e4755dbf571bbbb5f76) — **7.44× faster**
 
