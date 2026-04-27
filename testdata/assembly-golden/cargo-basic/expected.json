@@ -31,6 +31,19 @@
       "scope": null
     },
     {
+      "datafile_path": "Cargo.lock",
+      "datasource_id": "cargo_lock",
+      "dependency_uid": "pkg:cargo/test-crate@0.1.0?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "extracted_requirement": "0.1.0",
+      "for_package_uid": "pkg:cargo/test-crate@0.1.0?uuid=fixed-uid-done-for-testing-5642512d1758",
+      "is_direct": true,
+      "is_optional": null,
+      "is_pinned": true,
+      "is_runtime": null,
+      "purl": "pkg:cargo/test-crate@0.1.0",
+      "scope": null
+    },
+    {
       "datafile_path": "Cargo.toml",
       "datasource_id": "cargo_toml",
       "dependency_uid": "pkg:cargo/tokio?uuid=fixed-uid-done-for-testing-5642512d1758",
