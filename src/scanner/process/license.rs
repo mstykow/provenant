@@ -388,6 +388,28 @@ fn convert_match_to_model(
     };
     let matched_text = if license_options.include_text {
         m.matched_text.clone().or_else(|| {
+            // For files with long lines (e.g., minified JS), use token-span extraction
+            // to avoid capturing megabytes of text for a small license match.
+            // This mirrors ScanCode's `whole_lines=False` guard for long-line files.
+            if let Some(query) = query
+                && query.has_long_lines
+            {
+                let matched_positions: PositionSet = m.query_span().iter().collect();
+                if let (Some(start_pos), Some(end_pos)) = (
+                    matched_positions.iter().min(),
+                    matched_positions.iter().max(),
+                ) {
+                    return Some(crate::license_detection::query::matched_text_from_tokens(
+                        &query.text,
+                        query,
+                        &matched_positions,
+                        start_pos,
+                        end_pos,
+                        m.start_line.get(),
+                        m.end_line.get(),
+                    ));
+                }
+            }
             Some(crate::license_detection::query::matched_text_from_text(
                 text_content,
                 m.start_line.get(),
