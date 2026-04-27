@@ -122,3 +122,23 @@ fn test_refine_final_authors_keeps_structured_metadata_collectives() {
         ]
     );
 }
+
+#[test]
+fn test_refine_final_authors_drops_markdown_link_fragments() {
+    let mut authors = vec![
+        AuthorDetection {
+            author: "[becoming a sponsor] (https://opencollective.com/pnpm#sponsor)".to_string(),
+            start_line: LineNumber::ONE,
+            end_line: LineNumber::ONE,
+        },
+        AuthorDetection {
+            author: "the command [#7403] (https://github.com/pnpm/pnpm/issues/7403)".to_string(),
+            start_line: LineNumber::new(2).unwrap(),
+            end_line: LineNumber::new(2).unwrap(),
+        },
+    ];
+
+    refine_final_authors(&mut authors);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}

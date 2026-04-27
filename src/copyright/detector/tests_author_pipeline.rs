@@ -147,6 +147,65 @@ fn test_author_span_legal_clause_not_detected() {
 }
 
 #[test]
+fn test_author_markdown_link_prose_not_detected() {
+    let input = "the command [#7403] (https://github.com/pnpm/pnpm/issues/7403) changed behavior.";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_author_markdown_link_label_not_detected() {
+    let input = "[becoming a sponsor] (https://opencollective.com/pnpm#sponsor)";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_author_pnpm_readme_sponsor_line_not_detected() {
+    let input =
+        "Support this project by [becoming a sponsor](https://opencollective.com/pnpm#sponsor).";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_author_pnpm_changelog_issue_link_not_detected() {
+    let input = "- Fixed `minimumReleaseAgeExclude` not being respected by `pnpm dlx` [#10338](https://github.com/pnpm/pnpm/issues/10338).";
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_author_pnpm_readme_snippet_not_detected() {
+    let input = concat!(
+        "</table>\n\n",
+        "<!-- sponsors end -->\n\n",
+        "Support this project by [becoming a sponsor](https://opencollective.com/pnpm#sponsor).\n\n",
+        "## Background\n",
+    );
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_author_pnpm_changelog_snippet_not_detected() {
+    let input = concat!(
+        "- Fixed `allowBuilds` not working when set via `.pnpmfile.cjs` [#10516](https://github.com/pnpm/pnpm/issues/10516).\n",
+        "- When the [`enableGlobalVirtualStore`](https://pnpm.io/settings#enableglobalvirtualstore) option is set, the `pnpm deploy` command would incorrectly create symlinks to the global virtual store. To keep the deploy directory self-contained, `pnpm deploy` now ignores this setting and always creates a localized virtual store within the deploy directory.\n",
+        "- Fixed `minimumReleaseAgeExclude` not being respected by `pnpm dlx` [#10338](https://github.com/pnpm/pnpm/issues/10338).\n\n",
+        "## 10.29.2\n",
+    );
+    let (_copyrights, _holders, authors) = detect_copyrights_from_text(input);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
 fn test_json_author_object_name_preferred_over_url_tail() {
     let input =
         "\"author\": { \"name\": \"Chen Fengyuan\", \"url\": \"https://chenfengyuan.com/\" }";

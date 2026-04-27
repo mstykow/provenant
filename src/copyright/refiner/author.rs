@@ -86,6 +86,10 @@ fn looks_like_prose_fragment_author(s: &str) -> bool {
         return true;
     }
 
+    if contains_markdown_link_fragment(trimmed) {
+        return true;
+    }
+
     if looks_like_structured_key_with_hex_value(trimmed) {
         return true;
     }
@@ -163,6 +167,14 @@ fn contains_html_like_fragment(s: &str) -> bool {
     trimmed.contains("</")
         || trimmed.contains("/>")
         || (trimmed.contains('<') || trimmed.contains('>'))
+}
+
+fn contains_markdown_link_fragment(s: &str) -> bool {
+    let trimmed = s.trim();
+    trimmed.contains("](http")
+        || trimmed.contains("](https://")
+        || trimmed.contains("] (http")
+        || trimmed.contains("] (https://")
 }
 
 fn looks_like_machine_style_colon_token(s: &str) -> bool {
