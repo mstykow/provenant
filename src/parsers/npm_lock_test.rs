@@ -550,6 +550,61 @@ mod tests {
     }
 
     #[test]
+    fn test_workspace_path_entry_uses_linked_package_name() {
+        let content = r#"{
+            "name": "workspace-root",
+            "version": "1.0.0",
+            "lockfileVersion": 2,
+            "packages": {
+                "": {
+                    "name": "workspace-root",
+                    "version": "1.0.0"
+                },
+                "node_modules/foo": {
+                    "resolved": "packages/foo",
+                    "link": true
+                },
+                "packages/foo": {
+                    "version": "0.0.0",
+                    "dependencies": {
+                        "is-positive": "^1.0.0"
+                    }
+                },
+                "node_modules/is-positive": {
+                    "version": "1.0.0",
+                    "resolved": "https://registry.npmjs.org/is-positive/-/is-positive-1.0.0.tgz"
+                }
+            },
+            "dependencies": {
+                "foo": {
+                    "version": "file:packages/foo",
+                    "requires": {
+                        "is-positive": "^1.0.0"
+                    }
+                },
+                "is-positive": {
+                    "version": "1.0.0",
+                    "resolved": "https://registry.npmjs.org/is-positive/-/is-positive-1.0.0.tgz"
+                }
+            }
+        }"#;
+
+        let (_temp, path) = create_temp_lock_file(content);
+        let package_data = NpmLockParser::extract_first_package(&path);
+
+        assert!(package_data.dependencies.iter().any(|dep| {
+            dep.purl.as_deref() == Some("pkg:npm/foo@0.0.0")
+                && dep.extracted_requirement.as_deref() == Some("0.0.0")
+        }));
+        assert!(
+            !package_data
+                .dependencies
+                .iter()
+                .any(|dep| { dep.purl.as_deref() == Some("pkg:npm/packages%2Ffoo@0.0.0") })
+        );
+    }
+
+    #[test]
     fn test_root_package_falls_back_to_packages_entry_and_keeps_lockfile_version() {
         let content = r#"{
             "lockfileVersion": 3,
