@@ -109,18 +109,11 @@ impl LicenseExpression {
     pub fn and(expressions: Vec<LicenseExpression>) -> Option<LicenseExpression> {
         if expressions.is_empty() {
             None
-        } else if expressions.len() == 1 {
-            Some(expressions.into_iter().next().unwrap())
         } else {
-            let mut iter = expressions.into_iter();
-            let mut result = iter.next().unwrap();
-            for expr in iter {
-                result = LicenseExpression::And {
-                    left: Box::new(result),
-                    right: Box::new(expr),
-                };
-            }
-            Some(result)
+            Some(build_balanced_boolean_expression(
+                &expressions,
+                |left, right| LicenseExpression::And { left, right },
+            ))
         }
     }
 
@@ -128,18 +121,27 @@ impl LicenseExpression {
     pub fn or(expressions: Vec<LicenseExpression>) -> Option<LicenseExpression> {
         if expressions.is_empty() {
             None
-        } else if expressions.len() == 1 {
-            Some(expressions.into_iter().next().unwrap())
         } else {
-            let mut iter = expressions.into_iter();
-            let mut result = iter.next().unwrap();
-            for expr in iter {
-                result = LicenseExpression::Or {
-                    left: Box::new(result),
-                    right: Box::new(expr),
-                };
-            }
-            Some(result)
+            Some(build_balanced_boolean_expression(
+                &expressions,
+                |left, right| LicenseExpression::Or { left, right },
+            ))
+        }
+    }
+}
+
+fn build_balanced_boolean_expression(
+    expressions: &[LicenseExpression],
+    combine: fn(Box<LicenseExpression>, Box<LicenseExpression>) -> LicenseExpression,
+) -> LicenseExpression {
+    match expressions.len() {
+        0 => panic!("build_balanced_boolean_expression called with empty list"),
+        1 => expressions[0].clone(),
+        _ => {
+            let midpoint = expressions.len() / 2;
+            let left = build_balanced_boolean_expression(&expressions[..midpoint], combine);
+            let right = build_balanced_boolean_expression(&expressions[midpoint..], combine);
+            combine(Box::new(left), Box::new(right))
         }
     }
 }
@@ -148,6 +150,17 @@ impl LicenseExpression {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    fn expression_depth(expr: &LicenseExpression) -> usize {
+        match expr {
+            LicenseExpression::License(_) | LicenseExpression::LicenseRef(_) => 1,
+            LicenseExpression::And { left, right }
+            | LicenseExpression::Or { left, right }
+            | LicenseExpression::With { left, right } => {
+                1 + expression_depth(left).max(expression_depth(right))
+            }
+        }
+    }
 
     #[test]
     fn test_and_helper_empty() {
@@ -193,6 +206,28 @@ mod tests {
         ];
         let result = LicenseExpression::or(exprs).unwrap();
         assert!(matches!(result, LicenseExpression::Or { .. }));
+    }
+
+    #[test]
+    fn test_and_helper_balances_large_expression_depth() {
+        let exprs: Vec<_> = (0..1024)
+            .map(|idx| LicenseExpression::License(format!("license-{idx}")))
+            .collect();
+
+        let result = LicenseExpression::and(exprs).unwrap();
+
+        assert!(expression_depth(&result) <= 12);
+    }
+
+    #[test]
+    fn test_or_helper_balances_large_expression_depth() {
+        let exprs: Vec<_> = (0..1024)
+            .map(|idx| LicenseExpression::License(format!("license-{idx}")))
+            .collect();
+
+        let result = LicenseExpression::or(exprs).unwrap();
+
+        assert!(expression_depth(&result) <= 12);
     }
 
     #[test]
