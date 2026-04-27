@@ -396,7 +396,7 @@ checksum = "serde-checksum"
     }
 
     #[test]
-    fn test_extract_dependencies_skips_root_package_but_keeps_source_less_workspace_members() {
+    fn test_extract_dependencies_keeps_root_package_and_source_less_workspace_members() {
         let content = r#"
 [[package]]
 name = "my-app"
@@ -427,8 +427,16 @@ version = "0.1.0"
             .collect();
 
         assert!(dependency_purls.contains(&"pkg:cargo/serde@1.0.228"));
-        assert!(!dependency_purls.contains(&"pkg:cargo/my-app@0.4.0"));
+        assert!(dependency_purls.contains(&"pkg:cargo/my-app@0.4.0"));
         assert!(dependency_purls.contains(&"pkg:cargo/workspace-tool@0.1.0"));
+
+        let root_dep = package_data
+            .dependencies
+            .iter()
+            .find(|dep| dep.purl.as_deref() == Some("pkg:cargo/my-app@0.4.0"))
+            .expect("root package should be preserved as a direct dependency");
+        assert_eq!(root_dep.extracted_requirement.as_deref(), Some("0.4.0"));
+        assert_eq!(root_dep.is_direct, Some(true));
     }
 
     #[test]

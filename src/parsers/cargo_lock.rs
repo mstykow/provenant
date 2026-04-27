@@ -266,14 +266,7 @@ fn extract_all_dependencies(
             continue;
         };
 
-        let is_root_package = package_key_from_table(package)
-            .zip(root_package_key)
-            .is_some_and(|(package_key, root_key)| package_key == root_key);
         if package.get("source").is_some() {
-            continue;
-        }
-
-        if is_root_package {
             continue;
         }
 
