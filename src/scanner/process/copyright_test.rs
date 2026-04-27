@@ -2,9 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::{
-    extract_comment_author_supplements, extract_patch_header_author_supplements,
-    is_binary_string_copyright_candidate,
+    extract_comment_author_supplements, extract_copyright_information,
+    extract_patch_header_author_supplements, is_binary_string_copyright_candidate,
 };
+use crate::copyright;
+use crate::models::{FileInfoBuilder, FileType};
+use std::path::Path;
+use std::time::Duration;
 
 #[test]
 fn test_binary_string_copyright_candidate_rejects_gibberish_holder_text() {
@@ -108,4 +112,86 @@ fn test_extract_comment_author_supplements_ignores_html_tags() {
     let authors = extract_comment_author_supplements(text);
 
     assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_extract_comment_author_supplements_ignores_plain_markdown_prose() {
+    let text =
+        "Support this project by [becoming a sponsor](https://opencollective.com/pnpm#sponsor).";
+
+    let authors = extract_comment_author_supplements(text);
+
+    assert!(authors.is_empty(), "authors: {authors:?}");
+}
+
+#[test]
+fn test_extract_copyright_information_ignores_pnpm_markdown_link_prose() {
+    let text = concat!(
+        "</table>\n\n",
+        "<!-- sponsors end -->\n\n",
+        "Support this project by [becoming a sponsor](https://opencollective.com/pnpm#sponsor).\n\n",
+        "## Background\n",
+    );
+
+    let mut builder = FileInfoBuilder::default();
+    extract_copyright_information(&mut builder, Path::new("README.md"), text, 120.0, false);
+
+    let file = builder
+        .name("README.md".to_string())
+        .base_name("README".to_string())
+        .extension(".md".to_string())
+        .path("README.md".to_string())
+        .file_type(FileType::File)
+        .size(text.len() as u64)
+        .build()
+        .expect("builder should produce file info");
+
+    assert!(file.authors.is_empty(), "authors: {:?}", file.authors);
+}
+
+#[test]
+fn test_detector_timeout_and_non_timeout_paths_match_for_pnpm_markdown_link_prose() {
+    let text = concat!(
+        "</table>\n\n",
+        "<!-- sponsors end -->\n\n",
+        "Support this project by [becoming a sponsor](https://opencollective.com/pnpm#sponsor).\n\n",
+        "## Background\n",
+    );
+
+    let (_c1, _h1, authors_no_deadline) = copyright::detect_copyrights(text, None);
+    let (_c2, _h2, authors_with_deadline) =
+        copyright::detect_copyrights(text, Some(Duration::from_secs(120)));
+
+    assert_eq!(authors_no_deadline, authors_with_deadline);
+    assert!(
+        authors_with_deadline.is_empty(),
+        "authors_with_deadline: {authors_with_deadline:?}"
+    );
+}
+
+#[test]
+fn test_extract_copyright_information_ignores_pnpm_changelog_markdown_link_on_large_input() {
+    let repeated = "- Do not hang indefinitely, when there is a glob that starts with `!/` in `pnpm-workspace.yaml`. This fixes a regression introduced by [#9169](https://github.com/pnpm/pnpm/pull/9169).\n";
+    let text = repeated.repeat(4000);
+
+    let mut builder = FileInfoBuilder::default();
+    extract_copyright_information(
+        &mut builder,
+        Path::new("pnpm/CHANGELOG.md"),
+        &text,
+        0.000001,
+        false,
+    );
+
+    let file = builder
+        .name("CHANGELOG.md".to_string())
+        .base_name("CHANGELOG".to_string())
+        .extension(".md".to_string())
+        .path("pnpm/CHANGELOG.md".to_string())
+        .file_type(FileType::File)
+        .size(text.len() as u64)
+        .build()
+        .expect("builder should produce file info");
+
+    assert!(file.authors.is_empty(), "authors: {:?}", file.authors);
 }
