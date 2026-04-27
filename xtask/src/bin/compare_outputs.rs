@@ -508,7 +508,7 @@ fn prepare_target(context: &mut ContextState, args: &Args) -> Result<CheckoutGua
     let repo_ref = args.repo_ref.as_deref().unwrap();
     let cache_dir = context.repo_manifest.cache_dir.clone().unwrap();
     println!("  Updating repo cache: {}", cache_dir.display());
-    ensure_repo_mirror(repo_url, &cache_dir)?;
+    ensure_repo_mirror(repo_url, repo_ref, &cache_dir)?;
     let resolved_sha = resolve_repo_ref_to_sha(&cache_dir, repo_ref)?;
     println!("  Resolved {repo_ref} -> {resolved_sha}");
     println!(

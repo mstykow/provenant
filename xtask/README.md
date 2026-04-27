@@ -70,7 +70,7 @@ CLI arguments:
 
 1. Either scans a local directory passed via `--target-path` or resolves `--repo-url` + `--repo-ref` through a shared repo cache.
 2. Builds Provenant in release mode.
-3. Updates or creates a shared cached mirror under `.provenant/repo-cache/`, resolves the requested ref to a full commit SHA, and materializes a detached checkout for the run.
+3. Updates or creates a shared shallow repo cache under `.provenant/repo-cache/`, fetches only the requested ref at depth 1, resolves it to a full commit SHA, and materializes a detached checkout for the run.
 4. Runs cold/warm scenarios with isolated cache roots while forwarding the requested Provenant scan flags unchanged.
 5. Writes a run manifest plus benchmark results under `.provenant/benchmarks/`.
 6. Prints a summary table with wall time, key phase timings, peak RSS, and incremental reuse signals.
@@ -145,7 +145,7 @@ CLI arguments:
 1. Creates a per-run artifact directory under `.provenant/compare-runs/`.
 2. Either scans the local directory in place or resolves `--repo-url` + `--repo-ref` through a shared repo cache.
 3. Builds Provenant in release mode.
-4. Updates or creates a shared cached mirror under `.provenant/repo-cache/`, resolves the requested ref to a full commit SHA, and materializes a detached checkout for the run.
+4. Updates or creates a shared shallow repo cache under `.provenant/repo-cache/`, fetches only the requested ref at depth 1, resolves it to a full commit SHA, and materializes a detached checkout for the run.
 5. Resolves the ScanCode runtime identity and, on cache misses, ensures a local Docker-backed ScanCode runtime exists by building the image from `reference/scancode-toolkit` if needed.
 6. Reuses cached ScanCode raw artifacts when available, otherwise runs ScanCode alongside Provenant with the same shared scan profile and ephemeral license-cache directories.
 7. Saves raw outputs and logs under `raw/`.
@@ -181,7 +181,7 @@ Optional diagnostic logs when available:
 - For `--profile common`, the ScanCode Docker invocation also adds `--memory 12g --memory-swap 12g`, and that runtime cap is part of ScanCode cache validation.
 - `--repo-url` mode requires `--repo-ref`; the command records both the requested ref and the resolved full commit SHA in `run-manifest.json`.
 - `run-manifest.json` also records the Provenant binary version plus the current Provenant repository revision, dirty state, and diff hash, alongside the ScanCode runtime identity.
-- Repo URL runs reuse cached git objects from `.provenant/repo-cache/`, and the temporary detached checkout is removed after the run so compare artifacts do not retain duplicate full repository trees.
+- Repo URL runs reuse cached git objects from `.provenant/repo-cache/`, fetch only the requested ref shallowly, and remove the temporary detached checkout after the run so compare artifacts do not retain duplicate full repository trees.
 - Repo URL runs also reuse cached raw ScanCode artifacts from `.provenant/scancode-cache/` when the resolved target commit, ScanCode runtime identity, and effective ScanCode scan args are unchanged.
 - Local `--target-path` runs rerun ScanCode by default. Pass `--scancode-cache-identity <id>` to opt into shared ScanCode raw-artifact reuse for a local snapshot you have identified explicitly.
 - For local target-path cache hits, the **path itself is not the cache identity**. The cache key is derived from your explicit `--scancode-cache-identity` plus the effective ScanCode runtime/args, so reusing the same identity across different local paths will intentionally hit the same cache entry when the staged snapshot is meant to be the same.
