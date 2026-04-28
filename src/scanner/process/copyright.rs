@@ -249,8 +249,10 @@ fn extract_comment_author_supplements(text_content: &str) -> Vec<AuthorDetection
         let trimmed = line.trim();
         let normalized = normalize_comment_author_line(trimmed);
         let line_number = LineNumber::from_0_indexed(line_index);
+        let is_comment_like = looks_like_comment_author_source_line(trimmed);
 
-        if let Some(captures) = COMMENT_AUTHOR_RE.captures(&normalized)
+        if is_comment_like
+            && let Some(captures) = COMMENT_AUTHOR_RE.captures(&normalized)
             && let Some(author) = captures
                 .name("author")
                 .or_else(|| captures.name("author2"))
@@ -263,7 +265,9 @@ fn extract_comment_author_supplements(text_content: &str) -> Vec<AuthorDetection
             });
         }
 
-        if let Some(captures) = COMMENT_PAREN_CONTACT_AUTHOR_RE.captures(&normalized) {
+        if is_comment_like
+            && let Some(captures) = COMMENT_PAREN_CONTACT_AUTHOR_RE.captures(&normalized)
+        {
             let name = captures
                 .name("name")
                 .or_else(|| captures.name("name2"))
@@ -292,6 +296,10 @@ fn extract_comment_author_supplements(text_content: &str) -> Vec<AuthorDetection
             });
         }
 
+        if !is_comment_like {
+            continue;
+        }
+
         for captures in EMAIL_PAREN_NAME_RE.captures_iter(trimmed) {
             let Some(email) = captures.name("email").map(|m| m.as_str().trim()) else {
                 continue;
@@ -311,6 +319,17 @@ fn extract_comment_author_supplements(text_content: &str) -> Vec<AuthorDetection
     }
 
     authors
+}
+
+fn looks_like_comment_author_source_line(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed.starts_with('#')
+        || trimmed.starts_with("//")
+        || trimmed.starts_with("/*")
+        || trimmed.starts_with('*')
+        || trimmed.starts_with(';')
+        || trimmed.starts_with("--")
+        || trimmed.starts_with("<!--")
 }
 
 fn normalize_comment_author_line(line: &str) -> String {

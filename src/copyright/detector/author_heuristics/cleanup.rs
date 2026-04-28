@@ -483,6 +483,15 @@ fn json_window_is_simple_author_only_fragment(window: &str) -> bool {
     JSON_AUTHOR_ONLY_STRING_RE.is_match(window) || JSON_AUTHOR_ONLY_OBJECT_RE.is_match(window)
 }
 
+fn looks_like_simple_machine_author_token(name: &str) -> bool {
+    let trimmed = name.trim();
+    trimmed.split_whitespace().count() == 1
+        && trimmed.len() >= 6
+        && trimmed
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '_' | '-'))
+}
+
 pub(in super::super) fn looks_like_structured_json_author_fallback(value: &str) -> bool {
     let trimmed = value.trim();
     if looks_like_name_with_parenthesized_url(trimmed) {
@@ -548,10 +557,19 @@ pub(in super::super) fn refine_json_author_candidate(name: &str, window: &str) -
         .trim()
         .trim_end_matches(&[',', ';', '.'][..])
         .trim();
+    let has_metadata_context = json_window_has_metadata_context(window);
+    let is_simple_author_only_fragment = json_window_is_simple_author_only_fragment(window);
 
-    if !json_window_has_metadata_context(window)
-        && !json_window_is_simple_author_only_fragment(window)
+    if !has_metadata_context
+        && !is_simple_author_only_fragment
         && !looks_like_name_with_parenthesized_url(trimmed)
+    {
+        return None;
+    }
+
+    if !has_metadata_context
+        && is_simple_author_only_fragment
+        && looks_like_simple_machine_author_token(trimmed)
     {
         return None;
     }
@@ -560,8 +578,8 @@ pub(in super::super) fn refine_json_author_candidate(name: &str, window: &str) -
         return Some(author);
     }
 
-    if !json_window_has_metadata_context(window)
-        && !json_window_is_simple_author_only_fragment(window)
+    if !has_metadata_context
+        && !is_simple_author_only_fragment
         && !looks_like_name_with_parenthesized_url(trimmed)
     {
         return None;

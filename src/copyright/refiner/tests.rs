@@ -1171,8 +1171,20 @@ fn test_refine_author_drops_glibc_prose_fragments() {
     );
     assert_eq!(refine_author("versions, and"), None);
     assert_eq!(refine_author("makes"), None);
+    assert_eq!(refine_author("grants"), None);
     assert_eq!(refine_author("grants irrevocable"), None);
     assert_eq!(refine_author("version information"), None);
+    assert_eq!(refine_author("example. If"), None);
+    assert_eq!(refine_author("doxygen. Using"), None);
+    assert_eq!(refine_author("final String?"), None);
+    assert_eq!(
+        refine_author("[becoming a sponsor] (https://opencollective.com/pnpm#sponsor)"),
+        None
+    );
+    assert_eq!(
+        refine_author("the command [#7403] (https://github.com/pnpm/pnpm/issues/7403)"),
+        None
+    );
     assert_eq!(
         refine_author("not responsible for the consequences of use of"),
         None

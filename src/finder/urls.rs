@@ -65,6 +65,7 @@ fn end_of_url_cleaner(url: &str) -> String {
     }
 
     if let Some((before, after)) = cleaned.split_once('}')
+        && !has_unclosed_dollar_template(before)
         && ({
             let trimmed_after =
                 after.trim_matches(|c: char| [',', '.', ':', ';', '!', '?'].contains(&c));
@@ -76,9 +77,30 @@ fn end_of_url_cleaner(url: &str) -> String {
         cleaned = before.to_string();
     }
 
+    cleaned = trim_trailing_template_openers(&cleaned);
+
     cleaned
         .trim_end_matches(|c: char| [',', '.', ':', ';', '!', '?'].contains(&c))
         .to_string()
+}
+
+fn has_unclosed_dollar_template(url: &str) -> bool {
+    url.rfind("${")
+        .is_some_and(|idx| !url[idx + 2..].contains('}'))
+}
+
+fn trim_trailing_template_openers(url: &str) -> String {
+    let mut cleaned = url.to_string();
+
+    for opener in ["${{", "${"] {
+        if cleaned.ends_with(opener) {
+            cleaned.truncate(cleaned.len() - opener.len());
+            cleaned = cleaned.trim_end_matches('/').to_string();
+            break;
+        }
+    }
+
+    cleaned
 }
 
 fn add_fake_scheme(url: &str) -> String {

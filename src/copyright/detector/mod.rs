@@ -311,6 +311,7 @@ pub fn detect_copyrights_from_text_with_deadline(
 
     if deadline_exceeded(deadline) {
         refine_final_copyrights(&mut copyrights);
+        postprocess_transforms::refine_final_authors(&mut authors);
         dedupe_exact_span_copyrights(&mut copyrights);
         dedupe_exact_span_holders(&mut holders);
         dedupe_exact_span_authors(&mut authors);

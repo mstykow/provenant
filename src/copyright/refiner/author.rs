@@ -86,6 +86,10 @@ fn looks_like_prose_fragment_author(s: &str) -> bool {
         return true;
     }
 
+    if contains_markdown_link_fragment(trimmed) {
+        return true;
+    }
+
     if looks_like_structured_key_with_hex_value(trimmed) {
         return true;
     }
@@ -126,8 +130,21 @@ fn looks_like_prose_fragment_author(s: &str) -> bool {
             .all(|ch| !ch.is_alphabetic() || ch.is_lowercase());
         return !all_lower || word.len() < 6;
     }
-    if words.len() == 2 && words.iter().all(|word| starts_with_lowercase_alpha(word)) {
-        return true;
+    if words.len() == 2 {
+        if words.iter().all(|word| starts_with_lowercase_alpha(word)) {
+            return true;
+        }
+
+        if words[0].ends_with('.')
+            && starts_with_lowercase_alpha(words[0])
+            && starts_with_uppercase_alpha(words[1])
+        {
+            return true;
+        }
+
+        if starts_with_lowercase_alpha(words[0]) && words[1].contains('?') {
+            return true;
+        }
     }
     if words.len() < 3 {
         return false;
@@ -150,6 +167,14 @@ fn contains_html_like_fragment(s: &str) -> bool {
     trimmed.contains("</")
         || trimmed.contains("/>")
         || (trimmed.contains('<') || trimmed.contains('>'))
+}
+
+fn contains_markdown_link_fragment(s: &str) -> bool {
+    let trimmed = s.trim();
+    trimmed.contains("](http")
+        || trimmed.contains("](https://")
+        || trimmed.contains("] (http")
+        || trimmed.contains("] (https://")
 }
 
 fn looks_like_machine_style_colon_token(s: &str) -> bool {
@@ -301,6 +326,12 @@ fn starts_with_lowercase_alpha(word: &str) -> bool {
     word.chars()
         .find(|ch| ch.is_alphabetic())
         .is_some_and(|ch| ch.is_lowercase())
+}
+
+fn starts_with_uppercase_alpha(word: &str) -> bool {
+    word.chars()
+        .find(|ch| ch.is_alphabetic())
+        .is_some_and(|ch| ch.is_uppercase())
 }
 
 fn restore_leading_the_for_institution_and_contributors(original: &str, refined: &str) -> String {

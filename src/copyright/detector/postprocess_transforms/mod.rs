@@ -63,6 +63,8 @@ pub fn refine_final_authors(authors: &mut Vec<AuthorDetection>) {
         return;
     }
 
+    authors.retain(|author| !contains_markdown_link_author_fragment(&author.author));
+
     *authors = authors
         .iter()
         .filter_map(|a| {
@@ -83,6 +85,14 @@ pub fn refine_final_authors(authors: &mut Vec<AuthorDetection>) {
             })
         })
         .collect();
+}
+
+fn contains_markdown_link_author_fragment(author: &str) -> bool {
+    let trimmed = author.trim();
+    trimmed.contains("](http")
+        || trimmed.contains("](https://")
+        || trimmed.contains("] (http")
+        || trimmed.contains("] (https://")
 }
 
 fn looks_like_collective_institution_author(author: &str) -> bool {

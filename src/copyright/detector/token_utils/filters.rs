@@ -235,6 +235,7 @@ pub fn looks_like_bad_generic_author_candidate(s: &str) -> bool {
                 | "developers"
                 | "developer"
                 | "based"
+                | "grants"
                 | "working"
                 | "features"
                 | "components"
